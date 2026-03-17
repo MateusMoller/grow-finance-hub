@@ -3,8 +3,17 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+
+import HomePage from "./pages/HomePage";
+import AboutPage from "./pages/AboutPage";
+import SolutionsPage from "./pages/SolutionsPage";
+import ContactPage from "./pages/ContactPage";
+import LoginPage from "./pages/LoginPage";
+import DashboardPage from "./pages/DashboardPage";
+import KanbanPage from "./pages/KanbanPage";
+import ClientsPage from "./pages/ClientsPage";
+import CRMPage from "./pages/CRMPage";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
@@ -15,8 +24,19 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          {/* Site Institucional */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/sobre" element={<AboutPage />} />
+          <Route path="/solucoes" element={<SolutionsPage />} />
+          <Route path="/contato" element={<ContactPage />} />
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* App Interno */}
+          <Route path="/app" element={<DashboardPage />} />
+          <Route path="/app/kanban" element={<KanbanPage />} />
+          <Route path="/app/clientes" element={<ClientsPage />} />
+          <Route path="/app/crm" element={<CRMPage />} />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
