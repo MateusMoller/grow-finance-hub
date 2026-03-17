@@ -1,20 +1,29 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { signIn } = useAuth();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      toast.info("Sistema de login será ativado com o Lovable Cloud.");
-    }, 800);
+    const { error } = await signIn(email, password);
+    setLoading(false);
+    if (error) {
+      toast.error("E-mail ou senha inválidos.");
+    } else {
+      toast.success("Login realizado com sucesso!");
+      navigate("/app");
+    }
   };
 
   return (
@@ -55,11 +64,11 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">E-mail</label>
-              <Input type="email" placeholder="seu@email.com" required />
+              <Input type="email" placeholder="seu@email.com" required value={email} onChange={e => setEmail(e.target.value)} />
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Senha</label>
-              <Input type="password" placeholder="••••••••" required />
+              <Input type="password" placeholder="••••••••" required value={password} onChange={e => setPassword(e.target.value)} />
             </div>
             <Button variant="hero" size="lg" className="w-full" type="submit" disabled={loading}>
               {loading ? "Entrando..." : "Entrar"}
