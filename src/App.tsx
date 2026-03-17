@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/hooks/useAuth";
 
 import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
@@ -23,22 +24,24 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* Site Institucional */}
-          <Route path="/" element={<HomePage />} />
-          <Route path="/sobre" element={<AboutPage />} />
-          <Route path="/solucoes" element={<SolutionsPage />} />
-          <Route path="/contato" element={<ContactPage />} />
-          <Route path="/login" element={<LoginPage />} />
+        <AuthProvider>
+          <Routes>
+            {/* Site Institucional */}
+            <Route path="/" element={<HomePage />} />
+            <Route path="/sobre" element={<AboutPage />} />
+            <Route path="/solucoes" element={<SolutionsPage />} />
+            <Route path="/contato" element={<ContactPage />} />
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* App Interno */}
-          <Route path="/app" element={<DashboardPage />} />
-          <Route path="/app/kanban" element={<KanbanPage />} />
-          <Route path="/app/clientes" element={<ClientsPage />} />
-          <Route path="/app/crm" element={<CRMPage />} />
+            {/* App Interno */}
+            <Route path="/app" element={<DashboardPage />} />
+            <Route path="/app/kanban" element={<KanbanPage />} />
+            <Route path="/app/clientes" element={<ClientsPage />} />
+            <Route path="/app/crm" element={<CRMPage />} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
