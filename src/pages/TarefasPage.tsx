@@ -8,7 +8,6 @@ import {
   Plus,
   Search,
   AlertTriangle,
-  ChevronDown,
   MoreHorizontal,
   Paperclip,
   MessageSquare,
@@ -19,6 +18,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { toast } from "sonner";
 
 interface Task {
   id: string;
@@ -36,7 +41,7 @@ interface Task {
   comments: number;
 }
 
-const tasks: Task[] = [
+const initialTasks: Task[] = [
   {
     id: "1", title: "Fechamento contábil mensal", description: "Realizar fechamento contábil do mês de março",
     client: "ABC Tecnologia Ltda", sector: "Contábil", assignee: "Maria Santos", priority: "Alta",
@@ -100,9 +105,14 @@ const sectors = ["Todos", "Contábil", "Fiscal", "Departamento Pessoal", "Financ
 const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
 
 export default function TarefasPage() {
+  const [tasks, setTasks] = useState(initialTasks);
   const [search, setSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState("Todos");
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", description: "", client: "", sector: "Contábil", assignee: "", priority: "Média" as Task["priority"], dueDate: "" });
 
   const filtered = tasks.filter((t) => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !t.client.toLowerCase().includes(search.toLowerCase())) return false;
@@ -110,6 +120,38 @@ export default function TarefasPage() {
     if (statusFilter !== "Todos" && t.status !== statusFilter) return false;
     return true;
   });
+
+  const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+      const subtasks = [...t.subtasks];
+      subtasks[subtaskIndex] = { ...subtasks[subtaskIndex], done: !subtasks[subtaskIndex].done };
+      return { ...t, subtasks };
+    }));
+    setSelectedTask(prev => {
+      if (!prev || prev.id !== taskId) return prev;
+      const subtasks = [...prev.subtasks];
+      subtasks[subtaskIndex] = { ...subtasks[subtaskIndex], done: !subtasks[subtaskIndex].done };
+      return { ...prev, subtasks };
+    });
+  };
+
+  const handleCreate = () => {
+    if (!newTask.title.trim()) { toast.error("Título é obrigatório"); return; }
+    const task: Task = {
+      id: String(Date.now()),
+      ...newTask,
+      status: "Pendente",
+      tags: [newTask.sector],
+      subtasks: [],
+      attachments: 0,
+      comments: 0,
+    };
+    setTasks(prev => [task, ...prev]);
+    setCreateOpen(false);
+    setNewTask({ title: "", description: "", client: "", sector: "Contábil", assignee: "", priority: "Média", dueDate: "" });
+    toast.success("Tarefa criada com sucesso");
+  };
 
   return (
     <AppLayout>
@@ -119,7 +161,7 @@ export default function TarefasPage() {
             <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
             <p className="text-sm text-muted-foreground">Gestão completa de tarefas da equipe</p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Nova Tarefa
           </Button>
         </div>
@@ -163,7 +205,7 @@ export default function TarefasPage() {
             const statusCfg = statusConfig[task.status];
             const priorityCfg = priorityConfig[task.priority];
             const subtaskDone = task.subtasks.filter(s => s.done).length;
-            const subtaskPct = Math.round((subtaskDone / task.subtasks.length) * 100);
+            const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
             const StatusIcon = statusCfg.icon;
 
             return (
@@ -173,6 +215,7 @@ export default function TarefasPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04 }}
                 className="rounded-xl border bg-card p-4 hover:shadow-md transition-all cursor-pointer"
+                onClick={() => { setSelectedTask(task); setSheetOpen(true); }}
               >
                 <div className="flex items-start gap-4">
                   <div className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}>
@@ -191,12 +234,8 @@ export default function TarefasPage() {
                         <Badge variant="outline" className={`text-xs ${statusCfg.color} ${statusCfg.bg} border-0`}>
                           {task.status}
                         </Badge>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
-
                     <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{new Date(task.dueDate).toLocaleDateString("pt-BR")}</span>
                       <span>{task.assignee}</span>
@@ -211,11 +250,12 @@ export default function TarefasPage() {
                         ))}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-3 mt-3">
-                      <Progress value={subtaskPct} className="h-1.5 flex-1 max-w-[200px]" />
-                      <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} subtarefas</span>
-                    </div>
+                    {task.subtasks.length > 0 && (
+                      <div className="flex items-center gap-3 mt-3">
+                        <Progress value={subtaskPct} className="h-1.5 flex-1 max-w-[200px]" />
+                        <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} subtarefas</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -223,6 +263,59 @@ export default function TarefasPage() {
           })}
         </div>
       </div>
+
+      <TaskDetailSheet task={selectedTask} open={sheetOpen} onOpenChange={setSheetOpen} onSubtaskToggle={handleSubtaskToggle} />
+
+      {/* Create Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nova Tarefa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Título *</Label>
+              <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea placeholder="Descreva a tarefa..." value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Cliente</Label>
+                <Input placeholder="Nome do cliente" value={newTask.client} onChange={e => setNewTask(p => ({ ...p, client: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Responsável</Label>
+                <Input placeholder="Nome" value={newTask.assignee} onChange={e => setNewTask(p => ({ ...p, assignee: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Setor</Label>
+                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={e => setNewTask(p => ({ ...p, sector: e.target.value }))}>
+                  {sectors.filter(s => s !== "Todos").map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Prioridade</Label>
+                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.priority} onChange={e => setNewTask(p => ({ ...p, priority: e.target.value as Task["priority"] }))}>
+                  {["Urgente", "Alta", "Média", "Baixa"].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Prazo</Label>
+                <Input type="date" value={newTask.dueDate} onChange={e => setNewTask(p => ({ ...p, dueDate: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreate}>Criar Tarefa</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
