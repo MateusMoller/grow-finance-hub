@@ -45,6 +45,13 @@ const App = () => (
             <Route path="/app/kanban" element={<KanbanPage />} />
             <Route path="/app/clientes" element={<ClientsPage />} />
             <Route path="/app/crm" element={<CRMPage />} />
+            <Route path="/app/tarefas" element={<TarefasPage />} />
+            <Route path="/app/formularios" element={<FormulariosPage />} />
+            <Route path="/app/documentos" element={<DocumentosPage />} />
+            <Route path="/app/comercial" element={<ComercialPage />} />
+            <Route path="/app/relatorios" element={<RelatoriosPage />} />
+            <Route path="/app/notificacoes" element={<NotificacoesPage />} />
+            <Route path="/app/configuracoes" element={<ConfiguracoesPage />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
