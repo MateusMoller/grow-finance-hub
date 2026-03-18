@@ -14,6 +14,13 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import ClientsPage from "./pages/ClientsPage";
 import CRMPage from "./pages/CRMPage";
+import TarefasPage from "./pages/TarefasPage";
+import FormulariosPage from "./pages/FormulariosPage";
+import DocumentosPage from "./pages/DocumentosPage";
+import ComercialPage from "./pages/ComercialPage";
+import RelatoriosPage from "./pages/RelatoriosPage";
+import NotificacoesPage from "./pages/NotificacoesPage";
+import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
