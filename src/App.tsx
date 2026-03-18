@@ -14,6 +14,13 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import ClientsPage from "./pages/ClientsPage";
 import CRMPage from "./pages/CRMPage";
+import TarefasPage from "./pages/TarefasPage";
+import FormulariosPage from "./pages/FormulariosPage";
+import DocumentosPage from "./pages/DocumentosPage";
+import ComercialPage from "./pages/ComercialPage";
+import RelatoriosPage from "./pages/RelatoriosPage";
+import NotificacoesPage from "./pages/NotificacoesPage";
+import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +45,13 @@ const App = () => (
             <Route path="/app/kanban" element={<KanbanPage />} />
             <Route path="/app/clientes" element={<ClientsPage />} />
             <Route path="/app/crm" element={<CRMPage />} />
+            <Route path="/app/tarefas" element={<TarefasPage />} />
+            <Route path="/app/formularios" element={<FormulariosPage />} />
+            <Route path="/app/documentos" element={<DocumentosPage />} />
+            <Route path="/app/comercial" element={<ComercialPage />} />
+            <Route path="/app/relatorios" element={<RelatoriosPage />} />
+            <Route path="/app/notificacoes" element={<NotificacoesPage />} />
+            <Route path="/app/configuracoes" element={<ConfiguracoesPage />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
