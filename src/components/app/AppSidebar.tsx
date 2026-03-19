@@ -10,6 +10,7 @@ import {
   UserPlus,
   TrendingUp,
   ClipboardList,
+  Headset,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -34,6 +35,7 @@ const mainItems = [
 ];
 
 const operationalItems = [
+  { title: "Solicitações", url: "/app/solicitacoes", icon: Headset },
   { title: "Formulários", url: "/app/formularios", icon: FileText },
   { title: "Documentos", url: "/app/documentos", icon: FolderOpen },
   { title: "Comercial", url: "/app/comercial", icon: TrendingUp },
