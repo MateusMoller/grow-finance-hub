@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_documents: {
+        Row: {
+          category: string
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          request_id: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          request_id?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          request_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_documents_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_requests: {
+        Row: {
+          admin_notes: string | null
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          status: Database["public"]["Enums"]["request_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["request_status"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["request_status"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -84,6 +161,7 @@ export type Database = {
         | "commercial"
         | "client"
         | "partner"
+      request_status: "pending" | "in_progress" | "completed" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -220,6 +298,7 @@ export const Constants = {
         "client",
         "partner",
       ],
+      request_status: ["pending", "in_progress", "completed", "cancelled"],
     },
   },
 } as const
