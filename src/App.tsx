@@ -54,6 +54,9 @@ const App = () => (
             <Route path="/app/notificacoes" element={<NotificacoesPage />} />
             <Route path="/app/configuracoes" element={<ConfiguracoesPage />} />
 
+            {/* Portal do Cliente */}
+            <Route path="/portal" element={<PortalClientePage />} />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
