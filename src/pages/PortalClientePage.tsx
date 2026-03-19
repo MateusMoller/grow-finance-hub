@@ -5,6 +5,7 @@ import {
   Download, Trash2, Eye, Search, Filter, Send, Paperclip,
   FolderOpen, MessageSquare, ChevronRight, X, Loader2,
 } from "lucide-react";
+import { RequestChat } from "@/components/app/RequestChat";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
