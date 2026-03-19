@@ -22,6 +22,7 @@ import RelatoriosPage from "./pages/RelatoriosPage";
 import NotificacoesPage from "./pages/NotificacoesPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import PortalClientePage from "./pages/PortalClientePage";
+import SolicitacoesPage from "./pages/SolicitacoesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
