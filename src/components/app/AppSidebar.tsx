@@ -35,6 +35,7 @@ const mainItems = [
 ];
 
 const operationalItems = [
+  { title: "Solicitações", url: "/app/solicitacoes", icon: Headset },
   { title: "Formulários", url: "/app/formularios", icon: FileText },
   { title: "Documentos", url: "/app/documentos", icon: FolderOpen },
   { title: "Comercial", url: "/app/comercial", icon: TrendingUp },
