@@ -21,6 +21,7 @@ import ComercialPage from "./pages/ComercialPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
 import NotificacoesPage from "./pages/NotificacoesPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
+import PortalClientePage from "./pages/PortalClientePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
