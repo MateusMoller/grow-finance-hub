@@ -556,14 +556,13 @@ export default function PortalClientePage() {
                     </div>
                   </div>
 
-                  {selectedRequest.admin_notes && (
-                    <div className="bg-muted/50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium mb-1 flex items-center gap-1.5">
-                        <MessageSquare className="h-3.5 w-3.5" /> Resposta da equipe
-                      </h4>
-                      <p className="text-sm text-muted-foreground">{selectedRequest.admin_notes}</p>
-                    </div>
-                  )}
+                  {/* Chat / Mensagens */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                      <MessageSquare className="h-3.5 w-3.5" /> Mensagens
+                    </h4>
+                    <RequestChat requestId={selectedRequest.id} isTeamMember={false} />
+                  </div>
 
                   <div>
                     <h4 className="text-sm font-medium mb-2">Documentos vinculados ({relatedDocs.length})</h4>
