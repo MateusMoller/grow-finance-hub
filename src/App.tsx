@@ -21,6 +21,7 @@ import ComercialPage from "./pages/ComercialPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
 import NotificacoesPage from "./pages/NotificacoesPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
+import PortalClientePage from "./pages/PortalClientePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,9 @@ const App = () => (
             <Route path="/app/relatorios" element={<RelatoriosPage />} />
             <Route path="/app/notificacoes" element={<NotificacoesPage />} />
             <Route path="/app/configuracoes" element={<ConfiguracoesPage />} />
+
+            {/* Portal do Cliente */}
+            <Route path="/portal" element={<PortalClientePage />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
