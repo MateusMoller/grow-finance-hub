@@ -62,8 +62,9 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
         grow: {
-          emerald: "hsl(var(--grow-emerald))",
-          "emerald-light": "hsl(var(--grow-emerald-light))",
+          slate: "hsl(var(--grow-slate))",
+          "slate-light": "hsl(var(--grow-slate-light))",
+          lavender: "hsl(var(--grow-lavender))",
           dark: "hsl(var(--grow-dark))",
           surface: "hsl(var(--grow-surface))",
           gold: "hsl(var(--grow-gold))",
