@@ -46,6 +46,9 @@ export function SiteHeader() {
 
         <div className="hidden md:flex items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
+            <Link to="/portal">Portal do Cliente</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
             <Link to="/login">Entrar</Link>
           </Button>
           <Button variant="hero" size="sm" asChild>
