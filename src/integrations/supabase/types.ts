@@ -62,6 +62,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          sector: string
           status: Database["public"]["Enums"]["request_status"]
           title: string
           updated_at: string
@@ -73,6 +74,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          sector?: string
           status?: Database["public"]["Enums"]["request_status"]
           title: string
           updated_at?: string
@@ -84,12 +86,72 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          sector?: string
           status?: Database["public"]["Enums"]["request_status"]
           title?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      kanban_tasks: {
+        Row: {
+          assignee: string | null
+          client_name: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: string
+          request_id: string | null
+          sector: string
+          status: string
+          tags: string[] | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assignee?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string
+          request_id?: string | null
+          sector?: string
+          status?: string
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assignee?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string
+          request_id?: string | null
+          sector?: string
+          status?: string
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kanban_tasks_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

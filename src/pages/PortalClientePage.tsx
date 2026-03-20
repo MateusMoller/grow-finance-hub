@@ -73,6 +73,16 @@ const requestCategories = [
   "Outros",
 ];
 
+const sectorOptions = [
+  { label: "Contábil", value: "Contábil" },
+  { label: "Fiscal", value: "Fiscal" },
+  { label: "Departamento Pessoal", value: "Departamento Pessoal" },
+  { label: "Financeiro", value: "Financeiro" },
+  { label: "Comercial", value: "Comercial" },
+  { label: "Societário", value: "Societário" },
+  { label: "Geral", value: "Geral" },
+];
+
 export default function PortalClientePage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -97,6 +107,7 @@ export default function PortalClientePage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newCategory, setNewCategory] = useState("Outros");
+  const [newSector, setNewSector] = useState("Geral");
   const [submitting, setSubmitting] = useState(false);
 
   // Upload form
@@ -135,11 +146,12 @@ export default function PortalClientePage() {
       title: newTitle.trim(),
       description: newDescription.trim() || null,
       category: newCategory,
+      sector: newSector,
     });
     setSubmitting(false);
     if (error) { toast.error("Erro ao criar solicitação"); return; }
-    toast.success("Solicitação criada com sucesso!");
-    setNewTitle(""); setNewDescription(""); setNewCategory("Outros");
+    toast.success("Solicitação criada! Sua demanda foi enviada ao setor responsável.");
+    setNewTitle(""); setNewDescription(""); setNewCategory("Outros"); setNewSector("Geral");
     setNewRequestOpen(false);
     fetchData();
   };
@@ -310,6 +322,15 @@ export default function PortalClientePage() {
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {requestCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Setor Responsável</label>
+                      <Select value={newSector} onValueChange={setNewSector}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {sectorOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
