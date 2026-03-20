@@ -146,11 +146,12 @@ export default function PortalClientePage() {
       title: newTitle.trim(),
       description: newDescription.trim() || null,
       category: newCategory,
+      sector: newSector,
     });
     setSubmitting(false);
     if (error) { toast.error("Erro ao criar solicitação"); return; }
-    toast.success("Solicitação criada com sucesso!");
-    setNewTitle(""); setNewDescription(""); setNewCategory("Outros");
+    toast.success("Solicitação criada! Sua demanda foi enviada ao setor responsável.");
+    setNewTitle(""); setNewDescription(""); setNewCategory("Outros"); setNewSector("Geral");
     setNewRequestOpen(false);
     fetchData();
   };
