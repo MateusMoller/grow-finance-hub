@@ -73,6 +73,16 @@ const requestCategories = [
   "Outros",
 ];
 
+const sectorOptions = [
+  { label: "Contábil", value: "Contábil" },
+  { label: "Fiscal", value: "Fiscal" },
+  { label: "Departamento Pessoal", value: "Departamento Pessoal" },
+  { label: "Financeiro", value: "Financeiro" },
+  { label: "Comercial", value: "Comercial" },
+  { label: "Societário", value: "Societário" },
+  { label: "Geral", value: "Geral" },
+];
+
 export default function PortalClientePage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
