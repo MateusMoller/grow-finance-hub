@@ -107,6 +107,7 @@ export default function PortalClientePage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newCategory, setNewCategory] = useState("Outros");
+  const [newSector, setNewSector] = useState("Geral");
   const [submitting, setSubmitting] = useState(false);
 
   // Upload form
