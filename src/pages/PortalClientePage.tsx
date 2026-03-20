@@ -326,6 +326,15 @@ export default function PortalClientePage() {
                       </Select>
                     </div>
                     <div>
+                      <label className="text-sm font-medium mb-1.5 block">Setor Responsável</label>
+                      <Select value={newSector} onValueChange={setNewSector}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {sectorOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
                       <label className="text-sm font-medium mb-1.5 block">Descrição</label>
                       <Textarea placeholder="Descreva sua solicitação em detalhes..." rows={4} value={newDescription} onChange={(e) => setNewDescription(e.target.value)} />
                     </div>
