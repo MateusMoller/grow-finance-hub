@@ -46,6 +46,9 @@ export function SiteHeader() {
 
         <div className="hidden md:flex items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
+            <Link to="/portal">Portal do Cliente</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
             <Link to="/login">Entrar</Link>
           </Button>
           <Button variant="hero" size="sm" asChild>
@@ -79,6 +82,13 @@ export function SiteHeader() {
                   {link.label}
                 </Link>
               ))}
+              <Link
+                to="/portal"
+                onClick={() => setOpen(false)}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-muted text-primary"
+              >
+                Portal do Cliente
+              </Link>
               <div className="flex gap-2 pt-2 border-t mt-2">
                 <Button variant="outline" size="sm" className="flex-1" asChild>
                   <Link to="/login" onClick={() => setOpen(false)}>Entrar</Link>
