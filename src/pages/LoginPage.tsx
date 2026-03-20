@@ -75,9 +75,14 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="text-sm text-center text-muted-foreground">
-            <Link to="/" className="text-primary hover:underline">← Voltar ao site</Link>
-          </p>
+          <div className="text-sm text-center space-y-2">
+            <p className="text-muted-foreground">
+              É cliente? <Link to="/portal" className="text-primary hover:underline font-medium">Acesse o Portal do Cliente</Link>
+            </p>
+            <p className="text-muted-foreground">
+              <Link to="/" className="text-primary hover:underline">← Voltar ao site</Link>
+            </p>
+          </div>
         </motion.div>
       </div>
     </div>
