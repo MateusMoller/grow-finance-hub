@@ -81,7 +81,7 @@ export default function HomePage() {
               className="font-heading text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-primary-foreground leading-[1.1]"
             >
               Gestão contábil e financeira{" "}
-              <span className="text-grow-emerald-light" style={{ color: "hsl(160, 70%, 50%)" }}>
+              <span className="text-grow-lavender" style={{ color: "hsl(240, 30%, 85%)" }}>
                 inteligente
               </span>
             </motion.h1>
