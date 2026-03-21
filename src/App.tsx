@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/app/ProtectedRoute";
 
 import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
@@ -42,22 +43,22 @@ const App = () => (
             <Route path="/contato" element={<ContactPage />} />
             <Route path="/login" element={<LoginPage />} />
 
-            {/* App Interno */}
-            <Route path="/app" element={<DashboardPage />} />
-            <Route path="/app/kanban" element={<KanbanPage />} />
-            <Route path="/app/clientes" element={<ClientsPage />} />
-            <Route path="/app/crm" element={<CRMPage />} />
-            <Route path="/app/tarefas" element={<TarefasPage />} />
-            <Route path="/app/formularios" element={<FormulariosPage />} />
-            <Route path="/app/documentos" element={<DocumentosPage />} />
-            <Route path="/app/comercial" element={<ComercialPage />} />
-            <Route path="/app/relatorios" element={<RelatoriosPage />} />
-            <Route path="/app/notificacoes" element={<NotificacoesPage />} />
-            <Route path="/app/configuracoes" element={<ConfiguracoesPage />} />
-            <Route path="/app/solicitacoes" element={<SolicitacoesPage />} />
+            {/* App Interno - Protegido */}
+            <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/app/kanban" element={<ProtectedRoute><KanbanPage /></ProtectedRoute>} />
+            <Route path="/app/clientes" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
+            <Route path="/app/crm" element={<ProtectedRoute><CRMPage /></ProtectedRoute>} />
+            <Route path="/app/tarefas" element={<ProtectedRoute><TarefasPage /></ProtectedRoute>} />
+            <Route path="/app/formularios" element={<ProtectedRoute><FormulariosPage /></ProtectedRoute>} />
+            <Route path="/app/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
+            <Route path="/app/comercial" element={<ProtectedRoute><ComercialPage /></ProtectedRoute>} />
+            <Route path="/app/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
+            <Route path="/app/notificacoes" element={<ProtectedRoute><NotificacoesPage /></ProtectedRoute>} />
+            <Route path="/app/configuracoes" element={<ProtectedRoute><ConfiguracoesPage /></ProtectedRoute>} />
+            <Route path="/app/solicitacoes" element={<ProtectedRoute><SolicitacoesPage /></ProtectedRoute>} />
 
-            {/* Portal do Cliente */}
-            <Route path="/portal" element={<PortalClientePage />} />
+            {/* Portal do Cliente - Protegido */}
+            <Route path="/portal" element={<ProtectedRoute><PortalClientePage /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

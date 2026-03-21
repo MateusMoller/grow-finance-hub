@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import growIcon from "@/assets/grow-icon.png";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -32,8 +33,8 @@ export default function LoginPage() {
       <div className="hidden lg:flex w-1/2 bg-hero items-center justify-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,hsl(160_84%_22%/0.2),transparent_70%)]" />
         <div className="relative text-center space-y-6 px-12">
-          <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
-            <span className="text-primary-foreground font-heading font-bold text-2xl">G</span>
+          <div className="h-16 w-16 rounded-2xl overflow-hidden mx-auto">
+            <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           <h1 className="font-heading text-4xl font-bold text-primary-foreground">Grow Finance</h1>
           <p className="text-lg max-w-md" style={{ color: "hsl(150, 10%, 65%)" }}>
@@ -50,8 +51,8 @@ export default function LoginPage() {
           className="w-full max-w-sm space-y-8"
         >
           <div className="lg:hidden flex items-center gap-2 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-heading font-bold text-sm">G</span>
+            <div className="h-8 w-8 rounded-lg overflow-hidden">
+              <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
             </div>
             <span className="font-heading font-bold text-lg">Grow Finance</span>
           </div>

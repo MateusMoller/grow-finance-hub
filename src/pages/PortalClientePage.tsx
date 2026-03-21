@@ -24,6 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import growIcon from "@/assets/grow-icon.png";
 
 type RequestStatus = "pending" | "in_progress" | "completed" | "cancelled";
 
@@ -246,8 +247,8 @@ export default function PortalClientePage() {
       <header className="bg-card border-b sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">G</span>
+            <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
+              <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
             </div>
             <div>
               <span className="font-bold text-sm">Portal do Cliente</span>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
 import {
   MessageSquare, Clock, AlertCircle, CheckCircle2, X,
@@ -114,7 +115,8 @@ export default function SolicitacoesPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <AppLayout>
+    <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold">Solicitações de Clientes</h1>
         <p className="text-muted-foreground text-sm mt-1">
@@ -299,5 +301,6 @@ export default function SolicitacoesPage() {
         </SheetContent>
       </Sheet>
     </div>
+    </AppLayout>
   );
 }
