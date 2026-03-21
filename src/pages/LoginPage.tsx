@@ -33,8 +33,8 @@ export default function LoginPage() {
       <div className="hidden lg:flex w-1/2 bg-hero items-center justify-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,hsl(160_84%_22%/0.2),transparent_70%)]" />
         <div className="relative text-center space-y-6 px-12">
-          <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
-            <span className="text-primary-foreground font-heading font-bold text-2xl">G</span>
+          <div className="h-16 w-16 rounded-2xl overflow-hidden mx-auto">
+            <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           <h1 className="font-heading text-4xl font-bold text-primary-foreground">Grow Finance</h1>
           <p className="text-lg max-w-md" style={{ color: "hsl(150, 10%, 65%)" }}>
