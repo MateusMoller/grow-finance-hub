@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import growIcon from "@/assets/grow-icon.png";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
