@@ -24,6 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import growIcon from "@/assets/grow-icon.png";
 
 type RequestStatus = "pending" | "in_progress" | "completed" | "cancelled";
 
