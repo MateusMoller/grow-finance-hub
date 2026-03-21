@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Upload, FileText, Clock, CheckCircle2, AlertCircle, Plus,
-  Download, Trash2, Eye, Search, Filter, Send, Paperclip,
-  FolderOpen, MessageSquare, ChevronRight, X, Loader2,
+  Download, Trash2, Search, Filter, Send, Paperclip,
+  FolderOpen, MessageSquare, ChevronRight, X, Loader2, ClipboardList, ArrowLeft,
 } from "lucide-react";
 import { RequestChat } from "@/components/app/RequestChat";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,47 @@ const sectorOptions = [
   { label: "Geral", value: "Geral" },
 ];
 
+type PortalTab = "requests" | "documents" | "forms";
+
+interface PortalFormField {
+  name: string;
+  label: string;
+  type: "text" | "email" | "date" | "select" | "textarea";
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
+interface PortalFormTemplate {
+  id: string;
+  title: string;
+  description: string | null;
+  sector: string;
+  fields: PortalFormField[];
+}
+
+const parsePortalFields = (value: unknown): PortalFormField[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const raw = item as Record<string, unknown>;
+      const type = String(raw.type || "text");
+      if (!["text", "email", "date", "select", "textarea"].includes(type)) return null;
+
+      return {
+        name: String(raw.name || ""),
+        label: String(raw.label || ""),
+        type: type as PortalFormField["type"],
+        required: Boolean(raw.required),
+        options: Array.isArray(raw.options) ? raw.options.map((option) => String(option)) : [],
+        placeholder: raw.placeholder ? String(raw.placeholder) : "",
+      };
+    })
+    .filter((field): field is PortalFormField => Boolean(field));
+};
+
 export default function PortalClientePage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -91,6 +132,7 @@ export default function PortalClientePage() {
 
   const [requests, setRequests] = useState<ClientRequest[]>([]);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
+  const [publishedForms, setPublishedForms] = useState<PortalFormTemplate[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -115,6 +157,12 @@ export default function PortalClientePage() {
   const [uploadCategory, setUploadCategory] = useState("Outros");
   const [uploadRequestId, setUploadRequestId] = useState<string>("none");
 
+  // Tabs and client forms
+  const [activeTab, setActiveTab] = useState<PortalTab>("requests");
+  const [selectedFormTemplate, setSelectedFormTemplate] = useState<PortalFormTemplate | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [submittingForm, setSubmittingForm] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/login");
@@ -129,12 +177,32 @@ export default function PortalClientePage() {
 
   const fetchData = async () => {
     setLoadingData(true);
-    const [reqRes, docRes] = await Promise.all([
+    const [reqRes, docRes, formsRes] = await Promise.all([
       supabase.from("client_requests").select("*").order("created_at", { ascending: false }),
       supabase.from("client_documents").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("form_templates")
+        .select("id, title, description, sector, fields")
+        .eq("is_published", true)
+        .order("updated_at", { ascending: false }),
     ]);
     if (reqRes.data) setRequests(reqRes.data as ClientRequest[]);
     if (docRes.data) setDocuments(docRes.data as ClientDocument[]);
+    if (formsRes.data) {
+      const parsedForms = formsRes.data.map((form) => ({
+        id: form.id,
+        title: form.title,
+        description: form.description,
+        sector: form.sector,
+        fields: parsePortalFields(form.fields),
+      }));
+      setPublishedForms(parsedForms);
+    } else {
+      setPublishedForms([]);
+    }
+    if (formsRes.error) {
+      toast.error("Erro ao carregar formulários publicados");
+    }
     setLoadingData(false);
   };
 
@@ -155,6 +223,74 @@ export default function PortalClientePage() {
     setNewTitle(""); setNewDescription(""); setNewCategory("Outros"); setNewSector("Geral");
     setNewRequestOpen(false);
     fetchData();
+  };
+
+  const openFormTemplate = (template: PortalFormTemplate) => {
+    setSelectedFormTemplate(template);
+    setFormValues({});
+  };
+
+  const handleFormValueChange = (fieldName: string, value: string) => {
+    setFormValues((prev) => ({ ...prev, [fieldName]: value }));
+  };
+
+  const buildFormRequestDescription = (template: PortalFormTemplate) => {
+    const lines = template.fields
+      .map((field) => {
+        const value = formValues[field.name]?.trim();
+        if (!value) return null;
+        return `${field.label}: ${value}`;
+      })
+      .filter(Boolean) as string[];
+
+    return [
+      `Solicitacao criada a partir do formulario "${template.title}".`,
+      "",
+      ...lines,
+    ].join("\n");
+  };
+
+  const handleSubmitPortalForm = async () => {
+    if (!user || !selectedFormTemplate) return;
+
+    const missingRequiredField = selectedFormTemplate.fields.find(
+      (field) => field.required && !formValues[field.name]?.trim()
+    );
+
+    if (missingRequiredField) {
+      toast.error(`Preencha o campo: ${missingRequiredField.label}`);
+      return;
+    }
+
+    setSubmittingForm(true);
+
+    const collaboratorName = formValues.nome_colaborador?.trim();
+    const requestTitle = collaboratorName
+      ? `Formulário: ${selectedFormTemplate.title} - ${collaboratorName}`
+      : `Formulário: ${selectedFormTemplate.title}`;
+
+    const requestDescription = buildFormRequestDescription(selectedFormTemplate);
+
+    const { error } = await supabase.from("client_requests").insert({
+      user_id: user.id,
+      title: requestTitle,
+      description: requestDescription,
+      category: "Formulário",
+      sector: selectedFormTemplate.sector,
+    });
+
+    setSubmittingForm(false);
+
+    if (error) {
+      toast.error("Erro ao enviar formulário");
+      return;
+    }
+
+    toast.success("Formulário enviado. Ele já está no menu de solicitações.");
+    setSelectedFormTemplate(null);
+    setFormValues({});
+    setActiveTab("requests");
+    await fetchData();
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -290,7 +426,7 @@ export default function PortalClientePage() {
           ))}
         </div>
 
-        <Tabs defaultValue="requests" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <TabsList>
               <TabsTrigger value="requests" className="gap-1.5">
@@ -298,6 +434,9 @@ export default function PortalClientePage() {
               </TabsTrigger>
               <TabsTrigger value="documents" className="gap-1.5">
                 <FolderOpen className="h-4 w-4" /> Documentos
+              </TabsTrigger>
+              <TabsTrigger value="forms" className="gap-1.5">
+                <ClipboardList className="h-4 w-4" /> Formulários
               </TabsTrigger>
             </TabsList>
 
@@ -535,6 +674,134 @@ export default function PortalClientePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Forms Tab */}
+          <TabsContent value="forms" className="space-y-4">
+            {selectedFormTemplate ? (
+              <div className="bg-card border rounded-xl p-5 sm:p-6 max-w-3xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setSelectedFormTemplate(null);
+                      setFormValues({});
+                    }}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <div>
+                    <h3 className="font-semibold">{selectedFormTemplate.title}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedFormTemplate.description || "Sem descrição"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {selectedFormTemplate.fields.map((field) => (
+                    <div key={field.name} className="space-y-1.5">
+                      <label className="text-sm font-medium">
+                        {field.label}
+                        {field.required && <span className="text-destructive ml-1">*</span>}
+                      </label>
+                      {field.type === "select" ? (
+                        <Select
+                          value={formValues[field.name] || ""}
+                          onValueChange={(value) => handleFormValueChange(field.name, value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(field.options || []).map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : field.type === "textarea" ? (
+                        <Textarea
+                          value={formValues[field.name] || ""}
+                          onChange={(event) => handleFormValueChange(field.name, event.target.value)}
+                          rows={4}
+                          placeholder={field.placeholder}
+                        />
+                      ) : (
+                        <Input
+                          type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
+                          value={formValues[field.name] || ""}
+                          onChange={(event) => handleFormValueChange(field.name, event.target.value)}
+                          placeholder={field.placeholder}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 sm:justify-end mt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedFormTemplate(null);
+                      setFormValues({});
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="button" className="gap-2" onClick={handleSubmitPortalForm} disabled={submittingForm}>
+                    {submittingForm ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Enviar formulário
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-card border rounded-xl p-5">
+                  <h3 className="font-semibold">Formulários do Portal do Cliente</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Preencha um formulário e ele será enviado automaticamente para o menu de solicitações.
+                  </p>
+                </div>
+                {publishedForms.length === 0 ? (
+                  <div className="bg-card border rounded-xl p-10 text-center">
+                    <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="font-medium">Nenhum formulário publicado</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Assim que a equipe publicar um formulário, ele aparecerá aqui.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {publishedForms.map((template, index) => (
+                      <motion.button
+                        key={template.id}
+                        type="button"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.04 }}
+                        onClick={() => openFormTemplate(template)}
+                        className="text-left bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-3">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <p className="font-medium">{template.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {template.description || "Sem descrição"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-3">{template.fields.length} campos</p>
+                      </motion.button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>

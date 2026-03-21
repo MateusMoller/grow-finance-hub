@@ -3,6 +3,7 @@ import {
   Users,
   FileText,
   KanbanSquare,
+  CalendarDays,
   BarChart3,
   Bell,
   Settings,
@@ -30,6 +31,7 @@ import {
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
   { title: "Kanban", url: "/app/kanban", icon: KanbanSquare },
+  { title: "Calendário", url: "/app/calendario", icon: CalendarDays },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
   { title: "Clientes", url: "/app/clientes", icon: Users },
 ];
