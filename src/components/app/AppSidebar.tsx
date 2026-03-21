@@ -32,7 +32,6 @@ const mainItems = [
   { title: "Kanban", url: "/app/kanban", icon: KanbanSquare },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
   { title: "Clientes", url: "/app/clientes", icon: Users },
-  { title: "Leads / CRM", url: "/app/crm", icon: UserPlus },
 ];
 
 const operationalItems = [

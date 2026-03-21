@@ -14,7 +14,6 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import ClientsPage from "./pages/ClientsPage";
-import CRMPage from "./pages/CRMPage";
 import TarefasPage from "./pages/TarefasPage";
 import FormulariosPage from "./pages/FormulariosPage";
 import DocumentosPage from "./pages/DocumentosPage";
@@ -47,7 +46,6 @@ const App = () => (
             <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/app/kanban" element={<ProtectedRoute><KanbanPage /></ProtectedRoute>} />
             <Route path="/app/clientes" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
-            <Route path="/app/crm" element={<ProtectedRoute><CRMPage /></ProtectedRoute>} />
             <Route path="/app/tarefas" element={<ProtectedRoute><TarefasPage /></ProtectedRoute>} />
             <Route path="/app/formularios" element={<ProtectedRoute><FormulariosPage /></ProtectedRoute>} />
             <Route path="/app/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
