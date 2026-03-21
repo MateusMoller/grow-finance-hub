@@ -51,8 +51,8 @@ export default function LoginPage() {
           className="w-full max-w-sm space-y-8"
         >
           <div className="lg:hidden flex items-center gap-2 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-heading font-bold text-sm">G</span>
+            <div className="h-8 w-8 rounded-lg overflow-hidden">
+              <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
             </div>
             <span className="font-heading font-bold text-lg">Grow Finance</span>
           </div>

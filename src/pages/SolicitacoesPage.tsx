@@ -301,5 +301,6 @@ export default function SolicitacoesPage() {
         </SheetContent>
       </Sheet>
     </div>
+    </AppLayout>
   );
 }
