@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
 import {
   MessageSquare, Clock, AlertCircle, CheckCircle2, X,
