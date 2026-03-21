@@ -248,7 +248,7 @@ export default function PortalClientePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
-              <img src="/src/assets/grow-icon.png" alt="Grow" className="h-full w-full object-cover" />
+              <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
             </div>
             <div>
               <span className="font-bold text-sm">Portal do Cliente</span>
