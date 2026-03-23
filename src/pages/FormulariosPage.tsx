@@ -290,7 +290,7 @@ export default function FormulariosPage() {
       description: draft.description.trim() || null,
       sector: draft.sector,
       is_published: draft.is_published,
-      fields: normalizedFields as unknown,
+      fields: normalizedFields as any,
     };
 
     setSaving(true);
