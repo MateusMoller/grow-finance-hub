@@ -124,7 +124,7 @@ const parseFields = (value: unknown): FormField[] => {
         placeholder: raw.placeholder ? String(raw.placeholder) : "",
       };
     })
-    .filter((field): field is FormField => Boolean(field));
+    .filter((field): field is Required<Pick<FormField, 'name' | 'label' | 'type'>> & FormField => Boolean(field));
 };
 
 export default function FormulariosPage() {
