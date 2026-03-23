@@ -16,6 +16,7 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import CalendarioPage from "./pages/CalendarioPage";
 import ClientsPage from "./pages/ClientsPage";
+import ClientDetailPage from "./pages/ClientDetailPage";
 import TarefasPage from "./pages/TarefasPage";
 import FormulariosPage from "./pages/FormulariosPage";
 import DocumentosPage from "./pages/DocumentosPage";
