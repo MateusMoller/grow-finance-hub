@@ -355,7 +355,7 @@ function KanbanCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
       draggable
-      onDragStart={(event) => {
+      onDragStart={(event: any) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", task.id);
         onDragStart(task.id);
