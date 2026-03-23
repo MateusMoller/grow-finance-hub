@@ -16,6 +16,7 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import CalendarioPage from "./pages/CalendarioPage";
 import ClientsPage from "./pages/ClientsPage";
+import ClientDetailPage from "./pages/ClientDetailPage";
 import TarefasPage from "./pages/TarefasPage";
 import FormulariosPage from "./pages/FormulariosPage";
 import DocumentosPage from "./pages/DocumentosPage";
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/app/kanban" element={<ProtectedRoute><KanbanPage /></ProtectedRoute>} />
               <Route path="/app/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
               <Route path="/app/clientes" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
+              <Route path="/app/clientes/:id" element={<ProtectedRoute><ClientDetailPage /></ProtectedRoute>} />
               <Route path="/app/tarefas" element={<ProtectedRoute><TarefasPage /></ProtectedRoute>} />
               <Route path="/app/formularios" element={<ProtectedRoute><FormulariosPage /></ProtectedRoute>} />
               <Route path="/app/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />

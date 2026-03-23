@@ -111,11 +111,11 @@ export default function ConfiguracoesPage() {
     });
     setTheme(initialTheme);
     setIntegrationSettings({
-      calendarSync: settings?.integrations_calendar_sync ?? false,
-      driveSync: settings?.integrations_drive_sync ?? false,
-      webhookUrl: settings?.integrations_webhook_url || "",
-      apiAccess: settings?.integrations_api_access ?? false,
-      apiToken: settings?.integrations_api_token || "",
+      calendarSync: settings?.calendar_sync ?? false,
+      driveSync: settings?.drive_sync ?? false,
+      webhookUrl: settings?.webhook_url || "",
+      apiAccess: settings?.api_access ?? false,
+      apiToken: settings?.api_token || "",
     });
     setLoading(false);
   };
@@ -207,11 +207,11 @@ export default function ConfiguracoesPage() {
   const saveIntegrations = async () => {
     setSavingSection("integrations");
     const { error } = await upsertUserSettings({
-      integrations_calendar_sync: integrationSettings.calendarSync,
-      integrations_drive_sync: integrationSettings.driveSync,
-      integrations_webhook_url: integrationSettings.webhookUrl.trim() || null,
-      integrations_api_access: integrationSettings.apiAccess,
-      integrations_api_token: integrationSettings.apiToken.trim() || null,
+      calendar_sync: integrationSettings.calendarSync,
+      drive_sync: integrationSettings.driveSync,
+      webhook_url: integrationSettings.webhookUrl.trim() || null,
+      api_access: integrationSettings.apiAccess,
+      api_token: integrationSettings.apiToken.trim() || null,
     });
     setSavingSection(null);
     if (error) return toast.error("Erro ao salvar integracoes.");

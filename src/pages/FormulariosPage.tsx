@@ -124,7 +124,7 @@ const parseFields = (value: unknown): FormField[] => {
         placeholder: raw.placeholder ? String(raw.placeholder) : "",
       };
     })
-    .filter((field): field is FormField => Boolean(field));
+    .filter((field): field is any => Boolean(field)) as FormField[];
 };
 
 export default function FormulariosPage() {
@@ -290,7 +290,7 @@ export default function FormulariosPage() {
       description: draft.description.trim() || null,
       sector: draft.sector,
       is_published: draft.is_published,
-      fields: normalizedFields as unknown,
+      fields: normalizedFields as any,
     };
 
     setSaving(true);
@@ -312,10 +312,10 @@ export default function FormulariosPage() {
     } else {
       const { error } = await supabase
         .from("form_templates")
-        .insert({
+        .insert([{
           ...payload,
           created_by: user?.id || null,
-        });
+        }]);
 
       setSaving(false);
 

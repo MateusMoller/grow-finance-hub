@@ -122,7 +122,7 @@ const parsePortalFields = (value: unknown): PortalFormField[] => {
         placeholder: raw.placeholder ? String(raw.placeholder) : "",
       };
     })
-    .filter((field): field is PortalFormField => Boolean(field));
+    .filter((field): field is any => Boolean(field)) as PortalFormField[];
 };
 
 export default function PortalClientePage() {
