@@ -111,11 +111,11 @@ export default function ConfiguracoesPage() {
     });
     setTheme(initialTheme);
     setIntegrationSettings({
-      calendarSync: settings?.integrations_calendar_sync ?? false,
-      driveSync: settings?.integrations_drive_sync ?? false,
-      webhookUrl: settings?.integrations_webhook_url || "",
-      apiAccess: settings?.integrations_api_access ?? false,
-      apiToken: settings?.integrations_api_token || "",
+      calendarSync: settings?.calendar_sync ?? false,
+      driveSync: settings?.drive_sync ?? false,
+      webhookUrl: settings?.webhook_url || "",
+      apiAccess: settings?.api_access ?? false,
+      apiToken: settings?.api_token || "",
     });
     setLoading(false);
   };
