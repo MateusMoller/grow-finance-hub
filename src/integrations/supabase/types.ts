@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_events: {
+        Row: {
+          all_day: boolean | null
+          assignee: string | null
+          client_name: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_at: string
+          entry_type: string
+          id: string
+          priority: string
+          sector: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean | null
+          assignee?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_at?: string
+          entry_type?: string
+          id?: string
+          priority?: string
+          sector?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean | null
+          assignee?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_at?: string
+          entry_type?: string
+          id?: string
+          priority?: string
+          sector?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       client_data: {
         Row: {
           category: string
@@ -230,6 +281,89 @@ export type Database = {
         }
         Relationships: []
       }
+      form_submissions: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          notes: string | null
+          status: string | null
+          submitted_by: string | null
+          submitted_by_name: string | null
+          template_id: string | null
+          template_title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          notes?: string | null
+          status?: string | null
+          submitted_by?: string | null
+          submitted_by_name?: string | null
+          template_id?: string | null
+          template_title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          notes?: string | null
+          status?: string | null
+          submitted_by?: string | null
+          submitted_by_name?: string | null
+          template_id?: string | null
+          template_title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_submissions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "form_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          fields: Json | null
+          id: string
+          is_published: boolean | null
+          sector: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fields?: Json | null
+          id?: string
+          is_published?: boolean | null
+          sector?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fields?: Json | null
+          id?: string
+          is_published?: boolean | null
+          sector?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       kanban_tasks: {
         Row: {
           assignee: string | null
@@ -369,6 +503,87 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          api_access: boolean | null
+          api_token: string | null
+          calendar_sync: boolean | null
+          compact_mode: boolean | null
+          company_document: string | null
+          company_email: string | null
+          company_name: string | null
+          company_phone: string | null
+          company_website: string | null
+          created_at: string
+          drive_sync: boolean | null
+          id: string
+          job_title: string | null
+          language_code: string | null
+          notify_assigned_tasks: boolean | null
+          notify_daily_email: boolean | null
+          notify_due_soon: boolean | null
+          notify_new_forms: boolean | null
+          notify_new_leads: boolean | null
+          phone: string | null
+          theme_preference: string | null
+          updated_at: string
+          user_id: string
+          webhook_url: string | null
+        }
+        Insert: {
+          api_access?: boolean | null
+          api_token?: string | null
+          calendar_sync?: boolean | null
+          compact_mode?: boolean | null
+          company_document?: string | null
+          company_email?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          company_website?: string | null
+          created_at?: string
+          drive_sync?: boolean | null
+          id?: string
+          job_title?: string | null
+          language_code?: string | null
+          notify_assigned_tasks?: boolean | null
+          notify_daily_email?: boolean | null
+          notify_due_soon?: boolean | null
+          notify_new_forms?: boolean | null
+          notify_new_leads?: boolean | null
+          phone?: string | null
+          theme_preference?: string | null
+          updated_at?: string
+          user_id: string
+          webhook_url?: string | null
+        }
+        Update: {
+          api_access?: boolean | null
+          api_token?: string | null
+          calendar_sync?: boolean | null
+          compact_mode?: boolean | null
+          company_document?: string | null
+          company_email?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          company_website?: string | null
+          created_at?: string
+          drive_sync?: boolean | null
+          id?: string
+          job_title?: string | null
+          language_code?: string | null
+          notify_assigned_tasks?: boolean | null
+          notify_daily_email?: boolean | null
+          notify_due_soon?: boolean | null
+          notify_new_forms?: boolean | null
+          notify_new_leads?: boolean | null
+          phone?: string | null
+          theme_preference?: string | null
+          updated_at?: string
+          user_id?: string
+          webhook_url?: string | null
         }
         Relationships: []
       }
