@@ -207,11 +207,11 @@ export default function ConfiguracoesPage() {
   const saveIntegrations = async () => {
     setSavingSection("integrations");
     const { error } = await upsertUserSettings({
-      integrations_calendar_sync: integrationSettings.calendarSync,
-      integrations_drive_sync: integrationSettings.driveSync,
-      integrations_webhook_url: integrationSettings.webhookUrl.trim() || null,
-      integrations_api_access: integrationSettings.apiAccess,
-      integrations_api_token: integrationSettings.apiToken.trim() || null,
+      calendar_sync: integrationSettings.calendarSync,
+      drive_sync: integrationSettings.driveSync,
+      webhook_url: integrationSettings.webhookUrl.trim() || null,
+      api_access: integrationSettings.apiAccess,
+      api_token: integrationSettings.apiToken.trim() || null,
     });
     setSavingSection(null);
     if (error) return toast.error("Erro ao salvar integracoes.");

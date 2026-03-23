@@ -312,10 +312,10 @@ export default function FormulariosPage() {
     } else {
       const { error } = await supabase
         .from("form_templates")
-        .insert({
+        .insert([{
           ...payload,
           created_by: user?.id || null,
-        });
+        }]);
 
       setSaving(false);
 
