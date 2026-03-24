@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "vite build --base=/grow-finance-hub/",
     "build:dev": "vite build --mode development",
+    "deploy:pages": "npm run build:pages && node -e \"require('fs').copyFileSync('dist/index.html','dist/404.html')\" && npx --yes gh-pages -d dist",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
