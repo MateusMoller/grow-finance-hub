@@ -3,7 +3,6 @@ ALTER TABLE public.kanban_tasks
   ADD COLUMN IF NOT EXISTS integration_source text,
   ADD COLUMN IF NOT EXISTS integration_task_id text,
   ADD COLUMN IF NOT EXISTS integration_payload jsonb;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -16,6 +15,5 @@ BEGIN
       UNIQUE (integration_source, integration_task_id);
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_kanban_tasks_integration_source
   ON public.kanban_tasks (integration_source);

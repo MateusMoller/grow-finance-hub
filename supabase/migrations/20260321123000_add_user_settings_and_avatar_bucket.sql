@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE public.user_settings
   ADD COLUMN IF NOT EXISTS user_id uuid,
   ADD COLUMN IF NOT EXISTS phone text,
@@ -50,7 +49,6 @@ ALTER TABLE public.user_settings
   ADD COLUMN IF NOT EXISTS integrations_api_token text,
   ADD COLUMN IF NOT EXISTS created_at timestamptz,
   ADD COLUMN IF NOT EXISTS updated_at timestamptz;
-
 ALTER TABLE public.user_settings
   ALTER COLUMN user_id SET NOT NULL,
   ALTER COLUMN notify_assigned_tasks SET DEFAULT true,
@@ -79,9 +77,7 @@ ALTER TABLE public.user_settings
   ALTER COLUMN created_at SET NOT NULL,
   ALTER COLUMN updated_at SET DEFAULT now(),
   ALTER COLUMN updated_at SET NOT NULL;
-
 CREATE UNIQUE INDEX IF NOT EXISTS user_settings_user_id_key ON public.user_settings(user_id);
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -92,39 +88,32 @@ BEGIN
       FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
   END IF;
 END $$;
-
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Users can view own settings" ON public.user_settings;
 CREATE POLICY "Users can view own settings"
 ON public.user_settings
 FOR SELECT TO authenticated
 USING (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can insert own settings" ON public.user_settings;
 CREATE POLICY "Users can insert own settings"
 ON public.user_settings
 FOR INSERT TO authenticated
 WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Users can update own settings" ON public.user_settings;
 CREATE POLICY "Users can update own settings"
 ON public.user_settings
 FOR UPDATE TO authenticated
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
-
 DROP POLICY IF EXISTS "Admins can view all settings" ON public.user_settings;
 CREATE POLICY "Admins can view all settings"
 ON public.user_settings
 FOR SELECT TO authenticated
 USING (has_role(auth.uid(), 'admin'));
-
 DROP TRIGGER IF EXISTS update_user_settings_updated_at ON public.user_settings;
 CREATE TRIGGER update_user_settings_updated_at
 BEFORE UPDATE ON public.user_settings
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
 -- Avatar storage bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
@@ -135,7 +124,6 @@ VALUES (
   ARRAY['image/png', 'image/jpeg', 'image/webp']
 )
 ON CONFLICT (id) DO NOTHING;
-
 DROP POLICY IF EXISTS "Users can upload own avatars" ON storage.objects;
 CREATE POLICY "Users can upload own avatars"
 ON storage.objects
@@ -144,7 +132,6 @@ WITH CHECK (
   bucket_id = 'profile-avatars'
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
-
 DROP POLICY IF EXISTS "Users can update own avatars" ON storage.objects;
 CREATE POLICY "Users can update own avatars"
 ON storage.objects
@@ -157,7 +144,6 @@ WITH CHECK (
   bucket_id = 'profile-avatars'
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
-
 DROP POLICY IF EXISTS "Users can delete own avatars" ON storage.objects;
 CREATE POLICY "Users can delete own avatars"
 ON storage.objects
@@ -166,7 +152,6 @@ USING (
   bucket_id = 'profile-avatars'
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
-
 DROP POLICY IF EXISTS "Users can view own avatars" ON storage.objects;
 CREATE POLICY "Users can view own avatars"
 ON storage.objects

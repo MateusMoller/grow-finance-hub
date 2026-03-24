@@ -1,7 +1,5 @@
-
 -- Add sector column to client_requests
 ALTER TABLE public.client_requests ADD COLUMN sector text NOT NULL DEFAULT 'Geral';
-
 -- Create kanban_tasks table
 CREATE TABLE public.kanban_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -19,31 +17,24 @@ CREATE TABLE public.kanban_tasks (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE public.kanban_tasks ENABLE ROW LEVEL SECURITY;
-
 -- RLS policies
 CREATE POLICY "Admin full access" ON public.kanban_tasks
 FOR ALL TO authenticated
 USING (has_role(auth.uid(), 'admin'))
 WITH CHECK (has_role(auth.uid(), 'admin'));
-
 CREATE POLICY "Authenticated can view tasks" ON public.kanban_tasks
 FOR SELECT TO authenticated
 USING (true);
-
 CREATE POLICY "Authenticated can insert tasks" ON public.kanban_tasks
 FOR INSERT TO authenticated
 WITH CHECK (true);
-
 CREATE POLICY "Authenticated can update tasks" ON public.kanban_tasks
 FOR UPDATE TO authenticated
 USING (true);
-
 CREATE POLICY "Authenticated can delete own tasks" ON public.kanban_tasks
 FOR DELETE TO authenticated
 USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager'));
-
 -- Trigger: auto-create kanban task when client request is created
 CREATE OR REPLACE FUNCTION public.create_kanban_from_request()
 RETURNS trigger
@@ -65,12 +56,10 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 CREATE TRIGGER on_client_request_created
 AFTER INSERT ON public.client_requests
 FOR EACH ROW
 EXECUTE FUNCTION public.create_kanban_from_request();
-
 -- Updated_at trigger
 CREATE TRIGGER update_kanban_tasks_updated_at
 BEFORE UPDATE ON public.kanban_tasks

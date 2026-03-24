@@ -38,6 +38,33 @@ function generateApiToken() {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function isMissingColumnError(message: string | undefined, column: string) {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes("column") && normalized.includes(column.toLowerCase());
+}
+
+function readStringSetting(settings: Record<string, unknown>, modernKey: string, legacyKey: string) {
+  const modernValue = settings[modernKey];
+  if (typeof modernValue === "string") return modernValue;
+  const legacyValue = settings[legacyKey];
+  if (typeof legacyValue === "string") return legacyValue;
+  return "";
+}
+
+function readBooleanSetting(
+  settings: Record<string, unknown>,
+  modernKey: string,
+  legacyKey: string,
+  fallback = false,
+) {
+  const modernValue = settings[modernKey];
+  if (typeof modernValue === "boolean") return modernValue;
+  const legacyValue = settings[legacyKey];
+  if (typeof legacyValue === "boolean") return legacyValue;
+  return fallback;
+}
+
 export default function ConfiguracoesPage() {
   const { user } = useAuth();
   const { setTheme, theme } = useTheme();
@@ -80,42 +107,42 @@ export default function ConfiguracoesPage() {
     if (settingsRes.error) toast.error("Falha ao carregar configuracoes.");
 
     const profile = profileRes.data;
-    const settings = settingsRes.data;
-    const initialTheme = (settings?.theme_preference || theme || "system") as ThemePreference;
+    const settings = (settingsRes.data || {}) as Record<string, unknown>;
+    const initialTheme = (typeof settings.theme_preference === "string" ? settings.theme_preference : theme || "system") as ThemePreference;
 
     setProfileForm({
       displayName: profile?.display_name || user.email?.split("@")[0] || "",
       email: user.email || "",
-      phone: settings?.phone || "",
-      jobTitle: settings?.job_title || "",
+      phone: typeof settings.phone === "string" ? settings.phone : "",
+      jobTitle: typeof settings.job_title === "string" ? settings.job_title : "",
       avatarUrl: profile?.avatar_url || "",
     });
     setCompanyForm({
-      companyName: settings?.company_name || "",
-      companyDocument: settings?.company_document || "",
-      companyEmail: settings?.company_email || "",
-      companyPhone: settings?.company_phone || "",
-      companyWebsite: settings?.company_website || "",
+      companyName: typeof settings.company_name === "string" ? settings.company_name : "",
+      companyDocument: typeof settings.company_document === "string" ? settings.company_document : "",
+      companyEmail: typeof settings.company_email === "string" ? settings.company_email : "",
+      companyPhone: typeof settings.company_phone === "string" ? settings.company_phone : "",
+      companyWebsite: typeof settings.company_website === "string" ? settings.company_website : "",
     });
     setNotificationSettings({
-      assignedTasks: settings?.notify_assigned_tasks ?? true,
-      dueSoon: settings?.notify_due_soon ?? true,
-      newForms: settings?.notify_new_forms ?? true,
-      newLeads: settings?.notify_new_leads ?? true,
-      dailyEmail: settings?.notify_daily_email ?? true,
+      assignedTasks: typeof settings.notify_assigned_tasks === "boolean" ? settings.notify_assigned_tasks : true,
+      dueSoon: typeof settings.notify_due_soon === "boolean" ? settings.notify_due_soon : true,
+      newForms: typeof settings.notify_new_forms === "boolean" ? settings.notify_new_forms : true,
+      newLeads: typeof settings.notify_new_leads === "boolean" ? settings.notify_new_leads : true,
+      dailyEmail: typeof settings.notify_daily_email === "boolean" ? settings.notify_daily_email : true,
     });
     setAppearanceSettings({
       themePreference: initialTheme,
-      languageCode: settings?.language_code || "pt-BR",
-      compactMode: settings?.compact_mode ?? false,
+      languageCode: typeof settings.language_code === "string" ? settings.language_code : "pt-BR",
+      compactMode: typeof settings.compact_mode === "boolean" ? settings.compact_mode : false,
     });
     setTheme(initialTheme);
     setIntegrationSettings({
-      calendarSync: settings?.calendar_sync ?? false,
-      driveSync: settings?.drive_sync ?? false,
-      webhookUrl: settings?.webhook_url || "",
-      apiAccess: settings?.api_access ?? false,
-      apiToken: settings?.api_token || "",
+      calendarSync: readBooleanSetting(settings, "calendar_sync", "integrations_calendar_sync"),
+      driveSync: readBooleanSetting(settings, "drive_sync", "integrations_drive_sync"),
+      webhookUrl: readStringSetting(settings, "webhook_url", "integrations_webhook_url"),
+      apiAccess: readBooleanSetting(settings, "api_access", "integrations_api_access"),
+      apiToken: readStringSetting(settings, "api_token", "integrations_api_token"),
     });
     setLoading(false);
   };
@@ -206,13 +233,33 @@ export default function ConfiguracoesPage() {
 
   const saveIntegrations = async () => {
     setSavingSection("integrations");
-    const { error } = await upsertUserSettings({
+    let { error } = await upsertUserSettings({
       calendar_sync: integrationSettings.calendarSync,
       drive_sync: integrationSettings.driveSync,
       webhook_url: integrationSettings.webhookUrl.trim() || null,
       api_access: integrationSettings.apiAccess,
       api_token: integrationSettings.apiToken.trim() || null,
     });
+
+    if (
+      error &&
+      (
+        isMissingColumnError(error.message, "calendar_sync") ||
+        isMissingColumnError(error.message, "drive_sync") ||
+        isMissingColumnError(error.message, "webhook_url") ||
+        isMissingColumnError(error.message, "api_access") ||
+        isMissingColumnError(error.message, "api_token")
+      )
+    ) {
+      ({ error } = await upsertUserSettings({
+        integrations_calendar_sync: integrationSettings.calendarSync,
+        integrations_drive_sync: integrationSettings.driveSync,
+        integrations_webhook_url: integrationSettings.webhookUrl.trim() || null,
+        integrations_api_access: integrationSettings.apiAccess,
+        integrations_api_token: integrationSettings.apiToken.trim() || null,
+      } as unknown as Partial<Omit<TablesInsert<"user_settings">, "user_id">>));
+    }
+
     setSavingSection(null);
     if (error) return toast.error("Erro ao salvar integracoes.");
     toast.success("Integracoes salvas.");

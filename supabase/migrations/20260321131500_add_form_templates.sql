@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS public.form_templates (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE public.form_templates
   ADD COLUMN IF NOT EXISTS title text,
   ADD COLUMN IF NOT EXISTS description text,
@@ -20,7 +19,6 @@ ALTER TABLE public.form_templates
   ADD COLUMN IF NOT EXISTS created_by uuid,
   ADD COLUMN IF NOT EXISTS created_at timestamptz,
   ADD COLUMN IF NOT EXISTS updated_at timestamptz;
-
 ALTER TABLE public.form_templates
   ALTER COLUMN title SET NOT NULL,
   ALTER COLUMN sector SET DEFAULT 'Geral',
@@ -33,7 +31,6 @@ ALTER TABLE public.form_templates
   ALTER COLUMN created_at SET NOT NULL,
   ALTER COLUMN updated_at SET DEFAULT now(),
   ALTER COLUMN updated_at SET NOT NULL;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -46,7 +43,6 @@ BEGIN
       CHECK (jsonb_typeof(fields) = 'array');
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -59,9 +55,7 @@ BEGIN
       FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
   END IF;
 END $$;
-
 ALTER TABLE public.form_templates ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Clients can view only published forms" ON public.form_templates;
 CREATE POLICY "Clients can view only published forms" ON public.form_templates
 FOR SELECT TO authenticated
@@ -73,7 +67,6 @@ USING (
   OR has_role(auth.uid(), 'employee')
   OR has_role(auth.uid(), 'commercial')
 );
-
 DROP POLICY IF EXISTS "Team can insert form templates" ON public.form_templates;
 CREATE POLICY "Team can insert form templates" ON public.form_templates
 FOR INSERT TO authenticated
@@ -84,7 +77,6 @@ WITH CHECK (
   OR has_role(auth.uid(), 'employee')
   OR has_role(auth.uid(), 'commercial')
 );
-
 DROP POLICY IF EXISTS "Team can update form templates" ON public.form_templates;
 CREATE POLICY "Team can update form templates" ON public.form_templates
 FOR UPDATE TO authenticated
@@ -102,7 +94,6 @@ WITH CHECK (
   OR has_role(auth.uid(), 'employee')
   OR has_role(auth.uid(), 'commercial')
 );
-
 DROP POLICY IF EXISTS "Admins can delete form templates" ON public.form_templates;
 CREATE POLICY "Admins can delete form templates" ON public.form_templates
 FOR DELETE TO authenticated
@@ -111,13 +102,11 @@ USING (
   OR has_role(auth.uid(), 'director')
   OR has_role(auth.uid(), 'manager')
 );
-
 DROP TRIGGER IF EXISTS update_form_templates_updated_at ON public.form_templates;
 CREATE TRIGGER update_form_templates_updated_at
 BEFORE UPDATE ON public.form_templates
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
-
 INSERT INTO public.form_templates (title, description, sector, fields, is_published)
 SELECT
   'Formulário de Admissão',
@@ -139,7 +128,6 @@ WHERE NOT EXISTS (
   FROM public.form_templates
   WHERE title = 'Formulário de Admissão'
 );
-
 INSERT INTO public.form_templates (title, description, sector, fields, is_published)
 SELECT
   'Formulário de Férias',
@@ -160,7 +148,6 @@ WHERE NOT EXISTS (
   FROM public.form_templates
   WHERE title = 'Formulário de Férias'
 );
-
 INSERT INTO public.form_templates (title, description, sector, fields, is_published)
 SELECT
   'Formulário de Demissão',

@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS public.calendar_events (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE public.calendar_events
   ADD COLUMN IF NOT EXISTS title text,
   ADD COLUMN IF NOT EXISTS description text,
@@ -26,7 +25,6 @@ ALTER TABLE public.calendar_events
   ADD COLUMN IF NOT EXISTS created_by uuid,
   ADD COLUMN IF NOT EXISTS created_at timestamptz,
   ADD COLUMN IF NOT EXISTS updated_at timestamptz;
-
 ALTER TABLE public.calendar_events
   ALTER COLUMN title SET NOT NULL,
   ALTER COLUMN entry_type SET DEFAULT 'evento',
@@ -44,7 +42,6 @@ ALTER TABLE public.calendar_events
   ALTER COLUMN created_at SET NOT NULL,
   ALTER COLUMN updated_at SET DEFAULT now(),
   ALTER COLUMN updated_at SET NOT NULL;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -57,7 +54,6 @@ BEGIN
       CHECK (entry_type IN ('evento', 'obrigacao'));
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -70,7 +66,6 @@ BEGIN
       CHECK (priority IN ('baixa', 'media', 'alta', 'urgente'));
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -83,7 +78,6 @@ BEGIN
       CHECK (status IN ('pending', 'completed', 'cancelled'));
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -96,17 +90,13 @@ BEGIN
       FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS calendar_events_due_at_idx ON public.calendar_events(due_at);
-
 ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
-
 DROP POLICY IF EXISTS "Authenticated can view calendar events" ON public.calendar_events;
 CREATE POLICY "Authenticated can view calendar events"
 ON public.calendar_events
 FOR SELECT TO authenticated
 USING (true);
-
 DROP POLICY IF EXISTS "Team can insert calendar events" ON public.calendar_events;
 CREATE POLICY "Team can insert calendar events"
 ON public.calendar_events
@@ -118,7 +108,6 @@ WITH CHECK (
   OR has_role(auth.uid(), 'employee')
   OR has_role(auth.uid(), 'commercial')
 );
-
 DROP POLICY IF EXISTS "Team can update calendar events" ON public.calendar_events;
 CREATE POLICY "Team can update calendar events"
 ON public.calendar_events
@@ -137,7 +126,6 @@ WITH CHECK (
   OR has_role(auth.uid(), 'employee')
   OR has_role(auth.uid(), 'commercial')
 );
-
 DROP POLICY IF EXISTS "Managers can delete calendar events" ON public.calendar_events;
 CREATE POLICY "Managers can delete calendar events"
 ON public.calendar_events
@@ -147,7 +135,6 @@ USING (
   OR has_role(auth.uid(), 'director')
   OR has_role(auth.uid(), 'manager')
 );
-
 DROP TRIGGER IF EXISTS update_calendar_events_updated_at ON public.calendar_events;
 CREATE TRIGGER update_calendar_events_updated_at
 BEFORE UPDATE ON public.calendar_events
