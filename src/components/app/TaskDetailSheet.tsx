@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+﻿import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -13,12 +13,12 @@ import {
   Paperclip,
   MessageSquare,
   Tag,
-  Clock,
   Send,
   Edit,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import type { ChangeHistoryEntry } from "@/lib/changeHistory";
 
 interface Task {
   id: string;
@@ -41,37 +41,49 @@ interface TaskDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubtaskToggle?: (taskId: string, subtaskIndex: number) => void;
+  onDeleteTask?: (taskId: string) => void;
+  historyEntries?: ChangeHistoryEntry[];
 }
 
 const priorityConfig: Record<string, { color: string; bg: string }> = {
   Urgente: { color: "text-destructive", bg: "bg-destructive/10" },
   Alta: { color: "text-orange-600", bg: "bg-orange-100 dark:bg-orange-900/20" },
-  Média: { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
+  Media: { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
+  "Média": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
   Baixa: { color: "text-muted-foreground", bg: "bg-muted" },
 };
 
 const statusConfig: Record<string, { color: string; bg: string }> = {
   Pendente: { color: "text-muted-foreground", bg: "bg-muted" },
   "Em andamento": { color: "text-primary", bg: "bg-primary/10" },
+  "Em revisao": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
   "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  Concluído: { color: "text-primary", bg: "bg-primary/10" },
+  Concluido: { color: "text-primary", bg: "bg-primary/10" },
+  "Concluído": { color: "text-primary", bg: "bg-primary/10" },
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10" },
 };
 
 const mockComments = [
-  { author: "Maria Santos", text: "Já iniciei a conciliação das contas principais.", time: "Há 2 horas" },
-  { author: "Carlos Ribeiro", text: "Preciso do extrato do Banco X para continuar.", time: "Há 1 hora" },
-  { author: "Ana Lima", text: "Enviei os documentos pendentes por e-mail.", time: "Há 30 min" },
+  { author: "Maria Santos", text: "Ja iniciei a conciliacao das contas principais.", time: "Ha 2 horas" },
+  { author: "Carlos Ribeiro", text: "Preciso do extrato do Banco X para continuar.", time: "Ha 1 hora" },
+  { author: "Ana Lima", text: "Enviei os documentos pendentes por e-mail.", time: "Ha 30 min" },
 ];
 
-export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: TaskDetailSheetProps) {
+export function TaskDetailSheet({
+  task,
+  open,
+  onOpenChange,
+  onSubtaskToggle,
+  onDeleteTask,
+  historyEntries = [],
+}: TaskDetailSheetProps) {
   const [comment, setComment] = useState("");
 
   if (!task) return null;
 
-  const subtaskDone = task.subtasks.filter(s => s.done).length;
-  const subtaskPct = Math.round((subtaskDone / task.subtasks.length) * 100);
-  const priority = priorityConfig[task.priority] || priorityConfig.Média;
+  const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
+  const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
+  const priority = priorityConfig[task.priority] || priorityConfig.Media;
   const status = statusConfig[task.status] || statusConfig.Pendente;
 
   return (
@@ -87,15 +99,14 @@ export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: T
         </SheetHeader>
 
         <div className="space-y-6 pb-6">
-          {/* Info grid */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Cliente</span>
-              <span className="text-sm font-medium">{task.client}</span>
+              <span className="text-sm font-medium">{task.client || "Sem cliente"}</span>
             </div>
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" /> Responsável</span>
-              <span className="text-sm font-medium">{task.assignee}</span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" /> Responsavel</span>
+              <span className="text-sm font-medium">{task.assignee || "Sem responsavel"}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Setor</span>
@@ -103,15 +114,14 @@ export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: T
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Prazo</span>
-              <span className="text-sm font-medium">{new Date(task.dueDate).toLocaleDateString("pt-BR")}</span>
+              <span className="text-sm font-medium">{task.dueDate ? new Date(task.dueDate).toLocaleDateString("pt-BR") : "Sem prazo"}</span>
             </div>
           </div>
 
-          {/* Tags */}
           <div>
             <span className="text-xs text-muted-foreground flex items-center gap-1 mb-2"><Tag className="h-3 w-3" /> Etiquetas</span>
             <div className="flex flex-wrap gap-1.5">
-              {task.tags.map(tag => (
+              {task.tags.map((tag) => (
                 <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
               ))}
             </div>
@@ -119,24 +129,23 @@ export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: T
 
           <Separator />
 
-          {/* Subtasks */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold">Subtarefas</span>
-              <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} concluídas</span>
+              <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} concluidas</span>
             </div>
             <Progress value={subtaskPct} className="h-2 mb-3" />
             <div className="space-y-2">
-              {task.subtasks.map((sub, idx) => (
+              {task.subtasks.map((subtask, index) => (
                 <label
-                  key={idx}
+                  key={`${task.id}-${index}`}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                 >
                   <Checkbox
-                    checked={sub.done}
-                    onCheckedChange={() => onSubtaskToggle?.(task.id, idx)}
+                    checked={subtask.done}
+                    onCheckedChange={() => onSubtaskToggle?.(task.id, index)}
                   />
-                  <span className={`text-sm ${sub.done ? "line-through text-muted-foreground" : ""}`}>{sub.title}</span>
+                  <span className={`text-sm ${subtask.done ? "line-through text-muted-foreground" : ""}`}>{subtask.title}</span>
                 </label>
               ))}
             </div>
@@ -144,20 +153,19 @@ export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: T
 
           <Separator />
 
-          {/* Attachments */}
           <div>
             <span className="text-sm font-semibold flex items-center gap-2 mb-3">
               <Paperclip className="h-4 w-4" /> Anexos ({task.attachments})
             </span>
             <div className="space-y-2">
-              {Array.from({ length: Math.min(task.attachments, 3) }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
+              {Array.from({ length: Math.min(task.attachments, 3) }).map((_, index) => (
+                <div key={`${task.id}-attachment-${index}`} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                   <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
                     <Paperclip className="h-3.5 w-3.5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium truncate">documento_{i + 1}.pdf</div>
-                    <div className="text-xs text-muted-foreground">{(120 + i * 80)} KB</div>
+                    <div className="text-xs font-medium truncate">documento_{index + 1}.pdf</div>
+                    <div className="text-xs text-muted-foreground">{120 + index * 80} KB</div>
                   </div>
                 </div>
               ))}
@@ -169,34 +177,33 @@ export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: T
 
           <Separator />
 
-          {/* Comments */}
           <div>
             <span className="text-sm font-semibold flex items-center gap-2 mb-3">
-              <MessageSquare className="h-4 w-4" /> Comentários ({task.comments})
+              <MessageSquare className="h-4 w-4" /> Comentarios ({task.comments})
             </span>
             <div className="space-y-3 mb-4">
-              {mockComments.slice(0, task.comments || 3).map((c, i) => (
-                <div key={i} className="flex gap-3">
+              {mockComments.slice(0, task.comments || 3).map((commentItem, index) => (
+                <div key={`${task.id}-comment-${index}`} className="flex gap-3">
                   <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-semibold text-primary">
-                      {c.author.split(" ").map(n => n[0]).join("")}
+                      {commentItem.author.split(" ").map((name) => name[0]).join("")}
                     </span>
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold">{c.author}</span>
-                      <span className="text-xs text-muted-foreground">{c.time}</span>
+                      <span className="text-xs font-semibold">{commentItem.author}</span>
+                      <span className="text-xs text-muted-foreground">{commentItem.time}</span>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">{c.text}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">{commentItem.text}</p>
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex gap-2">
               <Textarea
-                placeholder="Escrever comentário..."
+                placeholder="Escrever comentario..."
                 value={comment}
-                onChange={(e) => setComment(e.target.value)}
+                onChange={(event) => setComment(event.target.value)}
                 className="text-sm min-h-[60px]"
               />
             </div>
@@ -207,13 +214,43 @@ export function TaskDetailSheet({ task, open, onOpenChange, onSubtaskToggle }: T
 
           <Separator />
 
-          {/* Actions */}
+          <div>
+            <h3 className="text-sm font-semibold mb-3">Historico de alteracoes</h3>
+            {historyEntries.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                Nenhuma alteracao registrada.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {historyEntries.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border p-3">
+                    <div className="text-sm font-medium">{entry.action}</div>
+                    {entry.details && <div className="text-xs text-muted-foreground mt-0.5">{entry.details}</div>}
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      {new Date(entry.createdAt).toLocaleString("pt-BR")} - {entry.actor}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1 gap-1"><Edit className="h-3.5 w-3.5" /> Editar</Button>
-            <Button variant="outline" className="text-destructive hover:text-destructive gap-1"><Trash2 className="h-3.5 w-3.5" /> Excluir</Button>
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive gap-1"
+              onClick={() => onDeleteTask?.(task.id)}
+              disabled={!onDeleteTask}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Excluir
+            </Button>
           </div>
         </div>
       </SheetContent>
     </Sheet>
   );
 }
+

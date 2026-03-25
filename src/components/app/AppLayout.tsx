@@ -1,7 +1,18 @@
 import { ReactNode, useMemo, useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { Bell, LogOut, Search, Settings, UserRound } from "lucide-react";
+import {
+  Bell,
+  Clock3,
+  Filter,
+  LogOut,
+  PlusCircle,
+  Search,
+  Settings,
+  TriangleAlert,
+  UserRound,
+  UserX,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,35 +25,100 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-interface HeaderNotification {
-  id: string;
+interface QuickLink {
   title: string;
-  time: string;
-  read: boolean;
+  url: string;
 }
 
+const toRelativeTime = (isoDate: string) => {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.max(1, Math.floor(diffMs / 60000));
+  if (diffMin < 60) return `Ha ${diffMin} min`;
+
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `Ha ${diffHours}h`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "Ontem";
+  if (diffDays < 7) return `Ha ${diffDays} dias`;
+  return date.toLocaleDateString("pt-BR");
+};
+
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
+  const base = [
+    { title: "Dashboard", url: "/app" },
+    { title: "Kanban", url: "/app/kanban" },
+    { title: "Calendario", url: "/app/calendario" },
+    { title: "Tarefas", url: "/app/tarefas" },
+    { title: "Clientes", url: "/app/clientes" },
+    { title: "Solicitacoes", url: "/app/solicitacoes" },
+    { title: "Formularios", url: "/app/formularios" },
+    { title: "CRM", url: "/app/crm" },
+    { title: "Relatorios", url: "/app/relatorios" },
+    { title: "Notificacoes", url: "/app/notificacoes" },
+    { title: "Configuracoes", url: "/app/configuracoes" },
+    { title: "Manual de uso", url: "/app/manual" },
+  ];
+
+  if (!isDepartmentRole) return base;
+
+  return base.filter((item) =>
+    item.url === "/app/kanban" ||
+    item.url === "/app/calendario" ||
+    item.url === "/app/tarefas" ||
+    item.url === "/app/clientes" ||
+    item.url === "/app/solicitacoes" ||
+    item.url === "/app/manual",
+  );
+};
+
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const {
     selectedCompany,
     selectedCompetence,
     setSelectedCompany,
     setSelectedCompetence,
+    clearFilters,
     companyOptions,
     competenceOptions,
     loadingOptions,
     formatCompetence,
   } = useGlobalFilters();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+  } = usePriorityNotifications();
+
   const navigate = useNavigate();
+  const isDepartmentRole = role === "departamento_pessoal" || role === "fiscal" || role === "contabil";
+  const quickLinks = useMemo(() => buildQuickLinks(isDepartmentRole), [isDepartmentRole]);
 
-  const [notifications, setNotifications] = useState<HeaderNotification[]>([
-    { id: "1", title: "Nova solicitação recebida", time: "Agora", read: false },
-    { id: "2", title: "Tarefa com prazo próximo", time: "Há 20 min", read: false },
-    { id: "3", title: "Documento enviado por cliente", time: "Há 1h", read: true },
-  ]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const unreadCount = notifications.filter((notification) => !notification.read).length;
+  const filteredLinks = useMemo(() => {
+    const term = normalizeText(searchTerm);
+    if (!term) return quickLinks;
+    return quickLinks.filter((item) => normalizeText(item.title).includes(term));
+  }, [quickLinks, searchTerm]);
 
   const userInitials = useMemo(() => {
     const fallback = "U";
@@ -51,19 +127,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return username.slice(0, 2).toUpperCase();
   }, [user?.email]);
 
-  const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((notification) => (notification.id === id ? { ...notification, read: true } : notification))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })));
-  };
-
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
+  };
+
+  const openLink = (url: string) => {
+    setSearchOpen(false);
+    setSearchTerm("");
+    navigate(url);
   };
 
   return (
@@ -71,14 +143,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-16 flex items-center justify-between border-b px-4 bg-card shrink-0">
-            <div className="flex items-center gap-3">
+          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <SidebarTrigger />
               <div className="hidden md:flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
-                  className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-48"
-                  placeholder="Buscar..."
+                  className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-44 lg:w-56"
+                  placeholder="Buscar paginas..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && filteredLinks[0]) {
+                      openLink(filteredLinks[0].url);
+                    }
+                  }}
                 />
               </div>
               <div className="hidden lg:flex items-center gap-2">
@@ -111,7 +191,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-1 md:gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Buscar"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative">
@@ -123,31 +214,57 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80">
                   <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notificações</span>
-                    <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
+                    <span>Notificacoes</span>
+                    <span className="text-xs text-muted-foreground">{unreadCount} nao lidas</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <div className="max-h-72 overflow-y-auto">
-                    {notifications.map((notification) => (
-                      <DropdownMenuItem
-                        key={notification.id}
-                        className="flex flex-col items-start gap-1 py-2 cursor-pointer"
-                        onClick={() => {
-                          markAsRead(notification.id);
-                          navigate("/app/notificacoes");
-                        }}
-                      >
-                        <span className={`text-sm ${notification.read ? "text-muted-foreground" : "font-medium"}`}>
-                          {notification.title}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{notification.time}</span>
-                      </DropdownMenuItem>
-                    ))}
+                    {notifications.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">Sem alertas no momento.</div>
+                    ) : (
+                      notifications.slice(0, 12).map((notification) => {
+                        const kindIcon =
+                          notification.kind === "overdue"
+                            ? TriangleAlert
+                            : notification.kind === "due_today"
+                              ? Clock3
+                              : UserX;
+                        const priorityClass =
+                          notification.priority === "alta"
+                            ? "text-destructive"
+                            : notification.priority === "media"
+                              ? "text-amber-600"
+                              : "text-muted-foreground";
+                        const KindIcon = kindIcon;
+
+                        return (
+                          <DropdownMenuItem
+                            key={notification.id}
+                            className="flex items-start gap-2 py-2 cursor-pointer"
+                            onClick={() => {
+                              markAsRead(notification.id);
+                              navigate("/app/notificacoes");
+                            }}
+                          >
+                            <KindIcon className={`h-4 w-4 mt-0.5 ${priorityClass}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-sm ${notification.read ? "text-muted-foreground" : "font-medium"}`}>
+                                {notification.title}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{notification.description}</div>
+                              <div className="text-[11px] text-muted-foreground mt-0.5">
+                                {toRelativeTime(notification.createdAt)}
+                              </div>
+                            </div>
+                          </DropdownMenuItem>
+                        );
+                      })
+                    )}
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={markAllAsRead}>Marcar todas como lidas</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    Ver central de notificações
+                    Ver central de notificacoes
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -163,16 +280,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="truncate">{user?.email || "Usuario"}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
                     <UserRound className="h-4 w-4 mr-2" /> Meu perfil
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <Settings className="h-4 w-4 mr-2" /> Configurações
+                    <Settings className="h-4 w-4 mr-2" /> Configuracoes
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    <Bell className="h-4 w-4 mr-2" /> Notificações
+                    <Bell className="h-4 w-4 mr-2" /> Notificacoes
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -185,9 +302,126 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </DropdownMenu>
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-6 bg-muted/20">{children}</main>
+
+          <main className="flex-1 overflow-auto p-4 md:p-6 pb-24 md:pb-6 bg-muted/20">{children}</main>
+
+          <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
+            <div className="grid grid-cols-3">
+              <button
+                type="button"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs"
+                onClick={() => setSearchOpen(true)}
+              >
+                <Search className="h-4 w-4" />
+                Buscar
+              </button>
+              <button
+                type="button"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs"
+                onClick={() => setMobileFiltersOpen(true)}
+              >
+                <Filter className="h-4 w-4" />
+                Filtros
+              </button>
+              <button
+                type="button"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs text-primary font-semibold"
+                onClick={() => navigate("/app/tarefas?create=1")}
+              >
+                <PlusCircle className="h-4 w-4" />
+                Nova tarefa
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Busca rapida</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <input
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none"
+              placeholder="Buscar pagina..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+            <div className="max-h-72 overflow-y-auto space-y-1">
+              {filteredLinks.length === 0 ? (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  Nenhuma pagina encontrada.
+                </div>
+              ) : (
+                filteredLinks.map((item) => (
+                  <button
+                    key={item.url}
+                    type="button"
+                    className="w-full rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => openLink(item.url)}
+                  >
+                    {item.title}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle>Filtros globais</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Empresa</label>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                value={selectedCompany || ""}
+                onChange={(event) => setSelectedCompany(event.target.value || null)}
+              >
+                <option value="">Total</option>
+                {companyOptions.map((company) => (
+                  <option key={company} value={company}>
+                    {company}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Competencia</label>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                value={selectedCompetence || ""}
+                onChange={(event) => setSelectedCompetence(event.target.value || null)}
+              >
+                <option value="">Total</option>
+                {competenceOptions.map((competence) => (
+                  <option key={competence} value={competence}>
+                    {formatCompetence(competence)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={clearFilters}
+              >
+                Limpar filtros
+              </Button>
+              <Button className="flex-1" onClick={() => setMobileFiltersOpen(false)}>
+                Aplicar
+              </Button>
+            </div>
+            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opcoes...</p>}
+          </div>
+        </SheetContent>
+      </Sheet>
     </SidebarProvider>
   );
 }

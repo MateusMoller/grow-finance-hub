@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import growIcon from "@/assets/grow-icon.png";
 
 export default function LoginPage() {
@@ -13,6 +14,37 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const { signIn } = useAuth();
   const navigate = useNavigate();
+
+  const resolveRedirectPath = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData.user?.id;
+    if (!userId) return "/app";
+
+    const { data: roleRows, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    if (rolesError || !roleRows) return "/app";
+
+    const roles = roleRows.map((row) => String(row.role));
+    const hasInternalRole = roles.some((roleName) =>
+      [
+        "admin",
+        "director",
+        "manager",
+        "employee",
+        "commercial",
+        "partner",
+        "departamento_pessoal",
+        "fiscal",
+        "contabil",
+      ].includes(roleName),
+    );
+    const isClientOnly = roles.includes("client") && !hasInternalRole;
+
+    return isClientOnly ? "/portal" : "/app";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +55,8 @@ export default function LoginPage() {
       toast.error("E-mail ou senha inválidos.");
     } else {
       toast.success("Login realizado com sucesso!");
-      navigate("/app");
+      const redirectPath = await resolveRedirectPath();
+      navigate(redirectPath);
     }
   };
 

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { RequestChat } from "@/components/app/RequestChat";
@@ -34,6 +35,8 @@ interface ClientRequest {
   user_id: string;
   profile?: { display_name: string | null } | null;
 }
+
+type ProfileSummary = Pick<Database["public"]["Tables"]["profiles"]["Row"], "user_id" | "display_name">;
 
 const statusConfig: Record<RequestStatus, { label: string; icon: typeof Clock; class: string }> = {
   pending: { label: "Pendente", icon: Clock, class: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
@@ -65,15 +68,15 @@ export default function SolicitacoesPage() {
 
     if (data) {
       // Get profiles for user names
-      const userIds = [...new Set(data.map((r: any) => r.user_id))];
+      const userIds = [...new Set(data.map((r) => r.user_id))];
       const { data: profiles } = await supabase
         .from("profiles")
         .select("user_id, display_name")
         .in("user_id", userIds);
-      const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+      const profileMap = new Map((profiles || []).map((p: ProfileSummary) => [p.user_id, p]));
 
       setRequests(
-        data.map((r: any) => ({ ...r, profile: profileMap.get(r.user_id) || null }))
+        data.map((r) => ({ ...r, profile: profileMap.get(r.user_id) || null }))
       );
     }
     if (error) toast.error("Erro ao carregar solicitações");

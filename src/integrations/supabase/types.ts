@@ -377,6 +377,7 @@ export type Database = {
           request_id: string | null
           sector: string
           status: string
+          subtasks: Json
           tags: string[] | null
           title: string
           updated_at: string
@@ -393,6 +394,7 @@ export type Database = {
           request_id?: string | null
           sector?: string
           status?: string
+          subtasks?: Json
           tags?: string[] | null
           title: string
           updated_at?: string
@@ -409,6 +411,7 @@ export type Database = {
           request_id?: string | null
           sector?: string
           status?: string
+          subtasks?: Json
           tags?: string[] | null
           title?: string
           updated_at?: string

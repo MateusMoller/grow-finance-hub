@@ -1,4 +1,7 @@
-project_id = "ifjziodofufkocxknknf"
+project_id = "vgkmcerjlwnzbiukinhd"
 
 [functions.conecta-chat-webhook]
 verify_jwt = false
+
+[functions.create-client-with-portal]
+verify_jwt = true

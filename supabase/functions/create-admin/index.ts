@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
       if (createError.message?.includes("already been registered")) {
         const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
         if (listError) throw listError;
-        const existingUser = users.find((u: any) => u.email === email);
+        const existingUser = users.find((u) => u.email === email);
         if (!existingUser) throw new Error("User not found");
         
         // Assign admin role
@@ -56,8 +56,9 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ message: "Admin user created", user_id: userData.user.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message || "Unknown error" }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

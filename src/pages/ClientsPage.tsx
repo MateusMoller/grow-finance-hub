@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 interface Client {
   id: string;
@@ -31,15 +32,27 @@ const statusColors: Record<string, string> = {
 
 export default function ClientsPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { role } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [newClient, setNewClient] = useState({ name: "", cnpj: "", regime: "Simples Nacional", sector: "Contábil", contact: "", email: "", phone: "" });
+  const [newClient, setNewClient] = useState({
+    name: "",
+    cnpj: "",
+    regime: "Simples Nacional",
+    sector: "Contabil",
+    contact: "",
+    email: "",
+    phone: "",
+    password: "",
+  });
+
+  const canCreateClients = role === "admin";
 
   useEffect(() => {
-    loadClients();
+    void loadClients();
   }, []);
 
   const loadClients = async () => {
@@ -49,33 +62,87 @@ export default function ClientsPage() {
       .select("id, name, cnpj, regime, sector, status, contact, email, phone")
       .order("name");
     setLoading(false);
-    if (error) return toast.error("Erro ao carregar clientes");
+
+    if (error) {
+      toast.error("Erro ao carregar clientes");
+      return;
+    }
+
     setClients((data || []) as Client[]);
   };
 
   const filtered = clients.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      (c.cnpj || "").includes(search)
+    (client) =>
+      client.name.toLowerCase().includes(search.toLowerCase()) ||
+      (client.cnpj || "").includes(search)
   );
 
   const handleCreate = async () => {
-    if (!newClient.name.trim()) { toast.error("Nome é obrigatório"); return; }
-    const { error } = await supabase.from("clients").insert([{
-      name: newClient.name,
-      cnpj: newClient.cnpj || null,
-      regime: newClient.regime,
-      sector: newClient.sector,
-      contact: newClient.contact || null,
-      email: newClient.email || null,
-      phone: newClient.phone || null,
-      created_by: user?.id || null,
-    }]);
-    if (error) return toast.error("Erro ao cadastrar cliente");
+    if (role !== "admin") {
+      toast.error("Apenas admin pode cadastrar clientes");
+      return;
+    }
+
+    if (!newClient.name.trim()) {
+      toast.error("Nome e obrigatorio");
+      return;
+    }
+
+    if (!newClient.email.trim()) {
+      toast.error("Informe o e-mail para criar o acesso do portal");
+      return;
+    }
+
+    if (!newClient.password || newClient.password.length < 6) {
+      toast.error("A senha do portal precisa ter no minimo 6 caracteres");
+      return;
+    }
+
+    setCreating(true);
+    const { error } = await supabase.functions.invoke("create-client-with-portal", {
+      body: {
+        name: newClient.name,
+        cnpj: newClient.cnpj || null,
+        regime: newClient.regime,
+        sector: newClient.sector,
+        contact: newClient.contact || null,
+        email: newClient.email,
+        phone: newClient.phone || null,
+        password: newClient.password,
+      },
+    });
+    setCreating(false);
+
+    if (error) {
+      if (error instanceof FunctionsHttpError) {
+        try {
+          const errorResponse = await error.context.json();
+          if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
+            toast.error(String(errorResponse.error));
+            return;
+          }
+        } catch {
+          // ignore parsing errors and fallback to generic message
+        }
+      }
+
+      toast.error(error.message || "Erro ao cadastrar cliente");
+      return;
+    }
+
     setCreateOpen(false);
-    setNewClient({ name: "", cnpj: "", regime: "Simples Nacional", sector: "Contábil", contact: "", email: "", phone: "" });
-    toast.success("Cliente cadastrado com sucesso");
-    loadClients();
+    setNewClient({
+      name: "",
+      cnpj: "",
+      regime: "Simples Nacional",
+      sector: "Contabil",
+      contact: "",
+      email: "",
+      phone: "",
+      password: "",
+    });
+    toast.success("Cliente cadastrado e acesso do portal criado com sucesso");
+    void loadClients();
   };
 
   return (
@@ -86,17 +153,26 @@ export default function ClientsPage() {
             <h1 className="font-heading text-2xl font-bold">Clientes</h1>
             <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados</p>
           </div>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Novo Cliente
-          </Button>
+          {canCreateClients && (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Novo Cliente
+            </Button>
+          )}
         </div>
 
         <div className="flex gap-2">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Buscar por nome ou CNPJ..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input
+              className="pl-9"
+              placeholder="Buscar por nome ou CNPJ..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
-          <Button variant="outline" size="sm"><Filter className="h-4 w-4 mr-1" /> Filtros</Button>
+          <Button variant="outline" size="sm">
+            <Filter className="h-4 w-4 mr-1" /> Filtros
+          </Button>
         </div>
 
         {loading ? (
@@ -117,12 +193,12 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filtered.map((client, i) => (
+                  {filtered.map((client, index) => (
                     <motion.tr
                       key={client.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.03 }}
+                      transition={{ delay: index * 0.03 }}
                       className="hover:bg-muted/20 cursor-pointer transition-colors"
                       onClick={() => navigate(`/app/clientes/${client.id}`)}
                     >
@@ -169,46 +245,53 @@ export default function ClientsPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Razão Social *</Label>
-                <Input placeholder="Nome da empresa" value={newClient.name} onChange={(e) => setNewClient((p) => ({ ...p, name: e.target.value }))} />
+                <Label>Razao Social *</Label>
+                <Input placeholder="Nome da empresa" value={newClient.name} onChange={(event) => setNewClient((prev) => ({ ...prev, name: event.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>CNPJ</Label>
-                <Input placeholder="00.000.000/0001-00" value={newClient.cnpj} onChange={(e) => setNewClient((p) => ({ ...p, cnpj: e.target.value }))} />
+                <Input placeholder="00.000.000/0001-00" value={newClient.cnpj} onChange={(event) => setNewClient((prev) => ({ ...prev, cnpj: event.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Regime Tributário</Label>
-                <select className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none" value={newClient.regime} onChange={(e) => setNewClient((p) => ({ ...p, regime: e.target.value }))}>
-                  {["Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI"].map((r) => <option key={r}>{r}</option>)}
+                <Label>Regime Tributario</Label>
+                <select className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none" value={newClient.regime} onChange={(event) => setNewClient((prev) => ({ ...prev, regime: event.target.value }))}>
+                  {["Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI"].map((regime) => <option key={regime}>{regime}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Setor</Label>
-                <select className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none" value={newClient.sector} onChange={(e) => setNewClient((p) => ({ ...p, sector: e.target.value }))}>
-                  {["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro"].map((s) => <option key={s}>{s}</option>)}
+                <select className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none" value={newClient.sector} onChange={(event) => setNewClient((prev) => ({ ...prev, sector: event.target.value }))}>
+                  {["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"].map((sector) => <option key={sector}>{sector}</option>)}
                 </select>
               </div>
             </div>
             <div className="space-y-2">
               <Label>Contato Principal</Label>
-              <Input placeholder="Nome do contato" value={newClient.contact} onChange={(e) => setNewClient((p) => ({ ...p, contact: e.target.value }))} />
+              <Input placeholder="Nome do contato" value={newClient.contact} onChange={(event) => setNewClient((prev) => ({ ...prev, contact: event.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>E-mail</Label>
-                <Input type="email" placeholder="email@empresa.com" value={newClient.email} onChange={(e) => setNewClient((p) => ({ ...p, email: e.target.value }))} />
+                <Label>E-mail do Portal *</Label>
+                <Input type="email" placeholder="email@empresa.com" value={newClient.email} onChange={(event) => setNewClient((prev) => ({ ...prev, email: event.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Telefone</Label>
-                <Input placeholder="(11) 99999-9999" value={newClient.phone} onChange={(e) => setNewClient((p) => ({ ...p, phone: e.target.value }))} />
+                <Input placeholder="(11) 99999-9999" value={newClient.phone} onChange={(event) => setNewClient((prev) => ({ ...prev, phone: event.target.value }))} />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Senha do Portal *</Label>
+              <Input type="password" placeholder="Minimo 6 caracteres" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate}>Cadastrar</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>Cancelar</Button>
+            <Button onClick={handleCreate} disabled={creating}>
+              {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              {creating ? "Cadastrando..." : "Cadastrar"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

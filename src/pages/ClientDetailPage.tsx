@@ -13,6 +13,7 @@ import {
   Loader2, Plus, Calculator, Receipt, Users, FolderOpen,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -38,6 +39,8 @@ interface ClientDataEntry {
   category: string;
   period: string | null;
 }
+
+type ClientDataRow = Database["public"]["Tables"]["client_data"]["Row"];
 
 interface ClientFile {
   id: string;
@@ -143,7 +146,7 @@ export default function ClientDetailPage() {
 
     // Build data map: category__field_name -> value
     const map: Record<string, string> = {};
-    (dataRes.data || []).forEach((d: any) => {
+    (dataRes.data || []).forEach((d: ClientDataRow) => {
       map[`${d.category}__${d.field_name}`] = d.field_value || "";
     });
     setDataEntries(map);

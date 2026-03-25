@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,13 +8,11 @@ import { Send, Loader2, User, Headset } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
-interface Message {
-  id: string;
-  content: string;
-  is_from_team: boolean;
-  user_id: string;
-  created_at: string;
-  profile?: { display_name: string | null } | null;
+type RequestMessageRow = Database["public"]["Tables"]["request_messages"]["Row"];
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
+
+interface Message extends RequestMessageRow {
+  profile?: Pick<ProfileRow, "display_name"> | null;
 }
 
 interface RequestChatProps {
@@ -28,6 +27,34 @@ export function RequestChat({ requestId, isTeamMember = false }: RequestChatProp
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const fetchMessages = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("request_messages")
+      .select("*")
+      .eq("request_id", requestId)
+      .order("created_at", { ascending: true });
+
+    if (data) {
+      const userIds = [...new Set(data.map((message) => message.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name")
+        .in("user_id", userIds);
+
+      const profileMap = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+
+      setMessages(
+        data.map((message) => ({
+          ...message,
+          profile: profileMap.get(message.user_id) || null,
+        })),
+      );
+    }
+    if (error) toast.error("Erro ao carregar mensagens");
+    setLoading(false);
+  }, [requestId]);
 
   useEffect(() => {
     fetchMessages();
@@ -55,42 +82,11 @@ export function RequestChat({ requestId, isTeamMember = false }: RequestChatProp
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [requestId]);
+  }, [fetchMessages, requestId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  const fetchMessages = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("request_messages")
-      .select("*")
-      .eq("request_id", requestId)
-      .order("created_at", { ascending: true });
-
-    if (data) {
-      // Fetch profile names for all unique user_ids
-      const userIds = [...new Set(data.map((m: any) => m.user_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name")
-        .in("user_id", userIds);
-
-      const profileMap = new Map(
-        (profiles || []).map((p: any) => [p.user_id, p])
-      );
-
-      setMessages(
-        data.map((m: any) => ({
-          ...m,
-          profile: profileMap.get(m.user_id) || null,
-        }))
-      );
-    }
-    if (error) toast.error("Erro ao carregar mensagens");
-    setLoading(false);
-  };
 
   const handleSend = async () => {
     if (!newMessage.trim() || !user) return;

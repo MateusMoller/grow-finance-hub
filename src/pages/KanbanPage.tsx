@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -104,6 +105,8 @@ export default function KanbanPage() {
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropTargetStatus, setDropTargetStatus] = useState<KanbanStatus | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [selectedTaskHistory, setSelectedTaskHistory] = useState<ChangeHistoryEntry[]>([]);
   const [newTask, setNewTask] = useState({
     title: "",
     client_name: "",
@@ -112,6 +115,20 @@ export default function KanbanPage() {
     sector: "ContÃ¡bil",
     subtasks: [] as TaskSubtask[],
   });
+
+  const actorLabel = user?.email || "Usuario";
+
+  const registerTaskHistory = (taskId: string, action: string, details?: string) => {
+    if (!user?.id) return;
+    addHistoryEntry(user.id, {
+      entityType: "task",
+      entityId: taskId,
+      action,
+      details,
+      actor: actorLabel,
+    });
+    setHistoryVersion((prev) => prev + 1);
+  };
 
   const columns = useMemo(
     () => (isAdmin ? [...baseColumns, archiveColumn] : baseColumns),
@@ -173,7 +190,24 @@ export default function KanbanPage() {
 
   const getColumnTasks = (status: KanbanStatus) => filteredTasks.filter((task) => task.status === status);
 
-  const handleStatusChange = async (taskId: string, newStatus: KanbanStatus) => {
+  useEffect(() => {
+    if (!user?.id || !selectedTask?.id) {
+      setSelectedTaskHistory([]);
+      return;
+    }
+
+    setSelectedTaskHistory(getEntityHistory(user.id, "task", selectedTask.id, 15));
+  }, [historyVersion, selectedTask?.id, user?.id]);
+
+  const handleStatusChange = async (
+    taskId: string,
+    newStatus: KanbanStatus,
+    options?: { undoable?: boolean; skipHistory?: boolean },
+  ) => {
+    const currentTask = tasks.find((task) => task.id === taskId);
+    if (!currentTask || currentTask.status === newStatus) return;
+
+    const previousStatus = currentTask.status;
     const { error } = await supabase.from("kanban_tasks").update({ status: newStatus }).eq("id", taskId);
     if (error) {
       toast.error(`Erro ao mover tarefa: ${error.message}`);
@@ -182,6 +216,25 @@ export default function KanbanPage() {
 
     setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task)));
     setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, status: newStatus } : prev));
+
+    if (!options?.skipHistory) {
+      registerTaskHistory(taskId, "Status alterado", `${previousStatus} -> ${newStatus}`);
+    }
+
+    if (options?.undoable === false) {
+      toast.success("Status da tarefa atualizado");
+      return;
+    }
+
+    toast.success("Status da tarefa atualizado", {
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          void handleStatusChange(taskId, previousStatus, { undoable: false, skipHistory: true });
+          registerTaskHistory(taskId, "Alteracao de status desfeita", `${newStatus} -> ${previousStatus}`);
+        },
+      },
+    });
   };
 
   const handleSaveTaskDetails = async (
@@ -197,6 +250,7 @@ export default function KanbanPage() {
       tags: string[];
     }
   ) => {
+    const previousTask = tasks.find((task) => task.id === taskId);
     setSavingDetail(true);
     const { error } = await supabase.from("kanban_tasks").update(updates).eq("id", taskId);
     setSavingDetail(false);
@@ -208,6 +262,22 @@ export default function KanbanPage() {
 
     setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, ...updates } : task)));
     setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, ...updates } : prev));
+    if (previousTask) {
+      const changedFields: string[] = [];
+      if ((previousTask.description || "") !== (updates.description || "")) changedFields.push("descricao");
+      if ((previousTask.client_name || "") !== (updates.client_name || "")) changedFields.push("cliente");
+      if ((previousTask.assignee || "") !== (updates.assignee || "")) changedFields.push("responsavel");
+      if (previousTask.priority !== updates.priority) changedFields.push("prioridade");
+      if (previousTask.sector !== updates.sector) changedFields.push("setor");
+      if (previousTask.status !== updates.status) changedFields.push("status");
+      if ((previousTask.due_date || "") !== (updates.due_date || "")) changedFields.push("prazo");
+      const previousTags = (previousTask.tags || []).join("|");
+      const nextTags = updates.tags.join("|");
+      if (previousTags !== nextTags) changedFields.push("tags");
+      if (changedFields.length > 0) {
+        registerTaskHistory(taskId, "Detalhes da tarefa atualizados", changedFields.join(", "));
+      }
+    }
     toast.success("Tarefa atualizada");
   };
 
@@ -230,22 +300,28 @@ export default function KanbanPage() {
       return;
     }
 
-    const { error } = await supabase.from("kanban_tasks").insert({
-      title: newTask.title,
-      client_name: selectedClient.name,
-      assignee: newTask.assignee || null,
-      priority: newTask.priority,
-      sector: newTask.sector,
-      status: "todo",
-      tags: [newTask.sector],
-      subtasks: newTask.subtasks,
-      created_by: user?.id,
-    });
+    const { data: createdTask, error } = await supabase
+      .from("kanban_tasks")
+      .insert({
+        title: newTask.title,
+        client_name: selectedClient.name,
+        assignee: newTask.assignee || null,
+        priority: newTask.priority,
+        sector: newTask.sector,
+        status: "todo",
+        tags: [newTask.sector],
+        subtasks: newTask.subtasks,
+        created_by: user?.id,
+      })
+      .select("id, title")
+      .single();
 
-    if (error) {
-      toast.error(`Erro ao criar tarefa: ${error.message}`);
+    if (error || !createdTask) {
+      toast.error(`Erro ao criar tarefa: ${error?.message || "Nao foi possivel criar a tarefa"}`);
       return;
     }
+
+    registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
 
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
@@ -395,6 +471,7 @@ export default function KanbanPage() {
         canArchive={isAdmin}
         onOpenChange={setDetailOpen}
         onSave={handleSaveTaskDetails}
+        historyEntries={selectedTaskHistory}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

@@ -1,88 +1,370 @@
-import { SiteLayout } from "@/components/site/SiteLayout";
+﻿import { SiteLayout } from "@/components/site/SiteLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Target, Eye, Heart, Award } from "lucide-react";
+import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock, Eye, FileText, Heart, Shield, Target, TrendingUp, Users } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+
+const metrics = [
+  { value: "+12", label: "Anos de mercado", detail: "Experiencia solida em contabilidade consultiva" },
+  { value: "98%", label: "Satisfacao dos clientes", detail: "Relacionamentos duradouros e atendimento proximo" },
+  { value: "120+", label: "Empresas atendidas", detail: "Operacao ativa em varios segmentos" },
+  { value: "100%", label: "Conformidade", detail: "Processos com foco em precisao e seguranca" },
+];
 
 const values = [
-  { icon: Target, title: "Foco em Resultados", description: "Cada ação é orientada para gerar impacto real no crescimento dos nossos clientes." },
-  { icon: Eye, title: "Transparência Total", description: "Comunicação clara, processos visíveis e dashboards em tempo real para você acompanhar tudo." },
-  { icon: Heart, title: "Compromisso", description: "Tratamos cada cliente como parceiro. Seu sucesso é o nosso sucesso." },
-  { icon: Award, title: "Excelência", description: "Equipe altamente qualificada e ferramentas de ponta para entregar o melhor serviço." },
+  { icon: Target, title: "Foco em resultados", description: "Cada acao orientada por metas claras de crescimento e eficiencia." },
+  { icon: Eye, title: "Visao estrategica", description: "Transformamos dados em direcao para decisoes de curto e longo prazo." },
+  { icon: Heart, title: "Atendimento humano", description: "Acompanhamento proximo para entender o contexto real de cada empresa." },
+  { icon: Award, title: "Excelencia tecnica", description: "Equipe especializada e processos padronizados com alta confiabilidade." },
+];
+
+const services = [
+  { icon: BarChart3, title: "Contabilidade consultiva", description: "Fechamentos, balancos e indicadores com orientacao para decisoes gerenciais." },
+  { icon: Shield, title: "Assessoria fiscal", description: "Planejamento tributario e revisoes periodicas para reduzir risco fiscal." },
+  { icon: Users, title: "Departamento pessoal", description: "Rotinas trabalhistas, folha, admissoes e suporte continuo ao RH." },
+  { icon: Building2, title: "Abertura e regularizacao", description: "Constituicao de empresa, alteracoes contratuais e regularizacoes completas." },
+  { icon: Briefcase, title: "Suporte ao empresario", description: "Consultoria para planejamento, estrutura financeira e crescimento sustentavel." },
+  { icon: FileText, title: "Relatorios gerenciais", description: "Painel mensal com leitura executiva para acompanhamento de performance." },
+];
+
+const differentials = [
+  "Atendimento por especialistas com agenda de acompanhamento.",
+  "Rotina de prevencao de riscos fiscais e trabalhistas.",
+  "Indicadores objetivos para apoiar decisao do empresario.",
+  "Comunicacao clara, prazos definidos e processos rastreaveis.",
+];
+
+const journey = [
+  { icon: CheckCircle2, title: "Diagnostico inicial", description: "Mapeamento das prioridades contabils, fiscais e financeiras." },
+  { icon: Clock, title: "Plano de 90 dias", description: "Roadmap com entregas, prazos e responsabilidades definidas." },
+  { icon: TrendingUp, title: "Evolucao mensal", description: "Monitoramento de indicadores e ajustes continuos na operacao." },
+];
+
+const testimonials = [
+  {
+    name: "Lucas Moreira",
+    role: "CEO, TechNova",
+    text: "Com a Grow, nossa gestao financeira ficou clara. Hoje decidimos com base em relatorios consistentes.",
+  },
+  {
+    name: "Mariana Ribeiro",
+    role: "Fundadora, Casa Verde",
+    text: "Atendimento muito proximo e pratico. Conseguimos regularizar pendencias e organizar o crescimento.",
+  },
+  {
+    name: "Rafael Alves",
+    role: "Diretor Financeiro, BlueLine",
+    text: "A consultoria estrategica da Grow virou parte da nossa rotina de tomada de decisao.",
+  },
+];
+
+const faqItems = [
+  {
+    question: "Como funciona o inicio da parceria com a Grow?",
+    answer: "Iniciamos com um diagnostico completo da operacao, definimos prioridades e montamos um plano de acao com entregas e prazos claros.",
+  },
+  {
+    question: "A Grow atende apenas empresas de um segmento especifico?",
+    answer: "Nao. Atendemos comercio, servicos, tecnologia, saude, construcao, profissionais liberais e outras estruturas empresariais.",
+  },
+  {
+    question: "Com que frequencia recebo relatorios e orientacoes?",
+    answer: "Acompanhamento mensal com relatorios gerenciais, alem de suporte continuo para demandas pontuais do dia a dia.",
+  },
+  {
+    question: "Posso contratar apenas parte dos servicos?",
+    answer: "Sim. Montamos uma jornada sob medida, com escopo modular para sua fase atual de crescimento.",
+  },
 ];
 
 const fadeIn = {
-  initial: { opacity: 0, y: 20 },
+  initial: { opacity: 0, y: 18 },
   whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true },
-  transition: { duration: 0.6 },
+  viewport: { once: true, amount: 0.15 },
+  transition: { duration: 0.45 },
 };
 
 export default function AboutPage() {
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSending(true);
+
+    window.setTimeout(() => {
+      setSending(false);
+      toast.success("Recebemos sua solicitacao. Vamos retornar em breve.");
+    }, 900);
+  };
+
   return (
     <SiteLayout>
-      <section className="py-24 bg-background">
-        <div className="container">
-          <motion.div {...fadeIn} className="max-w-3xl">
-            <span className="text-xs font-semibold tracking-widest uppercase text-primary">Sobre nós</span>
-            <h1 className="font-heading text-4xl md:text-5xl font-bold mt-3 mb-6">
-              Mais do que contabilidade.{" "}
-              <span className="text-primary">Parceria estratégica.</span>
-            </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              A Grow Finance nasceu com o propósito de transformar a relação entre empresas e sua gestão contábil e financeira. 
-              Unimos expertise técnica com tecnologia de ponta para oferecer uma experiência completamente digital, 
-              transparente e orientada a resultados.
-            </p>
-          </motion.div>
-        </div>
-      </section>
+      <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
+        <section id="institucional" className="border-b border-border/60 py-14 dark:border-[#243054] md:py-18">
+          <div className="container grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
+            <motion.div {...fadeIn} className="space-y-6">
+              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                Grow Contabilidade - Institucional
+              </span>
+              <h1 className="font-heading text-4xl font-bold leading-tight md:text-5xl">
+                Mais do que contabilidade, construimos estrategia para o crescimento do seu negocio
+              </h1>
+              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
+                A Grow une consultoria, tecnologia e atendimento proximo para organizar sua operacao contabil e financeira.
+                Nosso foco e transformar complexidade em clareza, conformidade e crescimento sustentavel.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  asChild
+                  className="rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
+                >
+                  <Link to="/#contato">Solicitar avaliacao gratuita</Link>
+                </Button>
+                <Button asChild variant="outline" className="rounded-full px-5">
+                  <Link to="/contato">Falar com especialista</Link>
+                </Button>
+              </div>
+            </motion.div>
 
-      <section className="py-24 bg-muted/30">
-        <div className="container">
-          <motion.div {...fadeIn} className="text-center mb-16">
-            <span className="text-xs font-semibold tracking-widest uppercase text-primary">Nossos valores</span>
-            <h2 className="font-heading text-3xl md:text-4xl font-bold mt-3">O que nos move</h2>
-          </motion.div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {values.map((v, i) => (
+            <motion.aside
+              {...fadeIn}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]"
+            >
+              <h2 className="font-heading text-lg font-semibold">Painel institucional</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Panorama da proposta de valor da Grow para empresas em crescimento.</p>
+              <div className="mt-5 space-y-3">
+                {[
+                  "Consultoria contabil, fiscal e financeira integrada",
+                  "Acompanhamento mensal com relatorios gerenciais",
+                  "Suporte estrategico para tomada de decisao",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 dark:border-[#2a3760] dark:bg-[#0d1a38]">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                    <span className="text-sm text-foreground">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.aside>
+          </div>
+
+          <div className="container mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {metrics.map((metric, index) => (
               <motion.div
-                key={v.title}
-                initial={{ opacity: 0, y: 20 }}
+                key={metric.label}
+                initial={{ opacity: 0, y: 14 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="rounded-2xl border bg-card p-6"
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.35, delay: index * 0.05 }}
+                className="rounded-2xl border border-border bg-card p-4 dark:border-[#223058] dark:bg-[#0a1734]"
               >
-                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <v.icon className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="font-heading font-semibold text-lg mb-2">{v.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{v.description}</p>
+                <p className="text-2xl font-bold text-foreground">{metric.value}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{metric.label}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
               </motion.div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-24 bg-background">
-        <div className="container max-w-3xl">
-          <motion.div {...fadeIn} className="space-y-8">
-            <div>
-              <h2 className="font-heading text-2xl font-bold mb-3">Nossa Missão</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                Democratizar o acesso a uma gestão contábil e financeira de alto nível, 
-                usando tecnologia para simplificar processos e gerar insights que impulsionam o crescimento dos nossos clientes.
+        <section className="py-14 md:py-16">
+          <div className="container">
+            <motion.div {...fadeIn} className="mb-6">
+              <h2 className="font-heading text-3xl font-semibold">Quem somos</h2>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                Somos uma consultoria contabil com abordagem proativa. Atuamos lado a lado com o empresario para transformar
+                dados em decisao e decisao em resultado.
               </p>
+            </motion.div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {values.map((value, index) => (
+                <motion.article
+                  key={value.title}
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.35, delay: index * 0.05 }}
+                  className="rounded-2xl border border-border bg-card p-5 dark:border-[#223058] dark:bg-[#0a1734]"
+                >
+                  <value.icon className="h-5 w-5 text-primary" />
+                  <h3 className="mt-3 font-heading text-lg font-semibold">{value.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">{value.description}</p>
+                </motion.article>
+              ))}
             </div>
-            <div>
-              <h2 className="font-heading text-2xl font-bold mb-3">Nossa Visão</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                Ser referência nacional em contabilidade digital e gestão financeira integrada, 
-                reconhecida pela inovação, excelência e impacto positivo nos negócios dos nossos clientes.
+          </div>
+        </section>
+
+        <section id="servicos" className="py-14 md:py-16">
+          <div className="container">
+            <motion.div {...fadeIn} className="mb-6">
+              <h2 className="font-heading text-3xl font-semibold">Nossos servicos</h2>
+            </motion.div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {services.map((service, index) => (
+                <motion.article
+                  key={service.title}
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.35, delay: index * 0.04 }}
+                  className="rounded-2xl border border-border bg-card p-5 dark:border-[#223058] dark:bg-[#0a1734]"
+                >
+                  <service.icon className="h-5 w-5 text-primary" />
+                  <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
+                </motion.article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="diferenciais" className="py-14 md:py-16">
+          <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
+              <h2 className="font-heading text-2xl font-semibold">Diferenciais Grow</h2>
+              <div className="mt-4 space-y-3">
+                {differentials.map((item) => (
+                  <div key={item} className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                    <span className="text-foreground">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.article>
+
+            <motion.article
+              {...fadeIn}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]"
+            >
+              <h2 className="font-heading text-2xl font-semibold">Como trabalhamos</h2>
+              <div className="mt-4 space-y-3">
+                {journey.map((step) => (
+                  <div key={step.title} className="rounded-lg border border-border/70 bg-muted/20 p-3 dark:border-[#2a3760] dark:bg-[#0d1a38]">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <step.icon className="h-4 w-4 text-primary" />
+                      <span>{step.title}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{step.description}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.article>
+          </div>
+        </section>
+
+        <section id="clientes" className="py-14 md:py-16">
+          <div className="container">
+            <motion.div {...fadeIn} className="mb-6">
+              <h2 className="font-heading text-3xl font-semibold">Clientes e depoimentos</h2>
+            </motion.div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {testimonials.map((testimonial, index) => (
+                <motion.article
+                  key={testimonial.name}
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.35, delay: index * 0.05 }}
+                  className="rounded-2xl border border-border bg-card p-5 dark:border-[#223058] dark:bg-[#0a1734]"
+                >
+                  <p className="text-sm text-muted-foreground">"{testimonial.text}"</p>
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold">{testimonial.name}</p>
+                    <p className="text-xs text-muted-foreground">{testimonial.role}</p>
+                  </div>
+                </motion.article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="py-14 md:py-16">
+          <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
+              <h2 className="font-heading text-2xl font-semibold">Perguntas frequentes</h2>
+              <Accordion type="single" collapsible className="mt-3">
+                {faqItems.map((faq, index) => (
+                  <AccordionItem key={faq.question} value={`faq-${index}`}>
+                    <AccordionTrigger className="text-left text-sm">{faq.question}</AccordionTrigger>
+                    <AccordionContent className="text-muted-foreground">{faq.answer}</AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </motion.article>
+
+            <motion.article
+              {...fadeIn}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]"
+            >
+              <h2 className="font-heading text-2xl font-semibold">Por que escolher a Grow?</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Porque nossa proposta combina tecnica, proximidade e inteligencia de gestao. Nao entregamos apenas obrigacoes,
+                entregamos direcao para o seu negocio.
               </p>
+              <div className="mt-4 space-y-2 text-sm">
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Equipe dedicada por cliente</p>
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Entrega mensal com leitura executiva</p>
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Suporte continuo para decisao</p>
+              </div>
+            </motion.article>
+          </div>
+        </section>
+
+        <section id="contato" className="py-14 md:py-16">
+          <div className="container">
+            <div className="rounded-2xl bg-primary p-6 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] md:p-10">
+              <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+                <motion.div {...fadeIn}>
+                  <h2 className="font-heading text-3xl font-semibold leading-tight">
+                    Pronto para tornar sua gestao mais clara e estrategica?
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
+                    Fale com a Grow e receba um plano inicial para organizar processos, reduzir riscos e evoluir com previsibilidade.
+                  </p>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <Button
+                      asChild
+                      className="rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
+                    >
+                      <Link to="/contato">Solicitar avaliacao gratuita</Link>
+                    </Button>
+                    <Button asChild variant="outline" className="rounded-full border-white/40 bg-transparent px-5 text-sm text-white hover:bg-white/10 hover:text-white dark:border-[#7d89b5] dark:text-[#d7dffa]">
+                      <Link to="/contato">Falar com consultor</Link>
+                    </Button>
+                  </div>
+                </motion.div>
+
+                <motion.form
+                  {...fadeIn}
+                  transition={{ duration: 0.45, delay: 0.1 }}
+                  onSubmit={handleSubmit}
+                  className="rounded-2xl bg-white p-5 text-foreground dark:border dark:border-[#2b3861] dark:bg-[#08142f] dark:text-[#e9eeff]"
+                >
+                  <div className="space-y-3">
+                    <Input placeholder="Nome completo" required className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
+                    <Input placeholder="Empresa" className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
+                    <Input type="email" placeholder="E-mail" required className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e seguranca dos seus dados.</p>
+                  <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>
+                    {sending ? "Enviando..." : "Enviar solicitacao"}
+                    {!sending && <ArrowRight className="h-4 w-4" />}
+                  </Button>
+                </motion.form>
+              </div>
             </div>
-          </motion.div>
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
     </SiteLayout>
   );
 }

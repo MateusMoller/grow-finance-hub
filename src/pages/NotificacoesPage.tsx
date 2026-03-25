@@ -1,115 +1,160 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
-import {
-  Bell,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  FileText,
-  UserPlus,
-  MessageSquare,
-  Settings,
-  Check,
-  Trash2,
-} from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Bell, Check, Clock3, Loader2, RefreshCcw, UserX } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
 
-interface Notification {
-  id: string;
-  title: string;
-  description: string;
-  type: "task" | "deadline" | "form" | "system" | "lead" | "comment";
-  time: string;
-  read: boolean;
-}
+type NotificationFilter = "all" | "unread" | "alta" | "media" | "baixa";
 
-const initialNotifications: Notification[] = [
-  { id: "1", title: "Nova tarefa atribuída", description: "Fechamento contábil - ABC Tecnologia foi atribuída a você", type: "task", time: "Há 5 minutos", read: false },
-  { id: "2", title: "Prazo próximo", description: "Declaração IR - Tech Solutions vence em 2 dias", type: "deadline", time: "Há 15 minutos", read: false },
-  { id: "3", title: "Formulário recebido", description: "Admissão enviada por João Silva (Startup XYZ)", type: "form", time: "Há 30 minutos", read: false },
-  { id: "4", title: "Novo lead capturado", description: "Empresa Delta solicitou contato pelo site", type: "lead", time: "Há 1 hora", read: false },
-  { id: "5", title: "Comentário em tarefa", description: "Maria Santos comentou em BPO Financeiro - Março", type: "comment", time: "Há 2 horas", read: true },
-  { id: "6", title: "Prazo vencido", description: "5 tarefas com prazo vencido precisam de atenção", type: "deadline", time: "Há 3 horas", read: true },
-  { id: "7", title: "Novo cliente ativado", description: "Nova Empresa Ltda foi ativada no sistema", type: "system", time: "Há 5 horas", read: true },
-  { id: "8", title: "Formulário concluído", description: "Processo de férias de Pedro Santos foi finalizado", type: "form", time: "Ontem", read: true },
-  { id: "9", title: "Relatório disponível", description: "Relatório de produtividade de fevereiro está pronto", type: "system", time: "Ontem", read: true },
-  { id: "10", title: "Nova demanda", description: "Carlos Ribeiro criou nova demanda de departamento pessoal", type: "task", time: "2 dias atrás", read: true },
-];
+const toRelativeTime = (isoDate: string) => {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return "-";
 
-const typeConfig: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
-  task: { icon: CheckCircle2, color: "text-primary", bg: "bg-primary/10" },
-  deadline: { icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10" },
-  form: { icon: FileText, color: "text-blue-600", bg: "bg-blue-100 dark:bg-blue-900/20" },
-  system: { icon: Settings, color: "text-muted-foreground", bg: "bg-muted" },
-  lead: { icon: UserPlus, color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  comment: { icon: MessageSquare, color: "text-purple-600", bg: "bg-purple-100 dark:bg-purple-900/20" },
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.max(1, Math.floor(diffMs / 60000));
+  if (diffMin < 60) return `Ha ${diffMin} min`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `Ha ${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "Ontem";
+  if (diffDays < 7) return `Ha ${diffDays} dias`;
+  return date.toLocaleDateString("pt-BR");
 };
 
 export default function NotificacoesPage() {
-  const [notifications, setNotifications] = useState(initialNotifications);
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    markAsRead,
+    markAllAsRead,
+    refresh,
+  } = usePriorityNotifications();
+  const [filter, setFilter] = useState<NotificationFilter>("all");
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-  const filtered = filter === "unread" ? notifications.filter(n => !n.read) : notifications;
-
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  const markRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const filteredNotifications = useMemo(() => {
+    if (filter === "all") return notifications;
+    if (filter === "unread") return notifications.filter((notification) => !notification.read);
+    return notifications.filter((notification) => notification.priority === filter);
+  }, [filter, notifications]);
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6 max-w-4xl">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-              Notificações
-              {unreadCount > 0 && <Badge className="bg-destructive text-destructive-foreground">{unreadCount}</Badge>}
+              Notificacoes
+              {unreadCount > 0 && (
+                <Badge className="bg-destructive text-destructive-foreground">{unreadCount}</Badge>
+              )}
             </h1>
-            <p className="text-sm text-muted-foreground">Centro de alertas e atualizações do sistema</p>
+            <p className="text-sm text-muted-foreground">
+              Alertas priorizados: atrasadas, vencendo hoje e tarefas sem responsavel
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={markAllRead} className="gap-1">
-            <Check className="h-3.5 w-3.5" /> Marcar todas como lidas
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => void refresh()} className="gap-1">
+              <RefreshCcw className="h-3.5 w-3.5" /> Atualizar
+            </Button>
+            <Button variant="outline" size="sm" onClick={markAllAsRead} className="gap-1">
+              <Check className="h-3.5 w-3.5" /> Marcar todas como lidas
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>
+            Todas
+          </Button>
+          <Button
+            variant={filter === "unread" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("unread")}
+          >
+            Nao lidas ({unreadCount})
+          </Button>
+          <Button variant={filter === "alta" ? "default" : "outline"} size="sm" onClick={() => setFilter("alta")}>
+            Prioridade alta
+          </Button>
+          <Button variant={filter === "media" ? "default" : "outline"} size="sm" onClick={() => setFilter("media")}>
+            Prioridade media
+          </Button>
+          <Button variant={filter === "baixa" ? "default" : "outline"} size="sm" onClick={() => setFilter("baixa")}>
+            Prioridade baixa
           </Button>
         </div>
 
-        {/* Filter tabs */}
-        <div className="flex gap-2">
-          <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>Todas</Button>
-          <Button variant={filter === "unread" ? "default" : "outline"} size="sm" onClick={() => setFilter("unread")}>Não lidas ({unreadCount})</Button>
-        </div>
+        {loading ? (
+          <div className="flex justify-center py-14">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : filteredNotifications.length === 0 ? (
+          <div className="rounded-xl border bg-card p-12 text-center">
+            <Bell className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+            <p className="font-medium">Nenhuma notificacao para este filtro</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Quando surgirem novos alertas de prioridade, eles aparecerao aqui.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredNotifications.map((notification, index) => {
+              const kindIcon =
+                notification.kind === "overdue"
+                  ? AlertTriangle
+                  : notification.kind === "due_today"
+                    ? Clock3
+                    : UserX;
+              const KindIcon = kindIcon;
 
-        {/* Notification list */}
-        <div className="space-y-2">
-          {filtered.map((notif, i) => {
-            const cfg = typeConfig[notif.type];
-            const Icon = cfg.icon;
-            return (
-              <motion.div
-                key={notif.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.03 }}
-                onClick={() => markRead(notif.id)}
-                className={`rounded-xl border p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-sm ${!notif.read ? "bg-primary/5 border-primary/20" : "bg-card"}`}
-              >
-                <div className={`h-9 w-9 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0`}>
-                  <Icon className={`h-4 w-4 ${cfg.color}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className={`text-sm ${!notif.read ? "font-semibold" : "font-medium"}`}>{notif.title}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">{notif.description}</p>
-                    </div>
-                    {!notif.read && <div className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1.5" />}
+              const priorityClass =
+                notification.priority === "alta"
+                  ? "text-destructive bg-destructive/10"
+                  : notification.priority === "media"
+                    ? "text-amber-700 bg-amber-100 dark:bg-amber-900/20"
+                    : "text-muted-foreground bg-muted";
+
+              return (
+                <motion.div
+                  key={notification.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                  onClick={() => markAsRead(notification.id)}
+                  className={`rounded-xl border p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-sm ${
+                    notification.read ? "bg-card" : "bg-primary/5 border-primary/20"
+                  }`}
+                >
+                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${priorityClass}`}>
+                    <KindIcon className="h-4 w-4" />
                   </div>
-                  <span className="text-xs text-muted-foreground mt-1.5 block">{notif.time}</span>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className={`text-sm ${notification.read ? "font-medium" : "font-semibold"}`}>
+                          {notification.title}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">{notification.description}</p>
+                      </div>
+                      {!notification.read && (
+                        <div className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1.5" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-muted-foreground">{toRelativeTime(notification.createdAt)}</span>
+                      <Badge variant="outline" className="text-[10px] border-0 bg-muted">
+                        {notification.priority}
+                      </Badge>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </AppLayout>
   );

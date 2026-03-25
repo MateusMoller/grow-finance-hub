@@ -26,6 +26,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
+import { useAuth } from "@/hooks/useAuth";
+import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
 const stageOrder = [
   "Oportunidade Nova",
@@ -41,6 +43,7 @@ const stageOrder = [
 type PipelineStage = (typeof stageOrder)[number];
 
 interface Lead {
+  id: string;
   name: string;
   contact: string;
   value: string;
@@ -51,13 +54,13 @@ interface Lead {
 }
 
 const initialLeads: Lead[] = [
-  { name: "Empresa Alpha", contact: "Roberto Dias", value: "R$ 3.500/mes", stage: "Proposta Enviada", daysInStage: 3, competence: "2026-03", source: "Indicacao" },
-  { name: "Beta Servicos", contact: "Juliana Melo", value: "R$ 2.800/mes", stage: "Reuniao Agendada", daysInStage: 1, competence: "2026-03", source: "Site" },
-  { name: "Gamma Tech", contact: "Felipe Rocha", value: "R$ 5.200/mes", stage: "Negociacao", daysInStage: 5, competence: "2026-03", source: "Outbound" },
-  { name: "Delta Corp", contact: "Camila Souza", value: "R$ 1.900/mes", stage: "Diagnostico", daysInStage: 2, competence: "2026-02", source: "Site" },
-  { name: "Epsilon Ltda", contact: "Andre Lima", value: "R$ 4.100/mes", stage: "Oportunidade Nova", daysInStage: 0, competence: "2026-02", source: "Indicacao" },
-  { name: "Nova Solar", contact: "Bianca Prado", value: "R$ 3.250/mes", stage: "Fechado Ganho", daysInStage: 0, competence: "2026-03", source: "Site" },
-  { name: "Conecta Food", contact: "Marcos Vieira", value: "R$ 2.350/mes", stage: "Fechado Perdido", daysInStage: 0, competence: "2026-01", source: "Outbound" },
+  { id: "lead-alpha", name: "Empresa Alpha", contact: "Roberto Dias", value: "R$ 3.500/mes", stage: "Proposta Enviada", daysInStage: 3, competence: "2026-03", source: "Indicacao" },
+  { id: "lead-beta", name: "Beta Servicos", contact: "Juliana Melo", value: "R$ 2.800/mes", stage: "Reuniao Agendada", daysInStage: 1, competence: "2026-03", source: "Site" },
+  { id: "lead-gamma", name: "Gamma Tech", contact: "Felipe Rocha", value: "R$ 5.200/mes", stage: "Negociacao", daysInStage: 5, competence: "2026-03", source: "Outbound" },
+  { id: "lead-delta", name: "Delta Corp", contact: "Camila Souza", value: "R$ 1.900/mes", stage: "Diagnostico", daysInStage: 2, competence: "2026-02", source: "Site" },
+  { id: "lead-epsilon", name: "Epsilon Ltda", contact: "Andre Lima", value: "R$ 4.100/mes", stage: "Oportunidade Nova", daysInStage: 0, competence: "2026-02", source: "Indicacao" },
+  { id: "lead-nova-solar", name: "Nova Solar", contact: "Bianca Prado", value: "R$ 3.250/mes", stage: "Fechado Ganho", daysInStage: 0, competence: "2026-03", source: "Site" },
+  { id: "lead-conecta-food", name: "Conecta Food", contact: "Marcos Vieira", value: "R$ 2.350/mes", stage: "Fechado Perdido", daysInStage: 0, competence: "2026-01", source: "Outbound" },
 ];
 
 const stageColors: Record<PipelineStage, string> = {
@@ -88,14 +91,18 @@ const parseCurrency = (value: string) => {
 };
 
 const isOpenStage = (stage: PipelineStage) => stage !== "Fechado Ganho" && stage !== "Fechado Perdido";
+const createLeadId = () => `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export default function CRMPage() {
+  const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [activeStageFilter, setActiveStageFilter] = useState<PipelineStage | "all">("all");
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [selectedLeadHistory, setSelectedLeadHistory] = useState<ChangeHistoryEntry[]>([]);
   const [newLead, setNewLead] = useState({
     name: "",
     contact: "",
@@ -103,6 +110,20 @@ export default function CRMPage() {
     stage: "Oportunidade Nova" as PipelineStage,
     competence: normalizeCompetence(new Date().toISOString()) || "2026-03",
   });
+
+  const actorLabel = user?.email || "Usuario";
+
+  const registerLeadHistory = (leadId: string, action: string, details?: string) => {
+    if (!user?.id) return;
+    addHistoryEntry(user.id, {
+      entityType: "crm",
+      entityId: leadId,
+      action,
+      details,
+      actor: actorLabel,
+    });
+    setHistoryVersion((prev) => prev + 1);
+  };
 
   useEffect(() => {
     setNewLead((prev) => ({
@@ -129,6 +150,15 @@ export default function CRMPage() {
         : scopedLeads.filter((lead) => lead.stage === activeStageFilter),
     [scopedLeads, activeStageFilter]
   );
+
+  useEffect(() => {
+    if (!user?.id || !selectedLead?.id) {
+      setSelectedLeadHistory([]);
+      return;
+    }
+
+    setSelectedLeadHistory(getEntityHistory(user.id, "crm", selectedLead.id, 12));
+  }, [historyVersion, selectedLead?.id, user?.id]);
 
   const metrics = useMemo(() => {
     const allLeadsByValue = scopedLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
@@ -237,11 +267,37 @@ export default function CRMPage() {
     },
   ];
 
-  const handleStageChange = (leadName: string, newStage: string) => {
+  const handleStageChange = (leadId: string, newStage: string) => {
     const stage = newStage as PipelineStage;
-    setLeads((prev) => prev.map((lead) => (lead.name === leadName ? { ...lead, stage, daysInStage: 0 } : lead)));
-    setSelectedLead((prev) => (prev && prev.name === leadName ? { ...prev, stage, daysInStage: 0 } : prev));
-    toast.success(`Negociacao movida para "${newStage}"`);
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead || lead.stage === stage) return;
+
+    if (stage === "Fechado Perdido") {
+      const confirmed = window.confirm(
+        `Confirmar mudanca para "Fechado Perdido" na negociacao "${lead.name}"?`,
+      );
+      if (!confirmed) return;
+    }
+
+    const previousStage = lead.stage;
+    setLeads((prev) => prev.map((item) => (item.id === leadId ? { ...item, stage, daysInStage: 0 } : item)));
+    setSelectedLead((prev) => (prev && prev.id === leadId ? { ...prev, stage, daysInStage: 0 } : prev));
+    registerLeadHistory(leadId, "Etapa alterada", `${previousStage} -> ${stage}`);
+
+    toast.success(`Negociacao movida para "${newStage}"`, {
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          setLeads((prev) =>
+            prev.map((item) => (item.id === leadId ? { ...item, stage: previousStage } : item)),
+          );
+          setSelectedLead((prev) =>
+            prev && prev.id === leadId ? { ...prev, stage: previousStage } : prev,
+          );
+          registerLeadHistory(leadId, "Alteracao de etapa desfeita", `${stage} -> ${previousStage}`);
+        },
+      },
+    });
   };
 
   const handleCreate = () => {
@@ -255,7 +311,14 @@ export default function CRMPage() {
       return;
     }
 
-    setLeads((prev) => [{ ...newLead, daysInStage: 0 }, ...prev]);
+    const createdLead: Lead = {
+      id: createLeadId(),
+      ...newLead,
+      daysInStage: 0,
+    };
+
+    setLeads((prev) => [createdLead, ...prev]);
+    registerLeadHistory(createdLead.id, "Negociacao criada", createdLead.name);
     setCreateOpen(false);
     setNewLead({
       name: selectedCompany || "",
@@ -265,6 +328,30 @@ export default function CRMPage() {
       competence: selectedCompetence || normalizeCompetence(new Date().toISOString()) || "2026-03",
     });
     toast.success("Negociacao cadastrada com sucesso");
+  };
+
+  const handleDeleteLead = (leadId: string) => {
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead) return;
+
+    const confirmed = window.confirm(`Excluir a negociacao "${lead.name}"?`);
+    if (!confirmed) return;
+
+    setLeads((prev) => prev.filter((item) => item.id !== leadId));
+    setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
+    setSheetOpen(false);
+    registerLeadHistory(leadId, "Negociacao excluida", lead.name);
+
+    toast.success("Negociacao excluida", {
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          setLeads((prev) => [lead, ...prev]);
+          registerLeadHistory(leadId, "Exclusao desfeita", lead.name);
+          toast.success("Negociacao restaurada");
+        },
+      },
+    });
   };
 
   return (
@@ -348,7 +435,7 @@ export default function CRMPage() {
               ) : (
                 metrics.topNegotiations.map((lead, index) => (
                   <div
-                    key={lead.name}
+                    key={lead.id}
                     className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => {
                       setSelectedLead(lead);
@@ -419,6 +506,8 @@ export default function CRMPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         onStageChange={handleStageChange}
+        onDeleteLead={handleDeleteLead}
+        historyEntries={selectedLeadHistory}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

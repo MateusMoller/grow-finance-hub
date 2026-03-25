@@ -12,8 +12,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { CalendarDays, Building2, Download, FileText, FolderOpen, Loader2, User } from "lucide-react";
 import { toast } from "sonner";
+import type { ChangeHistoryEntry } from "@/lib/changeHistory";
 
-export type KanbanStatus = "backlog" | "todo" | "doing" | "review" | "done";
+export type KanbanStatus = "backlog" | "todo" | "doing" | "review" | "done" | "archived";
+
+interface TaskSubtask {
+  title: string;
+  done: boolean;
+}
 
 export interface KanbanTaskItem {
   id: string;
@@ -26,6 +32,7 @@ export interface KanbanTaskItem {
   status: KanbanStatus;
   due_date: string | null;
   tags: string[];
+  subtasks: TaskSubtask[];
   request_id: string | null;
   created_at: string;
 }
@@ -63,8 +70,10 @@ interface KanbanTaskDetailSheetProps {
   task: KanbanTaskItem | null;
   open: boolean;
   saving?: boolean;
+  canArchive?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (taskId: string, updates: SavePayload) => Promise<void>;
+  historyEntries?: ChangeHistoryEntry[];
 }
 
 const statusLabels: Record<KanbanStatus, string> = {
@@ -73,6 +82,7 @@ const statusLabels: Record<KanbanStatus, string> = {
   doing: "Em Andamento",
   review: "Em Revisao",
   done: "Concluido",
+  archived: "Arquivado",
 };
 
 const priorityOptions = ["Urgente", "Alta", "Média", "Baixa"];
@@ -82,8 +92,10 @@ export function KanbanTaskDetailSheet({
   task,
   open,
   saving = false,
+  canArchive = false,
   onOpenChange,
   onSave,
+  historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
   const [form, setForm] = useState({
     description: "",
@@ -245,9 +257,10 @@ export function KanbanTaskDetailSheet({
           <Separator />
 
           <Tabs defaultValue="informacoes" className="space-y-4">
-            <TabsList className="grid grid-cols-2 w-full">
+            <TabsList className="grid grid-cols-3 w-full">
               <TabsTrigger value="informacoes">Informacoes</TabsTrigger>
               <TabsTrigger value="solicitacao">Solicitacao</TabsTrigger>
+              <TabsTrigger value="historico">Historico</TabsTrigger>
             </TabsList>
 
             <TabsContent value="informacoes" className="space-y-4">
@@ -263,6 +276,7 @@ export function KanbanTaskDetailSheet({
                     <SelectItem value="doing">Em Andamento</SelectItem>
                     <SelectItem value="review">Em Revisao</SelectItem>
                     <SelectItem value="done">Concluido</SelectItem>
+                    {canArchive && <SelectItem value="archived">Arquivado</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -392,6 +406,24 @@ export function KanbanTaskDetailSheet({
                     </div>
                   )}
                 </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="historico" className="space-y-3">
+              {historyEntries.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhuma alteracao registrada para esta tarefa.
+                </div>
+              ) : (
+                historyEntries.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border p-3">
+                    <div className="text-sm font-medium">{entry.action}</div>
+                    {entry.details && <div className="text-xs text-muted-foreground mt-0.5">{entry.details}</div>}
+                    <div className="text-[11px] text-muted-foreground mt-1">
+                      {new Date(entry.createdAt).toLocaleString("pt-BR")} - {entry.actor}
+                    </div>
+                  </div>
+                ))
               )}
             </TabsContent>
           </Tabs>

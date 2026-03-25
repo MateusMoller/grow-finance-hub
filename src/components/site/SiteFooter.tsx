@@ -1,69 +1,67 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import growIcon from "@/assets/grow-icon.png";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t bg-muted/30">
-      <div className="container py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-heading font-bold text-sm">G</span>
-              </div>
-              <span className="font-heading font-bold text-lg">
-                Grow <span className="text-primary">Finance</span>
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Escritório contábil e financeiro com soluções digitais para o crescimento do seu negócio.
+    <footer className="border-t border-border bg-[#efeff2] dark:bg-[#031029]">
+      <div className="container py-14">
+        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-5">
+          <div className="space-y-3 lg:col-span-2">
+            <Link to="/" className="flex items-center gap-3">
+              <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md" />
+              <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
+            </Link>
+            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Parceiro estrategico de empresas que buscam crescimento com organizacao, compliance e inteligencia.
             </p>
           </div>
 
           <div>
-            <h4 className="font-heading font-semibold text-sm mb-4">Empresa</h4>
-            <ul className="space-y-2.5">
-              {[["Sobre", "/sobre"], ["Soluções", "/solucoes"], ["Blog", "/blog"], ["Contato", "/contato"]].map(([label, href]) => (
-                <li key={href}>
-                  <Link to={href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    {label}
-                  </Link>
-                </li>
-              ))}
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Servicos</h4>
+            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <li><Link to="/solucoes" className="hover:text-foreground">Contabilidade Consultiva</Link></li>
+              <li><Link to="/solucoes" className="hover:text-foreground">Assessoria Fiscal</Link></li>
+              <li><Link to="/solucoes" className="hover:text-foreground">Departamento Pessoal</Link></li>
+              <li><Link to="/solucoes" className="hover:text-foreground">Abertura de Empresas</Link></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-heading font-semibold text-sm mb-4">Soluções</h4>
-            <ul className="space-y-2.5">
-              {["Contabilidade", "BPO Financeiro", "Departamento Pessoal", "Consultoria"].map((item) => (
-                <li key={item}>
-                  <span className="text-sm text-muted-foreground">{item}</span>
-                </li>
-              ))}
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Institucional</h4>
+            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <li><Link to="/" className="hover:text-foreground">Sobre a Grow</Link></li>
+              <li><Link to="/#clientes" className="hover:text-foreground">Clientes</Link></li>
+              <li><Link to="/contato" className="hover:text-foreground">Contato</Link></li>
+              <li><Link to="/login" className="hover:text-foreground">Area interna</Link></li>
             </ul>
           </div>
 
-          <div>
-            <h4 className="font-heading font-semibold text-sm mb-4">Contato</h4>
-            <ul className="space-y-2.5 text-sm text-muted-foreground">
-              <li>contato@growfinance.com.br</li>
-              <li>(11) 99999-9999</li>
-              <li>São Paulo, SP</li>
-            </ul>
+          <div className="space-y-4">
+            <div>
+              <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Contato</h4>
+              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                <li>Rua das Empresas, 123 - Centro, Sao Paulo, SP</li>
+                <li>Telefone: (11) 4000-1234</li>
+                <li>E-mail: contato@growcontabilidade.com.br</li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Assine nossa newsletter</p>
+              <div className="mt-2 flex gap-2">
+                <Input placeholder="Seu e-mail" className="h-9 bg-white dark:border-[#28355f] dark:bg-[#0a1734]" />
+                <Button size="sm" className="h-9 rounded-full px-4 dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]">Inscrever</Button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="border-t mt-12 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Grow Finance. Todos os direitos reservados.
-          </p>
-          <div className="flex gap-6">
-            <Link to="/termos" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-              Termos de Uso
-            </Link>
-            <Link to="/privacidade" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-              Privacidade
-            </Link>
+        <div className="mt-10 flex flex-col gap-3 border-t border-border pt-5 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
+          <p>© {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
+          <div className="flex items-center gap-4">
+            <Link to="/privacidade" className="hover:text-foreground">Politica de Privacidade</Link>
+            <Link to="/termos" className="hover:text-foreground">Termos</Link>
           </div>
         </div>
       </div>

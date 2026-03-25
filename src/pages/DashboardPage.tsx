@@ -74,6 +74,13 @@ interface TeamMember {
   role: string;
 }
 
+interface DashboardCardDefinition {
+  label: string;
+  icon: typeof Clock3;
+  color: string;
+  getValue: (summary: MetricsSummary) => string;
+}
+
 const doneStatuses = new Set(["done", "archived"]);
 const teamRoles = new Set([
   "admin",
@@ -139,6 +146,51 @@ const formatDuration = (ms: number | null) => {
   if (hours > 0) return `${hours}h ${minutes}min`;
   return `${minutes}min`;
 };
+
+const dashboardCardDefinitions: DashboardCardDefinition[] = [
+  {
+    label: "Tarefas monitoradas",
+    icon: KanbanSquare,
+    color: "text-primary",
+    getValue: (summary) => String(summary.totalTasks),
+  },
+  {
+    label: "Em aberto",
+    icon: Clock3,
+    color: "text-amber-600",
+    getValue: (summary) => String(summary.openTasks),
+  },
+  {
+    label: "Concluidas",
+    icon: CheckCircle2,
+    color: "text-primary",
+    getValue: (summary) => String(summary.doneTasks),
+  },
+  {
+    label: "Para hoje",
+    icon: CalendarCheck2,
+    color: "text-blue-600",
+    getValue: (summary) => String(summary.dueToday),
+  },
+  {
+    label: "Resolvidas hoje",
+    icon: Target,
+    color: "text-primary",
+    getValue: (summary) => String(summary.doneToday),
+  },
+  {
+    label: "Acertividade de prazos",
+    icon: Users,
+    color: "text-primary",
+    getValue: (summary) => (summary.deadlineAccuracy === null ? "-" : `${summary.deadlineAccuracy}%`),
+  },
+  {
+    label: "Tempo medio de resolucao",
+    icon: Clock3,
+    color: "text-purple-600",
+    getValue: (summary) => formatDuration(summary.avgResolutionMs),
+  },
+];
 
 const getPriorityClass = (priority: string) => {
   const normalized = normalizeText(priority || "");
@@ -442,51 +494,6 @@ export default function DashboardPage() {
 
   const maxDailyDone = Math.max(1, ...summary.dailyDone.map((point) => point.count));
 
-  const cards = [
-    {
-      label: "Tarefas monitoradas",
-      value: String(summary.totalTasks),
-      icon: KanbanSquare,
-      color: "text-primary",
-    },
-    {
-      label: "Em aberto",
-      value: String(summary.openTasks),
-      icon: Clock3,
-      color: "text-amber-600",
-    },
-    {
-      label: "Concluidas",
-      value: String(summary.doneTasks),
-      icon: CheckCircle2,
-      color: "text-primary",
-    },
-    {
-      label: "Para hoje",
-      value: String(summary.dueToday),
-      icon: CalendarCheck2,
-      color: "text-blue-600",
-    },
-    {
-      label: "Resolvidas hoje",
-      value: String(summary.doneToday),
-      icon: Target,
-      color: "text-primary",
-    },
-    {
-      label: "Acertividade de prazos",
-      value: summary.deadlineAccuracy === null ? "-" : `${summary.deadlineAccuracy}%`,
-      icon: Users,
-      color: "text-primary",
-    },
-    {
-      label: "Tempo medio de resolucao",
-      value: formatDuration(summary.avgResolutionMs),
-      icon: Clock3,
-      color: "text-purple-600",
-    },
-  ];
-
   return (
     <AppLayout>
       <div className="space-y-6 max-w-7xl">
@@ -506,7 +513,7 @@ export default function DashboardPage() {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-4">
-              {cards.map((card, index) => (
+              {dashboardCardDefinitions.map((card, index) => (
                 <motion.div
                   key={card.label}
                   initial={{ opacity: 0, y: 10 }}
@@ -517,7 +524,7 @@ export default function DashboardPage() {
                   <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
                     <card.icon className={`h-4 w-4 ${card.color}`} />
                   </div>
-                  <div className="font-heading text-xl font-bold">{card.value}</div>
+                  <div className="font-heading text-xl font-bold">{card.getValue(summary)}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{card.label}</div>
                 </motion.div>
               ))}

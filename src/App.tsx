@@ -26,6 +26,7 @@ import NotificacoesPage from "./pages/NotificacoesPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import PortalClientePage from "./pages/PortalClientePage";
 import SolicitacoesPage from "./pages/SolicitacoesPage";
+import ManualPage from "./pages/ManualPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="/app/notificacoes" element={<ProtectedRoute><NotificacoesPage /></ProtectedRoute>} />
                 <Route path="/app/configuracoes" element={<ProtectedRoute><ConfiguracoesPage /></ProtectedRoute>} />
                 <Route path="/app/solicitacoes" element={<ProtectedRoute><SolicitacoesPage /></ProtectedRoute>} />
+                <Route path="/app/manual" element={<ProtectedRoute><ManualPage /></ProtectedRoute>} />
 
                 {/* Portal do Cliente - Protegido */}
                 <Route path="/portal" element={<ProtectedRoute><PortalClientePage /></ProtectedRoute>} />

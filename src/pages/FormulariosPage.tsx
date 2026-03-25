@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -124,7 +125,7 @@ const parseFields = (value: unknown): FormField[] => {
         placeholder: raw.placeholder ? String(raw.placeholder) : "",
       };
     })
-    .filter((field): field is any => Boolean(field)) as FormField[];
+    .filter((field): field is FormField => Boolean(field));
 };
 
 export default function FormulariosPage() {
@@ -290,7 +291,7 @@ export default function FormulariosPage() {
       description: draft.description.trim() || null,
       sector: draft.sector,
       is_published: draft.is_published,
-      fields: normalizedFields as any,
+      fields: normalizedFields as Json,
     };
 
     setSaving(true);
@@ -358,7 +359,7 @@ export default function FormulariosPage() {
   };
 
   const deleteForm = async (form: ManagedForm) => {
-    const confirmed = window.confirm(`Excluir o formulário \"${form.title}\"?`);
+    const confirmed = window.confirm(`Excluir o formulário "${form.title}"?`);
     if (!confirmed) return;
 
     const { error } = await supabase.from("form_templates").delete().eq("id", form.id);

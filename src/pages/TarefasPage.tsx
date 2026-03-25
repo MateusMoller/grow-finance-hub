@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -34,6 +35,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import type { Tables } from "@/integrations/supabase/types";
+import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
 interface TaskSubtask {
   title: string;
@@ -69,8 +72,10 @@ interface KanbanTaskRow {
   status: string;
   tags: string[] | null;
   created_at: string;
-  subtasks: unknown;
+  subtasks?: unknown;
 }
+
+type KanbanTaskSnapshot = Tables<"kanban_tasks">;
 
 interface ClientOption {
   id: string;
@@ -174,13 +179,22 @@ const mapRowToTask = (row: KanbanTaskRow): Task => ({
   comments: 0,
 });
 
+const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
+  const normalized = normalizeText(errorMessage || "");
+  if (!normalized.includes("subtasks")) return false;
+  return normalized.includes("column") || normalized.includes("permission");
+};
+
 export default function TarefasPage() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
+  const [subtasksAvailable, setSubtasksAvailable] = useState(true);
   const [search, setSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState("Todos");
@@ -189,6 +203,8 @@ export default function TarefasPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [selectedTaskHistory, setSelectedTaskHistory] = useState<ChangeHistoryEntry[]>([]);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -200,17 +216,47 @@ export default function TarefasPage() {
     subtasks: [] as TaskSubtask[],
   });
 
+  const actorLabel = user?.email || "Usuario";
+
+  const registerTaskHistory = (taskId: string, action: string, details?: string) => {
+    if (!user?.id) return;
+    addHistoryEntry(user.id, {
+      entityType: "task",
+      entityId: taskId,
+      action,
+      details,
+      actor: actorLabel,
+    });
+    setHistoryVersion((prev) => prev + 1);
+  };
+
   useEffect(() => {
     void loadTasks();
     void loadClients();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("create") !== "1") return;
+
+    setCreateOpen(true);
+    params.delete("create");
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : "",
+      },
+      { replace: true },
+    );
+  }, [location.pathname, location.search, navigate]);
 
   const loadTasks = async () => {
     setLoading(true);
 
     const { data, error } = await supabase
       .from("kanban_tasks")
-      .select("id, title, description, client_name, sector, assignee, priority, due_date, status, tags, created_at, subtasks")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -219,10 +265,16 @@ export default function TarefasPage() {
       return;
     }
 
-    const mapped = ((data || []) as KanbanTaskRow[])
+    const rows = (data || []) as KanbanTaskRow[];
+    const subtasksColumnReturned =
+      rows.length === 0
+        ? subtasksAvailable
+        : rows.some((row) => Object.prototype.hasOwnProperty.call(row, "subtasks"));
+    const mapped = rows
       .filter((row) => row.status !== "archived")
       .map(mapRowToTask);
 
+    setSubtasksAvailable(subtasksColumnReturned);
     setTasks(mapped);
     setLoading(false);
   };
@@ -266,9 +318,24 @@ export default function TarefasPage() {
     return true;
   });
 
+  useEffect(() => {
+    if (!user?.id || !selectedTask?.id) {
+      setSelectedTaskHistory([]);
+      return;
+    }
+
+    setSelectedTaskHistory(getEntityHistory(user.id, "task", selectedTask.id, 12));
+  }, [historyVersion, selectedTask?.id, user?.id]);
+
   const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
+    if (!subtasksAvailable) {
+      toast.warning("Subtarefas nao estao disponiveis no banco atual.");
+      return;
+    }
+
     const taskToUpdate = tasks.find((task) => task.id === taskId);
     if (!taskToUpdate || !taskToUpdate.subtasks[subtaskIndex]) return;
+    const toggledSubtask = taskToUpdate.subtasks[subtaskIndex];
 
     const updatedSubtasks = taskToUpdate.subtasks.map((subtask, index) =>
       index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask
@@ -286,12 +353,23 @@ export default function TarefasPage() {
       return { ...prev, subtasks: updatedSubtasks };
     });
 
+    registerTaskHistory(
+      taskId,
+      toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluida",
+      toggledSubtask.title,
+    );
+
     void supabase
       .from("kanban_tasks")
       .update({ subtasks: updatedSubtasks })
       .eq("id", taskId)
       .then(({ error }) => {
         if (error) {
+          if (isSubtasksColumnIssue(error.message)) {
+            setSubtasksAvailable(false);
+            toast.warning("Subtarefas nao estao disponiveis no banco atual.");
+            return;
+          }
           toast.error(`Erro ao atualizar subtarefa: ${error.message}`);
         }
       });
@@ -316,7 +394,7 @@ export default function TarefasPage() {
       return;
     }
 
-    const { error } = await supabase.from("kanban_tasks").insert({
+    const baseInsertPayload = {
       title: newTask.title.trim(),
       description: newTask.description.trim() || null,
       client_name: selectedClient.name,
@@ -326,14 +404,37 @@ export default function TarefasPage() {
       due_date: newTask.dueDate || null,
       status: "todo",
       tags: [newTask.sector],
-      subtasks: newTask.subtasks,
       created_by: user?.id || null,
-    });
+    };
 
-    if (error) {
-      toast.error(`Erro ao criar tarefa: ${error.message}`);
+    const firstTry = await supabase
+      .from("kanban_tasks")
+      .insert(subtasksAvailable ? { ...baseInsertPayload, subtasks: newTask.subtasks } : baseInsertPayload)
+      .select("id, title")
+      .single();
+
+    let createdTask = firstTry.data;
+    let error = firstTry.error;
+    let savedWithoutSubtasks = !subtasksAvailable;
+
+    if (error && subtasksAvailable && isSubtasksColumnIssue(error.message)) {
+      setSubtasksAvailable(false);
+      savedWithoutSubtasks = true;
+      const fallbackInsert = await supabase
+        .from("kanban_tasks")
+        .insert(baseInsertPayload)
+        .select("id, title")
+        .single();
+      createdTask = fallbackInsert.data;
+      error = fallbackInsert.error;
+    }
+
+    if (error || !createdTask) {
+      toast.error(`Erro ao criar tarefa: ${error?.message || "Nao foi possivel criar a tarefa"}`);
       return;
     }
+
+    registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
 
     setCreateOpen(false);
     setNewSubtaskTitle("");
@@ -347,7 +448,11 @@ export default function TarefasPage() {
       dueDate: "",
       subtasks: [],
     });
-    toast.success("Tarefa criada com sucesso");
+    if (savedWithoutSubtasks && newTask.subtasks.length > 0) {
+      toast.success("Tarefa criada. Subtarefas nao foram salvas neste banco.");
+    } else {
+      toast.success("Tarefa criada com sucesso");
+    }
     await loadTasks();
   };
 
@@ -381,6 +486,12 @@ export default function TarefasPage() {
     const confirmed = window.confirm(`Excluir a tarefa "${taskToDelete.title}"?`);
     if (!confirmed) return;
 
+    const { data: snapshot } = await supabase
+      .from("kanban_tasks")
+      .select("*")
+      .eq("id", taskId)
+      .maybeSingle();
+
     const { error } = await supabase.from("kanban_tasks").delete().eq("id", taskId);
 
     if (error) {
@@ -391,7 +502,30 @@ export default function TarefasPage() {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
     setSelectedTask((prev) => (prev?.id === taskId ? null : prev));
     setSheetOpen(false);
-    toast.success("Tarefa excluida com sucesso");
+    registerTaskHistory(taskId, "Tarefa excluida", taskToDelete.title);
+
+    toast.success("Tarefa excluida", {
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          if (!snapshot) return;
+          void (async () => {
+            const { error: restoreError } = await supabase
+              .from("kanban_tasks")
+              .insert(snapshot as KanbanTaskSnapshot);
+
+            if (restoreError) {
+              toast.error(`Nao foi possivel desfazer: ${restoreError.message}`);
+              return;
+            }
+
+            setTasks((prev) => [mapRowToTask(snapshot as unknown as KanbanTaskRow), ...prev]);
+            registerTaskHistory(taskId, "Exclusao desfeita", taskToDelete.title);
+            toast.success("Tarefa restaurada com sucesso");
+          })();
+        },
+      },
+    });
   };
 
   return (
@@ -531,6 +665,7 @@ export default function TarefasPage() {
         onOpenChange={setSheetOpen}
         onSubtaskToggle={handleSubtaskToggle}
         onDeleteTask={handleDeleteTask}
+        historyEntries={selectedTaskHistory}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

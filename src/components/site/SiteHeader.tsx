@@ -1,42 +1,61 @@
-import { Link, useLocation } from "react-router-dom";
+﻿import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { Menu, Moon, Sun, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "next-themes";
+import growIcon from "@/assets/grow-icon.png";
 
 const navLinks = [
-  { label: "Home", href: "/" },
-  { label: "Sobre", href: "/sobre" },
-  { label: "Soluções", href: "/solucoes" },
-  { label: "Contato", href: "/contato" },
+  { label: "Institucional", to: "/" },
+  { label: "Servicos", to: "/#servicos" },
+  { label: "Diferenciais", to: "/#diferenciais" },
+  { label: "Clientes", to: "/#clientes" },
+  { label: "Contato", to: "/contato" },
 ];
+
+const isNavActive = (pathname: string, hash: string, target: string) => {
+  const [targetPath, targetHash] = target.split("#");
+
+  if (targetHash) {
+    return pathname === (targetPath || "/") && hash === `#${targetHash}`;
+  }
+
+  return pathname === target;
+};
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const location = useLocation();
+  const { resolvedTheme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDark = resolvedTheme === "dark";
+  const toggleTheme = () => {
+    setTheme(isDark ? "light" : "dark");
+  };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 glass">
-      <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-heading font-bold text-sm">G</span>
-          </div>
-          <span className="font-heading font-bold text-lg text-foreground">
-            Grow <span className="text-primary">Finance</span>
-          </span>
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/80 bg-white/95 backdrop-blur dark:bg-[#061330]/95">
+      <div className="container flex h-20 items-center justify-between">
+        <Link to="/" className="flex items-center gap-3">
+          <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md" />
+          <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
         </Link>
 
-        {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-1">
+        <nav className="hidden lg:flex items-center gap-1">
           {navLinks.map((link) => (
             <Link
-              key={link.href}
-              to={link.href}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                location.pathname === link.href
-                  ? "text-primary bg-accent"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              key={link.to}
+              to={link.to}
+              className={`rounded-full px-4 py-2 text-sm transition-colors ${
+                isNavActive(location.pathname, location.hash, link.to)
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               {link.label}
@@ -44,57 +63,81 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/portal">Portal do Cliente</Link>
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
+        <div className="hidden lg:flex items-center gap-3">
+          {mounted ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-full border-border/80 bg-background/70"
+              onClick={toggleTheme}
+              aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+          ) : (
+            <span className="h-9 w-9 rounded-full border border-border/80 bg-background/70" />
+          )}
+
+          <Button asChild variant="ghost" size="sm" className="rounded-full">
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button variant="hero" size="sm" asChild>
-            <Link to="/contato">Fale Conosco</Link>
+          <Button asChild size="sm" className="rounded-full px-5">
+            <Link to="/#contato">Agende uma Avaliacao</Link>
           </Button>
         </div>
 
-        {/* Mobile toggle */}
-        <button className="md:hidden p-2" onClick={() => setOpen(!open)}>
+        <button className="rounded-md p-2 lg:hidden" onClick={() => setOpen((prev) => !prev)} aria-label="Abrir menu">
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
-      {/* Mobile menu */}
       <AnimatePresence>
         {open && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden glass border-t"
+            className="border-t border-border bg-white dark:bg-[#061330] lg:hidden"
           >
-            <div className="container py-4 flex flex-col gap-2">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  onClick={() => setOpen(false)}
-                  className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-muted"
-                >
-                  {link.label}
-                </Link>
-              ))}
-              <Link
-                to="/portal"
-                onClick={() => setOpen(false)}
-                className="px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-muted text-primary"
+            <div className="container py-4">
+              <div className="flex flex-col gap-2">
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setOpen(false)}
+                    className="rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4 w-full"
+                onClick={toggleTheme}
               >
-                Portal do Cliente
-              </Link>
-              <div className="flex gap-2 pt-2 border-t mt-2">
-                <Button variant="outline" size="sm" className="flex-1" asChild>
-                  <Link to="/login" onClick={() => setOpen(false)}>Entrar</Link>
+                {isDark ? "Usar modo claro" : "Usar modo escuro"}
+              </Button>
+
+              <div className="mt-4 grid gap-2 border-t border-border pt-4">
+                <Button asChild variant="outline" className="w-full">
+                  <Link to="/portal" onClick={() => setOpen(false)}>
+                    Portal do Cliente
+                  </Link>
                 </Button>
-                <Button variant="hero" size="sm" className="flex-1" asChild>
-                  <Link to="/contato" onClick={() => setOpen(false)}>Fale Conosco</Link>
+                <Button asChild variant="outline" className="w-full">
+                  <Link to="/login" onClick={() => setOpen(false)}>
+                    Entrar
+                  </Link>
+                </Button>
+                <Button asChild className="w-full">
+                  <Link to="/#contato" onClick={() => setOpen(false)}>
+                    Agende uma Avaliacao
+                  </Link>
                 </Button>
               </div>
             </div>
