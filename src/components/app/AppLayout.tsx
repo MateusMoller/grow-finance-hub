@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 
 interface HeaderNotification {
   id: string;
@@ -23,6 +24,16 @@ interface HeaderNotification {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
+  const {
+    selectedCompany,
+    selectedCompetence,
+    setSelectedCompany,
+    setSelectedCompetence,
+    companyOptions,
+    competenceOptions,
+    loadingOptions,
+    formatCompetence,
+  } = useGlobalFilters();
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState<HeaderNotification[]>([
@@ -60,7 +71,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b px-4 bg-card shrink-0">
+          <header className="h-16 flex items-center justify-between border-b px-4 bg-card shrink-0">
             <div className="flex items-center gap-3">
               <SidebarTrigger />
               <div className="hidden md:flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5">
@@ -69,6 +80,35 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-48"
                   placeholder="Buscar..."
                 />
+              </div>
+              <div className="hidden lg:flex items-center gap-2">
+                <select
+                  className="h-9 min-w-[220px] rounded-md border bg-background px-3 text-sm outline-none"
+                  value={selectedCompany || ""}
+                  onChange={(event) => setSelectedCompany(event.target.value || null)}
+                >
+                  <option value="">Empresa: Total</option>
+                  {companyOptions.map((company) => (
+                    <option key={company} value={company}>
+                      {company}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="h-9 min-w-[190px] rounded-md border bg-background px-3 text-sm outline-none"
+                  value={selectedCompetence || ""}
+                  onChange={(event) => setSelectedCompetence(event.target.value || null)}
+                >
+                  <option value="">Competencia: Total</option>
+                  {competenceOptions.map((competence) => (
+                    <option key={competence} value={competence}>
+                      {formatCompetence(competence)}
+                    </option>
+                  ))}
+                </select>
+                {loadingOptions && (
+                  <span className="text-xs text-muted-foreground">Atualizando filtros...</span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">

@@ -8,13 +8,16 @@ import {
   Plus,
   Search,
   AlertTriangle,
-  MoreHorizontal,
   Paperclip,
   MessageSquare,
   CalendarDays,
   Tag,
+  Loader2,
+  Check,
+  ChevronsUpDown,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -22,8 +25,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
+import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+
+interface TaskSubtask {
+  title: string;
+  done: boolean;
+}
 
 interface Task {
   id: string;
@@ -32,125 +47,351 @@ interface Task {
   client: string;
   sector: string;
   assignee: string;
-  priority: "Alta" | "Média" | "Baixa" | "Urgente";
+  priority: "Alta" | "Media" | "Baixa" | "Urgente";
   dueDate: string;
-  status: "Pendente" | "Em andamento" | "Em revisão" | "Concluído" | "Atrasado";
+  status: "Pendente" | "Em andamento" | "Em revisao" | "Concluido" | "Atrasado";
+  createdAt: string;
   tags: string[];
-  subtasks: { title: string; done: boolean }[];
+  subtasks: TaskSubtask[];
   attachments: number;
   comments: number;
 }
 
-const initialTasks: Task[] = [
-  {
-    id: "1", title: "Fechamento contábil mensal", description: "Realizar fechamento contábil do mês de março",
-    client: "ABC Tecnologia Ltda", sector: "Contábil", assignee: "Maria Santos", priority: "Alta",
-    dueDate: "2026-03-20", status: "Em andamento", tags: ["Contábil", "Mensal"],
-    subtasks: [{ title: "Conciliar contas", done: true }, { title: "Gerar balancete", done: false }, { title: "Enviar relatório", done: false }],
-    attachments: 3, comments: 5,
-  },
-  {
-    id: "2", title: "Admissão - João Silva", description: "Processar admissão do novo colaborador",
-    client: "Tech Solutions SA", sector: "Departamento Pessoal", assignee: "Carlos Ribeiro", priority: "Média",
-    dueDate: "2026-03-22", status: "Pendente", tags: ["DP", "Admissão"],
-    subtasks: [{ title: "Coletar documentos", done: true }, { title: "Cadastro eSocial", done: false }],
-    attachments: 7, comments: 2,
-  },
-  {
-    id: "3", title: "Declaração IR 2026", description: "Preparar e enviar declaração de IR",
-    client: "Startup XYZ ME", sector: "Fiscal", assignee: "Ana Lima", priority: "Urgente",
-    dueDate: "2026-03-18", status: "Atrasado", tags: ["Fiscal", "IR"],
-    subtasks: [{ title: "Reunir informes", done: true }, { title: "Preencher declaração", done: true }, { title: "Revisar", done: false }, { title: "Enviar", done: false }],
-    attachments: 12, comments: 8,
-  },
-  {
-    id: "4", title: "BPO Financeiro - Março", description: "Conciliação e relatórios financeiros",
-    client: "Comércio Rápido Ltda", sector: "Financeiro", assignee: "Lucas Moreira", priority: "Média",
-    dueDate: "2026-03-25", status: "Em andamento", tags: ["BPO", "Financeiro"],
-    subtasks: [{ title: "Conciliar extratos", done: true }, { title: "Classificar despesas", done: true }, { title: "Gerar DRE", done: false }],
-    attachments: 5, comments: 3,
-  },
-  {
-    id: "5", title: "Cálculo de férias - Pedro Santos", description: "Calcular e processar férias do colaborador",
-    client: "ABC Tecnologia Ltda", sector: "Departamento Pessoal", assignee: "Maria Santos", priority: "Baixa",
-    dueDate: "2026-03-28", status: "Em revisão", tags: ["DP", "Férias"],
-    subtasks: [{ title: "Calcular valores", done: true }, { title: "Gerar recibo", done: true }, { title: "Aprovação gerência", done: false }],
-    attachments: 2, comments: 1,
-  },
-  {
-    id: "6", title: "Alteração salarial - Empresa Beta", description: "Processar alteração salarial para 3 colaboradores",
-    client: "Beta Serviços SA", sector: "Departamento Pessoal", assignee: "Carlos Ribeiro", priority: "Alta",
-    dueDate: "2026-03-21", status: "Pendente", tags: ["DP", "Salário"],
-    subtasks: [{ title: "Validar valores", done: false }, { title: "Atualizar folha", done: false }],
-    attachments: 1, comments: 0,
-  },
-];
+interface KanbanTaskRow {
+  id: string;
+  title: string;
+  description: string | null;
+  client_name: string | null;
+  sector: string;
+  assignee: string | null;
+  priority: string;
+  due_date: string | null;
+  status: string;
+  tags: string[] | null;
+  created_at: string;
+  subtasks: unknown;
+}
+
+interface ClientOption {
+  id: string;
+  name: string;
+}
 
 const priorityConfig: Record<string, { color: string; bg: string }> = {
   Urgente: { color: "text-destructive", bg: "bg-destructive/10" },
   Alta: { color: "text-orange-600", bg: "bg-orange-100 dark:bg-orange-900/20" },
-  Média: { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
+  Media: { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
   Baixa: { color: "text-muted-foreground", bg: "bg-muted" },
 };
 
 const statusConfig: Record<string, { color: string; bg: string; icon: typeof Circle }> = {
   Pendente: { color: "text-muted-foreground", bg: "bg-muted", icon: Circle },
   "Em andamento": { color: "text-primary", bg: "bg-primary/10", icon: Clock },
-  "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20", icon: AlertTriangle },
-  Concluído: { color: "text-primary", bg: "bg-primary/10", icon: CheckCircle2 },
+  "Em revisao": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20", icon: AlertTriangle },
+  Concluido: { color: "text-primary", bg: "bg-primary/10", icon: CheckCircle2 },
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
 };
 
-const sectors = ["Todos", "Contábil", "Fiscal", "Departamento Pessoal", "Financeiro"];
-const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
+const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"];
+const statuses = ["Todos", "Pendente", "Em andamento", "Em revisao", "Concluido", "Atrasado"];
+
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const normalizeSector = (value: string): string => {
+  const normalized = normalizeText(value);
+  if (normalized.includes("contabil")) return "Contabil";
+  if (normalized.includes("fiscal")) return "Fiscal";
+  if (normalized.includes("pessoal")) return "Departamento Pessoal";
+  if (normalized.includes("finance")) return "Financeiro";
+  return value || "Geral";
+};
+
+const normalizePriority = (value: string): Task["priority"] => {
+  const normalized = normalizeText(value);
+  if (normalized.includes("urgente")) return "Urgente";
+  if (normalized.includes("alta")) return "Alta";
+  if (normalized.includes("baixa")) return "Baixa";
+  return "Media";
+};
+
+const deriveStatus = (status: string, dueDate: string | null): Task["status"] => {
+  const normalizedStatus = normalizeText(status);
+
+  if (normalizedStatus === "done" || normalizedStatus === "archived") {
+    return "Concluido";
+  }
+
+  if (dueDate) {
+    const dueAt = new Date(`${dueDate}T23:59:59`).getTime();
+    if (!Number.isNaN(dueAt) && dueAt < Date.now()) {
+      return "Atrasado";
+    }
+  }
+
+  if (normalizedStatus === "doing") return "Em andamento";
+  if (normalizedStatus === "review") return "Em revisao";
+  return "Pendente";
+};
+
+const parseSubtasks = (value: unknown): TaskSubtask[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const subtask = item as { title?: unknown; done?: unknown };
+      const title = typeof subtask.title === "string" ? subtask.title.trim() : "";
+      if (!title) return null;
+
+      return {
+        title,
+        done: Boolean(subtask.done),
+      };
+    })
+    .filter((item): item is TaskSubtask => item !== null);
+};
+
+const mapRowToTask = (row: KanbanTaskRow): Task => ({
+  id: row.id,
+  title: row.title,
+  description: row.description || "",
+  client: row.client_name || "",
+  sector: normalizeSector(row.sector || ""),
+  assignee: row.assignee || "",
+  priority: normalizePriority(row.priority || ""),
+  dueDate: row.due_date || "",
+  status: deriveStatus(row.status || "todo", row.due_date),
+  createdAt: row.created_at,
+  tags: row.tags?.length ? row.tags.map(normalizeSector) : row.sector ? [normalizeSector(row.sector)] : [],
+  subtasks: parseSubtasks(row.subtasks),
+  attachments: 0,
+  comments: 0,
+});
 
 export default function TarefasPage() {
-  const [tasks, setTasks] = useState(initialTasks);
+  const { user } = useAuth();
+  const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingClients, setLoadingClients] = useState(true);
   const [search, setSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [newTask, setNewTask] = useState({ title: "", description: "", client: "", sector: "Contábil", assignee: "", priority: "Média" as Task["priority"], dueDate: "" });
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    client: "",
+    sector: "Contabil",
+    assignee: "",
+    priority: "Media" as Task["priority"],
+    dueDate: "",
+    subtasks: [] as TaskSubtask[],
+  });
 
-  const filtered = tasks.filter((t) => {
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !t.client.toLowerCase().includes(search.toLowerCase())) return false;
-    if (sectorFilter !== "Todos" && t.sector !== sectorFilter) return false;
-    if (statusFilter !== "Todos" && t.status !== statusFilter) return false;
+  useEffect(() => {
+    void loadTasks();
+    void loadClients();
+  }, []);
+
+  const loadTasks = async () => {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("kanban_tasks")
+      .select("id, title, description, client_name, sector, assignee, priority, due_date, status, tags, created_at, subtasks")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast.error("Erro ao carregar tarefas");
+      setLoading(false);
+      return;
+    }
+
+    const mapped = ((data || []) as KanbanTaskRow[])
+      .filter((row) => row.status !== "archived")
+      .map(mapRowToTask);
+
+    setTasks(mapped);
+    setLoading(false);
+  };
+
+  const loadClients = async () => {
+    setLoadingClients(true);
+
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, name")
+      .order("name");
+
+    if (error) {
+      toast.error("Erro ao carregar clientes cadastrados");
+      setLoadingClients(false);
+      return;
+    }
+
+    setClients((data || []) as ClientOption[]);
+    setLoadingClients(false);
+  };
+
+  const scopedTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          matchesSelectedCompany(task.client, selectedCompany) &&
+          matchesSelectedCompetence(
+            getTaskCompetence(task.dueDate || null, task.createdAt),
+            selectedCompetence
+          )
+      ),
+    [tasks, selectedCompany, selectedCompetence]
+  );
+
+  const filtered = scopedTasks.filter((task) => {
+    const searchTerm = search.toLowerCase();
+    if (search && !task.title.toLowerCase().includes(searchTerm) && !task.client.toLowerCase().includes(searchTerm)) return false;
+    if (sectorFilter !== "Todos" && task.sector !== sectorFilter) return false;
+    if (statusFilter !== "Todos" && task.status !== statusFilter) return false;
     return true;
   });
 
   const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t;
-      const subtasks = [...t.subtasks];
-      subtasks[subtaskIndex] = { ...subtasks[subtaskIndex], done: !subtasks[subtaskIndex].done };
-      return { ...t, subtasks };
-    }));
-    setSelectedTask(prev => {
+    const taskToUpdate = tasks.find((task) => task.id === taskId);
+    if (!taskToUpdate || !taskToUpdate.subtasks[subtaskIndex]) return;
+
+    const updatedSubtasks = taskToUpdate.subtasks.map((subtask, index) =>
+      index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask
+    );
+
+    setTasks((prev) =>
+      prev.map((task) => {
+        if (task.id !== taskId) return task;
+        return { ...task, subtasks: updatedSubtasks };
+      })
+    );
+
+    setSelectedTask((prev) => {
       if (!prev || prev.id !== taskId) return prev;
-      const subtasks = [...prev.subtasks];
-      subtasks[subtaskIndex] = { ...subtasks[subtaskIndex], done: !subtasks[subtaskIndex].done };
-      return { ...prev, subtasks };
+      return { ...prev, subtasks: updatedSubtasks };
     });
+
+    void supabase
+      .from("kanban_tasks")
+      .update({ subtasks: updatedSubtasks })
+      .eq("id", taskId)
+      .then(({ error }) => {
+        if (error) {
+          toast.error(`Erro ao atualizar subtarefa: ${error.message}`);
+        }
+      });
   };
 
-  const handleCreate = () => {
-    if (!newTask.title.trim()) { toast.error("Título é obrigatório"); return; }
-    const task: Task = {
-      id: String(Date.now()),
-      ...newTask,
-      status: "Pendente",
+  const handleCreate = async () => {
+    if (!newTask.title.trim()) {
+      toast.error("Titulo e obrigatorio");
+      return;
+    }
+
+    if (!newTask.client.trim()) {
+      toast.error("Selecione um cliente cadastrado");
+      return;
+    }
+
+    const selectedClient = clients.find(
+      (client) => normalizeText(client.name) === normalizeText(newTask.client)
+    );
+    if (!selectedClient) {
+      toast.error("Cliente invalido. Selecione um cliente da lista");
+      return;
+    }
+
+    const { error } = await supabase.from("kanban_tasks").insert({
+      title: newTask.title.trim(),
+      description: newTask.description.trim() || null,
+      client_name: selectedClient.name,
+      sector: newTask.sector,
+      assignee: newTask.assignee.trim() || null,
+      priority: newTask.priority,
+      due_date: newTask.dueDate || null,
+      status: "todo",
       tags: [newTask.sector],
-      subtasks: [],
-      attachments: 0,
-      comments: 0,
-    };
-    setTasks(prev => [task, ...prev]);
+      subtasks: newTask.subtasks,
+      created_by: user?.id || null,
+    });
+
+    if (error) {
+      toast.error(`Erro ao criar tarefa: ${error.message}`);
+      return;
+    }
+
     setCreateOpen(false);
-    setNewTask({ title: "", description: "", client: "", sector: "Contábil", assignee: "", priority: "Média", dueDate: "" });
+    setNewSubtaskTitle("");
+    setNewTask({
+      title: "",
+      description: "",
+      client: "",
+      sector: "Contabil",
+      assignee: "",
+      priority: "Media",
+      dueDate: "",
+      subtasks: [],
+    });
     toast.success("Tarefa criada com sucesso");
+    await loadTasks();
+  };
+
+  useEffect(() => {
+    if (!selectedCompany) return;
+    setNewTask((prev) => ({ ...prev, client: selectedCompany }));
+  }, [selectedCompany]);
+
+  const handleAddDraftSubtask = () => {
+    const title = newSubtaskTitle.trim();
+    if (!title) return;
+
+    setNewTask((prev) => ({
+      ...prev,
+      subtasks: [...prev.subtasks, { title, done: false }],
+    }));
+    setNewSubtaskTitle("");
+  };
+
+  const handleRemoveDraftSubtask = (index: number) => {
+    setNewTask((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    const taskToDelete = tasks.find((task) => task.id === taskId);
+    if (!taskToDelete) return;
+
+    const confirmed = window.confirm(`Excluir a tarefa "${taskToDelete.title}"?`);
+    if (!confirmed) return;
+
+    const { error } = await supabase.from("kanban_tasks").delete().eq("id", taskId);
+
+    if (error) {
+      toast.error(`Erro ao excluir tarefa: ${error.message}`);
+      return;
+    }
+
+    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    setSelectedTask((prev) => (prev?.id === taskId ? null : prev));
+    setSheetOpen(false);
+    toast.success("Tarefa excluida com sucesso");
   };
 
   return (
@@ -159,114 +400,139 @@ export default function TarefasPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
-            <p className="text-sm text-muted-foreground">Gestão completa de tarefas da equipe</p>
+            <p className="text-sm text-muted-foreground">Gestao completa de tarefas da equipe</p>
           </div>
           <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Nova Tarefa
           </Button>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: "Total", value: tasks.length, color: "text-foreground" },
-            { label: "Pendentes", value: tasks.filter(t => t.status === "Pendente").length, color: "text-muted-foreground" },
-            { label: "Em andamento", value: tasks.filter(t => t.status === "Em andamento").length, color: "text-primary" },
-            { label: "Atrasadas", value: tasks.filter(t => t.status === "Atrasado").length, color: "text-destructive" },
-            { label: "Concluídas", value: tasks.filter(t => t.status === "Concluído").length, color: "text-primary" },
-          ].map((s) => (
-            <div key={s.label} className="rounded-lg border bg-card p-3 text-center">
-              <div className={`text-xl font-bold ${s.color}`}>{s.value}</div>
-              <div className="text-xs text-muted-foreground">{s.label}</div>
+            { label: "Total", value: scopedTasks.length, color: "text-foreground" },
+            { label: "Pendentes", value: scopedTasks.filter((t) => t.status === "Pendente").length, color: "text-muted-foreground" },
+            { label: "Em andamento", value: scopedTasks.filter((t) => t.status === "Em andamento").length, color: "text-primary" },
+            { label: "Atrasadas", value: scopedTasks.filter((t) => t.status === "Atrasado").length, color: "text-destructive" },
+            { label: "Concluidas", value: scopedTasks.filter((t) => t.status === "Concluido").length, color: "text-primary" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border bg-card p-3 text-center">
+              <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
+              <div className="text-xs text-muted-foreground">{item.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 flex-1 min-w-[200px] max-w-sm">
             <Search className="h-4 w-4 text-muted-foreground" />
-            <input className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground" placeholder="Buscar tarefa ou cliente..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input
+              className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
+              placeholder="Buscar tarefa ou cliente..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={sectorFilter} onChange={(e) => setSectorFilter(e.target.value)}>
-              {sectors.map(s => <option key={s}>{s}</option>)}
+            <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)}>
+              {sectors.map((sector) => (
+                <option key={sector}>{sector}</option>
+              ))}
             </select>
-            <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              {statuses.map(s => <option key={s}>{s}</option>)}
+            <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              {statuses.map((status) => (
+                <option key={status}>{status}</option>
+              ))}
             </select>
           </div>
         </div>
 
-        {/* Task list */}
-        <div className="space-y-3">
-          {filtered.map((task, i) => {
-            const statusCfg = statusConfig[task.status];
-            const priorityCfg = priorityConfig[task.priority];
-            const subtaskDone = task.subtasks.filter(s => s.done).length;
-            const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
-            const StatusIcon = statusCfg.icon;
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((task, index) => {
+              const statusCfg = statusConfig[task.status];
+              const priorityCfg = priorityConfig[task.priority];
+              const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
+              const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
+              const StatusIcon = statusCfg.icon;
 
-            return (
-              <motion.div
-                key={task.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="rounded-xl border bg-card p-4 hover:shadow-md transition-all cursor-pointer"
-                onClick={() => { setSelectedTask(task); setSheetOpen(true); }}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}>
-                    <StatusIcon className={`h-4 w-4 ${statusCfg.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-medium text-sm">{task.title}</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">{task.client}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge variant="outline" className={`text-xs ${priorityCfg.color} ${priorityCfg.bg} border-0`}>
-                          {task.priority}
-                        </Badge>
-                        <Badge variant="outline" className={`text-xs ${statusCfg.color} ${statusCfg.bg} border-0`}>
-                          {task.status}
-                        </Badge>
-                      </div>
+              return (
+                <motion.div
+                  key={task.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                  className="rounded-xl border bg-card p-4 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => {
+                    setSelectedTask(task);
+                    setSheetOpen(true);
+                  }}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}>
+                      <StatusIcon className={`h-4 w-4 ${statusCfg.color}`} />
                     </div>
-                    <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{new Date(task.dueDate).toLocaleDateString("pt-BR")}</span>
-                      <span>{task.assignee}</span>
-                      <span>{task.sector}</span>
-                      <span className="flex items-center gap-1"><Paperclip className="h-3 w-3" />{task.attachments}</span>
-                      <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{task.comments}</span>
-                      <div className="flex items-center gap-1">
-                        {task.tags.map(tag => (
-                          <span key={tag} className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded text-xs">
-                            <Tag className="h-2.5 w-2.5" />{tag}
-                          </span>
-                        ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-medium text-sm">{task.title}</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">{task.client || "Sem cliente"}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge variant="outline" className={`text-xs ${priorityCfg.color} ${priorityCfg.bg} border-0`}>
+                            {task.priority}
+                          </Badge>
+                          <Badge variant="outline" className={`text-xs ${statusCfg.color} ${statusCfg.bg} border-0`}>
+                            {task.status}
+                          </Badge>
+                        </div>
                       </div>
+                      <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{task.dueDate ? new Date(task.dueDate).toLocaleDateString("pt-BR") : "Sem prazo"}</span>
+                        <span>{task.assignee || "Sem responsavel"}</span>
+                        <span>{task.sector}</span>
+                        <span className="flex items-center gap-1"><Paperclip className="h-3 w-3" />{task.attachments}</span>
+                        <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{task.comments}</span>
+                        <div className="flex items-center gap-1">
+                          {task.tags.map((tag) => (
+                            <span key={tag} className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded text-xs">
+                              <Tag className="h-2.5 w-2.5" />{tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {task.subtasks.length > 0 && (
+                        <div className="flex items-center gap-3 mt-3">
+                          <Progress value={subtaskPct} className="h-1.5 flex-1 max-w-[200px]" />
+                          <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} subtarefas</span>
+                        </div>
+                      )}
                     </div>
-                    {task.subtasks.length > 0 && (
-                      <div className="flex items-center gap-3 mt-3">
-                        <Progress value={subtaskPct} className="h-1.5 flex-1 max-w-[200px]" />
-                        <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} subtarefas</span>
-                      </div>
-                    )}
                   </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                </motion.div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Nenhuma tarefa encontrada.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <TaskDetailSheet task={selectedTask} open={sheetOpen} onOpenChange={setSheetOpen} onSubtaskToggle={handleSubtaskToggle} />
+      <TaskDetailSheet
+        task={selectedTask}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onSubtaskToggle={handleSubtaskToggle}
+        onDeleteTask={handleDeleteTask}
+      />
 
-      {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -274,44 +540,149 @@ export default function TarefasPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Título *</Label>
-              <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} />
+              <Label>Titulo *</Label>
+              <Input placeholder="Ex: Fechamento contabil" value={newTask.title} onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea placeholder="Descreva a tarefa..." value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} />
+              <Label>Descricao</Label>
+              <Textarea placeholder="Descreva a tarefa..." value={newTask.description} onChange={(event) => setNewTask((prev) => ({ ...prev, description: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Subtarefas</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: Conferir pendencias do cliente"
+                  value={newSubtaskTitle}
+                  onChange={(event) => setNewSubtaskTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddDraftSubtask();
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddDraftSubtask} disabled={!newSubtaskTitle.trim()}>
+                  Adicionar
+                </Button>
+              </div>
+              {newTask.subtasks.length > 0 ? (
+                <div className="space-y-1.5 rounded-lg border p-2">
+                  {newTask.subtasks.map((subtask, index) => (
+                    <div key={`${subtask.title}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5">
+                      <span className="text-sm">{subtask.title}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => handleRemoveDraftSubtask(index)}
+                        aria-label={`Remover subtarefa ${index + 1}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nenhuma subtarefa adicionada.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Cliente</Label>
-                <Input placeholder="Nome do cliente" value={newTask.client} onChange={e => setNewTask(p => ({ ...p, client: e.target.value }))} />
+                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clientPickerOpen}
+                      className="w-full justify-between"
+                      disabled={loadingClients}
+                    >
+                      {newTask.client || (loadingClients ? "Carregando clientes..." : "Selecione um cliente")}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar cliente..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {clients.map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.name}
+                              onSelect={(selectedValue) => {
+                                const matchedClient = clients.find(
+                                  (item) => normalizeText(item.name) === normalizeText(selectedValue)
+                                );
+                                if (matchedClient) {
+                                  setNewTask((prev) => ({ ...prev, client: matchedClient.name }));
+                                  setClientPickerOpen(false);
+                                }
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newTask.client === client.name ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {client.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
-                <Label>Responsável</Label>
-                <Input placeholder="Nome" value={newTask.assignee} onChange={e => setNewTask(p => ({ ...p, assignee: e.target.value }))} />
+                <Label>Responsavel</Label>
+                <Input placeholder="Nome" value={newTask.assignee} onChange={(event) => setNewTask((prev) => ({ ...prev, assignee: event.target.value }))} />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Setor</Label>
-                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={e => setNewTask(p => ({ ...p, sector: e.target.value }))}>
-                  {sectors.filter(s => s !== "Todos").map(s => <option key={s}>{s}</option>)}
+                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={(event) => setNewTask((prev) => ({ ...prev, sector: event.target.value }))}>
+                  {sectors.filter((sector) => sector !== "Todos").map((sector) => <option key={sector}>{sector}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Prioridade</Label>
-                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.priority} onChange={e => setNewTask(p => ({ ...p, priority: e.target.value as Task["priority"] }))}>
-                  {["Urgente", "Alta", "Média", "Baixa"].map(p => <option key={p}>{p}</option>)}
+                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.priority} onChange={(event) => setNewTask((prev) => ({ ...prev, priority: event.target.value as Task["priority"] }))}>
+                  {["Urgente", "Alta", "Media", "Baixa"].map((priority) => <option key={priority}>{priority}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Prazo</Label>
-                <Input type="date" value={newTask.dueDate} onChange={e => setNewTask(p => ({ ...p, dueDate: e.target.value }))} />
+                <Input type="date" value={newTask.dueDate} onChange={(event) => setNewTask((prev) => ({ ...prev, dueDate: event.target.value }))} />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateOpen(false);
+                setNewSubtaskTitle("");
+                setNewTask({
+                  title: "",
+                  description: "",
+                  client: "",
+                  sector: "Contabil",
+                  assignee: "",
+                  priority: "Media",
+                  dueDate: "",
+                  subtasks: [],
+                });
+              }}
+            >
+              Cancelar
+            </Button>
             <Button onClick={handleCreate}>Criar Tarefa</Button>
           </DialogFooter>
         </DialogContent>
@@ -319,3 +690,4 @@ export default function TarefasPage() {
     </AppLayout>
   );
 }
+

@@ -1,60 +1,270 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import {
+  TrendingUp,
+  DollarSign,
+  Target,
+  Users,
+  ArrowUpRight,
+  ArrowDownRight,
+  ArrowRight,
+  Star,
+  CheckCircle2,
+  Clock,
+  Plus,
+  Filter,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Filter } from "lucide-react";
-import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { LeadDetailSheet } from "@/components/app/LeadDetailSheet";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
 
-const stages = [
-  { label: "Lead Novo", count: 8, color: "bg-muted-foreground" },
-  { label: "Contato Iniciado", count: 5, color: "bg-primary/60" },
-  { label: "Qualificação", count: 4, color: "bg-primary" },
-  { label: "Reunião Agendada", count: 3, color: "bg-amber-500" },
-  { label: "Proposta Enviada", count: 6, color: "bg-primary" },
-  { label: "Negociação", count: 2, color: "bg-purple-500" },
-  { label: "Fechado Ganho", count: 4, color: "bg-primary" },
-  { label: "Fechado Perdido", count: 2, color: "bg-destructive/60" },
-];
+const stageOrder = [
+  "Oportunidade Nova",
+  "Contato Iniciado",
+  "Diagnostico",
+  "Reuniao Agendada",
+  "Proposta Enviada",
+  "Negociacao",
+  "Fechado Ganho",
+  "Fechado Perdido",
+] as const;
+
+type PipelineStage = (typeof stageOrder)[number];
 
 interface Lead {
   name: string;
   contact: string;
   value: string;
-  stage: string;
+  stage: PipelineStage;
   daysInStage: number;
+  competence: string;
+  source?: string;
 }
 
 const initialLeads: Lead[] = [
-  { name: "Empresa Alpha", contact: "Roberto Dias", value: "R$ 3.500/mês", stage: "Proposta Enviada", daysInStage: 3 },
-  { name: "Beta Serviços", contact: "Juliana Melo", value: "R$ 2.800/mês", stage: "Reunião Agendada", daysInStage: 1 },
-  { name: "Gamma Tech", contact: "Felipe Rocha", value: "R$ 5.200/mês", stage: "Negociação", daysInStage: 5 },
-  { name: "Delta Corp", contact: "Camila Souza", value: "R$ 1.900/mês", stage: "Qualificação", daysInStage: 2 },
-  { name: "Epsilon Ltda", contact: "André Lima", value: "R$ 4.100/mês", stage: "Lead Novo", daysInStage: 0 },
+  { name: "Empresa Alpha", contact: "Roberto Dias", value: "R$ 3.500/mes", stage: "Proposta Enviada", daysInStage: 3, competence: "2026-03", source: "Indicacao" },
+  { name: "Beta Servicos", contact: "Juliana Melo", value: "R$ 2.800/mes", stage: "Reuniao Agendada", daysInStage: 1, competence: "2026-03", source: "Site" },
+  { name: "Gamma Tech", contact: "Felipe Rocha", value: "R$ 5.200/mes", stage: "Negociacao", daysInStage: 5, competence: "2026-03", source: "Outbound" },
+  { name: "Delta Corp", contact: "Camila Souza", value: "R$ 1.900/mes", stage: "Diagnostico", daysInStage: 2, competence: "2026-02", source: "Site" },
+  { name: "Epsilon Ltda", contact: "Andre Lima", value: "R$ 4.100/mes", stage: "Oportunidade Nova", daysInStage: 0, competence: "2026-02", source: "Indicacao" },
+  { name: "Nova Solar", contact: "Bianca Prado", value: "R$ 3.250/mes", stage: "Fechado Ganho", daysInStage: 0, competence: "2026-03", source: "Site" },
+  { name: "Conecta Food", contact: "Marcos Vieira", value: "R$ 2.350/mes", stage: "Fechado Perdido", daysInStage: 0, competence: "2026-01", source: "Outbound" },
 ];
 
+const stageColors: Record<PipelineStage, string> = {
+  "Oportunidade Nova": "bg-muted-foreground",
+  "Contato Iniciado": "bg-primary/60",
+  Diagnostico: "bg-primary",
+  "Reuniao Agendada": "bg-amber-500",
+  "Proposta Enviada": "bg-blue-500",
+  Negociacao: "bg-purple-500",
+  "Fechado Ganho": "bg-emerald-500",
+  "Fechado Perdido": "bg-destructive/60",
+};
+
+const toCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const parseCurrency = (value: string) => {
+  const numeric = value
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(numeric);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const isOpenStage = (stage: PipelineStage) => stage !== "Fechado Ganho" && stage !== "Fechado Perdido";
+
 export default function CRMPage() {
-  const [leads, setLeads] = useState(initialLeads);
+  const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [newLead, setNewLead] = useState({ name: "", contact: "", value: "", stage: "Lead Novo" });
+  const [activeStageFilter, setActiveStageFilter] = useState<PipelineStage | "all">("all");
+  const [newLead, setNewLead] = useState({
+    name: "",
+    contact: "",
+    value: "",
+    stage: "Oportunidade Nova" as PipelineStage,
+    competence: normalizeCompetence(new Date().toISOString()) || "2026-03",
+  });
+
+  useEffect(() => {
+    setNewLead((prev) => ({
+      ...prev,
+      name: selectedCompany && !prev.name ? selectedCompany : prev.name,
+      competence: selectedCompetence || prev.competence,
+    }));
+  }, [selectedCompany, selectedCompetence]);
+
+  const scopedLeads = useMemo(
+    () =>
+      leads.filter(
+        (lead) =>
+          matchesSelectedCompany(lead.name, selectedCompany) &&
+          matchesSelectedCompetence(lead.competence, selectedCompetence)
+      ),
+    [leads, selectedCompany, selectedCompetence]
+  );
+
+  const filteredLeads = useMemo(
+    () =>
+      activeStageFilter === "all"
+        ? scopedLeads
+        : scopedLeads.filter((lead) => lead.stage === activeStageFilter),
+    [scopedLeads, activeStageFilter]
+  );
+
+  const metrics = useMemo(() => {
+    const allLeadsByValue = scopedLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
+    const valueByLead = filteredLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
+    const openLeads = valueByLead.filter((lead) => isOpenStage(lead.stage));
+    const wonLeads = valueByLead.filter((lead) => lead.stage === "Fechado Ganho");
+    const lostLeads = valueByLead.filter((lead) => lead.stage === "Fechado Perdido");
+    const proposalLeads = valueByLead.filter(
+      (lead) => lead.stage === "Proposta Enviada" || lead.stage === "Negociacao"
+    );
+
+    const openRevenue = openLeads.reduce((sum, lead) => sum + lead.amount, 0);
+    const wonRevenue = wonLeads.reduce((sum, lead) => sum + lead.amount, 0);
+    const avgTicket = valueByLead.length > 0 ? valueByLead.reduce((sum, lead) => sum + lead.amount, 0) / valueByLead.length : 0;
+    const closedTotal = wonLeads.length + lostLeads.length;
+    const conversionRate = closedTotal > 0 ? Math.round((wonLeads.length / closedTotal) * 100) : 0;
+    const avgDaysInStage =
+      openLeads.length > 0
+        ? Math.round(openLeads.reduce((sum, lead) => sum + lead.daysInStage, 0) / openLeads.length)
+        : 0;
+
+    const goals = [
+      {
+        label: "Meta de receita ganha",
+        current: wonRevenue,
+        target: 25000,
+        pct: Math.min(100, Math.round((wonRevenue / 25000) * 100)),
+      },
+      {
+        label: "Meta de negociacoes ganhas",
+        current: wonLeads.length,
+        target: 8,
+        pct: Math.min(100, Math.round((wonLeads.length / 8) * 100)),
+      },
+      {
+        label: "Meta de conversao",
+        current: conversionRate,
+        target: 40,
+        pct: Math.min(100, Math.round((conversionRate / 40) * 100)),
+      },
+    ];
+
+    const stageStats = stageOrder.map((stage) => {
+      const items = allLeadsByValue.filter((lead) => lead.stage === stage);
+      const amount = items.reduce((sum, lead) => sum + lead.amount, 0);
+      return { stage, count: items.length, amount };
+    });
+
+    const topNegotiations = [...valueByLead]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+
+    return {
+      openLeads,
+      wonLeads,
+      lostLeads,
+      proposalLeads,
+      openRevenue,
+      wonRevenue,
+      avgTicket,
+      conversionRate,
+      avgDaysInStage,
+      goals,
+      stageStats,
+      topNegotiations,
+      filteredCount: valueByLead.length,
+      totalCount: allLeadsByValue.length,
+    };
+  }, [scopedLeads, filteredLeads]);
+
+  const stageSummary = metrics.stageStats.map((item) => ({
+    label: item.stage,
+    count: item.count,
+    color: stageColors[item.stage],
+  }));
+  const hasActiveFilter = activeStageFilter !== "all";
+
+  const salesMetrics = [
+    {
+      label: "Pipeline ativo",
+      value: toCurrency(metrics.openRevenue),
+      change: `${metrics.openLeads.length} negociacoes`,
+      trend: "up" as const,
+      icon: DollarSign,
+    },
+    {
+      label: "Fechados com ganho",
+      value: String(metrics.wonLeads.length),
+      change: `${metrics.conversionRate}% conversao`,
+      trend: metrics.conversionRate >= 40 ? ("up" as const) : ("down" as const),
+      icon: CheckCircle2,
+    },
+    {
+      label: "Ticket medio",
+      value: toCurrency(metrics.avgTicket),
+      change: `${metrics.avgDaysInStage} dias em media`,
+      trend: "up" as const,
+      icon: TrendingUp,
+    },
+    {
+      label: "Propostas em andamento",
+      value: String(metrics.proposalLeads.length),
+      change: `${metrics.lostLeads.length} perdidas`,
+      trend: metrics.proposalLeads.length >= metrics.lostLeads.length ? ("up" as const) : ("down" as const),
+      icon: Clock,
+    },
+  ];
 
   const handleStageChange = (leadName: string, newStage: string) => {
-    setLeads(prev => prev.map(l => l.name === leadName ? { ...l, stage: newStage, daysInStage: 0 } : l));
-    setSelectedLead(prev => prev && prev.name === leadName ? { ...prev, stage: newStage, daysInStage: 0 } : prev);
-    toast.success(`Lead movido para "${newStage}"`);
+    const stage = newStage as PipelineStage;
+    setLeads((prev) => prev.map((lead) => (lead.name === leadName ? { ...lead, stage, daysInStage: 0 } : lead)));
+    setSelectedLead((prev) => (prev && prev.name === leadName ? { ...prev, stage, daysInStage: 0 } : prev));
+    toast.success(`Negociacao movida para "${newStage}"`);
   };
 
   const handleCreate = () => {
-    if (!newLead.name.trim()) { toast.error("Nome é obrigatório"); return; }
-    setLeads(prev => [{ ...newLead, daysInStage: 0 }, ...prev]);
+    if (!newLead.name.trim()) {
+      toast.error("Nome e obrigatorio");
+      return;
+    }
+
+    if (!newLead.value.trim()) {
+      toast.error("Informe o valor estimado");
+      return;
+    }
+
+    setLeads((prev) => [{ ...newLead, daysInStage: 0 }, ...prev]);
     setCreateOpen(false);
-    setNewLead({ name: "", contact: "", value: "", stage: "Lead Novo" });
-    toast.success("Lead cadastrado com sucesso");
+    setNewLead({
+      name: selectedCompany || "",
+      contact: "",
+      value: "",
+      stage: "Oportunidade Nova",
+      competence: selectedCompetence || normalizeCompetence(new Date().toISOString()) || "2026-03",
+    });
+    toast.success("Negociacao cadastrada com sucesso");
   };
 
   return (
@@ -62,84 +272,193 @@ export default function CRMPage() {
       <div className="space-y-6 max-w-7xl">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">CRM / Leads</h1>
-            <p className="text-sm text-muted-foreground">Pipeline comercial e gestão de leads</p>
+            <h1 className="font-heading text-2xl font-bold">CRM</h1>
+            <p className="text-sm text-muted-foreground">Controle de negociacoes e pipeline comercial</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm"><Filter className="h-4 w-4 mr-1" /> Filtros</Button>
-            <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4 mr-1" /> Novo Lead</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveStageFilter("all")}
+              disabled={!hasActiveFilter}
+            >
+              <Filter className="h-4 w-4 mr-1" /> Limpar filtro
+            </Button>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Nova Negociacao
+            </Button>
           </div>
         </div>
 
-        {/* Pipeline overview */}
-        <div className="rounded-xl border bg-card p-5">
-          <h2 className="font-heading font-semibold text-sm mb-4">Funil Comercial</h2>
-          <div className="flex gap-1 items-end h-20">
-            {stages.map((s) => (
-              <div key={s.label} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-xs font-bold">{s.count}</span>
-                <div className={`w-full rounded-t ${s.color} transition-all`} style={{ height: `${Math.max(s.count * 8, 8)}px` }} />
-                <span className="text-[10px] text-muted-foreground text-center leading-tight mt-1 hidden lg:block">{s.label}</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {salesMetrics.map((metric, index) => (
+            <motion.div
+              key={metric.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.06 }}
+              className="rounded-xl border bg-card p-5"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-muted-foreground">{metric.label}</span>
+                <span
+                  className={`text-xs font-medium flex items-center gap-0.5 ${
+                    metric.trend === "up" ? "text-primary" : "text-destructive"
+                  }`}
+                >
+                  {metric.trend === "up" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {metric.change}
+                </span>
               </div>
-            ))}
+              <div className="font-heading text-2xl font-bold">{metric.value}</div>
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="rounded-xl border bg-card p-5">
+            <h2 className="font-heading font-semibold mb-4 flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" /> Metas do mes
+            </h2>
+            <div className="space-y-5">
+              {metrics.goals.map((goal) => (
+                <div key={goal.label}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm">{goal.label}</span>
+                    <span className="text-sm font-semibold">{goal.pct}%</span>
+                  </div>
+                  <Progress value={goal.pct} className="h-2" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 rounded-xl border bg-card">
+            <div className="p-5 border-b flex items-center justify-between">
+              <h2 className="font-heading font-semibold">Top negociacoes por valor</h2>
+              <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                {metrics.filteredCount}/{metrics.totalCount} <ArrowRight className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="divide-y">
+              {metrics.topNegotiations.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Nenhuma negociacao encontrada para o filtro selecionado.
+                </div>
+              ) : (
+                metrics.topNegotiations.map((lead, index) => (
+                  <div
+                    key={lead.name}
+                    className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedLead(lead);
+                      setSheetOpen(true);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{lead.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {lead.contact} - {lead.stage}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Leads table */}
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="p-5 border-b">
-            <h2 className="font-heading font-semibold">Leads Recentes</h2>
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-heading font-semibold">Pipeline de negociacoes</h2>
+            {hasActiveFilter && (
+              <span className="text-xs text-primary font-medium">
+                Filtro ativo: {activeStageFilter}
+              </span>
+            )}
           </div>
-          <div className="divide-y">
-            {leads.map((lead, i) => (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {stageSummary.map((stage, index) => (
               <motion.div
-                key={lead.name}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.05 }}
-                className="p-4 flex items-center justify-between hover:bg-muted/20 cursor-pointer transition-colors"
-                onClick={() => { setSelectedLead(lead); setSheetOpen(true); }}
+                key={stage.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className={cn(
+                  "rounded-xl border bg-card p-5 hover:shadow-md transition-all relative cursor-pointer",
+                  activeStageFilter === stage.label && "border-primary bg-primary/5 shadow-md"
+                )}
+                onClick={() =>
+                  setActiveStageFilter((prev) => (prev === stage.label ? "all" : stage.label))
+                }
               >
-                <div>
-                  <div className="text-sm font-medium">{lead.name}</div>
-                  <div className="text-xs text-muted-foreground">{lead.contact}</div>
+                {(stage.label === "Negociacao" || stage.label === "Proposta Enviada") && (
+                  <Badge className="absolute top-3 right-3 bg-primary/10 text-primary border-0 gap-1">
+                    <Star className="h-3 w-3" /> Quente
+                  </Badge>
+                )}
+                <div className={`h-10 w-10 rounded-lg ${stage.color} flex items-center justify-center mb-3`}>
+                  <Users className="h-5 w-5 text-white" />
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium hidden sm:block">{lead.value}</span>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">{lead.stage}</span>
-                </div>
+                <h3 className="font-medium">{stage.label}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{stage.count} negociacao(oes)</p>
               </motion.div>
             ))}
           </div>
         </div>
       </div>
 
-      <LeadDetailSheet lead={selectedLead} open={sheetOpen} onOpenChange={setSheetOpen} onStageChange={handleStageChange} />
+      <LeadDetailSheet
+        lead={selectedLead}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onStageChange={handleStageChange}
+      />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Novo Lead</DialogTitle>
+            <DialogTitle>Nova Negociacao</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Empresa *</Label>
-              <Input placeholder="Nome da empresa" value={newLead.name} onChange={e => setNewLead(p => ({ ...p, name: e.target.value }))} />
+              <Input
+                placeholder="Nome da empresa"
+                value={newLead.name}
+                onChange={(event) => setNewLead((prev) => ({ ...prev, name: event.target.value }))}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Contato</Label>
-                <Input placeholder="Nome do contato" value={newLead.contact} onChange={e => setNewLead(p => ({ ...p, contact: e.target.value }))} />
+                <Input
+                  placeholder="Nome do contato"
+                  value={newLead.contact}
+                  onChange={(event) => setNewLead((prev) => ({ ...prev, contact: event.target.value }))}
+                />
               </div>
               <div className="space-y-2">
-                <Label>Valor Estimado</Label>
-                <Input placeholder="R$ 0,00/mês" value={newLead.value} onChange={e => setNewLead(p => ({ ...p, value: e.target.value }))} />
+                <Label>Valor estimado</Label>
+                <Input
+                  placeholder="R$ 0,00/mes"
+                  value={newLead.value}
+                  onChange={(event) => setNewLead((prev) => ({ ...prev, value: event.target.value }))}
+                />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate}>Cadastrar Lead</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreate}>Cadastrar Negociacao</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

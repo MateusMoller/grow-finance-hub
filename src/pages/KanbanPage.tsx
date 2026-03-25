@@ -6,14 +6,19 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
-import { ExternalLink, Filter, Loader2, Plus } from "lucide-react";
-import { useEffect, useState, type DragEvent } from "react";
+import { Check, ChevronsUpDown, ExternalLink, Filter, Loader2, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 
-const columns: { id: KanbanStatus; label: string; color: string }[] = [
+const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
   { id: "todo", label: "A Fazer", color: "bg-amber-500" },
   { id: "doing", label: "Em Andamento", color: "bg-primary" },
@@ -21,46 +26,101 @@ const columns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "done", label: "Concluido", color: "bg-primary" },
 ];
 
-const sectors = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
+const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
+  id: "archived",
+  label: "Arquivo",
+  color: "bg-slate-500",
+};
+
+const sectors = ["ContÃ¡bil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "SocietÃ¡rio", "Geral"];
 
 const priorityDot: Record<string, string> = {
   Urgente: "bg-destructive",
   Alta: "bg-orange-500",
-  "Média": "bg-amber-500",
   "MÃ©dia": "bg-amber-500",
+  "MÃƒÂ©dia": "bg-amber-500",
   Media: "bg-amber-500",
   Baixa: "bg-muted-foreground",
 };
 
 const normalizeSector = (value: string) =>
   value
-    .replace("ContÃ¡bil", "Contábil")
-    .replace("SocietÃ¡rio", "Societário")
+    .replace("ContÃƒÂ¡bil", "ContÃ¡bil")
+    .replace("SocietÃƒÂ¡rio", "SocietÃ¡rio")
     .trim();
 
-const normalizePriority = (value: string) => value.replace("MÃ©dia", "Média").trim();
+const normalizePriority = (value: string) => value.replace("MÃƒÂ©dia", "MÃ©dia").trim();
+
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+interface ClientOption {
+  id: string;
+  name: string;
+}
+
+interface TaskSubtask {
+  title: string;
+  done: boolean;
+}
+
+const parseSubtasks = (value: unknown): TaskSubtask[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const subtask = item as { title?: unknown; done?: unknown };
+      const title = typeof subtask.title === "string" ? subtask.title.trim() : "";
+      if (!title) return null;
+
+      return {
+        title,
+        done: Boolean(subtask.done),
+      };
+    })
+    .filter((item): item is TaskSubtask => item !== null);
+};
 
 export default function KanbanPage() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const isAdmin = role === "admin";
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingClients, setLoadingClients] = useState(true);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<KanbanTaskItem | null>(null);
   const [savingDetail, setSavingDetail] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropTargetStatus, setDropTargetStatus] = useState<KanbanStatus | null>(null);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newTask, setNewTask] = useState({
     title: "",
     client_name: "",
     assignee: "",
-    priority: "Média",
-    sector: "Contábil",
+    priority: "MÃ©dia",
+    sector: "ContÃ¡bil",
+    subtasks: [] as TaskSubtask[],
   });
+
+  const columns = useMemo(
+    () => (isAdmin ? [...baseColumns, archiveColumn] : baseColumns),
+    [isAdmin]
+  );
 
   useEffect(() => {
     void fetchTasks();
+    void fetchClients();
   }, []);
 
   const fetchTasks = async () => {
@@ -79,12 +139,33 @@ export default function KanbanPage() {
       sector: normalizeSector(task.sector || ""),
       status: task.status as KanbanStatus,
       tags: (task.tags?.length ? task.tags : task.sector ? [task.sector] : []).map((sector) => normalizeSector(sector)),
+      subtasks: parseSubtasks(task.subtasks),
     }));
     setTasks(normalized as KanbanTaskItem[]);
     setLoading(false);
   };
 
+  const fetchClients = async () => {
+    setLoadingClients(true);
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, name")
+      .order("name");
+
+    if (error) {
+      toast.error("Erro ao carregar clientes cadastrados");
+      setLoadingClients(false);
+      return;
+    }
+
+    setClients((data || []) as ClientOption[]);
+    setLoadingClients(false);
+  };
+
   const filteredTasks = tasks.filter((task) => {
+    if (!isAdmin && task.status === "archived") return false;
+    if (!matchesSelectedCompany(task.client_name, selectedCompany)) return false;
+    if (!matchesSelectedCompetence(getTaskCompetence(task.due_date, task.created_at), selectedCompetence)) return false;
     const taskSectors = task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
     if (sectorFilter !== "all" && !taskSectors.includes(sectorFilter)) return false;
     return true;
@@ -95,7 +176,7 @@ export default function KanbanPage() {
   const handleStatusChange = async (taskId: string, newStatus: KanbanStatus) => {
     const { error } = await supabase.from("kanban_tasks").update({ status: newStatus }).eq("id", taskId);
     if (error) {
-      toast.error("Erro ao mover tarefa");
+      toast.error(`Erro ao mover tarefa: ${error.message}`);
       return;
     }
 
@@ -121,7 +202,7 @@ export default function KanbanPage() {
     setSavingDetail(false);
 
     if (error) {
-      toast.error("Erro ao salvar detalhes da tarefa");
+      toast.error(`Erro ao salvar detalhes da tarefa: ${error.message}`);
       return;
     }
 
@@ -136,26 +217,64 @@ export default function KanbanPage() {
       return;
     }
 
+    if (!newTask.client_name.trim()) {
+      toast.error("Selecione um cliente cadastrado");
+      return;
+    }
+
+    const selectedClient = clients.find(
+      (client) => normalizeText(client.name) === normalizeText(newTask.client_name)
+    );
+    if (!selectedClient) {
+      toast.error("Cliente invalido. Selecione um cliente da lista");
+      return;
+    }
+
     const { error } = await supabase.from("kanban_tasks").insert({
       title: newTask.title,
-      client_name: newTask.client_name || null,
+      client_name: selectedClient.name,
       assignee: newTask.assignee || null,
       priority: newTask.priority,
       sector: newTask.sector,
       status: "todo",
       tags: [newTask.sector],
+      subtasks: newTask.subtasks,
       created_by: user?.id,
     });
 
     if (error) {
-      toast.error("Erro ao criar tarefa");
+      toast.error(`Erro ao criar tarefa: ${error.message}`);
       return;
     }
 
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
-    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil" });
+    setNewSubtaskTitle("");
+    setNewTask({ title: "", client_name: "", assignee: "", priority: "MÃ©dia", sector: "ContÃ¡bil", subtasks: [] });
     void fetchTasks();
+  };
+
+  useEffect(() => {
+    if (!selectedCompany) return;
+    setNewTask((prev) => ({ ...prev, client_name: selectedCompany }));
+  }, [selectedCompany]);
+
+  const handleAddDraftSubtask = () => {
+    const title = newSubtaskTitle.trim();
+    if (!title) return;
+
+    setNewTask((prev) => ({
+      ...prev,
+      subtasks: [...prev.subtasks, { title, done: false }],
+    }));
+    setNewSubtaskTitle("");
+  };
+
+  const handleRemoveDraftSubtask = (index: number) => {
+    setNewTask((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.filter((_, itemIndex) => itemIndex !== index),
+    }));
   };
 
   const handleDragStart = (taskId: string) => {
@@ -180,6 +299,11 @@ export default function KanbanPage() {
 
     handleDragEnd();
     if (!draggedTask || draggedTask.status === status) return;
+    if (status === "archived" && draggedTask.status !== "done") {
+      toast.error("Somente tarefas concluidas podem ser movidas para o arquivo");
+      return;
+    }
+
     await handleStatusChange(taskId, status);
   };
 
@@ -248,6 +372,7 @@ export default function KanbanPage() {
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         isDragging={draggingTaskId === task.id}
+                        canArchive={isAdmin}
                       />
                     ))}
                     {columnTasks.length === 0 && (
@@ -267,6 +392,7 @@ export default function KanbanPage() {
         task={selectedTask}
         open={detailOpen}
         saving={savingDetail}
+        canArchive={isAdmin}
         onOpenChange={setDetailOpen}
         onSave={handleSaveTaskDetails}
       />
@@ -281,10 +407,97 @@ export default function KanbanPage() {
               <Label>Titulo *</Label>
               <Input placeholder="Ex: Fechamento contabil" value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))} />
             </div>
+            <div className="space-y-2">
+              <Label>Subtarefas</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: Validar documentos enviados"
+                  value={newSubtaskTitle}
+                  onChange={(event) => setNewSubtaskTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddDraftSubtask();
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddDraftSubtask} disabled={!newSubtaskTitle.trim()}>
+                  Adicionar
+                </Button>
+              </div>
+              {newTask.subtasks.length > 0 ? (
+                <div className="space-y-1.5 rounded-lg border p-2">
+                  {newTask.subtasks.map((subtask, index) => (
+                    <div key={`${subtask.title}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5">
+                      <span className="text-sm">{subtask.title}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => handleRemoveDraftSubtask(index)}
+                        aria-label={`Remover subtarefa ${index + 1}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nenhuma subtarefa adicionada.</p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Cliente</Label>
-                <Input placeholder="Nome do cliente" value={newTask.client_name} onChange={(e) => setNewTask((prev) => ({ ...prev, client_name: e.target.value }))} />
+                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clientPickerOpen}
+                      className="w-full justify-between"
+                      disabled={loadingClients}
+                    >
+                      {newTask.client_name || (loadingClients ? "Carregando clientes..." : "Selecione um cliente")}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar cliente..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {clients.map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.name}
+                              onSelect={(selectedValue) => {
+                                const matchedClient = clients.find(
+                                  (item) => normalizeText(item.name) === normalizeText(selectedValue)
+                                );
+                                if (matchedClient) {
+                                  setNewTask((prev) => ({ ...prev, client_name: matchedClient.name }));
+                                  setClientPickerOpen(false);
+                                }
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newTask.client_name === client.name ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {client.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Responsavel</Label>
@@ -303,13 +516,22 @@ export default function KanbanPage() {
                 <Label>Prioridade</Label>
                 <Select value={newTask.priority} onValueChange={(value) => setNewTask((prev) => ({ ...prev, priority: value }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["Urgente", "Alta", "Média", "Baixa"].map((priority) => <SelectItem key={priority} value={priority}>{priority}</SelectItem>)}</SelectContent>
+                  <SelectContent>{["Urgente", "Alta", "MÃ©dia", "Baixa"].map((priority) => <SelectItem key={priority} value={priority}>{priority}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateOpen(false);
+                setNewSubtaskTitle("");
+                setNewTask({ title: "", client_name: "", assignee: "", priority: "MÃ©dia", sector: "ContÃ¡bil", subtasks: [] });
+              }}
+            >
+              Cancelar
+            </Button>
             <Button onClick={handleCreate}>Adicionar</Button>
           </DialogFooter>
         </DialogContent>
@@ -327,6 +549,7 @@ function KanbanCard({
   onDragStart,
   onDragEnd,
   isDragging,
+  canArchive,
 }: {
   task: KanbanTaskItem;
   index: number;
@@ -336,12 +559,14 @@ function KanbanCard({
   onDragStart: (taskId: string) => void;
   onDragEnd: () => void;
   isDragging: boolean;
+  canArchive: boolean;
 }) {
   const nextStatus: Partial<Record<KanbanStatus, { label: string; target: KanbanStatus }>> = {
     backlog: { label: "Mover para A Fazer", target: "todo" },
     todo: { label: "Iniciar", target: "doing" },
     doing: { label: "Enviar para Revisao", target: "review" },
     review: { label: "Concluir", target: "done" },
+    done: canArchive ? { label: "Arquivar", target: "archived" } : undefined,
   };
 
   const taskSectors = task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
@@ -355,7 +580,7 @@ function KanbanCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04 }}
       draggable
-      onDragStart={(event: any) => {
+      onDragStart={(event: DragEvent<HTMLDivElement>) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", task.id);
         onDragStart(task.id);
@@ -409,3 +634,4 @@ function KanbanCard({
     </motion.div>
   );
 }
+
