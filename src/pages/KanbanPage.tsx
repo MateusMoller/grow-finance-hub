@@ -33,24 +33,30 @@ const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
   color: "bg-slate-500",
 };
 
-const sectors = ["ContÃ¡bil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "SocietÃ¡rio", "Geral"];
+const sectors = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
 
 const priorityDot: Record<string, string> = {
   Urgente: "bg-destructive",
   Alta: "bg-orange-500",
-  "MÃ©dia": "bg-amber-500",
-  "MÃƒÂ©dia": "bg-amber-500",
+  Média: "bg-amber-500",
   Media: "bg-amber-500",
   Baixa: "bg-muted-foreground",
 };
 
 const normalizeSector = (value: string) =>
   value
-    .replace("ContÃƒÂ¡bil", "ContÃ¡bil")
-    .replace("SocietÃƒÂ¡rio", "SocietÃ¡rio")
+    .replace("ContÃ¡bil", "Contábil")
+    .replace("ContÃƒÂ¡bil", "Contábil")
+    .replace("SocietÃ¡rio", "Societário")
+    .replace("SocietÃƒÂ¡rio", "Societário")
     .trim();
 
-const normalizePriority = (value: string) => value.replace("MÃƒÂ©dia", "MÃ©dia").trim();
+const normalizePriority = (value: string) =>
+  value
+    .replace("MÃ©dia", "Média")
+    .replace("MÃƒÂ©dia", "Média")
+    .replace("MÃƒÆ’Ã‚Â©dia", "Média")
+    .trim();
 
 const normalizeText = (value: string) =>
   value
@@ -111,8 +117,8 @@ export default function KanbanPage() {
     title: "",
     client_name: "",
     assignee: "",
-    priority: "MÃ©dia",
-    sector: "ContÃ¡bil",
+    priority: "Média",
+    sector: "Contábil",
     subtasks: [] as TaskSubtask[],
   });
 
@@ -326,7 +332,7 @@ export default function KanbanPage() {
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
     setNewSubtaskTitle("");
-    setNewTask({ title: "", client_name: "", assignee: "", priority: "MÃ©dia", sector: "ContÃ¡bil", subtasks: [] });
+    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil", subtasks: [] });
     void fetchTasks();
   };
 
@@ -593,7 +599,7 @@ export default function KanbanPage() {
                 <Label>Prioridade</Label>
                 <Select value={newTask.priority} onValueChange={(value) => setNewTask((prev) => ({ ...prev, priority: value }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["Urgente", "Alta", "MÃ©dia", "Baixa"].map((priority) => <SelectItem key={priority} value={priority}>{priority}</SelectItem>)}</SelectContent>
+                  <SelectContent>{["Urgente", "Alta", "Média", "Baixa"].map((priority) => <SelectItem key={priority} value={priority}>{priority}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -604,7 +610,7 @@ export default function KanbanPage() {
               onClick={() => {
                 setCreateOpen(false);
                 setNewSubtaskTitle("");
-                setNewTask({ title: "", client_name: "", assignee: "", priority: "MÃ©dia", sector: "ContÃ¡bil", subtasks: [] });
+                setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil", subtasks: [] });
               }}
             >
               Cancelar
