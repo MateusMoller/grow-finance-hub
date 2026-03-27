@@ -14,6 +14,10 @@ const navLinks = [
   { label: "Contato", to: "/contato" },
 ];
 
+const MOBILE_APP_DEEP_LINK = import.meta.env.VITE_MOBILE_APP_DEEP_LINK ?? "growfinance://app";
+const MOBILE_APP_FALLBACK_URL =
+  import.meta.env.VITE_MOBILE_APP_FALLBACK_URL ?? "https://github.com/MateusMoller/grow-finance-mobile";
+
 const isNavActive = (pathname: string, hash: string, target: string) => {
   const [targetPath, targetHash] = target.split("#");
 
@@ -37,6 +41,17 @@ export function SiteHeader() {
   const isDark = resolvedTheme === "dark";
   const toggleTheme = () => {
     setTheme(isDark ? "light" : "dark");
+  };
+
+  const openMobileApp = () => {
+    window.location.href = MOBILE_APP_DEEP_LINK;
+
+    window.setTimeout(() => {
+      const hidden = document.visibilityState === "hidden";
+      if (!hidden) {
+        window.open(MOBILE_APP_FALLBACK_URL, "_blank", "noopener,noreferrer");
+      }
+    }, 1200);
   };
 
   return (
@@ -81,6 +96,9 @@ export function SiteHeader() {
 
           <Button asChild variant="ghost" size="sm" className="rounded-full">
             <Link to="/login">Entrar</Link>
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-full px-5" onClick={openMobileApp}>
+            Abrir no App
           </Button>
           <Button asChild size="sm" className="rounded-full px-5">
             <Link to="/#contato">Agende uma Avaliacao</Link>
@@ -133,6 +151,17 @@ export function SiteHeader() {
                   <Link to="/login" onClick={() => setOpen(false)}>
                     Entrar
                   </Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setOpen(false);
+                    openMobileApp();
+                  }}
+                >
+                  Abrir no App
                 </Button>
                 <Button asChild className="w-full">
                   <Link to="/#contato" onClick={() => setOpen(false)}>
