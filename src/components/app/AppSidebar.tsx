@@ -37,7 +37,7 @@ const mainItems = [
 ];
 
 const operationalItems = [
-  { title: "Solicitacoes", url: "/app/solicitacoes", icon: Headset },
+  { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
   { title: "Formularios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },

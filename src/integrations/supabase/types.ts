@@ -117,6 +117,8 @@ export type Database = {
           file_path: string
           file_size: number | null
           id: string
+          processed_at: string | null
+          processed_by: string | null
           request_id: string | null
           user_id: string
         }
@@ -127,6 +129,8 @@ export type Database = {
           file_path: string
           file_size?: number | null
           id?: string
+          processed_at?: string | null
+          processed_by?: string | null
           request_id?: string | null
           user_id: string
         }
@@ -137,10 +141,19 @@ export type Database = {
           file_path?: string
           file_size?: number | null
           id?: string
+          processed_at?: string | null
+          processed_by?: string | null
           request_id?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "client_documents_processed_by_fkey"
+            columns: ["processed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "client_documents_request_id_fkey"
             columns: ["request_id"]
@@ -242,6 +255,7 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          portal_user_id: string | null
           regime: string | null
           sector: string | null
           status: string | null
@@ -258,6 +272,7 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          portal_user_id?: string | null
           regime?: string | null
           sector?: string | null
           status?: string | null
@@ -274,19 +289,97 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          portal_user_id?: string | null
           regime?: string | null
           sector?: string | null
           status?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_portal_user_id_fkey"
+            columns: ["portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_portal_tasks: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          request_id: string | null
+          sector: string
+          status: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          request_id?: string | null
+          sector?: string
+          status?: string
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          request_id?: string | null
+          sector?: string
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_tasks_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       form_submissions: {
         Row: {
+          client_id: string | null
           created_at: string
           data: Json | null
           id: string
           notes: string | null
+          request_id: string | null
           status: string | null
           submitted_by: string | null
           submitted_by_name: string | null
@@ -295,10 +388,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           data?: Json | null
           id?: string
           notes?: string | null
+          request_id?: string | null
           status?: string | null
           submitted_by?: string | null
           submitted_by_name?: string | null
@@ -307,10 +402,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           data?: Json | null
           id?: string
           notes?: string | null
+          request_id?: string | null
           status?: string | null
           submitted_by?: string | null
           submitted_by_name?: string | null
@@ -319,6 +416,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "form_submissions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_submissions_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "form_submissions_template_id_fkey"
             columns: ["template_id"]
@@ -612,6 +723,9 @@ export type Database = {
         | "commercial"
         | "client"
         | "partner"
+        | "departamento_pessoal"
+        | "fiscal"
+        | "contabil"
       request_status: "pending" | "in_progress" | "completed" | "cancelled"
     }
     CompositeTypes: {
@@ -748,6 +862,9 @@ export const Constants = {
         "commercial",
         "client",
         "partner",
+        "departamento_pessoal",
+        "fiscal",
+        "contabil",
       ],
       request_status: ["pending", "in_progress", "completed", "cancelled"],
     },

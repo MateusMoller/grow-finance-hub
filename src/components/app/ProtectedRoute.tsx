@@ -19,16 +19,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (role === "client") {
-    if (!location.pathname.startsWith("/portal")) {
-      return <Navigate to="/portal" replace />;
-    }
-  } else if (location.pathname.startsWith("/portal")) {
-    return <Navigate to="/app" replace />;
-  }
-
   const isDepartmentRole = role === "departamento_pessoal" || role === "fiscal" || role === "contabil";
-  if (isDepartmentRole) {
+  if (isDepartmentRole && location.pathname.startsWith("/app")) {
     const pathname = location.pathname;
     const allowedPaths = [
       "/app/kanban",

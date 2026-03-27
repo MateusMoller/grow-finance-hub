@@ -65,7 +65,7 @@ const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
     { title: "Calendario", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
-    { title: "Solicitacoes", url: "/app/solicitacoes" },
+    { title: "Atendimento Portal", url: "/app/solicitacoes" },
     { title: "Formularios", url: "/app/formularios" },
     { title: "CRM", url: "/app/crm" },
     { title: "Relatorios", url: "/app/relatorios" },
