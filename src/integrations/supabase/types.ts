@@ -673,23 +673,29 @@ export type Database = {
       }
       internal_chat_messages: {
         Row: {
+          chat_type: string
           content: string
           created_at: string
           id: string
+          recipient_user_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          chat_type?: string
           content: string
           created_at?: string
           id?: string
+          recipient_user_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          chat_type?: string
           content?: string
           created_at?: string
           id?: string
+          recipient_user_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -906,6 +912,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      list_internal_user_profiles: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          display_name: string | null
+          user_id: string
+        }[]
       }
     }
     Enums: {

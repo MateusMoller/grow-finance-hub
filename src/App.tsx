@@ -30,7 +30,6 @@ import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import PortalClientePage from "./pages/PortalClientePage";
 import SolicitacoesPage from "./pages/SolicitacoesPage";
 import ManualPage from "./pages/ManualPage";
-import CaixaEntradaPage from "./pages/CaixaEntradaPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,7 +68,6 @@ const App = () => (
                 <Route path="/app/comercial" element={<ProtectedRoute><Navigate to="/app/crm" replace /></ProtectedRoute>} />
                 <Route path="/app/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
                 <Route path="/app/notificacoes" element={<ProtectedRoute><NotificacoesPage /></ProtectedRoute>} />
-                <Route path="/app/caixa-entrada" element={<ProtectedRoute><CaixaEntradaPage /></ProtectedRoute>} />
                 <Route path="/app/configuracoes" element={<ProtectedRoute><ConfiguracoesPage /></ProtectedRoute>} />
                 <Route path="/app/solicitacoes" element={<ProtectedRoute><SolicitacoesPage /></ProtectedRoute>} />
                 <Route path="/app/manual" element={<ProtectedRoute><ManualPage /></ProtectedRoute>} />

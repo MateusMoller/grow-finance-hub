@@ -12,7 +12,6 @@ import {
   Headset,
   BookOpenText,
   Newspaper,
-  Inbox,
   MessagesSquare,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -43,7 +42,6 @@ const operationalItems = [
   { title: "Formularios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
-  { title: "Caixa de Entrada", url: "/app/caixa-entrada", icon: Inbox },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
 ];

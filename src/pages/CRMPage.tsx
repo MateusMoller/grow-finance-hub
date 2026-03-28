@@ -75,6 +75,18 @@ interface LeadFormState {
   notes: string;
 }
 
+interface CrmGoals {
+  wonRevenue: number;
+  wonDeals: number;
+  conversionRate: number;
+}
+
+interface GoalFormState {
+  wonRevenue: string;
+  wonDeals: string;
+  conversionRate: string;
+}
+
 type SiteLeadRow = Tables<"site_leads">;
 
 const stageColors: Record<PipelineStage, string> = {
@@ -104,14 +116,38 @@ const parseCurrency = (value: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const parseNumericInput = (value: string) => {
+  const sanitized = value.replace(/[^\d,.-]/g, "").trim();
+  if (!sanitized) return Number.NaN;
+
+  const normalized = sanitized.includes(",")
+    ? sanitized.replace(/\./g, "").replace(",", ".")
+    : sanitized;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
 const isOpenStage = (stage: PipelineStage) => stage !== "Fechado Ganho" && stage !== "Fechado Perdido";
 const createLeadId = () => `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const getCurrentCompetence = () => normalizeCompetence(new Date().toISOString()) || "2026-03";
 const buildLeadStorageKey = (userId: string) => `grow-crm-leads-${userId}`;
+const buildGoalStorageKey = (userId: string) => `grow-crm-goals-${userId}`;
 const siteLeadPrefix = "site-lead-";
 const buildSiteLeadId = (siteLeadId: string) => `${siteLeadPrefix}${siteLeadId}`;
 const extractSiteLeadId = (leadId: string) =>
   leadId.startsWith(siteLeadPrefix) ? leadId.slice(siteLeadPrefix.length) : null;
+
+const defaultGoals: CrmGoals = {
+  wonRevenue: 25000,
+  wonDeals: 8,
+  conversionRate: 40,
+};
+
+const createGoalFormState = (goals: CrmGoals): GoalFormState => ({
+  wonRevenue: String(goals.wonRevenue),
+  wonDeals: String(goals.wonDeals),
+  conversionRate: String(goals.conversionRate),
+});
 
 const normalizeStage = (value: unknown): PipelineStage => {
   if (typeof value !== "string") return "Oportunidade Nova";
@@ -159,6 +195,42 @@ const sanitizeLead = (value: unknown): Lead | null => {
     createdAt,
     updatedAt,
   };
+};
+
+const sanitizeGoalValue = (value: unknown, fallback: number) => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string") {
+    const parsed = parseNumericInput(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return fallback;
+};
+
+const sanitizeGoals = (value: unknown): CrmGoals => {
+  if (!value || typeof value !== "object") return defaultGoals;
+  const raw = value as Record<string, unknown>;
+
+  const wonRevenue = Math.round(sanitizeGoalValue(raw.wonRevenue, defaultGoals.wonRevenue));
+  const wonDeals = Math.max(1, Math.round(sanitizeGoalValue(raw.wonDeals, defaultGoals.wonDeals)));
+  const conversionRate = Math.min(
+    100,
+    Math.max(1, Math.round(sanitizeGoalValue(raw.conversionRate, defaultGoals.conversionRate))),
+  );
+
+  return { wonRevenue, wonDeals, conversionRate };
+};
+
+const readStoredGoals = (userId: string): CrmGoals => {
+  if (!userId) return defaultGoals;
+  const raw = localStorage.getItem(buildGoalStorageKey(userId));
+  if (!raw) return defaultGoals;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return sanitizeGoals(parsed);
+  } catch {
+    return defaultGoals;
+  }
 };
 
 const readStoredLeads = (userId: string): Lead[] => {
@@ -227,8 +299,11 @@ export default function CRMPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [leadForm, setLeadForm] = useState<LeadFormState>(createEmptyLeadForm());
+  const [crmGoals, setCrmGoals] = useState<CrmGoals>(defaultGoals);
+  const [goalForm, setGoalForm] = useState<GoalFormState>(createGoalFormState(defaultGoals));
   const [activeStageFilter, setActiveStageFilter] = useState<PipelineStage | "all">("all");
   const [historyVersion, setHistoryVersion] = useState(0);
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<ChangeHistoryEntry[]>([]);
@@ -247,6 +322,18 @@ export default function CRMPage() {
     });
     setHistoryVersion((prev) => prev + 1);
   };
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCrmGoals(defaultGoals);
+      setGoalForm(createGoalFormState(defaultGoals));
+      return;
+    }
+
+    const storedGoals = readStoredGoals(user.id);
+    setCrmGoals(storedGoals);
+    setGoalForm(createGoalFormState(storedGoals));
+  }, [user?.id]);
 
   const loadLeadsFromSources = useCallback(async (showLoader = false) => {
     if (!user?.id) {
@@ -320,6 +407,11 @@ export default function CRMPage() {
   }, [leads, loadingLeads, user?.id]);
 
   useEffect(() => {
+    if (!user?.id) return;
+    localStorage.setItem(buildGoalStorageKey(user.id), JSON.stringify(crmGoals));
+  }, [crmGoals, user?.id]);
+
+  useEffect(() => {
     if (!selectedLead?.id) return;
     const freshLead = leads.find((lead) => lead.id === selectedLead.id);
     if (!freshLead) {
@@ -385,18 +477,30 @@ export default function CRMPage() {
     const goals = [
       {
         label: "Meta de receita ganha",
-        target: 25000,
-        pct: Math.min(100, Math.round((wonRevenue / 25000) * 100)),
+        targetLabel: toCurrency(crmGoals.wonRevenue),
+        currentLabel: toCurrency(wonRevenue),
+        pct:
+          crmGoals.wonRevenue > 0
+            ? Math.min(100, Math.round((wonRevenue / crmGoals.wonRevenue) * 100))
+            : 0,
       },
       {
         label: "Meta de negociacoes ganhas",
-        target: 8,
-        pct: Math.min(100, Math.round((wonLeads.length / 8) * 100)),
+        targetLabel: String(crmGoals.wonDeals),
+        currentLabel: String(wonLeads.length),
+        pct:
+          crmGoals.wonDeals > 0
+            ? Math.min(100, Math.round((wonLeads.length / crmGoals.wonDeals) * 100))
+            : 0,
       },
       {
         label: "Meta de conversao",
-        target: 40,
-        pct: Math.min(100, Math.round((conversionRate / 40) * 100)),
+        targetLabel: `${crmGoals.conversionRate}%`,
+        currentLabel: `${conversionRate}%`,
+        pct:
+          crmGoals.conversionRate > 0
+            ? Math.min(100, Math.round((conversionRate / crmGoals.conversionRate) * 100))
+            : 0,
       },
     ];
 
@@ -424,7 +528,7 @@ export default function CRMPage() {
       filteredCount: valueByLead.length,
       totalCount: allLeadsByValue.length,
     };
-  }, [scopedLeads, filteredLeads]);
+  }, [crmGoals, filteredLeads, scopedLeads]);
 
   const stageSummary = metrics.stageStats.map((item) => ({
     label: item.stage,
@@ -467,6 +571,43 @@ export default function CRMPage() {
       icon: Clock,
     },
   ];
+
+  const openGoalsDialog = () => {
+    setGoalForm(createGoalFormState(crmGoals));
+    setGoalsDialogOpen(true);
+  };
+
+  const handleSaveGoals = () => {
+    const wonRevenue = parseNumericInput(goalForm.wonRevenue);
+    const wonDeals = parseNumericInput(goalForm.wonDeals);
+    const conversionRate = parseNumericInput(goalForm.conversionRate);
+
+    if (!Number.isFinite(wonRevenue) || wonRevenue <= 0) {
+      toast.error("Informe uma meta de receita valida.");
+      return;
+    }
+
+    if (!Number.isFinite(wonDeals) || wonDeals <= 0) {
+      toast.error("Informe uma meta valida para negociacoes ganhas.");
+      return;
+    }
+
+    if (!Number.isFinite(conversionRate) || conversionRate <= 0 || conversionRate > 100) {
+      toast.error("A meta de conversao deve ficar entre 1% e 100%.");
+      return;
+    }
+
+    const nextGoals: CrmGoals = {
+      wonRevenue: Math.round(wonRevenue),
+      wonDeals: Math.max(1, Math.round(wonDeals)),
+      conversionRate: Math.round(conversionRate),
+    };
+
+    setCrmGoals(nextGoals);
+    setGoalForm(createGoalFormState(nextGoals));
+    setGoalsDialogOpen(false);
+    toast.success("Metas do CRM atualizadas.");
+  };
 
   const openCreateDialog = () => {
     setEditingLeadId(null);
@@ -715,15 +856,25 @@ export default function CRMPage() {
 
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="rounded-xl border bg-card p-5">
-                <h2 className="font-heading font-semibold mb-4 flex items-center gap-2">
-                  <Target className="h-4 w-4 text-primary" /> Metas do mes
-                </h2>
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <h2 className="font-heading font-semibold flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" /> Metas do mes
+                  </h2>
+                  <Button variant="outline" size="sm" onClick={openGoalsDialog}>
+                    Cadastrar metas
+                  </Button>
+                </div>
                 <div className="space-y-5">
                   {metrics.goals.map((goal) => (
                     <div key={goal.label}>
-                      <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-start justify-between gap-3 mb-1.5">
                         <span className="text-sm">{goal.label}</span>
-                        <span className="text-sm font-semibold">{goal.pct}%</span>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">{goal.pct}%</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {goal.currentLabel} / {goal.targetLabel}
+                          </p>
+                        </div>
                       </div>
                       <Progress value={goal.pct} className="h-2" />
                     </div>
@@ -871,6 +1022,61 @@ export default function CRMPage() {
         onSaveNotes={handleSaveNotes}
         historyEntries={selectedLeadHistory}
       />
+
+      <Dialog
+        open={goalsDialogOpen}
+        onOpenChange={(open) => {
+          setGoalsDialogOpen(open);
+          if (!open) {
+            setGoalForm(createGoalFormState(crmGoals));
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cadastrar metas do CRM</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Meta de receita ganha (R$)</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="25000"
+                value={goalForm.wonRevenue}
+                onChange={(event) => setGoalForm((prev) => ({ ...prev, wonRevenue: event.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Meta de negociacoes ganhas</Label>
+              <Input
+                inputMode="numeric"
+                placeholder="8"
+                value={goalForm.wonDeals}
+                onChange={(event) => setGoalForm((prev) => ({ ...prev, wonDeals: event.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Meta de conversao (%)</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="40"
+                value={goalForm.conversionRate}
+                onChange={(event) => setGoalForm((prev) => ({ ...prev, conversionRate: event.target.value }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGoalsDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveGoals}>Salvar metas</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={formOpen}

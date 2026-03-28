@@ -69,7 +69,6 @@ const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
     { title: "Formularios", url: "/app/formularios" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
-    { title: "Caixa de Entrada", url: "/app/caixa-entrada" },
     { title: "Relatorios", url: "/app/relatorios" },
     { title: "Notificacoes", url: "/app/notificacoes" },
     { title: "Configuracoes", url: "/app/configuracoes" },
