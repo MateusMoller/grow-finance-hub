@@ -337,7 +337,7 @@ export default function AboutPage() {
                     >
                       <Link to="/contato">Solicitar avaliacao gratuita</Link>
                     </Button>
-                    <Button asChild variant="outline" className="rounded-full border-white/40 bg-transparent px-5 text-sm text-white hover:bg-white/10 hover:text-white dark:border-[#7d89b5] dark:text-[#d7dffa]">
+                    <Button asChild variant="outline" className="rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
                       <Link to="/contato">Falar com consultor</Link>
                     </Button>
                   </div>

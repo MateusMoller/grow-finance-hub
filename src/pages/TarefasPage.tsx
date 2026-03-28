@@ -17,7 +17,7 @@ import {
   ChevronsUpDown,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -231,11 +231,6 @@ export default function TarefasPage() {
   };
 
   useEffect(() => {
-    void loadTasks();
-    void loadClients();
-  }, []);
-
-  useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("create") !== "1") return;
 
@@ -251,7 +246,7 @@ export default function TarefasPage() {
     );
   }, [location.pathname, location.search, navigate]);
 
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     setLoading(true);
 
     const { data, error } = await supabase
@@ -266,20 +261,17 @@ export default function TarefasPage() {
     }
 
     const rows = (data || []) as KanbanTaskRow[];
-    const subtasksColumnReturned =
-      rows.length === 0
-        ? subtasksAvailable
-        : rows.some((row) => Object.prototype.hasOwnProperty.call(row, "subtasks"));
+    const subtasksColumnReturned = rows.some((row) => Object.prototype.hasOwnProperty.call(row, "subtasks"));
     const mapped = rows
       .filter((row) => row.status !== "archived")
       .map(mapRowToTask);
 
-    setSubtasksAvailable(subtasksColumnReturned);
+    setSubtasksAvailable((prev) => (rows.length === 0 ? prev : subtasksColumnReturned));
     setTasks(mapped);
     setLoading(false);
-  };
+  }, []);
 
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     setLoadingClients(true);
 
     const { data, error } = await supabase
@@ -295,7 +287,12 @@ export default function TarefasPage() {
 
     setClients((data || []) as ClientOption[]);
     setLoadingClients(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadTasks();
+    void loadClients();
+  }, [loadClients, loadTasks]);
 
   const scopedTasks = useMemo(
     () =>

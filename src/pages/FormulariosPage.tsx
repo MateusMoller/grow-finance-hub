@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -56,6 +56,8 @@ interface FormEditorState {
   is_published: boolean;
   fields: FormField[];
 }
+
+type FormTemplateRow = Tables<"form_templates">;
 
 const sectorOptions = [
   "Contábil",
@@ -151,15 +153,24 @@ export default function FormulariosPage() {
       .order("updated_at", { ascending: false });
 
     if (error) {
-      toast.error("Erro ao carregar formulários");
+      toast.error(`Erro ao carregar formulários: ${error.message}`);
       setLoading(false);
       return;
     }
 
-    const parsed = (data || []).map((item) => ({
-      ...(item as Omit<ManagedForm, "fields">),
-      fields: parseFields((item as { fields: unknown }).fields),
-    }));
+    const parsed = (data || []).map((item) => {
+      const row = item as FormTemplateRow;
+      return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        sector: row.sector || "Geral",
+        is_published: Boolean(row.is_published),
+        fields: parseFields(row.fields),
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      } satisfies ManagedForm;
+    });
 
     setForms(parsed);
     setLoading(false);
@@ -199,7 +210,7 @@ export default function FormulariosPage() {
     setDraft({
       title: form.title,
       description: form.description || "",
-      sector: form.sector,
+      sector: sectorOptions.includes(form.sector) ? form.sector : "Geral",
       is_published: form.is_published,
       fields: form.fields.length > 0
         ? form.fields.map((field) => ({ ...field, options: field.options || [] }))
@@ -305,7 +316,7 @@ export default function FormulariosPage() {
       setSaving(false);
 
       if (error) {
-        toast.error("Erro ao atualizar formulário");
+        toast.error(`Erro ao atualizar formulário: ${error.message}`);
         return;
       }
 
@@ -321,7 +332,7 @@ export default function FormulariosPage() {
       setSaving(false);
 
       if (error) {
-        toast.error("Erro ao criar formulário");
+        toast.error(`Erro ao criar formulário: ${error.message}`);
         return;
       }
 
@@ -345,7 +356,7 @@ export default function FormulariosPage() {
     setTogglingId(null);
 
     if (error) {
-      toast.error("Erro ao atualizar status");
+      toast.error(`Erro ao atualizar status: ${error.message}`);
       return;
     }
 
@@ -365,7 +376,7 @@ export default function FormulariosPage() {
     const { error } = await supabase.from("form_templates").delete().eq("id", form.id);
 
     if (error) {
-      toast.error("Erro ao excluir formulário");
+      toast.error(`Erro ao excluir formulário: ${error.message}`);
       return;
     }
 
@@ -677,3 +688,5 @@ export default function FormulariosPage() {
     </AppLayout>
   );
 }
+
+

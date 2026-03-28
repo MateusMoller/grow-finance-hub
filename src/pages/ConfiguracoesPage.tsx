@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
 import { User, Shield, Bell, Palette, Building2, Globe, ChevronRight, Loader2, Upload, KeyRound } from "lucide-react";
@@ -67,7 +67,7 @@ function readBooleanSetting(
 
 export default function ConfiguracoesPage() {
   const { user } = useAuth();
-  const { setTheme, theme } = useTheme();
+  const { setTheme } = useTheme();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [activeSection, setActiveSection] = useState<SettingSectionId>("profile");
@@ -81,20 +81,12 @@ export default function ConfiguracoesPage() {
   const [integrationSettings, setIntegrationSettings] = useState({ calendarSync: false, driveSync: false, webhookUrl: "", apiAccess: false, apiToken: "" });
   const [securityForm, setSecurityForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
-  useEffect(() => {
-    if (user) {
-      void loadSettings();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
-
   const upsertUserSettings = async (payload: Partial<Omit<TablesInsert<"user_settings">, "user_id">>) => {
     if (!user) return { error: new Error("Usuario nao autenticado.") };
     return supabase.from("user_settings").upsert({ user_id: user.id, ...payload }, { onConflict: "user_id" });
   };
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
@@ -108,7 +100,7 @@ export default function ConfiguracoesPage() {
 
     const profile = profileRes.data;
     const settings = (settingsRes.data || {}) as Record<string, unknown>;
-    const initialTheme = (typeof settings.theme_preference === "string" ? settings.theme_preference : theme || "system") as ThemePreference;
+    const initialTheme = (typeof settings.theme_preference === "string" ? settings.theme_preference : "system") as ThemePreference;
 
     setProfileForm({
       displayName: profile?.display_name || user.email?.split("@")[0] || "",
@@ -145,7 +137,15 @@ export default function ConfiguracoesPage() {
       apiToken: readStringSetting(settings, "api_token", "integrations_api_token"),
     });
     setLoading(false);
-  };
+  }, [setTheme, user]);
+
+  useEffect(() => {
+    if (user) {
+      void loadSettings();
+    } else {
+      setLoading(false);
+    }
+  }, [loadSettings, user]);
 
   const saveProfile = async () => {
     if (!user) return;

@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   CalendarCheck2,
   CheckCircle2,
@@ -304,6 +304,7 @@ export default function DashboardPage() {
   const { user, role } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const isAdmin = role === "admin";
+  const userId = user?.id;
 
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<MetricsSummary>({
@@ -323,13 +324,8 @@ export default function DashboardPage() {
   const [teamRoleDrafts, setTeamRoleDrafts] = useState<Record<string, string>>({});
   const [savingTeamUserId, setSavingTeamUserId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    void fetchDashboardData();
-  }, [user?.id, isAdmin, selectedCompany, selectedCompetence]);
-
-  const fetchDashboardData = async () => {
-    if (!user) return;
+  const fetchDashboardData = useCallback(async () => {
+    if (!userId) return;
 
     setLoading(true);
 
@@ -388,7 +384,7 @@ export default function DashboardPage() {
       tasksByOwner.set(ownerId, grouped);
     });
 
-    const myTasks = tasksByOwner.get(user.id) || [];
+    const myTasks = tasksByOwner.get(userId) || [];
     const visibleTasks = isAdmin ? scopedTasks : myTasks;
     const todayKey = toDateKey(new Date());
     const dueTodayList = visibleTasks
@@ -454,7 +450,12 @@ export default function DashboardPage() {
     }
 
     setLoading(false);
-  };
+  }, [isAdmin, selectedCompany, selectedCompetence, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void fetchDashboardData();
+  }, [fetchDashboardData, userId]);
 
   const saveTeamRole = async (userId: string) => {
     if (!isAdmin) return;

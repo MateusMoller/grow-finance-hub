@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/app/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -120,11 +120,7 @@ export default function ClientDetailPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
-  useEffect(() => {
-    if (id) loadClient();
-  }, [id]);
-
-  const loadClient = async () => {
+  const loadClient = useCallback(async () => {
     if (!id) return;
     setLoading(true);
 
@@ -153,7 +149,13 @@ export default function ClientDetailPage() {
 
     setFiles((filesRes.data || []) as ClientFile[]);
     setLoading(false);
-  };
+  }, [id, navigate]);
+
+  useEffect(() => {
+    if (id) {
+      void loadClient();
+    }
+  }, [id, loadClient]);
 
   const saveClientInfo = async () => {
     if (!id) return;
@@ -231,7 +233,7 @@ export default function ClientDetailPage() {
     setUploading(false);
     if (dbError) return toast.error("Erro ao registrar arquivo");
     toast.success("Arquivo enviado");
-    loadClient();
+    void loadClient();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -145,7 +145,7 @@ export default function CalendarioPage() {
 
   const monthKey = format(selectedDate, "yyyy-MM");
 
-  const loadMonthEvents = async (baseDate: Date) => {
+  const loadMonthEvents = useCallback(async (baseDate: Date) => {
     setLoading(true);
 
     const from = startOfMonth(baseDate).toISOString();
@@ -167,11 +167,13 @@ export default function CalendarioPage() {
 
     setEvents((data || []) as CalendarEntry[]);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    loadMonthEvents(selectedDate);
-  }, [monthKey]);
+    const [year, month] = monthKey.split("-").map(Number);
+    if (!year || !month) return;
+    void loadMonthEvents(new Date(year, month - 1, 1));
+  }, [loadMonthEvents, monthKey]);
 
   const selectedDayEvents = useMemo(() => {
     return events.filter((event) => isSameDay(parseISO(event.due_at), selectedDate));
