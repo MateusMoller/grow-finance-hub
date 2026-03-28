@@ -14,6 +14,7 @@ import {
   Clock,
   Plus,
   Filter,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { LeadDetailSheet } from "@/components/app/LeadDetailSheet";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -46,22 +48,29 @@ interface Lead {
   id: string;
   name: string;
   contact: string;
+  email: string;
+  phone: string;
   value: string;
   stage: PipelineStage;
   daysInStage: number;
   competence: string;
-  source?: string;
+  source: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const initialLeads: Lead[] = [
-  { id: "lead-alpha", name: "Empresa Alpha", contact: "Roberto Dias", value: "R$ 3.500/mes", stage: "Proposta Enviada", daysInStage: 3, competence: "2026-03", source: "Indicacao" },
-  { id: "lead-beta", name: "Beta Servicos", contact: "Juliana Melo", value: "R$ 2.800/mes", stage: "Reuniao Agendada", daysInStage: 1, competence: "2026-03", source: "Site" },
-  { id: "lead-gamma", name: "Gamma Tech", contact: "Felipe Rocha", value: "R$ 5.200/mes", stage: "Negociacao", daysInStage: 5, competence: "2026-03", source: "Outbound" },
-  { id: "lead-delta", name: "Delta Corp", contact: "Camila Souza", value: "R$ 1.900/mes", stage: "Diagnostico", daysInStage: 2, competence: "2026-02", source: "Site" },
-  { id: "lead-epsilon", name: "Epsilon Ltda", contact: "Andre Lima", value: "R$ 4.100/mes", stage: "Oportunidade Nova", daysInStage: 0, competence: "2026-02", source: "Indicacao" },
-  { id: "lead-nova-solar", name: "Nova Solar", contact: "Bianca Prado", value: "R$ 3.250/mes", stage: "Fechado Ganho", daysInStage: 0, competence: "2026-03", source: "Site" },
-  { id: "lead-conecta-food", name: "Conecta Food", contact: "Marcos Vieira", value: "R$ 2.350/mes", stage: "Fechado Perdido", daysInStage: 0, competence: "2026-01", source: "Outbound" },
-];
+interface LeadFormState {
+  name: string;
+  contact: string;
+  email: string;
+  phone: string;
+  value: string;
+  stage: PipelineStage;
+  competence: string;
+  source: string;
+  notes: string;
+}
 
 const stageColors: Record<PipelineStage, string> = {
   "Oportunidade Nova": "bg-muted-foreground",
@@ -92,26 +101,97 @@ const parseCurrency = (value: string) => {
 
 const isOpenStage = (stage: PipelineStage) => stage !== "Fechado Ganho" && stage !== "Fechado Perdido";
 const createLeadId = () => `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const getCurrentCompetence = () => normalizeCompetence(new Date().toISOString()) || "2026-03";
+const buildLeadStorageKey = (userId: string) => `grow-crm-leads-${userId}`;
+
+const normalizeStage = (value: unknown): PipelineStage => {
+  if (typeof value !== "string") return "Oportunidade Nova";
+  if (stageOrder.includes(value as PipelineStage)) return value as PipelineStage;
+  return "Oportunidade Nova";
+};
+
+const createEmptyLeadForm = (selectedCompetence?: string | null): LeadFormState => ({
+  name: "",
+  contact: "",
+  email: "",
+  phone: "",
+  value: "",
+  stage: "Oportunidade Nova",
+  competence: normalizeCompetence(selectedCompetence) || getCurrentCompetence(),
+  source: "Site",
+  notes: "",
+});
+
+const sanitizeLead = (value: unknown): Lead | null => {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+
+  const id = String(raw.id || "").trim();
+  const name = String(raw.name || "").trim();
+  if (!id || !name) return null;
+
+  const competence = normalizeCompetence(raw.competence ? String(raw.competence) : null) || getCurrentCompetence();
+  const amount = parseCurrency(String(raw.value || "0"));
+  const createdAt = raw.createdAt ? String(raw.createdAt) : new Date().toISOString();
+  const updatedAt = raw.updatedAt ? String(raw.updatedAt) : createdAt;
+
+  return {
+    id,
+    name,
+    contact: String(raw.contact || "").trim(),
+    email: String(raw.email || "").trim(),
+    phone: String(raw.phone || "").trim(),
+    value: toCurrency(amount),
+    stage: normalizeStage(raw.stage),
+    daysInStage: Math.max(0, Number(raw.daysInStage) || 0),
+    competence,
+    source: String(raw.source || "").trim(),
+    notes: String(raw.notes || "").trim(),
+    createdAt,
+    updatedAt,
+  };
+};
+
+const readStoredLeads = (userId: string): Lead[] => {
+  if (!userId) return [];
+  const raw = localStorage.getItem(buildLeadStorageKey(userId));
+  if (!raw) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const payload = Array.isArray(parsed)
+      ? parsed
+      : parsed &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as { leads?: unknown[] }).leads)
+        ? ((parsed as { leads?: unknown[] }).leads || [])
+        : [];
+
+    return payload
+      .map((item) => sanitizeLead(item))
+      .filter((item): item is Lead => Boolean(item))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  } catch {
+    return [];
+  }
+};
 
 export default function CRMPage() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
-  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
+  const [leadForm, setLeadForm] = useState<LeadFormState>(createEmptyLeadForm());
   const [activeStageFilter, setActiveStageFilter] = useState<PipelineStage | "all">("all");
   const [historyVersion, setHistoryVersion] = useState(0);
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<ChangeHistoryEntry[]>([]);
-  const [newLead, setNewLead] = useState({
-    name: "",
-    contact: "",
-    value: "",
-    stage: "Oportunidade Nova" as PipelineStage,
-    competence: normalizeCompetence(new Date().toISOString()) || "2026-03",
-  });
 
   const actorLabel = user?.email || "Usuario";
+  const isEditing = Boolean(editingLeadId);
 
   const registerLeadHistory = (leadId: string, action: string, details?: string) => {
     if (!user?.id) return;
@@ -126,30 +206,34 @@ export default function CRMPage() {
   };
 
   useEffect(() => {
-    setNewLead((prev) => ({
-      ...prev,
-      name: selectedCompany && !prev.name ? selectedCompany : prev.name,
-      competence: selectedCompetence || prev.competence,
-    }));
-  }, [selectedCompany, selectedCompetence]);
+    if (!user?.id) {
+      setLeads([]);
+      setLoadingLeads(false);
+      return;
+    }
 
-  const scopedLeads = useMemo(
-    () =>
-      leads.filter(
-        (lead) =>
-          matchesSelectedCompany(lead.name, selectedCompany) &&
-          matchesSelectedCompetence(lead.competence, selectedCompetence)
-      ),
-    [leads, selectedCompany, selectedCompetence]
-  );
+    setLoadingLeads(true);
+    setLeads(readStoredLeads(user.id));
+    setLoadingLeads(false);
+  }, [user?.id]);
 
-  const filteredLeads = useMemo(
-    () =>
-      activeStageFilter === "all"
-        ? scopedLeads
-        : scopedLeads.filter((lead) => lead.stage === activeStageFilter),
-    [scopedLeads, activeStageFilter]
-  );
+  useEffect(() => {
+    if (!user?.id || loadingLeads) return;
+    localStorage.setItem(buildLeadStorageKey(user.id), JSON.stringify(leads));
+  }, [leads, loadingLeads, user?.id]);
+
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    const freshLead = leads.find((lead) => lead.id === selectedLead.id);
+    if (!freshLead) {
+      setSelectedLead(null);
+      setSheetOpen(false);
+      return;
+    }
+    if (freshLead !== selectedLead) {
+      setSelectedLead(freshLead);
+    }
+  }, [leads, selectedLead]);
 
   useEffect(() => {
     if (!user?.id || !selectedLead?.id) {
@@ -160,6 +244,24 @@ export default function CRMPage() {
     setSelectedLeadHistory(getEntityHistory(user.id, "crm", selectedLead.id, 12));
   }, [historyVersion, selectedLead?.id, user?.id]);
 
+  const scopedLeads = useMemo(
+    () =>
+      leads.filter(
+        (lead) =>
+          matchesSelectedCompany(lead.name, selectedCompany) &&
+          matchesSelectedCompetence(lead.competence, selectedCompetence),
+      ),
+    [leads, selectedCompany, selectedCompetence],
+  );
+
+  const filteredLeads = useMemo(
+    () =>
+      activeStageFilter === "all"
+        ? scopedLeads
+        : scopedLeads.filter((lead) => lead.stage === activeStageFilter),
+    [scopedLeads, activeStageFilter],
+  );
+
   const metrics = useMemo(() => {
     const allLeadsByValue = scopedLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
     const valueByLead = filteredLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
@@ -167,12 +269,15 @@ export default function CRMPage() {
     const wonLeads = valueByLead.filter((lead) => lead.stage === "Fechado Ganho");
     const lostLeads = valueByLead.filter((lead) => lead.stage === "Fechado Perdido");
     const proposalLeads = valueByLead.filter(
-      (lead) => lead.stage === "Proposta Enviada" || lead.stage === "Negociacao"
+      (lead) => lead.stage === "Proposta Enviada" || lead.stage === "Negociacao",
     );
 
     const openRevenue = openLeads.reduce((sum, lead) => sum + lead.amount, 0);
     const wonRevenue = wonLeads.reduce((sum, lead) => sum + lead.amount, 0);
-    const avgTicket = valueByLead.length > 0 ? valueByLead.reduce((sum, lead) => sum + lead.amount, 0) / valueByLead.length : 0;
+    const avgTicket =
+      valueByLead.length > 0
+        ? valueByLead.reduce((sum, lead) => sum + lead.amount, 0) / valueByLead.length
+        : 0;
     const closedTotal = wonLeads.length + lostLeads.length;
     const conversionRate = closedTotal > 0 ? Math.round((wonLeads.length / closedTotal) * 100) : 0;
     const avgDaysInStage =
@@ -183,19 +288,16 @@ export default function CRMPage() {
     const goals = [
       {
         label: "Meta de receita ganha",
-        current: wonRevenue,
         target: 25000,
         pct: Math.min(100, Math.round((wonRevenue / 25000) * 100)),
       },
       {
         label: "Meta de negociacoes ganhas",
-        current: wonLeads.length,
         target: 8,
         pct: Math.min(100, Math.round((wonLeads.length / 8) * 100)),
       },
       {
         label: "Meta de conversao",
-        current: conversionRate,
         target: 40,
         pct: Math.min(100, Math.round((conversionRate / 40) * 100)),
       },
@@ -207,9 +309,7 @@ export default function CRMPage() {
       return { stage, count: items.length, amount };
     });
 
-    const topNegotiations = [...valueByLead]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
+    const topNegotiations = [...valueByLead].sort((a, b) => b.amount - a.amount).slice(0, 5);
 
     return {
       openLeads,
@@ -267,6 +367,31 @@ export default function CRMPage() {
     },
   ];
 
+  const openCreateDialog = () => {
+    setEditingLeadId(null);
+    setLeadForm(createEmptyLeadForm(selectedCompetence));
+    setFormOpen(true);
+  };
+
+  const openEditDialog = (leadId: string) => {
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead) return;
+
+    setEditingLeadId(lead.id);
+    setLeadForm({
+      name: lead.name,
+      contact: lead.contact,
+      email: lead.email,
+      phone: lead.phone,
+      value: lead.value,
+      stage: lead.stage,
+      competence: lead.competence,
+      source: lead.source,
+      notes: lead.notes,
+    });
+    setFormOpen(true);
+  };
+
   const handleStageChange = (leadId: string, newStage: string) => {
     const stage = newStage as PipelineStage;
     const lead = leads.find((item) => item.id === leadId);
@@ -280,8 +405,15 @@ export default function CRMPage() {
     }
 
     const previousStage = lead.stage;
-    setLeads((prev) => prev.map((item) => (item.id === leadId ? { ...item, stage, daysInStage: 0 } : item)));
-    setSelectedLead((prev) => (prev && prev.id === leadId ? { ...prev, stage, daysInStage: 0 } : prev));
+    const previousDaysInStage = lead.daysInStage;
+
+    setLeads((prev) =>
+      prev.map((item) =>
+        item.id === leadId
+          ? { ...item, stage, daysInStage: 0, updatedAt: new Date().toISOString() }
+          : item,
+      ),
+    );
     registerLeadHistory(leadId, "Etapa alterada", `${previousStage} -> ${stage}`);
 
     toast.success(`Negociacao movida para "${newStage}"`, {
@@ -289,10 +421,11 @@ export default function CRMPage() {
         label: "Desfazer",
         onClick: () => {
           setLeads((prev) =>
-            prev.map((item) => (item.id === leadId ? { ...item, stage: previousStage } : item)),
-          );
-          setSelectedLead((prev) =>
-            prev && prev.id === leadId ? { ...prev, stage: previousStage } : prev,
+            prev.map((item) =>
+              item.id === leadId
+                ? { ...item, stage: previousStage, daysInStage: previousDaysInStage, updatedAt: new Date().toISOString() }
+                : item,
+            ),
           );
           registerLeadHistory(leadId, "Alteracao de etapa desfeita", `${stage} -> ${previousStage}`);
         },
@@ -300,34 +433,87 @@ export default function CRMPage() {
     });
   };
 
-  const handleCreate = () => {
-    if (!newLead.name.trim()) {
-      toast.error("Nome e obrigatorio");
+  const handleSaveLead = () => {
+    const name = leadForm.name.trim();
+    if (!name) {
+      toast.error("Nome da empresa e obrigatorio");
       return;
     }
 
-    if (!newLead.value.trim()) {
-      toast.error("Informe o valor estimado");
+    const amount = parseCurrency(leadForm.value);
+    if (amount <= 0) {
+      toast.error("Informe um valor estimado valido");
       return;
     }
 
-    const createdLead: Lead = {
-      id: createLeadId(),
-      ...newLead,
-      daysInStage: 0,
+    const email = leadForm.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Informe um e-mail valido");
+      return;
+    }
+
+    const competence = normalizeCompetence(leadForm.competence) || getCurrentCompetence();
+    const now = new Date().toISOString();
+    const payload = {
+      name,
+      contact: leadForm.contact.trim(),
+      email,
+      phone: leadForm.phone.trim(),
+      value: toCurrency(amount),
+      stage: leadForm.stage,
+      competence,
+      source: leadForm.source.trim(),
+      notes: leadForm.notes.trim(),
+      updatedAt: now,
     };
 
-    setLeads((prev) => [createdLead, ...prev]);
-    registerLeadHistory(createdLead.id, "Negociacao criada", createdLead.name);
-    setCreateOpen(false);
-    setNewLead({
-      name: selectedCompany || "",
-      contact: "",
-      value: "",
-      stage: "Oportunidade Nova",
-      competence: selectedCompetence || normalizeCompetence(new Date().toISOString()) || "2026-03",
-    });
-    toast.success("Negociacao cadastrada com sucesso");
+    if (editingLeadId) {
+      const previousLead = leads.find((lead) => lead.id === editingLeadId);
+      if (!previousLead) {
+        toast.error("Negociacao nao encontrada");
+        return;
+      }
+
+      setLeads((prev) =>
+        prev.map((lead) => (lead.id === editingLeadId ? { ...lead, ...payload } : lead)),
+      );
+      registerLeadHistory(editingLeadId, "Negociacao atualizada", previousLead.name);
+      toast.success("Negociacao atualizada com sucesso");
+    } else {
+      const createdLead: Lead = {
+        id: createLeadId(),
+        ...payload,
+        daysInStage: 0,
+        createdAt: now,
+      };
+
+      setLeads((prev) => [createdLead, ...prev]);
+      registerLeadHistory(createdLead.id, "Negociacao criada", createdLead.name);
+      toast.success("Negociacao cadastrada com sucesso");
+    }
+
+    setFormOpen(false);
+    setEditingLeadId(null);
+    setLeadForm(createEmptyLeadForm(selectedCompetence));
+  };
+
+  const handleSaveNotes = (leadId: string, notes: string) => {
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead) return;
+
+    if ((lead.notes || "") === notes) return;
+
+    setLeads((prev) =>
+      prev.map((item) =>
+        item.id === leadId ? { ...item, notes, updatedAt: new Date().toISOString() } : item,
+      ),
+    );
+    registerLeadHistory(
+      leadId,
+      "Observacoes atualizadas",
+      notes ? "Observacoes registradas" : "Observacoes removidas",
+    );
+    toast.success("Observacoes salvas");
   };
 
   const handleDeleteLead = (leadId: string) => {
@@ -360,7 +546,9 @@ export default function CRMPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">CRM</h1>
-            <p className="text-sm text-muted-foreground">Controle de negociacoes e pipeline comercial</p>
+            <p className="text-sm text-muted-foreground">
+              Controle de negociacoes e pipeline comercial ({leads.length} cadastradas)
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -371,134 +559,142 @@ export default function CRMPage() {
             >
               <Filter className="h-4 w-4 mr-1" /> Limpar filtro
             </Button>
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" onClick={openCreateDialog}>
               <Plus className="h-4 w-4 mr-1" /> Nova Negociacao
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {salesMetrics.map((metric, index) => (
-            <motion.div
-              key={metric.label}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.06 }}
-              className="rounded-xl border bg-card p-5"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground">{metric.label}</span>
-                <span
-                  className={`text-xs font-medium flex items-center gap-0.5 ${
-                    metric.trend === "up" ? "text-primary" : "text-destructive"
-                  }`}
+        {loadingLeads ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {salesMetrics.map((metric, index) => (
+                <motion.div
+                  key={metric.label}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.06 }}
+                  className="rounded-xl border bg-card p-5"
                 >
-                  {metric.trend === "up" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {metric.change}
-                </span>
-              </div>
-              <div className="font-heading text-2xl font-bold">{metric.value}</div>
-            </motion.div>
-          ))}
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="rounded-xl border bg-card p-5">
-            <h2 className="font-heading font-semibold mb-4 flex items-center gap-2">
-              <Target className="h-4 w-4 text-primary" /> Metas do mes
-            </h2>
-            <div className="space-y-5">
-              {metrics.goals.map((goal) => (
-                <div key={goal.label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm">{goal.label}</span>
-                    <span className="text-sm font-semibold">{goal.pct}%</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground">{metric.label}</span>
+                    <span
+                      className={`text-xs font-medium flex items-center gap-0.5 ${
+                        metric.trend === "up" ? "text-primary" : "text-destructive"
+                      }`}
+                    >
+                      {metric.trend === "up" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                      {metric.change}
+                    </span>
                   </div>
-                  <Progress value={goal.pct} className="h-2" />
-                </div>
+                  <div className="font-heading text-2xl font-bold">{metric.value}</div>
+                </motion.div>
               ))}
             </div>
-          </div>
 
-          <div className="lg:col-span-2 rounded-xl border bg-card">
-            <div className="p-5 border-b flex items-center justify-between">
-              <h2 className="font-heading font-semibold">Top negociacoes por valor</h2>
-              <Button variant="ghost" size="sm" className="gap-1 text-xs">
-                {metrics.filteredCount}/{metrics.totalCount} <ArrowRight className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="divide-y">
-              {metrics.topNegotiations.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  Nenhuma negociacao encontrada para o filtro selecionado.
-                </div>
-              ) : (
-                metrics.topNegotiations.map((lead, index) => (
-                  <div
-                    key={lead.id}
-                    className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => {
-                      setSelectedLead(lead);
-                      setSheetOpen(true);
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                        {index + 1}
+            <div className="grid lg:grid-cols-3 gap-6">
+              <div className="rounded-xl border bg-card p-5">
+                <h2 className="font-heading font-semibold mb-4 flex items-center gap-2">
+                  <Target className="h-4 w-4 text-primary" /> Metas do mes
+                </h2>
+                <div className="space-y-5">
+                  {metrics.goals.map((goal) => (
+                    <div key={goal.label}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm">{goal.label}</span>
+                        <span className="text-sm font-semibold">{goal.pct}%</span>
                       </div>
-                      <div>
-                        <div className="text-sm font-medium">{lead.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {lead.contact} - {lead.stage}
-                        </div>
-                      </div>
+                      <Progress value={goal.pct} className="h-2" />
                     </div>
-                    <span className="text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading font-semibold">Pipeline de negociacoes</h2>
-            {hasActiveFilter && (
-              <span className="text-xs text-primary font-medium">
-                Filtro ativo: {activeStageFilter}
-              </span>
-            )}
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {stageSummary.map((stage, index) => (
-              <motion.div
-                key={stage.label}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={cn(
-                  "rounded-xl border bg-card p-5 hover:shadow-md transition-all relative cursor-pointer",
-                  activeStageFilter === stage.label && "border-primary bg-primary/5 shadow-md"
-                )}
-                onClick={() =>
-                  setActiveStageFilter((prev) => (prev === stage.label ? "all" : stage.label))
-                }
-              >
-                {(stage.label === "Negociacao" || stage.label === "Proposta Enviada") && (
-                  <Badge className="absolute top-3 right-3 bg-primary/10 text-primary border-0 gap-1">
-                    <Star className="h-3 w-3" /> Quente
-                  </Badge>
-                )}
-                <div className={`h-10 w-10 rounded-lg ${stage.color} flex items-center justify-center mb-3`}>
-                  <Users className="h-5 w-5 text-white" />
+                  ))}
                 </div>
-                <h3 className="font-medium">{stage.label}</h3>
-                <p className="text-xs text-muted-foreground mt-1">{stage.count} negociacao(oes)</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
+              </div>
+
+              <div className="lg:col-span-2 rounded-xl border bg-card">
+                <div className="p-5 border-b flex items-center justify-between">
+                  <h2 className="font-heading font-semibold">Top negociacoes por valor</h2>
+                  <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                    {metrics.filteredCount}/{metrics.totalCount} <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="divide-y">
+                  {metrics.topNegotiations.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">
+                      Nenhuma negociacao encontrada para o filtro selecionado.
+                    </div>
+                  ) : (
+                    metrics.topNegotiations.map((lead, index) => (
+                      <div
+                        key={lead.id}
+                        className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setSelectedLead(lead);
+                          setSheetOpen(true);
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium">{lead.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {lead.contact || "Sem contato"} - {lead.stage}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-heading font-semibold">Pipeline de negociacoes</h2>
+                {hasActiveFilter && (
+                  <span className="text-xs text-primary font-medium">
+                    Filtro ativo: {activeStageFilter}
+                  </span>
+                )}
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {stageSummary.map((stage, index) => (
+                  <motion.div
+                    key={stage.label}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={cn(
+                      "rounded-xl border bg-card p-5 hover:shadow-md transition-all relative cursor-pointer",
+                      activeStageFilter === stage.label && "border-primary bg-primary/5 shadow-md",
+                    )}
+                    onClick={() =>
+                      setActiveStageFilter((prev) => (prev === stage.label ? "all" : stage.label))
+                    }
+                  >
+                    {(stage.label === "Negociacao" || stage.label === "Proposta Enviada") && (
+                      <Badge className="absolute top-3 right-3 bg-primary/10 text-primary border-0 gap-1">
+                        <Star className="h-3 w-3" /> Quente
+                      </Badge>
+                    )}
+                    <div className={`h-10 w-10 rounded-lg ${stage.color} flex items-center justify-center mb-3`}>
+                      <Users className="h-5 w-5 text-white" />
+                    </div>
+                    <h3 className="font-medium">{stage.label}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{stage.count} negociacao(oes)</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <LeadDetailSheet
@@ -507,47 +703,130 @@ export default function CRMPage() {
         onOpenChange={setSheetOpen}
         onStageChange={handleStageChange}
         onDeleteLead={handleDeleteLead}
+        onEditLead={openEditDialog}
+        onSaveNotes={handleSaveNotes}
         historyEntries={selectedLeadHistory}
       />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) {
+            setEditingLeadId(null);
+            setLeadForm(createEmptyLeadForm(selectedCompetence));
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nova Negociacao</DialogTitle>
+            <DialogTitle>{isEditing ? "Editar Negociacao" : "Nova Negociacao"}</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Empresa *</Label>
-              <Input
-                placeholder="Nome da empresa"
-                value={newLead.name}
-                onChange={(event) => setNewLead((prev) => ({ ...prev, name: event.target.value }))}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>Empresa *</Label>
+                <Input
+                  placeholder="Nome da empresa"
+                  value={leadForm.name}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, name: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>Valor estimado *</Label>
+                <Input
+                  placeholder="R$ 0,00"
+                  value={leadForm.value}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, value: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2 col-span-2 sm:col-span-1">
                 <Label>Contato</Label>
                 <Input
                   placeholder="Nome do contato"
-                  value={newLead.contact}
-                  onChange={(event) => setNewLead((prev) => ({ ...prev, contact: event.target.value }))}
+                  value={leadForm.contact}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, contact: event.target.value }))}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Valor estimado</Label>
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>Etapa</Label>
+                <select
+                  className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none"
+                  value={leadForm.stage}
+                  onChange={(event) =>
+                    setLeadForm((prev) => ({ ...prev, stage: event.target.value as PipelineStage }))
+                  }
+                >
+                  {stageOrder.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>E-mail</Label>
                 <Input
-                  placeholder="R$ 0,00/mes"
-                  value={newLead.value}
-                  onChange={(event) => setNewLead((prev) => ({ ...prev, value: event.target.value }))}
+                  type="email"
+                  placeholder="contato@empresa.com"
+                  value={leadForm.email}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>Telefone</Label>
+                <Input
+                  placeholder="(00) 00000-0000"
+                  value={leadForm.phone}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, phone: event.target.value }))}
                 />
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>Origem</Label>
+                <Input
+                  placeholder="Site, Indicacao, Outbound..."
+                  value={leadForm.source}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, source: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label>Competencia</Label>
+                <Input
+                  placeholder="AAAA-MM"
+                  value={leadForm.competence}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, competence: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Observacoes</Label>
+              <Textarea
+                placeholder="Contexto da negociacao, proximos passos, pontos de atencao..."
+                value={leadForm.notes}
+                onChange={(event) => setLeadForm((prev) => ({ ...prev, notes: event.target.value }))}
+                rows={3}
+              />
+            </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleCreate}>Cadastrar Negociacao</Button>
+            <Button onClick={handleSaveLead}>
+              {isEditing ? "Salvar alteracoes" : "Cadastrar Negociacao"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

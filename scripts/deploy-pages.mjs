@@ -23,20 +23,45 @@ function captureSafe(command, args, options = {}) {
   }
 }
 
+function normalizeBasePath(value) {
+  if (!value || value === "/") return "/";
+  const trimmed = value.trim().replace(/^\/+|\/+$/g, "");
+  return `/${trimmed}/`;
+}
+
+function extractRepoName(repoUrl) {
+  if (!repoUrl) return "";
+  const normalized = repoUrl.trim().replace(/\/+$/, "");
+  const lastSegment = normalized.split("/").pop() || "";
+  return lastSegment.replace(/\.git$/i, "");
+}
+
 const tempRoot = mkdtempSync(join(tmpdir(), "grow-pages-"));
 const publishDir = join(tempRoot, "publish");
 const viteCliPath = join(process.cwd(), "node_modules", "vite", "bin", "vite.js");
 
 try {
-  run(process.execPath, [viteCliPath, "build", "--base=/grow-finance-hub/"]);
+  run(process.execPath, [join(process.cwd(), "scripts", "validate-env.mjs")]);
+
+  const repoUrl = captureSafe("git", ["config", "--get", "remote.origin.url"]);
+  if (!repoUrl) {
+    throw new Error("Remote 'origin' nao foi encontrado.");
+  }
+
+  const repoName = extractRepoName(repoUrl);
+  const defaultBase = repoName.endsWith(".github.io") ? "/" : `/${repoName}/`;
+  const basePath = normalizeBasePath(process.env.PAGES_BASE_PATH || defaultBase);
+
+  process.stdout.write(`Base path de deploy: ${basePath}\n`);
+
+  run(process.execPath, [viteCliPath, "build", `--base=${basePath}`]);
 
   cpSync(join(process.cwd(), "dist"), publishDir, { recursive: true });
   cpSync(join(publishDir, "index.html"), join(publishDir, "404.html"));
   writeFileSync(join(publishDir, ".nojekyll"), "");
 
-  const repoUrl = captureSafe("git", ["config", "--get", "remote.origin.url"]);
-  if (!repoUrl) {
-    throw new Error("Remote 'origin' nao foi encontrado.");
+  if (process.env.PAGES_CNAME) {
+    writeFileSync(join(publishDir, "CNAME"), `${process.env.PAGES_CNAME}\n`);
   }
 
   run("git", ["init"], { cwd: publishDir });
@@ -57,7 +82,7 @@ try {
 
   run("git", ["checkout", "-b", "gh-pages"], { cwd: publishDir });
   run("git", ["add", "."], { cwd: publishDir });
-  run("git", ["commit", "-m", "Deploy GitHub Pages"], { cwd: publishDir });
+  run("git", ["commit", "-m", `Deploy GitHub Pages (${new Date().toISOString()})`], { cwd: publishDir });
   run("git", ["remote", "add", "origin", repoUrl], { cwd: publishDir });
   run("git", ["push", "-f", "origin", "gh-pages"], { cwd: publishDir });
 

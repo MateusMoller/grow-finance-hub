@@ -11,7 +11,6 @@ import {
   ClipboardList,
   Headset,
   BookOpenText,
-  Smartphone,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -48,10 +47,6 @@ const systemItems = [
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
   { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
 ];
-
-const MOBILE_APP_DEEP_LINK = import.meta.env.VITE_MOBILE_APP_DEEP_LINK ?? "growfinance://app";
-const MOBILE_APP_FALLBACK_URL =
-  import.meta.env.VITE_MOBILE_APP_FALLBACK_URL ?? "https://github.com/MateusMoller/grow-finance-mobile";
 
 function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {
   const { state } = useSidebar();
@@ -118,17 +113,6 @@ export function AppSidebar() {
     (a, b) => (mainItemOrder[a.url] ?? 99) - (mainItemOrder[b.url] ?? 99),
   );
 
-  const openMobileApp = () => {
-    window.location.href = MOBILE_APP_DEEP_LINK;
-
-    window.setTimeout(() => {
-      const hidden = document.visibilityState === "hidden";
-      if (!hidden) {
-        window.open(MOBILE_APP_FALLBACK_URL, "_blank", "noopener,noreferrer");
-      }
-    }, 1200);
-  };
-
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
@@ -146,20 +130,6 @@ export function AppSidebar() {
         <SidebarSection label="Principal" items={orderedMainItems} />
         {visibleOperationalItems.length > 0 && <SidebarSection label="Operacional" items={visibleOperationalItems} />}
         {visibleSystemItems.length > 0 && <SidebarSection label="Sistema" items={visibleSystemItems} />}
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Mobile</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={openMobileApp} className="hover:bg-sidebar-accent/50">
-                  <Smartphone className="mr-2 h-4 w-4" />
-                  {!collapsed && <span>Abrir App Mobile</span>}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
     </Sidebar>
   );

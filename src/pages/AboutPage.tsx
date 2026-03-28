@@ -120,7 +120,7 @@ export default function AboutPage() {
               <div className="flex flex-wrap gap-3">
                 <Button
                   asChild
-                  className="rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
+                  className="rounded-full border border-white/35 px-5 font-semibold dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                 >
                   <Link to="/#contato">Solicitar avaliacao gratuita</Link>
                 </Button>
@@ -333,7 +333,7 @@ export default function AboutPage() {
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Button
                       asChild
-                      className="rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
+                      className="rounded-full border border-white/35 px-5 text-sm font-semibold dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                     >
                       <Link to="/contato">Solicitar avaliacao gratuita</Link>
                     </Button>

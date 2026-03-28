@@ -1,4 +1,4 @@
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import {
@@ -104,6 +104,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     unreadCount,
     markAsRead,
     markAllAsRead,
+    notificationSignal,
   } = usePriorityNotifications();
 
   const navigate = useNavigate();
@@ -113,6 +114,67 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playNotificationSound = useCallback(async () => {
+    if (typeof window === "undefined") return;
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) return;
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextCtor();
+    }
+
+    const context = audioContextRef.current;
+
+    if (context.state === "suspended") {
+      await context.resume();
+    }
+
+    const now = context.currentTime;
+    const envelope = context.createGain();
+    envelope.connect(context.destination);
+
+    envelope.gain.setValueAtTime(0.0001, now);
+    envelope.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+    const toneA = context.createOscillator();
+    toneA.type = "sine";
+    toneA.frequency.setValueAtTime(880, now);
+    toneA.frequency.exponentialRampToValueAtTime(720, now + 0.16);
+    toneA.connect(envelope);
+    toneA.start(now);
+    toneA.stop(now + 0.18);
+
+    const toneB = context.createOscillator();
+    toneB.type = "sine";
+    toneB.frequency.setValueAtTime(960, now + 0.16);
+    toneB.frequency.exponentialRampToValueAtTime(760, now + 0.33);
+    toneB.connect(envelope);
+    toneB.start(now + 0.16);
+    toneB.stop(now + 0.35);
+  }, []);
+
+  useEffect(() => {
+    if (notificationSignal === 0) return;
+
+    void playNotificationSound().catch(() => {
+      // Browsers can block autoplay until user interaction; fail silently.
+    });
+  }, [notificationSignal, playNotificationSound]);
+
+  useEffect(() => {
+    return () => {
+      if (!audioContextRef.current) return;
+      void audioContextRef.current.close();
+      audioContextRef.current = null;
+    };
+  }, []);
 
   const filteredLinks = useMemo(() => {
     const term = normalizeText(searchTerm);

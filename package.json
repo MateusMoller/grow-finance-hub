@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "check:env": "node scripts/validate-env.mjs",
     "build": "vite build",
     "build:pages": "vite build --base=/grow-finance-hub/",
     "build:dev": "vite build --mode development",
+    "verify:deploy": "npm run check:env && npm run lint && npm run build",
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "lint": "eslint .",
     "preview": "vite preview",

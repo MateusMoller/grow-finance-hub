@@ -42,9 +42,9 @@ export default function ContactPage() {
 
               <div className="space-y-6">
                 {[
-                  { icon: Mail, label: "E-mail", value: "contato@growfinance.com.br" },
-                  { icon: Phone, label: "Telefone", value: "(11) 99999-9999" },
-                  { icon: MapPin, label: "Endereço", value: "São Paulo, SP" },
+                  { icon: Mail, label: "E-mail", value: "contato@contabilidadegrow.com.br" },
+                  { icon: Phone, label: "Telefone", value: "(51) 99532-5592" },
+                  { icon: MapPin, label: "Endereço", value: "R. Júlio de Castilhos, 2579 - Sl 205 - Centro, Taquara - RS" },
                 ].map((c) => (
                   <div key={c.label} className="flex items-center gap-4">
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">

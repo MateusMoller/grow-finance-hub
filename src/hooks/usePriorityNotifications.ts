@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
@@ -22,13 +22,21 @@ export interface NotificationWithRead extends PriorityNotification {
   read: boolean;
 }
 
+type RefreshSource = "initial" | "filters" | "realtime" | "manual";
+
 export function usePriorityNotifications() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const [notifications, setNotifications] = useState<NotificationWithRead[]>([]);
   const [loading, setLoading] = useState(false);
+  const [notificationSignal, setNotificationSignal] = useState(0);
+  const notificationsRef = useRef<NotificationWithRead[]>([]);
 
-  const refresh = useCallback(async () => {
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
+
+  const refresh = useCallback(async (source: RefreshSource = "manual") => {
     if (!user?.id) {
       setNotifications([]);
       return;
@@ -56,13 +64,46 @@ export function usePriorityNotifications() {
       read: readIds.has(notification.id),
     }));
 
+    if (source === "realtime") {
+      const previousIds = new Set(notificationsRef.current.map((notification) => notification.id));
+      const hasNewUnread = built.some(
+        (notification) => !notification.read && !previousIds.has(notification.id),
+      );
+      if (hasNewUnread) {
+        setNotificationSignal((prev) => prev + 1);
+      }
+    }
+
     setNotifications(built);
     setLoading(false);
   }, [selectedCompany, selectedCompetence, user?.id]);
 
   useEffect(() => {
-    void refresh();
+    void refresh("filters");
   }, [refresh]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`priority-notifications-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "kanban_tasks",
+        },
+        () => {
+          void refresh("realtime");
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refresh, user?.id]);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
@@ -99,5 +140,6 @@ export function usePriorityNotifications() {
     markAllAsRead,
     refresh,
     resetReadState,
+    notificationSignal,
   };
 }

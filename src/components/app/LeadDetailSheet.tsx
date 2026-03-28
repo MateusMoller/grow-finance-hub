@@ -16,7 +16,7 @@ import {
   Send,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
 
 interface Lead {
@@ -30,6 +30,7 @@ interface Lead {
   phone?: string;
   source?: string;
   notes?: string;
+  competence?: string;
 }
 
 interface LeadDetailSheetProps {
@@ -38,6 +39,8 @@ interface LeadDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onStageChange?: (leadId: string, newStage: string) => void;
   onDeleteLead?: (leadId: string) => void;
+  onEditLead?: (leadId: string) => void;
+  onSaveNotes?: (leadId: string, notes: string) => void;
   historyEntries?: ChangeHistoryEntry[];
 }
 
@@ -69,13 +72,21 @@ export function LeadDetailSheet({
   onOpenChange,
   onStageChange,
   onDeleteLead,
+  onEditLead,
+  onSaveNotes,
   historyEntries = [],
 }: LeadDetailSheetProps) {
   const [note, setNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
+  useEffect(() => {
+    setNote(lead?.notes || "");
+  }, [lead?.id, lead?.notes]);
 
   if (!lead) return null;
 
   const stageCfg = stageColors[lead.stage] || "bg-muted";
+  const hasNoteChanges = (lead.notes || "") !== note.trim();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -129,14 +140,14 @@ export function LeadDetailSheet({
                 <Mail className="h-3 w-3" /> E-mail
               </span>
               <span className="text-sm font-medium block">
-                {lead.email || `contato@${lead.name.toLowerCase().replace(/\s/g, "")}.com`}
+                {lead.email || "-"}
               </span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Phone className="h-3 w-3" /> Telefone
               </span>
-              <span className="text-sm font-medium block">{lead.phone || "(11) 99999-0000"}</span>
+              <span className="text-sm font-medium block">{lead.phone || "-"}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -146,7 +157,7 @@ export function LeadDetailSheet({
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground">Origem</span>
-              <span className="text-sm font-medium block">{lead.source || "Site institucional"}</span>
+              <span className="text-sm font-medium block">{lead.source || "-"}</span>
             </div>
           </div>
 
@@ -206,7 +217,17 @@ export function LeadDetailSheet({
               onChange={(event) => setNote(event.target.value)}
               className="text-sm min-h-[60px]"
             />
-            <Button size="sm" className="mt-2 gap-1">
+            <Button
+              size="sm"
+              className="mt-2 gap-1"
+              disabled={!onSaveNotes || !hasNoteChanges || savingNote}
+              onClick={() => {
+                if (!onSaveNotes) return;
+                setSavingNote(true);
+                onSaveNotes(lead.id, note.trim());
+                setSavingNote(false);
+              }}
+            >
               <Send className="h-3 w-3" /> Salvar
             </Button>
           </div>
@@ -214,7 +235,12 @@ export function LeadDetailSheet({
           <Separator />
 
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 gap-1">
+            <Button
+              variant="outline"
+              className="flex-1 gap-1"
+              onClick={() => onEditLead?.(lead.id)}
+              disabled={!onEditLead}
+            >
               <Edit className="h-3.5 w-3.5" /> Editar
             </Button>
             <Button

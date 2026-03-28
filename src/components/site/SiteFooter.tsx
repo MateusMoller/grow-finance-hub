@@ -42,9 +42,9 @@ export function SiteFooter() {
             <div>
               <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Contato</h4>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li>Rua das Empresas, 123 - Centro, Sao Paulo, SP</li>
-                <li>Telefone: (11) 4000-1234</li>
-                <li>E-mail: contato@growcontabilidade.com.br</li>
+                <li>R. Júlio de Castilhos, 2579 - Sl 205 - Centro, Taquara - RS</li>
+                <li>Telefone: (51) 99532-5592</li>
+                <li>E-mail: contato@contabilidadegrow.com.br</li>
               </ul>
             </div>
             <div>
