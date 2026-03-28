@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   TrendingUp,
   DollarSign,
@@ -30,6 +30,9 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+import { SITE_LEAD_TAG, isSiteLeadSource } from "@/lib/siteLeadCapture";
 
 const stageOrder = [
   "Oportunidade Nova",
@@ -72,6 +75,8 @@ interface LeadFormState {
   notes: string;
 }
 
+type SiteLeadRow = Tables<"site_leads">;
+
 const stageColors: Record<PipelineStage, string> = {
   "Oportunidade Nova": "bg-muted-foreground",
   "Contato Iniciado": "bg-primary/60",
@@ -103,6 +108,10 @@ const isOpenStage = (stage: PipelineStage) => stage !== "Fechado Ganho" && stage
 const createLeadId = () => `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const getCurrentCompetence = () => normalizeCompetence(new Date().toISOString()) || "2026-03";
 const buildLeadStorageKey = (userId: string) => `grow-crm-leads-${userId}`;
+const siteLeadPrefix = "site-lead-";
+const buildSiteLeadId = (siteLeadId: string) => `${siteLeadPrefix}${siteLeadId}`;
+const extractSiteLeadId = (leadId: string) =>
+  leadId.startsWith(siteLeadPrefix) ? leadId.slice(siteLeadPrefix.length) : null;
 
 const normalizeStage = (value: unknown): PipelineStage => {
   if (typeof value !== "string") return "Oportunidade Nova";
@@ -176,6 +185,40 @@ const readStoredLeads = (userId: string): Lead[] => {
   }
 };
 
+const mapSiteLeadToLead = (siteLead: SiteLeadRow): Lead => {
+  const createdAt = siteLead.created_at;
+  const createdTimestamp = new Date(createdAt).getTime();
+  const daysInStage =
+    Number.isNaN(createdTimestamp) ? 0 : Math.max(0, Math.floor((Date.now() - createdTimestamp) / 86400000));
+  const competence = normalizeCompetence(createdAt) || getCurrentCompetence();
+  const source = siteLead.source_tag || SITE_LEAD_TAG;
+  const normalizedCompany = (siteLead.company_name || "").trim();
+  const normalizedName = (siteLead.full_name || "").trim();
+  const normalizedPhone = (siteLead.phone || "").trim();
+  const normalizedMessage = (siteLead.message || "").trim();
+  const notesParts = [
+    siteLead.origin_page ? `Lead captado pelo site (${siteLead.origin_page}).` : "Lead captado pelo site.",
+    normalizedPhone ? `Telefone informado: ${normalizedPhone}` : "",
+    normalizedMessage ? `Mensagem: ${normalizedMessage}` : "",
+  ].filter(Boolean);
+
+  return {
+    id: buildSiteLeadId(siteLead.id),
+    name: normalizedCompany || normalizedName || "Lead captado via site",
+    contact: normalizedName,
+    email: siteLead.email,
+    phone: normalizedPhone,
+    value: toCurrency(0),
+    stage: "Oportunidade Nova",
+    daysInStage,
+    competence,
+    source,
+    notes: notesParts.join("\n"),
+    createdAt,
+    updatedAt: createdAt,
+  };
+};
+
 export default function CRMPage() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
@@ -205,6 +248,54 @@ export default function CRMPage() {
     setHistoryVersion((prev) => prev + 1);
   };
 
+  const loadLeadsFromSources = useCallback(async (showLoader = false) => {
+    if (!user?.id) {
+      setLeads([]);
+      setLoadingLeads(false);
+      return;
+    }
+
+    if (showLoader) {
+      setLoadingLeads(true);
+    }
+
+    const storedLeads = readStoredLeads(user.id);
+    const { data, error } = await supabase
+      .from("site_leads")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setLeads(storedLeads);
+      if (showLoader) {
+        setLoadingLeads(false);
+        toast.error(`Nao foi possivel carregar leads do site: ${error.message}`);
+      }
+      return;
+    }
+
+    const siteLeads = ((data || []) as SiteLeadRow[]).map(mapSiteLeadToLead);
+    const mergedLeadsMap = new Map<string, Lead>();
+
+    siteLeads.forEach((lead) => {
+      mergedLeadsMap.set(lead.id, lead);
+    });
+
+    storedLeads.forEach((lead) => {
+      mergedLeadsMap.set(lead.id, lead);
+    });
+
+    const mergedLeads = Array.from(mergedLeadsMap.values()).sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    );
+
+    setLeads(mergedLeads);
+
+    if (showLoader) {
+      setLoadingLeads(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) {
       setLeads([]);
@@ -212,10 +303,16 @@ export default function CRMPage() {
       return;
     }
 
-    setLoadingLeads(true);
-    setLeads(readStoredLeads(user.id));
-    setLoadingLeads(false);
-  }, [user?.id]);
+    void loadLeadsFromSources(true);
+
+    const intervalId = window.setInterval(() => {
+      void loadLeadsFromSources(false);
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadLeadsFromSources, user?.id]);
 
   useEffect(() => {
     if (!user?.id || loadingLeads) return;
@@ -335,6 +432,10 @@ export default function CRMPage() {
     color: stageColors[item.stage],
   }));
   const hasActiveFilter = activeStageFilter !== "all";
+  const siteCapturedLeads = useMemo(
+    () => filteredLeads.filter((lead) => isSiteLeadSource(lead.source)).slice(0, 8),
+    [filteredLeads],
+  );
 
   const salesMetrics = [
     {
@@ -516,12 +617,28 @@ export default function CRMPage() {
     toast.success("Observacoes salvas");
   };
 
-  const handleDeleteLead = (leadId: string) => {
+  const handleDeleteLead = async (leadId: string) => {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead) return;
 
     const confirmed = window.confirm(`Excluir a negociacao "${lead.name}"?`);
     if (!confirmed) return;
+
+    const siteLeadId = extractSiteLeadId(leadId);
+    if (siteLeadId) {
+      const { error } = await supabase.from("site_leads").delete().eq("id", siteLeadId);
+      if (error) {
+        toast.error(`Nao foi possivel excluir lead captado via site: ${error.message}`);
+        return;
+      }
+
+      setLeads((prev) => prev.filter((item) => item.id !== leadId));
+      setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
+      setSheetOpen(false);
+      registerLeadHistory(leadId, "Lead captado via site excluido", lead.name);
+      toast.success("Lead captado via site excluido");
+      return;
+    }
 
     setLeads((prev) => prev.filter((item) => item.id !== leadId));
     setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
@@ -645,6 +762,11 @@ export default function CRMPage() {
                             <div className="text-xs text-muted-foreground">
                               {lead.contact || "Sem contato"} - {lead.stage}
                             </div>
+                            {isSiteLeadSource(lead.source) && (
+                              <Badge variant="secondary" className="mt-1 text-[10px]">
+                                {SITE_LEAD_TAG}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <span className="text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
@@ -652,6 +774,48 @@ export default function CRMPage() {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card">
+              <div className="p-5 border-b">
+                <h2 className="font-heading font-semibold">Leads captados via site</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Novos contatos recebidos pelos formulários institucionais
+                </p>
+              </div>
+              <div className="divide-y">
+                {siteCapturedLeads.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-muted-foreground">
+                    Nenhum lead com origem de captação via site no filtro atual.
+                  </div>
+                ) : (
+                  siteCapturedLeads.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className="p-4 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedLead(lead);
+                        setSheetOpen(true);
+                      }}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium truncate">{lead.name}</p>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {SITE_LEAD_TAG}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          {lead.contact || "Sem contato"} {lead.email ? `- ${lead.email}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-xs text-muted-foreground shrink-0">
+                        {new Date(lead.createdAt).toLocaleDateString("pt-BR")}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

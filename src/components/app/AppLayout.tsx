@@ -368,15 +368,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <main className="flex-1 overflow-auto p-4 md:p-6 pb-24 md:pb-6 bg-muted/20">{children}</main>
 
           <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-16 md:mb-0">
-            Siga a Grow no Instagram:{" "}
-            <a
-              href="https://www.instagram.com/contabilidade.grow/"
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-primary hover:underline"
-            >
-              @contabilidade.grow
-            </a>
+            Grow Finance Hub - Area interna
           </footer>
 
           <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">

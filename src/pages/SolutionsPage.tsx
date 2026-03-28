@@ -8,38 +8,38 @@ const solutions = [
   {
     icon: FileText,
     title: "Contabilidade Digital",
-    description: "Escrituração fiscal e contábil automatizada, declarações, balanços e demonstrativos com acompanhamento em tempo real pelo portal.",
-    features: ["Escrituração completa", "Declarações fiscais", "Balanços patrimoniais", "Portal em tempo real"],
+    description: "Escrituracao fiscal e contabil automatizada, declaracoes e demonstrativos com acompanhamento em tempo real pelo portal.",
+    features: ["Escrituracao completa", "Declaracoes fiscais", "Balancos patrimoniais", "Portal em tempo real"],
   },
   {
     icon: BarChart3,
     title: "BPO Financeiro",
-    description: "Terceirização completa da gestão financeira: contas a pagar e receber, fluxo de caixa, conciliações e relatórios gerenciais.",
-    features: ["Contas a pagar/receber", "Fluxo de caixa", "Conciliação bancária", "Relatórios gerenciais"],
+    description: "Terceirizacao completa da gestao financeira: contas a pagar e receber, fluxo de caixa, conciliacoes e relatorios gerenciais.",
+    features: ["Contas a pagar/receber", "Fluxo de caixa", "Conciliacao bancaria", "Relatorios gerenciais"],
   },
   {
     icon: Users,
     title: "Departamento Pessoal",
-    description: "Gestão de folha de pagamento, admissões, demissões, férias e benefícios com formulários digitais inteligentes.",
-    features: ["Folha de pagamento", "Admissão digital", "Gestão de férias", "Benefícios"],
+    description: "Gestao de folha de pagamento, admissoes, demissoes, ferias e beneficios com formularios digitais inteligentes.",
+    features: ["Folha de pagamento", "Admissao digital", "Gestao de ferias", "Beneficios"],
   },
   {
     icon: Calculator,
-    title: "Consultoria Tributária",
-    description: "Planejamento tributário personalizado para otimizar a carga fiscal e garantir conformidade.",
-    features: ["Planejamento tributário", "Recuperação de créditos", "Compliance fiscal", "Simulações"],
+    title: "Consultoria Tributaria",
+    description: "Planejamento tributario personalizado para otimizar a carga fiscal e garantir conformidade.",
+    features: ["Planejamento tributario", "Recuperacao de creditos", "Compliance fiscal", "Simulacoes"],
   },
   {
     icon: Briefcase,
     title: "Abertura de Empresas",
-    description: "Assessoria completa para constituição empresarial, escolha de regime tributário e regularização.",
-    features: ["Constituição societária", "Escolha do CNAE", "Regime tributário", "Licenças e alvarás"],
+    description: "Assessoria completa para constituicao empresarial, escolha de regime tributario e regularizacao.",
+    features: ["Constituicao societaria", "Escolha do CNAE", "Regime tributario", "Licencas e alvaras"],
   },
   {
     icon: PieChart,
     title: "Consultoria Financeira",
-    description: "Análise de indicadores, planejamento financeiro estratégico e suporte na tomada de decisões.",
-    features: ["Análise de indicadores", "Planejamento estratégico", "Budget e forecast", "KPIs financeiros"],
+    description: "Analise de indicadores, planejamento financeiro estrategico e suporte na tomada de decisoes.",
+    features: ["Analise de indicadores", "Planejamento estrategico", "Budget e forecast", "KPIs financeiros"],
   },
 ];
 
@@ -53,43 +53,43 @@ const fadeIn = {
 export default function SolutionsPage() {
   return (
     <SiteLayout>
-      <section className="py-24 bg-background">
+      <section className="bg-background py-12 sm:py-16 md:py-20">
         <div className="container">
-          <motion.div {...fadeIn} className="max-w-3xl mb-16">
-            <span className="text-xs font-semibold tracking-widest uppercase text-primary">Soluções</span>
-            <h1 className="font-heading text-4xl md:text-5xl font-bold mt-3 mb-4">
-              Soluções completas para a{" "}
-              <span className="text-primary">gestão do seu negócio</span>
+          <motion.div {...fadeIn} className="mb-10 max-w-3xl sm:mb-14 md:mb-16">
+            <span className="text-xs font-semibold uppercase tracking-widest text-primary">Solucoes</span>
+            <h1 className="mt-3 mb-4 font-heading text-3xl font-bold sm:text-4xl md:text-5xl">
+              Solucoes completas para a{" "}
+              <span className="text-primary">gestao do seu negocio</span>
             </h1>
-            <p className="text-lg text-muted-foreground">
-              Cada serviço é desenhado para se integrar com os demais, formando um ecossistema digital completo.
+            <p className="text-base text-muted-foreground md:text-lg">
+              Cada servico e desenhado para se integrar com os demais, formando um ecossistema digital completo.
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {solutions.map((s, i) => (
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+            {solutions.map((solution, index) => (
               <motion.div
-                key={s.title}
+                key={solution.title}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.08 }}
-                className="group rounded-2xl border bg-card p-6 hover:shadow-lg hover:border-primary/20 transition-all duration-300 flex flex-col"
+                transition={{ delay: index * 0.08 }}
+                className="group flex flex-col rounded-2xl border bg-card p-5 transition-all duration-300 hover:border-primary/20 hover:shadow-lg sm:p-6"
               >
-                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                  <s.icon className="h-6 w-6 text-primary" />
+                <div className="mb-4 h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center transition-colors group-hover:bg-primary/20">
+                  <solution.icon className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-heading font-semibold text-xl mb-2">{s.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4 flex-1">{s.description}</p>
-                <ul className="space-y-1.5 mb-4">
-                  {s.features.map((f) => (
-                    <li key={f} className="text-xs text-muted-foreground flex items-center gap-2">
+                <h3 className="mb-2 font-heading text-lg font-semibold sm:text-xl">{solution.title}</h3>
+                <p className="mb-4 flex-1 text-sm leading-relaxed text-muted-foreground">{solution.description}</p>
+                <ul className="mb-4 space-y-1.5">
+                  {solution.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="h-1 w-1 rounded-full bg-primary" />
-                      {f}
+                      {feature}
                     </li>
                   ))}
                 </ul>
-                <Button variant="ghost" size="sm" className="self-start text-primary" asChild>
+                <Button variant="ghost" size="sm" className="self-start px-0 text-primary" asChild>
                   <Link to="/contato">
                     Saiba mais <ArrowRight className="ml-1 h-3 w-3" />
                   </Link>

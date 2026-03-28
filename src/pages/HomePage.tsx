@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, BarChart3, Briefcase, Building2, CheckCircle2, FileText, FolderOpen, Search, Shield, TrendingUp, Users, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { captureSiteLead } from "@/lib/siteLeadCapture";
 
 const heroStats = [
   { value: "+12", label: "Anos de mercado", detail: "Experiencia solida" },
@@ -69,38 +70,67 @@ const fadeIn = {
 
 export default function HomePage() {
   const [sending, setSending] = useState(false);
+  const [leadForm, setLeadForm] = useState({
+    fullName: "",
+    companyName: "",
+    email: "",
+  });
 
-  const handleLeadSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleLeadSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const fullName = leadForm.fullName.trim();
+    const email = leadForm.email.trim();
+
+    if (!fullName || !email) {
+      toast.error("Preencha nome e e-mail para continuar.");
+      return;
+    }
+
     setSending(true);
 
-    window.setTimeout(() => {
-      setSending(false);
-      toast.success("Solicitacao enviada com sucesso. Nossa equipe entrara em contato em breve.");
-    }, 900);
+    const { error } = await captureSiteLead({
+      fullName,
+      companyName: leadForm.companyName.trim(),
+      email,
+      originPage: "home",
+    });
+
+    setSending(false);
+
+    if (error) {
+      toast.error(`Nao foi possivel enviar sua solicitacao: ${error.message}`);
+      return;
+    }
+
+    setLeadForm({
+      fullName: "",
+      companyName: "",
+      email: "",
+    });
+    toast.success("Solicitacao enviada com sucesso. Nossa equipe entrara em contato em breve.");
   };
 
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
-        <section className="border-b border-border/60 pb-12 pt-12 dark:border-[#243054] md:pb-16 md:pt-16">
+        <section className="border-b border-border/60 pb-10 pt-8 dark:border-[#243054] sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
           <div className="container grid gap-10 lg:grid-cols-2 lg:items-start">
             <motion.div {...fadeIn} className="space-y-8">
               <div className="space-y-5">
-                <h1 className="font-heading text-4xl font-bold leading-tight text-foreground md:text-5xl">
+                <h1 className="font-heading text-3xl font-bold leading-tight text-foreground sm:text-4xl md:text-5xl">
                   Mais do que contabilidade, impulsionamos o crescimento do seu negocio
                 </h1>
-                <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
+                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
                   A Grow oferece contabilidade consultiva e assessoria estrategica para empresas que buscam organizacao,
                   seguranca fiscal e decisoes embasadas para crescer com confianca.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button asChild className="rounded-full px-6" size="lg">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Button asChild className="w-full rounded-full px-6 sm:w-auto" size="lg">
                   <Link to="/#contato">Quero Crescer</Link>
                 </Button>
-                <Button asChild variant="outline" className="rounded-full px-6" size="lg">
+                <Button asChild variant="outline" className="w-full rounded-full px-6 sm:w-auto" size="lg">
                   <Link to="/contato">Falar com um Especialista</Link>
                 </Button>
               </div>
@@ -121,7 +151,7 @@ export default function HomePage() {
               transition={{ duration: 0.45, delay: 0.1 }}
               className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734] dark:shadow-[0_14px_40px_rgba(0,0,0,0.32)]"
             >
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="font-heading text-lg font-semibold">Dashboard de Resultados</h3>
                   <p className="text-xs text-muted-foreground">Relatorios gerenciais para decisoes estrategicas.</p>
@@ -135,9 +165,9 @@ export default function HomePage() {
                     <div key={index} className="flex-1 rounded-t-md bg-gradient-to-t from-orange-500 to-amber-300" style={{ height: `${height}%` }} />
                   ))}
                 </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <div className="mt-3 flex flex-col items-start gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                   <span>Consultoria continua + relatorios mensais</span>
-                  <Button asChild size="sm" className="h-8 rounded-full px-4 text-xs">
+                  <Button asChild size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
                     <Link to="/solucoes">Ver Demonstracao</Link>
                   </Button>
                 </div>
@@ -197,7 +227,7 @@ export default function HomePage() {
         <section id="servicos" className="py-14 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-3xl font-semibold">Nossos servicos</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos servicos</h2>
             </motion.div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {services.map((service, index) => (
@@ -209,14 +239,14 @@ export default function HomePage() {
                   transition={{ duration: 0.35, delay: index * 0.04 }}
                   className="rounded-2xl border border-border bg-card p-5"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2 text-primary">
                         <service.icon className="h-4 w-4" />
                       </div>
                       <h3 className="font-heading text-base font-semibold">{service.title}</h3>
                     </div>
-                    <Button asChild variant="outline" className="h-8 rounded-full px-3 text-xs">
+                    <Button asChild variant="outline" className="h-8 w-full rounded-full px-3 text-xs sm:w-auto">
                       <Link to="/solucoes">Saiba Mais</Link>
                     </Button>
                   </div>
@@ -230,7 +260,7 @@ export default function HomePage() {
         <section id="diferenciais" className="py-14 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-3xl font-semibold">Nossos diferenciais</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos diferenciais</h2>
             </motion.div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {differentials.map((item, index) => (
@@ -254,7 +284,7 @@ export default function HomePage() {
         <section className="py-14 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-3xl font-semibold">Como ajudamos seu negocio</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Como ajudamos seu negocio</h2>
             </motion.div>
             <div className="rounded-2xl border border-border bg-card px-4 py-6 md:px-8">
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
@@ -278,7 +308,7 @@ export default function HomePage() {
         <section id="clientes" className="py-14 md:py-16">
           <div className="container space-y-6">
             <motion.div {...fadeIn}>
-              <h2 className="font-heading text-3xl font-semibold">Depoimentos</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Depoimentos</h2>
             </motion.div>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -314,24 +344,24 @@ export default function HomePage() {
 
         <section id="contato" className="py-14 md:py-16">
           <div className="container">
-            <div className="rounded-2xl bg-primary p-6 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] md:p-10">
+            <div className="rounded-2xl bg-primary p-5 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] sm:p-6 md:p-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
                 <motion.div {...fadeIn}>
-                  <h2 className="font-heading text-3xl font-semibold leading-tight">
+                  <h2 className="font-heading text-2xl font-semibold leading-tight sm:text-3xl">
                     Pronto para crescer com organizacao e estrategia?
                   </h2>
                   <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
                     Agende uma avaliacao gratuita e descubra como a Grow pode estruturar sua contabilidade para apoiar
                     decisoes que impulsionam resultados.
                   </p>
-                  <div className="mt-6 flex flex-wrap gap-3">
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Button
                       asChild
-                      className="rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
+                      className="w-full rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] sm:w-auto dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
                     >
                       <Link to="/contato">Solicitar Avaliacao Gratuita</Link>
                     </Button>
-                    <Button asChild variant="outline" className="rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
+                    <Button asChild variant="outline" className="w-full rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] sm:w-auto dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
                       <Link to="/contato">Falar com Consultor</Link>
                     </Button>
                   </div>
@@ -344,9 +374,27 @@ export default function HomePage() {
                   className="rounded-2xl bg-white p-5 text-foreground dark:border dark:border-[#2b3861] dark:bg-[#08142f] dark:text-[#e9eeff]"
                 >
                   <div className="space-y-3">
-                    <Input placeholder="Nome completo" required className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
-                    <Input placeholder="Empresa" className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
-                    <Input type="email" placeholder="E-mail" required className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
+                    <Input
+                      placeholder="Nome completo"
+                      required
+                      value={leadForm.fullName}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                    <Input
+                      placeholder="Empresa"
+                      value={leadForm.companyName}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, companyName: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                    <Input
+                      type="email"
+                      placeholder="E-mail"
+                      required
+                      value={leadForm.email}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e seguranca dos seus dados.</p>
                   <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>

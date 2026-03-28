@@ -12,6 +12,7 @@ import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
 import SolutionsPage from "./pages/SolutionsPage";
 import ContactPage from "./pages/ContactPage";
+import NewsletterPage from "./pages/NewsletterPage";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
@@ -22,6 +23,7 @@ import TarefasPage from "./pages/TarefasPage";
 import FormulariosPage from "./pages/FormulariosPage";
 import CRMPage from "./pages/CRMPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
+import NewsletterAdminPage from "./pages/NewsletterAdminPage";
 import NotificacoesPage from "./pages/NotificacoesPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import PortalClientePage from "./pages/PortalClientePage";
@@ -47,6 +49,7 @@ const App = () => (
                 <Route path="/inicio" element={<HomePage />} />
                 <Route path="/solucoes" element={<SolutionsPage />} />
                 <Route path="/contato" element={<ContactPage />} />
+                <Route path="/newsletter" element={<NewsletterPage />} />
                 <Route path="/login" element={<LoginPage />} />
 
                 {/* App Interno - Protegido */}
@@ -59,6 +62,7 @@ const App = () => (
                 <Route path="/app/formularios" element={<ProtectedRoute><FormulariosPage /></ProtectedRoute>} />
                 <Route path="/app/documentos" element={<ProtectedRoute><Navigate to="/app/clientes" replace /></ProtectedRoute>} />
                 <Route path="/app/crm" element={<ProtectedRoute><CRMPage /></ProtectedRoute>} />
+                <Route path="/app/newsletter" element={<ProtectedRoute><NewsletterAdminPage /></ProtectedRoute>} />
                 <Route path="/app/comercial" element={<ProtectedRoute><Navigate to="/app/crm" replace /></ProtectedRoute>} />
                 <Route path="/app/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
                 <Route path="/app/notificacoes" element={<ProtectedRoute><NotificacoesPage /></ProtectedRoute>} />

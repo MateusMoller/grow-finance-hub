@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Headset,
   BookOpenText,
+  Newspaper,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -39,6 +40,7 @@ const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
   { title: "Formularios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
+  { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
 ];
 
@@ -95,7 +97,9 @@ export function AppSidebar() {
 
   const visibleOperationalItems = isDepartmentRole
     ? operationalItems.filter((item) => item.url === "/app/solicitacoes")
-    : operationalItems;
+    : role === "admin"
+      ? operationalItems
+      : operationalItems.filter((item) => item.url !== "/app/newsletter");
 
   const visibleSystemItems = isDepartmentRole
     ? systemItems.filter((item) => item.url === "/app/manual")

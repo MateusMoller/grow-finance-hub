@@ -11,6 +11,7 @@ const navLinks = [
   { label: "Servicos", to: "/#servicos" },
   { label: "Diferenciais", to: "/#diferenciais" },
   { label: "Clientes", to: "/#clientes" },
+  { label: "Newsletter", to: "/newsletter" },
   { label: "Contato", to: "/contato" },
 ];
 
@@ -34,6 +35,10 @@ export function SiteHeader() {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname, location.hash]);
+
   const isDark = resolvedTheme === "dark";
   const toggleTheme = () => {
     setTheme(isDark ? "light" : "dark");
@@ -41,10 +46,12 @@ export function SiteHeader() {
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/80 bg-white/95 backdrop-blur dark:bg-[#061330]/95">
-      <div className="container flex h-20 items-center justify-between">
-        <Link to="/" className="flex items-center gap-3">
-          <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md" />
-          <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
+      <div className="container flex h-16 items-center justify-between sm:h-20">
+        <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
+          <span className="max-w-[165px] truncate font-heading text-base font-semibold text-foreground sm:max-w-none sm:text-lg">
+            Grow Contabilidade
+          </span>
         </Link>
 
         <nav className="hidden lg:flex items-center gap-1">
@@ -87,7 +94,11 @@ export function SiteHeader() {
           </Button>
         </div>
 
-        <button className="rounded-md p-2 lg:hidden" onClick={() => setOpen((prev) => !prev)} aria-label="Abrir menu">
+        <button
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md lg:hidden"
+          onClick={() => setOpen((prev) => !prev)}
+          aria-label="Abrir menu"
+        >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
@@ -100,14 +111,14 @@ export function SiteHeader() {
             exit={{ opacity: 0, height: 0 }}
             className="border-t border-border bg-white dark:bg-[#061330] lg:hidden"
           >
-            <div className="container py-4">
+            <div className="container py-3">
               <div className="flex flex-col gap-2">
                 {navLinks.map((link) => (
                   <Link
                     key={link.to}
                     to={link.to}
                     onClick={() => setOpen(false)}
-                    className="rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted"
+                    className="rounded-lg px-3 py-2.5 text-sm text-foreground hover:bg-muted"
                   >
                     {link.label}
                   </Link>

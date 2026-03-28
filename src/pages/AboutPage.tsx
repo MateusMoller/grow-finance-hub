@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock, Eye, FileText, Heart, Shield, Target, TrendingUp, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { captureSiteLead } from "@/lib/siteLeadCapture";
 
 const metrics = [
   { value: "+12", label: "Anos de mercado", detail: "Experiencia solida em contabilidade consultiva" },
@@ -90,41 +91,70 @@ const fadeIn = {
 
 export default function AboutPage() {
   const [sending, setSending] = useState(false);
+  const [leadForm, setLeadForm] = useState({
+    fullName: "",
+    companyName: "",
+    email: "",
+  });
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const fullName = leadForm.fullName.trim();
+    const email = leadForm.email.trim();
+
+    if (!fullName || !email) {
+      toast.error("Preencha nome e e-mail para continuar.");
+      return;
+    }
+
     setSending(true);
 
-    window.setTimeout(() => {
-      setSending(false);
-      toast.success("Recebemos sua solicitacao. Vamos retornar em breve.");
-    }, 900);
+    const { error } = await captureSiteLead({
+      fullName,
+      companyName: leadForm.companyName.trim(),
+      email,
+      originPage: "about",
+    });
+
+    setSending(false);
+
+    if (error) {
+      toast.error(`Nao foi possivel enviar sua solicitacao: ${error.message}`);
+      return;
+    }
+
+    setLeadForm({
+      fullName: "",
+      companyName: "",
+      email: "",
+    });
+    toast.success("Recebemos sua solicitacao. Vamos retornar em breve.");
   };
 
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
-        <section id="institucional" className="border-b border-border/60 py-14 dark:border-[#243054] md:py-18">
-          <div className="container grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
+        <section id="institucional" className="border-b border-border/60 py-10 dark:border-[#243054] sm:py-12 md:py-16">
+          <div className="container grid gap-8 sm:gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
             <motion.div {...fadeIn} className="space-y-6">
               <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 Grow Contabilidade - Institucional
               </span>
-              <h1 className="font-heading text-4xl font-bold leading-tight md:text-5xl">
+              <h1 className="font-heading text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
                 Mais do que contabilidade, construimos estrategia para o crescimento do seu negocio
               </h1>
               <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
                 A Grow une consultoria, tecnologia e atendimento proximo para organizar sua operacao contabil e financeira.
                 Nosso foco e transformar complexidade em clareza, conformidade e crescimento sustentavel.
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   asChild
-                  className="rounded-full border border-white/35 px-5 font-semibold dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                  className="w-full rounded-full border border-white/35 px-5 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                 >
                   <Link to="/#contato">Solicitar avaliacao gratuita</Link>
                 </Button>
-                <Button asChild variant="outline" className="rounded-full px-5">
+                <Button asChild variant="outline" className="w-full rounded-full px-5 sm:w-auto">
                   <Link to="/contato">Falar com especialista</Link>
                 </Button>
               </div>
@@ -170,10 +200,10 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="py-14 md:py-16">
+        <section className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-3xl font-semibold">Quem somos</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Quem somos</h2>
               <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
                 Somos uma consultoria contabil com abordagem proativa. Atuamos lado a lado com o empresario para transformar
                 dados em decisao e decisao em resultado.
@@ -199,10 +229,10 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="servicos" className="py-14 md:py-16">
+        <section id="servicos" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-3xl font-semibold">Nossos servicos</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos servicos</h2>
             </motion.div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -224,7 +254,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="diferenciais" className="py-14 md:py-16">
+        <section id="diferenciais" className="py-12 md:py-16">
           <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
             <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
               <h2 className="font-heading text-2xl font-semibold">Diferenciais Grow</h2>
@@ -259,13 +289,13 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="clientes" className="py-14 md:py-16">
+        <section id="clientes" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-3xl font-semibold">Clientes e depoimentos</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Clientes e depoimentos</h2>
             </motion.div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
               {testimonials.map((testimonial, index) => (
                 <motion.article
                   key={testimonial.name}
@@ -286,7 +316,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="py-14 md:py-16">
+        <section className="py-12 md:py-16">
           <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
             <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
               <h2 className="font-heading text-2xl font-semibold">Perguntas frequentes</h2>
@@ -319,25 +349,25 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="contato" className="py-14 md:py-16">
+        <section id="contato" className="py-12 md:py-16">
           <div className="container">
-            <div className="rounded-2xl bg-primary p-6 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] md:p-10">
+            <div className="rounded-2xl bg-primary p-5 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] sm:p-6 md:p-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
                 <motion.div {...fadeIn}>
-                  <h2 className="font-heading text-3xl font-semibold leading-tight">
+                  <h2 className="font-heading text-2xl font-semibold leading-tight sm:text-3xl">
                     Pronto para tornar sua gestao mais clara e estrategica?
                   </h2>
                   <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
                     Fale com a Grow e receba um plano inicial para organizar processos, reduzir riscos e evoluir com previsibilidade.
                   </p>
-                  <div className="mt-6 flex flex-wrap gap-3">
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Button
                       asChild
-                      className="rounded-full border border-white/35 px-5 text-sm font-semibold dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                      className="w-full rounded-full border border-white/35 px-5 text-sm font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                     >
                       <Link to="/contato">Solicitar avaliacao gratuita</Link>
                     </Button>
-                    <Button asChild variant="outline" className="rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
+                    <Button asChild variant="outline" className="w-full rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] sm:w-auto dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
                       <Link to="/contato">Falar com consultor</Link>
                     </Button>
                   </div>
@@ -350,9 +380,27 @@ export default function AboutPage() {
                   className="rounded-2xl bg-white p-5 text-foreground dark:border dark:border-[#2b3861] dark:bg-[#08142f] dark:text-[#e9eeff]"
                 >
                   <div className="space-y-3">
-                    <Input placeholder="Nome completo" required className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
-                    <Input placeholder="Empresa" className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
-                    <Input type="email" placeholder="E-mail" required className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]" />
+                    <Input
+                      placeholder="Nome completo"
+                      required
+                      value={leadForm.fullName}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                    <Input
+                      placeholder="Empresa"
+                      value={leadForm.companyName}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, companyName: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                    <Input
+                      type="email"
+                      placeholder="E-mail"
+                      required
+                      value={leadForm.email}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e seguranca dos seus dados.</p>
                   <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>
