@@ -13,6 +13,7 @@ import {
   BookOpenText,
   Newspaper,
   MessagesSquare,
+  UserCog,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -48,6 +49,7 @@ const operationalItems = [
 
 const systemItems = [
   { title: "Notificacoes", url: "/app/notificacoes", icon: Bell },
+  { title: "Usuarios", url: "/app/usuarios", icon: UserCog },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
   { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
 ];
@@ -105,7 +107,9 @@ export function AppSidebar() {
 
   const visibleSystemItems = isDepartmentRole
     ? systemItems.filter((item) => item.url === "/app/manual")
-    : systemItems;
+    : role === "admin"
+      ? systemItems
+      : systemItems.filter((item) => item.url !== "/app/usuarios");
 
   const mainItemOrder: Record<string, number> = {
     "/app": 0,

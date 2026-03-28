@@ -920,6 +920,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      list_admin_users: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       app_role:

@@ -58,7 +58,7 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
+const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickLink[] => {
   const base = [
     { title: "Dashboard", url: "/app" },
     { title: "Kanban", url: "/app/kanban" },
@@ -71,9 +71,25 @@ const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatorios", url: "/app/relatorios" },
     { title: "Notificacoes", url: "/app/notificacoes" },
+    { title: "Usuarios", url: "/app/usuarios" },
     { title: "Configuracoes", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
   ];
+
+  if (role !== "admin") {
+    const withoutUsers = base.filter((item) => item.url !== "/app/usuarios");
+    if (!isDepartmentRole) return withoutUsers;
+
+    return withoutUsers.filter((item) =>
+      item.url === "/app/kanban" ||
+      item.url === "/app/calendario" ||
+        item.url === "/app/tarefas" ||
+        item.url === "/app/clientes" ||
+        item.url === "/app/solicitacoes" ||
+        item.url === "/app/chat-interno" ||
+        item.url === "/app/manual",
+    );
+  }
 
   if (!isDepartmentRole) return base;
 
@@ -111,7 +127,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const navigate = useNavigate();
   const isDepartmentRole = role === "departamento_pessoal" || role === "fiscal" || role === "contabil";
-  const quickLinks = useMemo(() => buildQuickLinks(isDepartmentRole), [isDepartmentRole]);
+  const quickLinks = useMemo(() => buildQuickLinks(isDepartmentRole, role), [isDepartmentRole, role]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);

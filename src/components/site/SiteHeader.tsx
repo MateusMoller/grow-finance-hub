@@ -45,7 +45,7 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/80 bg-white/95 shadow-sm backdrop-blur dark:bg-[#061330]/95">
+    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/80 bg-white shadow-sm dark:bg-[#061330]">
       <div className="container flex h-[60px] items-center justify-between sm:h-20">
         <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
           <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
@@ -76,14 +76,14 @@ export function SiteHeader() {
               type="button"
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-full border-border/80 bg-background/70"
+              className="h-9 w-9 rounded-full border-border/80 bg-background"
               onClick={toggleTheme}
               aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
             >
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           ) : (
-            <span className="h-9 w-9 rounded-full border border-border/80 bg-background/70" />
+            <span className="h-9 w-9 rounded-full border border-border/80 bg-background" />
           )}
 
           <Button asChild variant="ghost" size="sm" className="rounded-full">
@@ -95,7 +95,7 @@ export function SiteHeader() {
         </div>
 
         <button
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/80 bg-background/60 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/80 bg-background lg:hidden"
           onClick={() => setOpen((prev) => !prev)}
           aria-label="Abrir menu"
           aria-expanded={open}
@@ -109,7 +109,7 @@ export function SiteHeader() {
         <SheetContent
           id="mobile-site-menu"
           side="left"
-          className="w-[calc(100%-1rem)] max-w-sm border-r border-border bg-background/98 p-0 backdrop-blur lg:hidden"
+          className="w-[calc(100%-1rem)] max-w-sm border-r border-border bg-background p-0 lg:hidden"
         >
           <SheetHeader className="border-b border-border px-4 py-4 text-left">
             <SheetTitle className="text-base">Menu</SheetTitle>
