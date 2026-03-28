@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS public.site_leads (
+CREATE TABLE IF NOT EXISTS public.site_leads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name text NOT NULL,
   company_name text,

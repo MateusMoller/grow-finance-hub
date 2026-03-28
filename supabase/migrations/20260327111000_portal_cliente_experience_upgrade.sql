@@ -1,4 +1,4 @@
-﻿-- Portal do Cliente: pendencias rastreaveis + melhoria de comunicacao + submissoes estruturadas
+-- Portal do Cliente: pendencias rastreaveis + melhoria de comunicacao + submissoes estruturadas
 
 -- =====================================================
 -- 1) CLIENTS: permitir cliente visualizar o proprio cadastro vinculado
@@ -200,6 +200,27 @@ CREATE POLICY "Clients and internal can insert request messages"
 -- =====================================================
 -- 5) FORM SUBMISSIONS: rastreabilidade para request/client + RLS consistente
 -- =====================================================
+CREATE TABLE IF NOT EXISTS public.form_submissions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id uuid REFERENCES public.form_templates(id) ON DELETE SET NULL,
+  template_title text NOT NULL,
+  submitted_by uuid,
+  submitted_by_name text,
+  data jsonb DEFAULT '{}'::jsonb,
+  status text DEFAULT 'pending',
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.form_submissions ENABLE ROW LEVEL SECURITY;
+
+DROP TRIGGER IF EXISTS update_form_submissions_updated_at ON public.form_submissions;
+CREATE TRIGGER update_form_submissions_updated_at
+  BEFORE UPDATE ON public.form_submissions
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
 ALTER TABLE public.form_submissions
   ADD COLUMN IF NOT EXISTS client_id uuid REFERENCES public.clients(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS request_id uuid REFERENCES public.client_requests(id) ON DELETE SET NULL;
