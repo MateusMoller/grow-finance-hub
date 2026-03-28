@@ -137,6 +137,13 @@
   .shadow-glow {
     box-shadow: var(--shadow-glow);
   }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
   .glass {
     backdrop-filter: blur(12px);
     background: hsl(0 0% 100% / 0.8);

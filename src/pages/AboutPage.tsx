@@ -210,7 +210,7 @@ export default function AboutPage() {
               </p>
             </motion.div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-4">
               {values.map((value, index) => (
                 <motion.article
                   key={value.title}
@@ -218,7 +218,7 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="rounded-2xl border border-border bg-card p-5 dark:border-[#223058] dark:bg-[#0a1734]"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
                   <value.icon className="h-5 w-5 text-primary" />
                   <h3 className="mt-3 font-heading text-lg font-semibold">{value.title}</h3>
@@ -235,7 +235,7 @@ export default function AboutPage() {
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos servicos</h2>
             </motion.div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-3">
               {services.map((service, index) => (
                 <motion.article
                   key={service.title}
@@ -243,7 +243,7 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="rounded-2xl border border-border bg-card p-5 dark:border-[#223058] dark:bg-[#0a1734]"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
                   <service.icon className="h-5 w-5 text-primary" />
                   <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
@@ -295,7 +295,7 @@ export default function AboutPage() {
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Clientes e depoimentos</h2>
             </motion.div>
 
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-3">
               {testimonials.map((testimonial, index) => (
                 <motion.article
                   key={testimonial.name}
@@ -303,7 +303,7 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="rounded-2xl border border-border bg-card p-5 dark:border-[#223058] dark:bg-[#0a1734]"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
                   <p className="text-sm text-muted-foreground">"{testimonial.text}"</p>
                   <div className="mt-4">

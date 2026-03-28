@@ -78,6 +78,15 @@ export default function ContactPage() {
                 Preencha o formulario ou entre em contato diretamente. Nossa equipe responde em ate 24 horas uteis.
               </p>
 
+              <div className="mb-6 grid grid-cols-2 gap-2 md:hidden">
+                <Button asChild variant="outline" className="h-10 rounded-full">
+                  <a href="tel:+5551995325592">Ligar agora</a>
+                </Button>
+                <Button asChild className="h-10 rounded-full">
+                  <a href="mailto:contato@contabilidadegrow.com.br">Enviar e-mail</a>
+                </Button>
+              </div>
+
               <div className="space-y-6">
                 {[
                   { icon: Mail, label: "E-mail", value: "contato@contabilidadegrow.com.br" },
@@ -105,6 +114,7 @@ export default function ContactPage() {
                     <Input
                       placeholder="Seu nome"
                       required
+                      className="h-11"
                       value={contactForm.fullName}
                       onChange={(event) =>
                         setContactForm((prev) => ({ ...prev, fullName: event.target.value }))
@@ -115,6 +125,7 @@ export default function ContactPage() {
                     <label className="mb-1.5 block text-sm font-medium">Empresa</label>
                     <Input
                       placeholder="Nome da empresa"
+                      className="h-11"
                       value={contactForm.companyName}
                       onChange={(event) =>
                         setContactForm((prev) => ({ ...prev, companyName: event.target.value }))
@@ -129,6 +140,7 @@ export default function ContactPage() {
                     type="email"
                     placeholder="seu@email.com"
                     required
+                    className="h-11"
                     value={contactForm.email}
                     onChange={(event) =>
                       setContactForm((prev) => ({ ...prev, email: event.target.value }))
@@ -140,6 +152,7 @@ export default function ContactPage() {
                   <label className="mb-1.5 block text-sm font-medium">Telefone</label>
                   <Input
                     placeholder="(11) 99999-9999"
+                    className="h-11"
                     value={contactForm.phone}
                     onChange={(event) =>
                       setContactForm((prev) => ({ ...prev, phone: event.target.value }))

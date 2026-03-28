@@ -98,7 +98,7 @@ export default function NewsletterPage() {
             </div>
           ) : (
             <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
-              <aside className="grid gap-3 sm:grid-cols-2 lg:block lg:space-y-3">
+              <aside className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0 sm:snap-none sm:grid-cols-2 lg:block lg:space-y-3">
                 {newsletters.map((item, index) => {
                   const isActive = activeNewsletter?.id === item.id;
                   return (
@@ -109,7 +109,7 @@ export default function NewsletterPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.04 }}
                       onClick={() => setActiveSlug(item.slug)}
-                      className={`w-full rounded-xl border p-3.5 text-left transition sm:p-4 ${
+                      className={`min-w-[84%] snap-start rounded-xl border p-3.5 text-left transition sm:min-w-0 sm:p-4 ${
                         isActive ? "border-primary bg-primary/5" : "bg-card hover:border-primary/40"
                       }`}
                     >

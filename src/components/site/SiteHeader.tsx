@@ -45,11 +45,11 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/80 bg-white/95 backdrop-blur dark:bg-[#061330]/95">
-      <div className="container flex h-16 items-center justify-between sm:h-20">
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/80 bg-white/95 shadow-sm backdrop-blur dark:bg-[#061330]/95">
+      <div className="container flex h-[60px] items-center justify-between sm:h-20">
         <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
           <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
-          <span className="max-w-[165px] truncate font-heading text-base font-semibold text-foreground sm:max-w-none sm:text-lg">
+          <span className="max-w-[165px] truncate font-heading text-[15px] font-semibold text-foreground sm:max-w-none sm:text-lg">
             Grow Contabilidade
           </span>
         </Link>
@@ -95,7 +95,7 @@ export function SiteHeader() {
         </div>
 
         <button
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/80 bg-background/60 lg:hidden"
           onClick={() => setOpen((prev) => !prev)}
           aria-label="Abrir menu"
         >
@@ -106,19 +106,35 @@ export function SiteHeader() {
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="border-t border-border bg-white dark:bg-[#061330] lg:hidden"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="fixed inset-x-0 top-[60px] bottom-0 z-50 overflow-y-auto border-t border-border bg-background/98 backdrop-blur sm:top-20 lg:hidden"
           >
-            <div className="container py-3">
+            <div className="container py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+              <div className="mb-4 rounded-xl border bg-card p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso rapido</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Link to="/#contato" className="rounded-lg border bg-background px-3 py-2 text-xs font-medium text-foreground">
+                    Agendar avaliacao
+                  </Link>
+                  <Link to="/newsletter" className="rounded-lg border bg-background px-3 py-2 text-xs font-medium text-foreground">
+                    Ver newsletter
+                  </Link>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-2">
                 {navLinks.map((link) => (
                   <Link
                     key={link.to}
                     to={link.to}
                     onClick={() => setOpen(false)}
-                    className="rounded-lg px-3 py-2.5 text-sm text-foreground hover:bg-muted"
+                    className={`rounded-lg px-3 py-3 text-sm font-medium transition-colors ${
+                      isNavActive(location.pathname, location.hash, link.to)
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground hover:bg-muted"
+                    }`}
                   >
                     {link.label}
                   </Link>

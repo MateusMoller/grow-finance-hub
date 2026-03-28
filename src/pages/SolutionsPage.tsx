@@ -66,7 +66,7 @@ export default function SolutionsPage() {
             </p>
           </motion.div>
 
-          <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+          <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-5 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
             {solutions.map((solution, index) => (
               <motion.div
                 key={solution.title}
@@ -74,7 +74,7 @@ export default function SolutionsPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.08 }}
-                className="group flex flex-col rounded-2xl border bg-card p-5 transition-all duration-300 hover:border-primary/20 hover:shadow-lg sm:p-6"
+                className="group min-w-[84%] snap-start flex flex-col rounded-2xl border bg-card p-5 transition-all duration-300 hover:border-primary/20 hover:shadow-lg sm:min-w-[72%] sm:p-6 md:min-w-0"
               >
                 <div className="mb-4 h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center transition-colors group-hover:bg-primary/20">
                   <solution.icon className="h-6 w-6 text-primary" />

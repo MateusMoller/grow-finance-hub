@@ -224,12 +224,12 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="servicos" className="py-14 md:py-16">
+        <section id="servicos" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos servicos</h2>
             </motion.div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-3">
               {services.map((service, index) => (
                 <motion.article
                   key={service.title}
@@ -237,7 +237,7 @@ export default function HomePage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.15 }}
                   transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="rounded-2xl border border-border bg-card p-5"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -257,12 +257,12 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="diferenciais" className="py-14 md:py-16">
+        <section id="diferenciais" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos diferenciais</h2>
             </motion.div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-3">
               {differentials.map((item, index) => (
                 <motion.article
                   key={item.title}
@@ -270,7 +270,7 @@ export default function HomePage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.15 }}
                   transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="rounded-2xl border border-border bg-card p-5"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0"
                 >
                   <item.icon className="h-4 w-4 text-primary" />
                   <h3 className="mt-3 font-heading text-base font-semibold">{item.title}</h3>
@@ -281,7 +281,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-14 md:py-16">
+        <section className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Como ajudamos seu negocio</h2>
@@ -305,13 +305,13 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="clientes" className="py-14 md:py-16">
+        <section id="clientes" className="py-12 md:py-16">
           <div className="container space-y-6">
             <motion.div {...fadeIn}>
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Depoimentos</h2>
             </motion.div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-3">
               {testimonials.map((testimonial, index) => (
                 <motion.article
                   key={testimonial.name}
@@ -319,7 +319,7 @@ export default function HomePage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.15 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="rounded-2xl border border-border bg-card p-5"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0"
                 >
                   <p className="text-sm leading-relaxed text-muted-foreground">"{testimonial.text}"</p>
                   <div className="mt-4">
@@ -331,9 +331,9 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-4">
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <div className="hide-scrollbar mx-[-0.25rem] flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0 sm:grid-cols-3 lg:grid-cols-5">
                 {partners.map((partner) => (
-                  <div key={partner} className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-center text-xs font-medium text-muted-foreground">
+                  <div key={partner} className="whitespace-nowrap rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-center text-xs font-medium text-muted-foreground">
                     {partner}
                   </div>
                 ))}

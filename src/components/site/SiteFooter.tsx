@@ -37,7 +37,7 @@ export function SiteFooter() {
   };
 
   return (
-    <footer className="border-t border-border bg-[#efeff2] dark:bg-[#031029]">
+    <footer className="border-t border-border bg-[#efeff2] pb-16 dark:bg-[#031029] md:pb-0">
       <div className="container py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-3 lg:col-span-2">
