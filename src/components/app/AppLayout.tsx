@@ -68,6 +68,8 @@ const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
     { title: "Formularios", url: "/app/formularios" },
     { title: "CRM", url: "/app/crm" },
+    { title: "Chat Interno", url: "/app/chat-interno" },
+    { title: "Caixa de Entrada", url: "/app/caixa-entrada" },
     { title: "Relatorios", url: "/app/relatorios" },
     { title: "Notificacoes", url: "/app/notificacoes" },
     { title: "Configuracoes", url: "/app/configuracoes" },
@@ -79,10 +81,11 @@ const buildQuickLinks = (isDepartmentRole: boolean): QuickLink[] => {
   return base.filter((item) =>
     item.url === "/app/kanban" ||
     item.url === "/app/calendario" ||
-    item.url === "/app/tarefas" ||
-    item.url === "/app/clientes" ||
-    item.url === "/app/solicitacoes" ||
-    item.url === "/app/manual",
+      item.url === "/app/tarefas" ||
+      item.url === "/app/clientes" ||
+      item.url === "/app/solicitacoes" ||
+      item.url === "/app/chat-interno" ||
+      item.url === "/app/manual",
   );
 };
 

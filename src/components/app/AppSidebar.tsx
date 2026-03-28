@@ -12,6 +12,8 @@ import {
   Headset,
   BookOpenText,
   Newspaper,
+  Inbox,
+  MessagesSquare,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -40,6 +42,8 @@ const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
   { title: "Formularios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
+  { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
+  { title: "Caixa de Entrada", url: "/app/caixa-entrada", icon: Inbox },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
 ];
@@ -96,7 +100,7 @@ export function AppSidebar() {
     : mainItems;
 
   const visibleOperationalItems = isDepartmentRole
-    ? operationalItems.filter((item) => item.url === "/app/solicitacoes")
+    ? operationalItems.filter((item) => item.url === "/app/solicitacoes" || item.url === "/app/chat-interno")
     : role === "admin"
       ? operationalItems
       : operationalItems.filter((item) => item.url !== "/app/newsletter");

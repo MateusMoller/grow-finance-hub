@@ -623,6 +623,78 @@ export type Database = {
           },
         ]
       }
+      email_inbox_messages: {
+        Row: {
+          created_at: string
+          from_email: string
+          html_content: string | null
+          id: string
+          preview: string | null
+          provider: string
+          provider_message_id: string | null
+          read_at: string | null
+          received_at: string
+          source_payload: Json | null
+          subject: string
+          text_content: string | null
+          to_email: string
+        }
+        Insert: {
+          created_at?: string
+          from_email: string
+          html_content?: string | null
+          id?: string
+          preview?: string | null
+          provider?: string
+          provider_message_id?: string | null
+          read_at?: string | null
+          received_at?: string
+          source_payload?: Json | null
+          subject?: string
+          text_content?: string | null
+          to_email: string
+        }
+        Update: {
+          created_at?: string
+          from_email?: string
+          html_content?: string | null
+          id?: string
+          preview?: string | null
+          provider?: string
+          provider_message_id?: string | null
+          read_at?: string | null
+          received_at?: string
+          source_payload?: Json | null
+          subject?: string
+          text_content?: string | null
+          to_email?: string
+        }
+        Relationships: []
+      }
+      internal_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

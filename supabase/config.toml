@@ -8,3 +8,6 @@ verify_jwt = true
 
 [functions.send-newsletter-broadcast]
 verify_jwt = true
+
+[functions.email-inbox-webhook]
+verify_jwt = false

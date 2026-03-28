@@ -38,7 +38,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 pt-16 pb-20 sm:pt-20 md:pb-0">{children}</main>
       <SiteFooter />
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border/80 bg-background/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 backdrop-blur md:hidden">
         <div
           className="grid grid-cols-4 px-2 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] pt-1"
           style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.25rem)" }}
