@@ -70,7 +70,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
 
         <div className="space-y-6 pb-6">
           {/* Info */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground">CNPJ</span>
               <span className="text-sm font-medium block">{client.cnpj}</span>
@@ -149,7 +149,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
           <Separator />
 
           {/* Quick actions */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button variant="outline" size="sm" className="gap-1"><FileText className="h-3.5 w-3.5" /> Documentos</Button>
             <Button variant="outline" size="sm" className="gap-1"><ExternalLink className="h-3.5 w-3.5" /> Tarefas</Button>
           </div>

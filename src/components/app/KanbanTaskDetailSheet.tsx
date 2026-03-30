@@ -223,7 +223,7 @@ export function KanbanTaskDetailSheet({
         </SheetHeader>
 
         <div className="space-y-6 pb-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Building2 className="h-3 w-3" /> Cliente
@@ -257,7 +257,7 @@ export function KanbanTaskDetailSheet({
           <Separator />
 
           <Tabs defaultValue="informacoes" className="space-y-4">
-            <TabsList className="grid grid-cols-3 w-full">
+            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
               <TabsTrigger value="informacoes">Informacoes</TabsTrigger>
               <TabsTrigger value="solicitacao">Solicitacao</TabsTrigger>
               <TabsTrigger value="historico">Historico</TabsTrigger>
@@ -281,7 +281,7 @@ export function KanbanTaskDetailSheet({
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Prioridade</Label>
                   <Select value={form.priority} onValueChange={(value) => setForm((prev) => ({ ...prev, priority: value }))}>
@@ -303,7 +303,7 @@ export function KanbanTaskDetailSheet({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Cliente</Label>
                   <Input value={form.client_name} onChange={(event) => setForm((prev) => ({ ...prev, client_name: event.target.value }))} />

@@ -91,7 +91,7 @@ export default function ContactPage() {
                 {[
                   { icon: Mail, label: "E-mail", value: "contato@contabilidadegrow.com.br" },
                   { icon: Phone, label: "Telefone", value: "(51) 99532-5592" },
-                  { icon: MapPin, label: "Endereco", value: "Rua Julio de Castilhos, 2579 - Sl 205 - Centro, Taquara - RS" },
+                  { icon: MapPin, label: "Endereco", value: "Rua Julio de Castilhos, 2579 - Sl 212 - Centro, Taquara - RS" },
                 ].map((item) => (
                   <div key={item.label} className="flex items-start gap-4">
                     <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">

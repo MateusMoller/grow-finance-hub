@@ -538,7 +538,7 @@ export default function TarefasPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { label: "Total", value: scopedTasks.length, color: "text-foreground" },
             { label: "Pendentes", value: scopedTasks.filter((t) => t.status === "Pendente").length, color: "text-muted-foreground" },
@@ -554,7 +554,7 @@ export default function TarefasPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 flex-1 min-w-[200px] max-w-sm">
+          <div className="flex w-full items-center gap-2 rounded-lg border bg-card px-3 py-2 sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
               className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
@@ -719,7 +719,7 @@ export default function TarefasPage() {
                 <p className="text-xs text-muted-foreground">Nenhuma subtarefa adicionada.</p>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Cliente</Label>
                 <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
@@ -776,7 +776,7 @@ export default function TarefasPage() {
                 <Input placeholder="Nome" value={newTask.assignee} onChange={(event) => setNewTask((prev) => ({ ...prev, assignee: event.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Setor</Label>
                 <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={(event) => setNewTask((prev) => ({ ...prev, sector: event.target.value }))}>

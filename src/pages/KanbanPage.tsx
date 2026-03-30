@@ -427,7 +427,7 @@ export default function KanbanPage() {
             {columns.map((column) => {
               const columnTasks = getColumnTasks(column.id);
               return (
-                <div key={column.id} className="min-w-[280px] w-[280px] shrink-0">
+                <div key={column.id} className="min-w-[calc(100vw-2.75rem)] w-[calc(100vw-2.75rem)] shrink-0 sm:min-w-[280px] sm:w-[280px]">
                   <div className="flex items-center gap-2 mb-3">
                     <div className={`h-2 w-2 rounded-full ${column.color}`} />
                     <span className="text-sm font-semibold">{column.label}</span>
@@ -530,7 +530,7 @@ export default function KanbanPage() {
                 <p className="text-xs text-muted-foreground">Nenhuma subtarefa adicionada.</p>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Cliente</Label>
                 <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
@@ -587,7 +587,7 @@ export default function KanbanPage() {
                 <Input placeholder="Nome" value={newTask.assignee} onChange={(e) => setNewTask((prev) => ({ ...prev, assignee: e.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Setor</Label>
                 <Select value={newTask.sector} onValueChange={(value) => setNewTask((prev) => ({ ...prev, sector: value }))}>

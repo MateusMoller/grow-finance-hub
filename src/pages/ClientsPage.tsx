@@ -243,7 +243,7 @@ export default function ClientsPage() {
             <DialogTitle>Novo Cliente</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Razao Social *</Label>
                 <Input placeholder="Nome da empresa" value={newClient.name} onChange={(event) => setNewClient((prev) => ({ ...prev, name: event.target.value }))} />
@@ -253,7 +253,7 @@ export default function ClientsPage() {
                 <Input placeholder="00.000.000/0001-00" value={newClient.cnpj} onChange={(event) => setNewClient((prev) => ({ ...prev, cnpj: event.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Regime Tributario</Label>
                 <select className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none" value={newClient.regime} onChange={(event) => setNewClient((prev) => ({ ...prev, regime: event.target.value }))}>
@@ -271,7 +271,7 @@ export default function ClientsPage() {
               <Label>Contato Principal</Label>
               <Input placeholder="Nome do contato" value={newClient.contact} onChange={(event) => setNewClient((prev) => ({ ...prev, contact: event.target.value }))} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>E-mail do Portal *</Label>
                 <Input type="email" placeholder="email@empresa.com" value={newClient.email} onChange={(event) => setNewClient((prev) => ({ ...prev, email: event.target.value }))} />

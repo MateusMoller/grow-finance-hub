@@ -99,7 +99,7 @@ export function TaskDetailSheet({
         </SheetHeader>
 
         <div className="space-y-6 pb-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Cliente</span>
               <span className="text-sm font-medium">{task.client || "Sem cliente"}</span>

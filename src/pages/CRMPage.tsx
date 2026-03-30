@@ -829,7 +829,7 @@ export default function CRMPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {salesMetrics.map((metric, index) => (
                 <motion.div
                   key={metric.label}
@@ -1094,7 +1094,7 @@ export default function CRMPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2 col-span-2 sm:col-span-1">
                 <Label>Empresa *</Label>
                 <Input
@@ -1113,7 +1113,7 @@ export default function CRMPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2 col-span-2 sm:col-span-1">
                 <Label>Contato</Label>
                 <Input
@@ -1140,7 +1140,7 @@ export default function CRMPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2 col-span-2 sm:col-span-1">
                 <Label>E-mail</Label>
                 <Input
@@ -1160,7 +1160,7 @@ export default function CRMPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2 col-span-2 sm:col-span-1">
                 <Label>Origem</Label>
                 <Input

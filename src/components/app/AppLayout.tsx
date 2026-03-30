@@ -292,7 +292,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
                     <span>Notificacoes</span>
                     <span className="text-xs text-muted-foreground">{unreadCount} nao lidas</span>
@@ -359,7 +359,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <span className="text-xs font-semibold">{userInitials}</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-[min(14rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="truncate">{user?.email || "Usuario"}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
@@ -383,17 +383,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto p-4 md:p-6 pb-24 md:pb-6 bg-muted/20">{children}</main>
+          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
+            {children}
+          </main>
 
-          <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-16 md:mb-0">
+          <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
             Grow Finance Hub - Area interna
           </footer>
 
           <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
-            <div className="grid grid-cols-3">
+            <div
+              className="grid grid-cols-3 px-1 pb-[calc(env(safe-area-inset-bottom)+0.125rem)]"
+              style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.125rem)" }}
+            >
               <button
                 type="button"
-                className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px]"
                 onClick={() => setSearchOpen(true)}
               >
                 <Search className="h-4 w-4" />
@@ -401,7 +406,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
               <button
                 type="button"
-                className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px]"
                 onClick={() => setMobileFiltersOpen(true)}
               >
                 <Filter className="h-4 w-4" />
@@ -409,7 +414,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
               <button
                 type="button"
-                className="flex flex-col items-center justify-center gap-1 py-2.5 text-xs text-primary font-semibold"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] text-primary font-semibold"
                 onClick={() => navigate("/app/tarefas?create=1")}
               >
                 <PlusCircle className="h-4 w-4" />
@@ -421,7 +426,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </div>
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85svh]">
           <DialogHeader>
             <DialogTitle>Busca rapida</DialogTitle>
           </DialogHeader>
@@ -455,7 +460,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </Dialog>
 
       <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl">
+        <SheetContent side="bottom" className="rounded-t-2xl px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           <SheetHeader>
             <SheetTitle>Filtros globais</SheetTitle>
           </SheetHeader>

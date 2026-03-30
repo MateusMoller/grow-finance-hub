@@ -55,7 +55,7 @@ const systemItems = [
 ];
 
 function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
 
   return (
@@ -69,6 +69,9 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
                 <NavLink
                   to={item.url}
                   end={item.url === "/app"}
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false);
+                  }}
                   className="hover:bg-sidebar-accent/50"
                   activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                 >
@@ -125,7 +128,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent>
+      <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         <div className="p-4 flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />

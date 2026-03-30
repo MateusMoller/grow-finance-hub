@@ -407,7 +407,7 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
             <TabsTrigger value="contabilidade">Contabilidade</TabsTrigger>
             <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
