@@ -28,38 +28,38 @@ export function ClientPortalOverview({
   onOpenSupport,
 }: ClientPortalOverviewProps) {
   return (
-    <div className="space-y-4">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
+    <div className="space-y-5">
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-xl">Ola, {clientName}</CardTitle>
-          <CardDescription className="text-sm">
-            Veja o que esta pendente e acompanhe o que a Grow esta fazendo por voce.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="space-y-1">
+              <CardTitle className="text-xl">Ola, {clientName}</CardTitle>
+              <CardDescription className="text-sm">
+                Aqui voce acompanha solicitacoes, documentos e pendencias em um fluxo unico.
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              Resumo de {monthLabel}
+            </Badge>
+          </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant="outline" className="border-primary/30 text-primary">
-            Resumo de {monthLabel}
-          </Badge>
-          <span>Tudo em um so lugar, sem burocracia.</span>
+        <CardContent className="pt-0">
+          <ClientPortalQuickActions
+            onNewRequest={onNewRequest}
+            onUploadDocument={onUploadDocument}
+            onOpenForms={onOpenForms}
+            onOpenSupport={onOpenSupport}
+          />
         </CardContent>
       </Card>
 
-      <ClientPortalQuickActions
-        onNewRequest={onNewRequest}
-        onUploadDocument={onUploadDocument}
-        onOpenForms={onOpenForms}
-        onOpenSupport={onOpenSupport}
-      />
-
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         {metrics.map((metric) => (
-          <Card key={metric.label}>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{metric.label}</p>
-              <p className="text-2xl font-semibold mt-1">{metric.value}</p>
-              <p className="text-[11px] text-muted-foreground mt-1">{metric.helper}</p>
-            </CardContent>
-          </Card>
+          <div key={metric.label} className="rounded-xl border bg-card p-4">
+            <p className="text-xs text-muted-foreground">{metric.label}</p>
+            <p className="text-2xl font-semibold mt-1">{metric.value}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{metric.helper}</p>
+          </div>
         ))}
       </div>
 
@@ -67,17 +67,18 @@ export function ClientPortalOverview({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-amber-600" />O que precisamos de voce agora
+              <Clock3 className="h-4 w-4 text-amber-600" />
+              O que precisa da sua acao
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-1">
             {pendingNow.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Tudo certo por enquanto. Assim que houver nova pendencia, ela aparece aqui.
               </p>
             ) : (
               pendingNow.map((item) => (
-                <div key={item.id} className="rounded-lg border p-3">
+                <div key={item.id} className="rounded-lg border bg-background px-3 py-2.5">
                   <p className="text-sm font-medium">{item.title}</p>
                   {item.description && <p className="text-xs text-muted-foreground mt-1">{item.description}</p>}
                   <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -102,17 +103,17 @@ export function ClientPortalOverview({
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              Ultimas atualizacoes da Grow
+              Atualizacoes recentes
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-1">
             {recentUpdates.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Ainda nao temos atualizacoes recentes. Voce recebera novidades por aqui.
               </p>
             ) : (
               recentUpdates.map((item) => (
-                <div key={item.id} className="rounded-lg border p-3">
+                <div key={item.id} className="rounded-lg border bg-background px-3 py-2.5">
                   <p className="text-sm font-medium">{item.title}</p>
                   {item.description && <p className="text-xs text-muted-foreground mt-1">{item.description}</p>}
                   <div className="flex items-center justify-between mt-2">

@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Clock, FolderOpen, Loader2, MessageSquare, ShieldCheck } from "lucide-react";
 import type { PortalActionItem } from "@/components/portal/types";
 
@@ -30,10 +29,10 @@ export function ClientPortalPendingList({ loading, groups }: ClientPortalPending
       {groups.map((group) => {
         const Icon = iconMap[group.icon];
         return (
-          <Card key={group.key}>
+          <Card key={group.key} className="overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Icon className={`h-4 w-4 ${group.icon === "analysis" ? "animate-pulse" : ""}`} />
+                <Icon className={`h-4 w-4 ${group.icon === "analysis" ? "animate-spin" : ""}`} />
                 {group.title}
               </CardTitle>
             </CardHeader>
@@ -43,8 +42,8 @@ export function ClientPortalPendingList({ loading, groups }: ClientPortalPending
               ) : group.items.length === 0 ? (
                 <div className="text-sm text-muted-foreground">{group.emptyText}</div>
               ) : (
-                group.items.map((item, index) => (
-                  <div key={`${item.id}-${index}`}>
+                group.items.map((item) => (
+                  <div key={item.id} className="rounded-lg border bg-background px-3 py-2.5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{item.title}</p>
@@ -66,7 +65,6 @@ export function ClientPortalPendingList({ loading, groups }: ClientPortalPending
                         )}
                       </div>
                     </div>
-                    {index < group.items.length - 1 && <Separator className="mt-3" />}
                   </div>
                 ))
               )}

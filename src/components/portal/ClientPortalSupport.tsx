@@ -57,18 +57,15 @@ export function ClientPortalSupport({
     <div className="space-y-4">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Atendimento Grow</CardTitle>
+          <CardTitle className="text-base">Falar com a equipe</CardTitle>
           <CardDescription>
-            Use este espaco para conversar com nossa equipe com clareza e acompanhamento.
+            Abra uma nova conversa por setor e acompanhe tudo em um unico historico.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Sua mensagem sera direcionada ao setor responsavel. Voce acompanha respostas e atualizacoes sem sair do portal.
-          </p>
-          <div className="flex flex-wrap gap-2">
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             {sectors.map((sector) => (
-              <Button key={sector} variant="outline" size="sm" onClick={() => onOpenRequestWithSector(sector)}>
+              <Button key={sector} variant="outline" size="sm" className="justify-start bg-card" onClick={() => onOpenRequestWithSector(sector)}>
                 {sector}
               </Button>
             ))}
@@ -77,11 +74,11 @@ export function ClientPortalSupport({
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-[330px_minmax(0,1fr)] gap-4">
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-3 border-b bg-muted/20">
             <CardTitle className="text-base">Conversas ativas</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="p-3 space-y-2 max-h-[560px] overflow-y-auto">
             {conversationRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Ainda nao ha conversas iniciadas. Abra uma solicitacao para comecar.
@@ -97,8 +94,8 @@ export function ClientPortalSupport({
                     type="button"
                     key={request.id}
                     onClick={() => onSelectRequest(request.id)}
-                    className={`w-full text-left rounded-lg border p-3 transition-colors ${
-                      isActive ? "border-primary bg-primary/5" : "hover:bg-muted/40"
+                    className={`w-full text-left rounded-lg border bg-background px-3 py-2.5 transition-colors ${
+                      isActive ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "hover:bg-muted/40"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -118,14 +115,14 @@ export function ClientPortalSupport({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2 border-b bg-muted/20">
             <CardTitle className="text-base flex items-center gap-2">
               <Headset className="h-4 w-4" />
               {activeRequest ? activeRequest.title : "Selecione uma conversa"}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4">
             {activeRequest ? (
               <RequestChat requestId={activeRequest.id} isTeamMember={false} />
             ) : (

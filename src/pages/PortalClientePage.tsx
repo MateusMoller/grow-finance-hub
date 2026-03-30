@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   Clock,
   Download,
@@ -21,6 +22,7 @@ import { RequestChat } from "@/components/app/RequestChat";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { ClientPortalPendingList } from "@/components/portal/ClientPortalPendingList";
 import { ClientPortalSupport } from "@/components/portal/ClientPortalSupport";
+import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
 import {
   documentCategories,
   parsePortalFields,
@@ -53,12 +55,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import growIcon from "@/assets/grow-icon.png";
 
 const statusConfig: Record<RequestStatus, RequestStatusMeta> = {
   pending: {
@@ -82,8 +84,6 @@ const statusConfig: Record<RequestStatus, RequestStatusMeta> = {
     className: "bg-destructive/10 text-destructive",
   },
 };
-
-type PortalTab = "overview" | "pending" | "requests" | "documents" | "forms" | "support";
 
 const getMonthKey = (dateString: string) => {
   const date = new Date(dateString);
@@ -761,54 +761,58 @@ export default function PortalClientePage() {
     );
   }
   return (
-    <div className="min-h-screen bg-muted/20">
-      <header className="bg-card border-b sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
-              <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
-            </div>
-            <div>
-              <span className="font-semibold text-sm">Portal do Cliente Grow</span>
-              <span className="text-xs text-muted-foreground block -mt-0.5">Central de atendimento e pendências</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground hidden sm:inline">{user.email}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                void signOut();
-                navigate("/login");
-              }}
-            >
-              Sair
-            </Button>
-          </div>
-        </div>
-      </header>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full">
+        <PortalClienteSidebar activeTab={activeTab} onChangeTab={setActiveTab} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <TabsList className="flex flex-wrap h-auto">
-              <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-              <TabsTrigger value="pending">Pendências</TabsTrigger>
-              <TabsTrigger value="requests">Solicitações</TabsTrigger>
-              <TabsTrigger value="documents">Documentos</TabsTrigger>
-              <TabsTrigger value="forms">Formulários</TabsTrigger>
-              <TabsTrigger value="support">Atendimento</TabsTrigger>
-            </TabsList>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" className="gap-1.5" onClick={() => openNewRequestDialog()}>
-                <MessageSquare className="h-4 w-4" /> Nova solicitação
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setUploadDialogOpen(true)}>
-                <Upload className="h-4 w-4" /> Enviar documentos
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <SidebarTrigger />
+              <div className="min-w-0">
+                <p className="font-semibold text-sm">Portal do Cliente</p>
+                <p className="text-xs text-muted-foreground">Solicitacoes, documentos e atendimento</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground hidden sm:inline">{user.email}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  void signOut();
+                  navigate("/login");
+                }}
+              >
+                Sair
               </Button>
             </div>
-          </div>
+          </header>
+
+          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6">
+            <div className="w-full max-w-7xl mx-auto space-y-5">
+              <div className="rounded-xl border bg-card p-4 sm:p-5">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="space-y-1">
+                    <h1 className="text-lg font-semibold">
+                      {clientProfile?.name || clientProfile?.contact || "Area do cliente"}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      Acompanhe tudo em um fluxo simples: abrir solicitacao, enviar documentos e conversar com a equipe.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" className="gap-1.5" onClick={() => openNewRequestDialog()}>
+                      <MessageSquare className="h-4 w-4" /> Nova solicitação
+                    </Button>
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setUploadDialogOpen(true)}>
+                      <Upload className="h-4 w-4" /> Enviar documentos
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
 
           <TabsContent value="overview" className="space-y-4">
             <ClientPortalOverview
@@ -829,7 +833,7 @@ export default function PortalClientePage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Pendências do cliente</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Aqui você acompanha o que está aguardando sua ação, o que está em análise e o que já foi concluído.
+                  Visualize o que depende da sua acao, o que esta em analise e o que ja foi concluido.
                 </p>
               </CardHeader>
             </Card>
@@ -838,8 +842,11 @@ export default function PortalClientePage() {
 
           <TabsContent value="requests" className="space-y-4">
             <Card>
-              <CardContent className="p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
-                <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Solicitações</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
+                <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <input
                     className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
@@ -849,7 +856,7 @@ export default function PortalClientePage() {
                   />
                 </div>
                 <Select value={requestStatusFilter} onValueChange={setRequestStatusFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background">
                     <Filter className="h-4 w-4 mr-1" />
                     <SelectValue />
                   </SelectTrigger>
@@ -890,28 +897,31 @@ export default function PortalClientePage() {
                     <button
                       type="button"
                       key={request.id}
-                      className="w-full text-left rounded-xl border bg-card p-4 hover:shadow-md transition-shadow"
+                      className="w-full text-left rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-muted/30"
                       onClick={() => {
                         setSelectedRequest(request);
                         setRequestDetailOpen(true);
                       }}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium">{request.title}</p>
-                        <Badge variant="outline" className={`border-0 ${statusMeta.className}`}>
-                          <StatusIcon className="h-3 w-3 mr-1" /> {statusMeta.label}
-                        </Badge>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium line-clamp-1">{request.title}</p>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
+                            <span>{request.category}</span>
+                            <span>•</span>
+                            <span>{request.sector}</span>
+                            <span>•</span>
+                            <span>Atualizada em {new Date(request.updated_at).toLocaleDateString("pt-BR")}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge variant="outline" className={`border-0 ${statusMeta.className}`}>
+                            <StatusIcon className="h-3 w-3 mr-1" /> {statusMeta.label}
+                          </Badge>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-2">
-                        <span>{request.category}</span>
-                        <span>•</span>
-                        <span>{request.sector}</span>
-                        <span>•</span>
-                        <span>Aberta em {new Date(request.created_at).toLocaleDateString("pt-BR")}</span>
-                        <span>•</span>
-                        <span>Atualizada em {new Date(request.updated_at).toLocaleDateString("pt-BR")}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-2 mt-3">
                         <Badge variant="secondary" className="text-[10px]">
                           {requestDocs.length} documento(s) vinculado(s)
                         </Badge>
@@ -928,12 +938,14 @@ export default function PortalClientePage() {
           <TabsContent value="documents" className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Central de documentos</CardTitle>
-                <p className="text-sm text-muted-foreground">Envie seus documentos de forma rápida e organizada.</p>
+                <CardTitle className="text-base">Documentos</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Envie arquivos, acompanhe o processamento e baixe sempre que precisar.
+                </p>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <Select value={documentCategoryFilter} onValueChange={setDocumentCategoryFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background">
                     <SelectValue placeholder="Categoria" />
                   </SelectTrigger>
                   <SelectContent>
@@ -945,7 +957,12 @@ export default function PortalClientePage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input type="month" value={documentMonthFilter} onChange={(event) => setDocumentMonthFilter(event.target.value)} />
+                <Input
+                  className="bg-background"
+                  type="month"
+                  value={documentMonthFilter}
+                  onChange={(event) => setDocumentMonthFilter(event.target.value)}
+                />
                 <Button variant="outline" className="gap-2" onClick={() => setUploadDialogOpen(true)}>
                   <Upload className="h-4 w-4" /> Novo envio
                 </Button>
@@ -1052,7 +1069,7 @@ export default function PortalClientePage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Formulários do portal</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Preencha e envie. O conteúdo estruturado vai para o time interno junto da solicitação.
+                  Preencha e envie. O conteúdo vai para o time interno junto da solicitação.
                 </p>
               </CardHeader>
             </Card>
@@ -1148,7 +1165,7 @@ export default function PortalClientePage() {
                   <button
                     type="button"
                     key={template.id}
-                    className="text-left rounded-xl border bg-card p-4 hover:shadow-md transition-shadow"
+                    className="text-left rounded-xl border bg-card p-4 transition-colors hover:bg-muted/30"
                     onClick={() => openFormTemplate(template)}
                   >
                     <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-3">
@@ -1180,8 +1197,11 @@ export default function PortalClientePage() {
               onSelectRequest={setSelectedSupportRequestId}
             />
           </TabsContent>
-        </Tabs>
-      </main>
+              </Tabs>
+            </div>
+          </main>
+        </div>
+      </div>
 
       <Dialog
         open={newRequestOpen}
@@ -1508,6 +1528,6 @@ export default function PortalClientePage() {
           })()}
         </SheetContent>
       </Sheet>
-    </div>
+    </SidebarProvider>
   );
 }
