@@ -1180,6 +1180,166 @@ export default function PortalClientePage() {
             )}
           </TabsContent>
 
+          <TabsContent value="manual" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Manual do usuário</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Passo a passo rápido para usar o portal no dia a dia.
+                </p>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="rounded-lg border bg-card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">1. Abra uma solicitação</p>
+                      <p className="text-sm text-muted-foreground">
+                        Use a aba de solicitações para enviar demandas com título, descrição e setor responsável.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("requests")}>
+                      Ir para solicitações
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">2. Envie documentos</p>
+                      <p className="text-sm text-muted-foreground">
+                        Na aba de documentos, faça upload dos arquivos do mês e acompanhe o status de processamento.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("documents")}>
+                      Ir para documentos
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">3. Preencha formulários quando solicitado</p>
+                      <p className="text-sm text-muted-foreground">
+                        Os formulários publicados pela equipe ficam centralizados para envio rápido e organizado.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("forms")}>
+                      Ir para formulários
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">4. Converse com a equipe</p>
+                      <p className="text-sm text-muted-foreground">
+                        Use o atendimento para tirar dúvidas e registrar assuntos que precisam de acompanhamento.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("support")}>
+                      Ir para atendimento
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Dicas rápidas</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2 text-sm text-muted-foreground">
+                <p>• Mantenha títulos objetivos nas solicitações para facilitar o retorno da equipe.</p>
+                <p>• Sempre que possível, vincule documentos a uma solicitação específica.</p>
+                <p>• A aba Pendências mostra o que está aguardando sua ação imediata.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Configurações do portal</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Gerencie seus dados e acione a equipe quando precisar de alterações de acesso.
+                </p>
+              </CardHeader>
+            </Card>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Dados da conta</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-3">
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="text-xs text-muted-foreground">Nome</p>
+                    <p className="text-sm font-medium">{clientProfile?.name || clientProfile?.contact || "Não informado"}</p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="text-xs text-muted-foreground">Contato</p>
+                    <p className="text-sm font-medium">{clientProfile?.contact || "Não informado"}</p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="text-xs text-muted-foreground">Email de acesso</p>
+                    <p className="text-sm font-medium">{clientProfile?.email || user?.email || "Não informado"}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      openNewRequestDialog({
+                        sector: "Geral",
+                        title: "Atualização de dados cadastrais",
+                        description: "Preciso atualizar meus dados no portal do cliente.",
+                      })
+                    }
+                  >
+                    Solicitar atualização cadastral
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Acesso e segurança</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-3">
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="text-sm font-medium">Troca de senha</p>
+                    <p className="text-sm text-muted-foreground">
+                      Se precisar redefinir a senha do portal, abra uma solicitação para o time responsável.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="text-sm font-medium">Controle de acesso</p>
+                    <p className="text-sm text-muted-foreground">
+                      Alterações de usuários e permissões são feitas pela equipe para garantir segurança no processo.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      openNewRequestDialog({
+                        sector: "Geral",
+                        title: "Solicitação de troca de senha do portal",
+                        description: "Solicito suporte para redefinição de senha do portal do cliente.",
+                      })
+                    }
+                  >
+                    Abrir solicitação de acesso
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
           <TabsContent value="support" className="space-y-4">
             <ClientPortalSupport
               requests={requests}

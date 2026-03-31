@@ -266,9 +266,6 @@ function parseAuthToken(req: Request): string | null {
   const headerToken = req.headers.get("x-api-token") || req.headers.get("x-conecta-token");
   if (headerToken?.trim()) return headerToken.trim();
 
-  const urlToken = new URL(req.url).searchParams.get("token");
-  if (urlToken?.trim()) return urlToken.trim();
-
   return null;
 }
 

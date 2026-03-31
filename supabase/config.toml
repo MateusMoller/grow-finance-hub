@@ -6,6 +6,12 @@ verify_jwt = false
 [functions.create-client-with-portal]
 verify_jwt = true
 
+[functions.create-team-user]
+verify_jwt = true
+
+[functions.create-admin]
+verify_jwt = true
+
 [functions.send-newsletter-broadcast]
 verify_jwt = true
 

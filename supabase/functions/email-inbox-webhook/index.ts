@@ -75,10 +75,6 @@ function normalizeEmailList(value: unknown): string[] {
 function getWebhookSecret(req: Request) {
   const headerSecret = req.headers.get("x-inbox-webhook-secret") || req.headers.get("x-webhook-secret");
   if (headerSecret) return headerSecret.trim();
-
-  const querySecret = new URL(req.url).searchParams.get("secret");
-  if (querySecret) return querySecret.trim();
-
   return null;
 }
 
@@ -110,11 +106,13 @@ Deno.serve(async (req) => {
     }
 
     const configuredSecret = asTrimmedString(Deno.env.get("INBOX_WEBHOOK_SECRET"));
-    if (configuredSecret) {
-      const providedSecret = getWebhookSecret(req);
-      if (!providedSecret || providedSecret !== configuredSecret) {
-        return jsonResponse({ error: "Unauthorized webhook call" }, 401);
-      }
+    if (!configuredSecret) {
+      return jsonResponse({ error: "Missing INBOX_WEBHOOK_SECRET environment variable" }, 500);
+    }
+
+    const providedSecret = getWebhookSecret(req);
+    if (!providedSecret || providedSecret !== configuredSecret) {
+      return jsonResponse({ error: "Unauthorized webhook call" }, 401);
     }
 
     const rawPayload = await req.json();

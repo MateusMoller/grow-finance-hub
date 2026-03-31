@@ -1,10 +1,12 @@
 import {
+  BookOpen,
   ClipboardList,
   FileText,
   FolderOpen,
   Headset,
   LayoutDashboard,
   ListChecks,
+  Settings2,
 } from "lucide-react";
 import growIcon from "@/assets/grow-icon.png";
 import {
@@ -19,7 +21,15 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-export type PortalTab = "overview" | "pending" | "requests" | "documents" | "forms" | "support";
+export type PortalTab =
+  | "overview"
+  | "pending"
+  | "requests"
+  | "documents"
+  | "forms"
+  | "manual"
+  | "settings"
+  | "support";
 
 interface PortalClienteSidebarProps {
   activeTab: PortalTab;
@@ -27,11 +37,13 @@ interface PortalClienteSidebarProps {
 }
 
 const menuItems: Array<{ key: PortalTab; title: string; icon: typeof LayoutDashboard }> = [
-  { key: "overview", title: "Visão Geral", icon: LayoutDashboard },
+  { key: "overview", title: "Visão geral", icon: LayoutDashboard },
   { key: "pending", title: "Pendências", icon: ListChecks },
   { key: "requests", title: "Solicitações", icon: ClipboardList },
   { key: "documents", title: "Documentos", icon: FolderOpen },
   { key: "forms", title: "Formulários", icon: FileText },
+  { key: "manual", title: "Manual do usuário", icon: BookOpen },
+  { key: "settings", title: "Configurações", icon: Settings2 },
   { key: "support", title: "Atendimento", icon: Headset },
 ];
 
@@ -79,4 +91,3 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
     </Sidebar>
   );
 }
-

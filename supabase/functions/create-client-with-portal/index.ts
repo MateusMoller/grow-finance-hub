@@ -54,6 +54,13 @@ function normalizeEmail(value: unknown): string | null {
   return email;
 }
 
+function isStrongPassword(value: string) {
+  if (value.length < 8) return false;
+  if (!/[a-zA-Z]/.test(value)) return false;
+  if (!/[0-9]/.test(value)) return false;
+  return true;
+}
+
 function extractBearerToken(req: Request): string | null {
   const authorization = req.headers.get("authorization");
   if (!authorization) return null;
@@ -166,8 +173,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Valid email is required" }, 400);
     }
 
-    if (!parsedPayload.password || parsedPayload.password.length < 6) {
-      return jsonResponse({ error: "Password must have at least 6 characters" }, 400);
+    if (!isStrongPassword(parsedPayload.password)) {
+      return jsonResponse(
+        { error: "Password must have at least 8 characters and include letters and numbers" },
+        400,
+      );
     }
 
     const { data: existingClientByEmail, error: existingClientError } = await supabaseAdmin

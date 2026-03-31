@@ -93,8 +93,10 @@ export default function ClientsPage() {
       return;
     }
 
-    if (!newClient.password || newClient.password.length < 6) {
-      toast.error("A senha do portal precisa ter no minimo 6 caracteres");
+    const password = newClient.password.trim();
+    const isStrongPassword = password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password);
+    if (!isStrongPassword) {
+      toast.error("A senha do portal precisa ter no minimo 8 caracteres com letras e numeros");
       return;
     }
 
@@ -108,7 +110,7 @@ export default function ClientsPage() {
         contact: newClient.contact || null,
         email: newClient.email,
         phone: newClient.phone || null,
-        password: newClient.password,
+        password,
       },
     });
     setCreating(false);
@@ -283,7 +285,7 @@ export default function ClientsPage() {
             </div>
             <div className="space-y-2">
               <Label>Senha do Portal *</Label>
-              <Input type="password" placeholder="Minimo 6 caracteres" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
+              <Input type="password" placeholder="Minimo 8 caracteres com letras e numeros" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
             </div>
           </div>
           <DialogFooter>

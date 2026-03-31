@@ -119,8 +119,10 @@ export default function UsuariosPage() {
       return;
     }
 
-    if (!form.password || form.password.length < 6) {
-      toast.error("A senha precisa ter no minimo 6 caracteres.");
+    const password = form.password.trim();
+    const isStrongPassword = password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password);
+    if (!isStrongPassword) {
+      toast.error("A senha precisa ter no minimo 8 caracteres com letras e numeros.");
       return;
     }
 
@@ -129,7 +131,7 @@ export default function UsuariosPage() {
       body: {
         displayName: form.displayName,
         email: form.email,
-        password: form.password,
+        password,
         role: form.role,
       },
     });
@@ -328,7 +330,7 @@ export default function UsuariosPage() {
               <Label>Senha temporaria *</Label>
               <Input
                 type="password"
-                placeholder="Minimo 6 caracteres"
+                placeholder="Minimo 8 caracteres com letras e numeros"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
               />
