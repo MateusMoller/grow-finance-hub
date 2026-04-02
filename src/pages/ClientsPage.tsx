@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { clientSegmentOptions } from "@/lib/clientSegments";
 import { toast } from "sonner";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 
@@ -42,14 +43,14 @@ export default function ClientsPage() {
     name: "",
     cnpj: "",
     regime: "Simples Nacional",
-    sector: "Contabil",
+    sector: clientSegmentOptions[0],
     contact: "",
     email: "",
     phone: "",
     password: "",
   });
 
-  const canCreateClients = role === "admin";
+  const canCreateClients = role === "admin" || role === "director" || role === "manager" || role === "commercial";
 
   useEffect(() => {
     void loadClients();
@@ -78,8 +79,8 @@ export default function ClientsPage() {
   );
 
   const handleCreate = async () => {
-    if (role !== "admin") {
-      toast.error("Apenas admin pode cadastrar clientes");
+    if (!canCreateClients) {
+      toast.error("Seu perfil nao possui permissao para cadastrar clientes");
       return;
     }
 
@@ -94,9 +95,9 @@ export default function ClientsPage() {
     }
 
     const password = newClient.password.trim();
-    const isStrongPassword = password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password);
-    if (!isStrongPassword) {
-      toast.error("A senha do portal precisa ter no minimo 8 caracteres com letras e numeros");
+    const isValidPassword = password.length >= 6;
+    if (!isValidPassword) {
+      toast.error("A senha do portal precisa ter no minimo 6 caracteres");
       return;
     }
 
@@ -137,7 +138,7 @@ export default function ClientsPage() {
       name: "",
       cnpj: "",
       regime: "Simples Nacional",
-      sector: "Contabil",
+      sector: clientSegmentOptions[0],
       contact: "",
       email: "",
       phone: "",
@@ -190,7 +191,7 @@ export default function ClientsPage() {
                     <th className="text-left text-xs font-semibold text-muted-foreground p-4">Empresa</th>
                     <th className="text-left text-xs font-semibold text-muted-foreground p-4 hidden md:table-cell">CNPJ</th>
                     <th className="text-left text-xs font-semibold text-muted-foreground p-4 hidden lg:table-cell">Regime</th>
-                    <th className="text-left text-xs font-semibold text-muted-foreground p-4 hidden lg:table-cell">Setor</th>
+                    <th className="text-left text-xs font-semibold text-muted-foreground p-4 hidden lg:table-cell">Segmento</th>
                     <th className="text-left text-xs font-semibold text-muted-foreground p-4">Status</th>
                   </tr>
                 </thead>
@@ -217,7 +218,7 @@ export default function ClientsPage() {
                       </td>
                       <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">{client.cnpj}</td>
                       <td className="p-4 text-sm hidden lg:table-cell">{client.regime}</td>
-                      <td className="p-4 text-sm hidden lg:table-cell">{client.sector}</td>
+                      <td className="p-4 text-sm hidden lg:table-cell">{client.sector || "Nao informado"}</td>
                       <td className="p-4">
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[client.status || ""] || "bg-muted"}`}>
                           {client.status}
@@ -263,9 +264,9 @@ export default function ClientsPage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label>Setor</Label>
+                <Label>Segmento do Cliente</Label>
                 <select className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none" value={newClient.sector} onChange={(event) => setNewClient((prev) => ({ ...prev, sector: event.target.value }))}>
-                  {["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"].map((sector) => <option key={sector}>{sector}</option>)}
+                  {clientSegmentOptions.map((segment) => <option key={segment}>{segment}</option>)}
                 </select>
               </div>
             </div>
@@ -285,7 +286,7 @@ export default function ClientsPage() {
             </div>
             <div className="space-y-2">
               <Label>Senha do Portal *</Label>
-              <Input type="password" placeholder="Minimo 8 caracteres com letras e numeros" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
+              <Input type="password" placeholder="Minimo 6 caracteres" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
             </div>
           </div>
           <DialogFooter>

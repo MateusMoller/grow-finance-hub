@@ -7,6 +7,7 @@ export interface PortalClientProfile {
   name: string;
   contact: string | null;
   email: string | null;
+  portal_cashflow_enabled: boolean;
   portal_user_id: string | null;
 }
 
@@ -61,6 +62,32 @@ export interface PortalClientTask {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type PortalCashflowEntryType = "income" | "expense";
+export type PortalCashflowEntryStatus = "predicted" | "confirmed";
+
+export interface PortalCashflowEntry {
+  id: string;
+  client_id: string;
+  entry_date: string;
+  entry_type: PortalCashflowEntryType;
+  category: string;
+  description: string;
+  amount: number;
+  status: PortalCashflowEntryStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewPortalCashflowEntryPayload {
+  entry_date: string;
+  entry_type: PortalCashflowEntryType;
+  category: string;
+  description: string;
+  amount: number;
+  status: PortalCashflowEntryStatus;
 }
 
 export interface PortalFormField {
@@ -195,6 +222,23 @@ export const supportSectors = [
   "Financeiro",
   "Societario",
 ];
+
+export const cashflowCategoriesByType: Record<PortalCashflowEntryType, string[]> = {
+  income: [
+    "Recebimento de clientes",
+    "Aporte dos socios",
+    "Credito bancario",
+    "Outras entradas",
+  ],
+  expense: [
+    "Folha de pagamento",
+    "Impostos",
+    "Fornecedores",
+    "Despesas operacionais",
+    "Pro-labore",
+    "Outras saidas",
+  ],
+};
 
 export const parsePortalFields = (value: unknown): PortalFormField[] => {
   if (!Array.isArray(value)) return [];

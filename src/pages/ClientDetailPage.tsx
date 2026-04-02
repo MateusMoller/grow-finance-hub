@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft, Building2, Save, Upload, FileText, Trash2, Download,
   Loader2, Plus, Calculator, Receipt, Users, FolderOpen,
@@ -15,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
+import { getClientSegmentOptions } from "@/lib/clientSegments";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -30,6 +32,7 @@ interface ClientRecord {
   phone: string | null;
   address: string | null;
   notes: string | null;
+  portal_cashflow_enabled: boolean;
 }
 
 interface ClientDataEntry {
@@ -103,7 +106,7 @@ const categoryConfig = {
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [client, setClient] = useState<ClientRecord | null>(null);
@@ -119,6 +122,7 @@ export default function ClientDetailPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const canManageCashflowAccess = role === "admin";
 
   const loadClient = useCallback(async () => {
     if (!id) return;
@@ -171,6 +175,7 @@ export default function ClientDetailPage() {
       phone: clientForm.phone,
       address: clientForm.address,
       notes: clientForm.notes,
+      portal_cashflow_enabled: Boolean(clientForm.portal_cashflow_enabled),
     }).eq("id", id);
     setSaving(false);
     if (error) return toast.error("Erro ao salvar dados do cliente");
@@ -436,9 +441,9 @@ export default function ClientDetailPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Setor Responsável</Label>
+                  <Label className="text-xs">Segmento do Cliente</Label>
                   <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.sector || ""} onChange={(e) => setClientForm((p) => ({ ...p, sector: e.target.value }))}>
-                    {["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro"].map((s) => <option key={s}>{s}</option>)}
+                    {getClientSegmentOptions(clientForm.sector).map((segment) => <option key={segment}>{segment}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
@@ -466,6 +471,27 @@ export default function ClientDetailPage() {
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs">Observações</Label>
                   <Textarea value={clientForm.notes || ""} onChange={(e) => setClientForm((p) => ({ ...p, notes: e.target.value }))} rows={3} />
+                </div>
+                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Liberar controle de caixa no portal</p>
+                      <p className="text-xs text-muted-foreground">
+                        Define se este cliente pode acessar a nova aba de controle de caixa no portal.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={Boolean(clientForm.portal_cashflow_enabled)}
+                      disabled={!canManageCashflowAccess}
+                      onCheckedChange={(checked) => setClientForm((prev) => ({ ...prev, portal_cashflow_enabled: checked }))}
+                      aria-label="Liberar controle de caixa no portal"
+                    />
+                  </div>
+                  {!canManageCashflowAccess && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Apenas usuario admin pode alterar esta liberacao.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex justify-end">

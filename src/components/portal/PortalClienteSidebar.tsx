@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Settings2,
+  Wallet,
 } from "lucide-react";
 import growIcon from "@/assets/grow-icon.png";
 import {
@@ -26,6 +27,7 @@ export type PortalTab =
   | "pending"
   | "requests"
   | "documents"
+  | "cashflow"
   | "forms"
   | "manual"
   | "settings"
@@ -36,15 +38,45 @@ interface PortalClienteSidebarProps {
   onChangeTab: (tab: PortalTab) => void;
 }
 
-const menuItems: Array<{ key: PortalTab; title: string; icon: typeof LayoutDashboard }> = [
-  { key: "overview", title: "Visão geral", icon: LayoutDashboard },
-  { key: "pending", title: "Pendências", icon: ListChecks },
-  { key: "requests", title: "Solicitações", icon: ClipboardList },
-  { key: "documents", title: "Documentos", icon: FolderOpen },
-  { key: "forms", title: "Formulários", icon: FileText },
-  { key: "manual", title: "Manual do usuário", icon: BookOpen },
-  { key: "settings", title: "Configurações", icon: Settings2 },
-  { key: "support", title: "Atendimento", icon: Headset },
+interface PortalMenuItem {
+  key: PortalTab;
+  title: string;
+  icon: typeof LayoutDashboard;
+}
+
+interface PortalMenuSection {
+  label: string;
+  items: PortalMenuItem[];
+}
+
+const menuSections: PortalMenuSection[] = [
+  {
+    label: "Visão Geral",
+    items: [
+      { key: "overview", title: "Painel geral", icon: LayoutDashboard },
+      { key: "pending", title: "Pendências", icon: ListChecks },
+    ],
+  },
+  {
+    label: "Operação",
+    items: [
+      { key: "requests", title: "Solicitações", icon: ClipboardList },
+      { key: "documents", title: "Documentos", icon: FolderOpen },
+      { key: "forms", title: "Formulários", icon: FileText },
+    ],
+  },
+  {
+    label: "Financeiro",
+    items: [{ key: "cashflow", title: "Controle de caixa", icon: Wallet }],
+  },
+  {
+    label: "Conta e Suporte",
+    items: [
+      { key: "support", title: "Atendimento", icon: Headset },
+      { key: "manual", title: "Manual do usuário", icon: BookOpen },
+      { key: "settings", title: "Configurações", icon: Settings2 },
+    ],
+  },
 ];
 
 export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSidebarProps) {
@@ -65,28 +97,30 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
           )}
         </div>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Navegação</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.key}>
-                  <SidebarMenuButton
-                    tooltip={item.title}
-                    isActive={activeTab === item.key}
-                    onClick={() => {
-                      onChangeTab(item.key);
-                      if (isMobile) setOpenMobile(false);
-                    }}
-                  >
-                    <item.icon className="mr-2 h-4 w-4" />
-                    {!collapsed && <span>{item.title}</span>}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {menuSections.map((section) => (
+          <SidebarGroup key={section.label}>
+            <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {section.items.map((item) => (
+                  <SidebarMenuItem key={item.key}>
+                    <SidebarMenuButton
+                      tooltip={item.title}
+                      isActive={activeTab === item.key}
+                      onClick={() => {
+                        onChangeTab(item.key);
+                        if (isMobile) setOpenMobile(false);
+                      }}
+                    >
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
     </Sidebar>
   );

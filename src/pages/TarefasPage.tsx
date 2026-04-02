@@ -525,6 +525,25 @@ export default function TarefasPage() {
     });
   };
 
+  const updateTaskCounter = (taskId: string, field: "attachments" | "comments", count: number) => {
+    setTasks((prev) =>
+      prev.map((task) => (task.id === taskId ? { ...task, [field]: count } : task))
+    );
+
+    setSelectedTask((prev) => {
+      if (!prev || prev.id !== taskId) return prev;
+      return { ...prev, [field]: count };
+    });
+  };
+
+  const handleCommentCountChange = (taskId: string, count: number) => {
+    updateTaskCounter(taskId, "comments", count);
+  };
+
+  const handleAttachmentCountChange = (taskId: string, count: number) => {
+    updateTaskCounter(taskId, "attachments", count);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6 max-w-7xl">
@@ -662,6 +681,9 @@ export default function TarefasPage() {
         onOpenChange={setSheetOpen}
         onSubtaskToggle={handleSubtaskToggle}
         onDeleteTask={handleDeleteTask}
+        onCommentCountChange={handleCommentCountChange}
+        onAttachmentCountChange={handleAttachmentCountChange}
+        actorName={actorLabel}
         historyEntries={selectedTaskHistory}
       />
 

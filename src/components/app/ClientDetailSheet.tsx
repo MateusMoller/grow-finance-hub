@@ -80,7 +80,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
               <span className="text-sm font-medium block">{client.regime}</span>
             </div>
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">Setor Responsável</span>
+              <span className="text-xs text-muted-foreground">Segmento do cliente</span>
               <span className="text-sm font-medium block">{client.sector}</span>
             </div>
           </div>

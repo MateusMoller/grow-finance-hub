@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { RequestChat } from "@/components/app/RequestChat";
+import { ClientPortalCashflow } from "@/components/portal/ClientPortalCashflow";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { ClientPortalPendingList } from "@/components/portal/ClientPortalPendingList";
 import { ClientPortalSupport } from "@/components/portal/ClientPortalSupport";
@@ -30,7 +31,9 @@ import {
   recommendedMonthlyUploads,
   sectorOptions,
   supportSectors,
+  type NewPortalCashflowEntryPayload,
   type PortalActionItem,
+  type PortalCashflowEntry,
   type PortalClientDocument,
   type PortalClientProfile,
   type PortalClientRequest,
@@ -112,6 +115,8 @@ export default function PortalClientePage() {
   const [publishedForms, setPublishedForms] = useState<PortalFormTemplate[]>([]);
   const [portalTasks, setPortalTasks] = useState<PortalClientTask[]>([]);
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
+  const [cashflowEntries, setCashflowEntries] = useState<PortalCashflowEntry[]>([]);
+  const [creatingCashflowEntry, setCreatingCashflowEntry] = useState(false);
 
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("all");
@@ -160,7 +165,7 @@ export default function PortalClientePage() {
     const [clientRes, requestRes, docRes, formsRes] = await Promise.all([
       supabase
         .from("clients")
-        .select("id, name, contact, email, portal_user_id")
+        .select("id, name, contact, email, portal_user_id, portal_cashflow_enabled")
         .eq("portal_user_id", user.id)
         .maybeSingle(),
       supabase
@@ -210,6 +215,22 @@ export default function PortalClientePage() {
       }
     }
 
+    let fetchedCashflowEntries: PortalCashflowEntry[] = [];
+    if (client?.id && client.portal_cashflow_enabled) {
+      const { data: cashflowData, error: cashflowError } = await supabase
+        .from("client_cashflow_entries")
+        .select("id, client_id, entry_date, entry_type, category, description, amount, status, created_by, created_at, updated_at")
+        .eq("client_id", client.id)
+        .order("entry_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (cashflowError) {
+        toast.error("Erro ao carregar controle de caixa.");
+      } else {
+        fetchedCashflowEntries = (cashflowData || []) as PortalCashflowEntry[];
+      }
+    }
+
     let fetchedMessages: PortalRequestMessage[] = [];
     if (fetchedRequests.length > 0) {
       const requestIds = fetchedRequests.map((request) => request.id);
@@ -231,6 +252,7 @@ export default function PortalClientePage() {
     setDocuments(fetchedDocuments);
     setPublishedForms(fetchedForms);
     setPortalTasks(fetchedTasks);
+    setCashflowEntries(fetchedCashflowEntries);
     setMessages(fetchedMessages);
     setLoadingData(false);
   }, [user]);
@@ -748,6 +770,40 @@ export default function PortalClientePage() {
     await fetchPortalData();
   };
 
+  const handleCreateCashflowEntry = async (payload: NewPortalCashflowEntryPayload) => {
+    if (!user || !clientProfile?.id) {
+      toast.error("Cliente nao vinculado ao portal para registrar lancamentos.");
+      return false;
+    }
+
+    if (!clientProfile.portal_cashflow_enabled) {
+      toast.error("Controle de caixa ainda nao liberado para este cliente.");
+      return false;
+    }
+
+    setCreatingCashflowEntry(true);
+    const { error } = await supabase.from("client_cashflow_entries").insert({
+      client_id: clientProfile.id,
+      entry_date: payload.entry_date,
+      entry_type: payload.entry_type,
+      category: payload.category,
+      description: payload.description,
+      amount: payload.amount,
+      status: payload.status,
+      created_by: user.id,
+    });
+    setCreatingCashflowEntry(false);
+
+    if (error) {
+      toast.error("Nao foi possivel registrar o lancamento no caixa.");
+      return false;
+    }
+
+    toast.success("Lancamento registrado no controle de caixa.");
+    await fetchPortalData();
+    return true;
+  };
+
   const currentMonthLabel = useMemo(
     () => new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
     []
@@ -771,7 +827,7 @@ export default function PortalClientePage() {
               <SidebarTrigger />
               <div className="min-w-0">
                 <p className="font-semibold text-sm">Portal do Cliente</p>
-                <p className="text-xs text-muted-foreground">Solicitacoes, documentos e atendimento</p>
+                <p className="text-xs text-muted-foreground">Solicitacoes, documentos, atendimento e caixa</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1064,6 +1120,23 @@ export default function PortalClientePage() {
             )}
           </TabsContent>
 
+          <TabsContent value="cashflow" className="space-y-4">
+            <ClientPortalCashflow
+              enabled={Boolean(clientProfile?.portal_cashflow_enabled)}
+              loading={loadingData}
+              entries={cashflowEntries}
+              creating={creatingCashflowEntry}
+              onCreateEntry={handleCreateCashflowEntry}
+              onRequestEnable={() =>
+                openNewRequestDialog({
+                  sector: "Financeiro",
+                  title: "Liberacao do controle de caixa no portal",
+                  description: "Solicito a liberacao do modulo de controle de caixa para uso no portal do cliente.",
+                })
+              }
+            />
+          </TabsContent>
+
           <TabsContent value="forms" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
@@ -1237,7 +1310,21 @@ export default function PortalClientePage() {
                 <div className="rounded-lg border bg-card p-4 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium">4. Converse com a equipe</p>
+                      <p className="font-medium">4. Acompanhe o controle de caixa (quando liberado)</p>
+                      <p className="text-sm text-muted-foreground">
+                        Se o admin liberar este modulo, voce pode registrar entradas e saidas e acompanhar os indicadores de caixa.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("cashflow")}>
+                      Ir para controle de caixa
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">5. Converse com a equipe</p>
                       <p className="text-sm text-muted-foreground">
                         Use o atendimento para tirar dúvidas e registrar assuntos que precisam de acompanhamento.
                       </p>
@@ -1321,6 +1408,12 @@ export default function PortalClientePage() {
                     <p className="text-sm font-medium">Controle de acesso</p>
                     <p className="text-sm text-muted-foreground">
                       Alterações de usuários e permissões são feitas pela equipe para garantir segurança no processo.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                    <p className="text-sm font-medium">Modulo de controle de caixa</p>
+                    <p className="text-sm text-muted-foreground">
+                      Status atual: {clientProfile?.portal_cashflow_enabled ? "liberado pelo admin" : "aguardando liberacao do admin"}.
                     </p>
                   </div>
                   <Button

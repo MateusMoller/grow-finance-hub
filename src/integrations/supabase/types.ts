@@ -255,6 +255,7 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          portal_cashflow_enabled: boolean
           portal_user_id: string | null
           regime: string | null
           sector: string | null
@@ -272,6 +273,7 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          portal_cashflow_enabled?: boolean
           portal_user_id?: string | null
           regime?: string | null
           sector?: string | null
@@ -289,6 +291,7 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          portal_cashflow_enabled?: boolean
           portal_user_id?: string | null
           regime?: string | null
           sector?: string | null
@@ -299,6 +302,63 @@ export type Database = {
           {
             foreignKeyName: "clients_portal_user_id_fkey"
             columns: ["portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_cashflow_entries: {
+        Row: {
+          amount: number
+          category: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          description: string
+          entry_date: string
+          entry_type: string
+          id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category?: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cashflow_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_entries_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]

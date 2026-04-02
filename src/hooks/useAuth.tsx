@@ -13,6 +13,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const rolePriority: string[] = [
+  "admin",
+  "director",
+  "manager",
+  "employee",
+  "commercial",
+  "partner",
+  "departamento_pessoal",
+  "fiscal",
+  "contabil",
+  "client",
+];
+
+const pickPrimaryRole = (roles: string[]) => {
+  if (roles.length === 0) return null;
+  const normalized = roles.map((role) => role.trim().toLowerCase()).filter(Boolean);
+  for (const priorityRole of rolePriority) {
+    if (normalized.includes(priorityRole)) return priorityRole;
+  }
+  return normalized[0] ?? null;
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -43,12 +65,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchRole = async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", userId)
-      .maybeSingle();
-    setRole(data?.role ?? null);
+      .eq("user_id", userId);
+
+    if (error) {
+      setRole(null);
+      return;
+    }
+
+    const roles = (data || [])
+      .map((item) => String(item.role || ""))
+      .filter((value) => value.length > 0);
+
+    setRole(pickPrimaryRole(roles));
   };
 
   const signIn = async (email: string, password: string) => {
