@@ -565,7 +565,7 @@ export function ClientPortalCashflow({
             Importacao automatica de extratos
           </CardTitle>
           <CardDescription>
-            Envie PDF, Excel, CSV ou imagem do extrato. O sistema gera os lancamentos automaticamente para voce revisar e confirmar.
+            Envie OFX, PDF, Excel, CSV ou imagem do extrato. O sistema gera os lancamentos automaticamente para voce revisar e confirmar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
@@ -576,7 +576,7 @@ export function ClientPortalCashflow({
                 ref={importFileInputRef}
                 type="file"
                 multiple
-                accept=".pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                accept=".ofx,.pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
                 onChange={handleImportFileSelection}
               />
             </div>

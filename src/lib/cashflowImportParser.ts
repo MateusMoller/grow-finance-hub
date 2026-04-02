@@ -46,7 +46,7 @@ const expenseKeywords = [
   "cash out",
 ];
 
-const acceptedExtensions = new Set(["pdf", "xls", "xlsx", "csv", "png", "jpg", "jpeg", "webp"]);
+const acceptedExtensions = new Set(["pdf", "ofx", "xls", "xlsx", "csv", "png", "jpg", "jpeg", "webp"]);
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
 
@@ -352,6 +352,99 @@ const parseImageFile = async (file: File): Promise<ParsedCashflowSuggestion[]> =
   return suggestions;
 };
 
+const normalizeOfxText = (text: string) =>
+  text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\0")
+    .join("");
+
+const parseOfxDate = (rawDate: string): string | null => {
+  const normalized = normalizeWhitespace(rawDate);
+  if (!normalized) return null;
+
+  const digits = normalized.replace(/\D/g, "");
+  if (digits.length < 8) return null;
+
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  const day = Number(digits.slice(6, 8));
+  if (!year || !month || !day) return null;
+
+  const candidate = new Date(year, month - 1, day);
+  if (Number.isNaN(candidate.getTime())) return null;
+  if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return null;
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+
+const getOfxTagValue = (block: string, tag: string): string | null => {
+  const enclosingTagRegex = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
+  const enclosingTagMatch = block.match(enclosingTagRegex);
+  if (enclosingTagMatch?.[1]) {
+    return normalizeWhitespace(enclosingTagMatch[1]);
+  }
+
+  const inlineTagRegex = new RegExp(`<${tag}>([^\\n<]*)`, "i");
+  const inlineTagMatch = block.match(inlineTagRegex);
+  if (inlineTagMatch?.[1]) {
+    return normalizeWhitespace(inlineTagMatch[1]);
+  }
+
+  return null;
+};
+
+const parseOfxFile = async (file: File): Promise<ParsedCashflowSuggestion[]> => {
+  const fileContent = normalizeOfxText(await file.text());
+  const transactionBlocks = [...fileContent.matchAll(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi)];
+
+  if (transactionBlocks.length === 0) {
+    return [];
+  }
+
+  const suggestions: ParsedCashflowSuggestion[] = [];
+
+  transactionBlocks.forEach((match, index) => {
+    const block = match[1] || "";
+    const postedDate = getOfxTagValue(block, "DTPOSTED");
+    const amountText = getOfxTagValue(block, "TRNAMT");
+    const transactionType = getOfxTagValue(block, "TRNTYPE");
+    const memo = getOfxTagValue(block, "MEMO");
+    const name = getOfxTagValue(block, "NAME");
+
+    const entryDate = postedDate ? parseOfxDate(postedDate) : null;
+    const amount = amountText ? parseAmount(amountText) : null;
+    if (!entryDate || amount === null || amount === 0) return;
+
+    const normalizedType = normalizeWhitespace(transactionType || "").toLowerCase();
+    const baseDescription = memo || name || transactionType || `Lancamento OFX ${index + 1}`;
+    const line = `${normalizedType} ${baseDescription}`;
+
+    let entryType: PortalCashflowEntryType;
+    if (normalizedType.includes("debit") || normalizedType.includes("payment")) {
+      entryType = "expense";
+    } else if (normalizedType.includes("credit") || normalizedType.includes("deposit")) {
+      entryType = "income";
+    } else {
+      entryType = amount < 0 ? "expense" : "income";
+    }
+
+    const suggestion = buildSuggestion({
+      date: entryDate,
+      description: baseDescription,
+      value: entryType === "expense" ? -Math.abs(amount) : Math.abs(amount),
+      line,
+      sourceFile: file.name,
+      sourceLine: `transacao OFX ${index + 1}`,
+      confidence: 0.99,
+    });
+
+    if (suggestion) suggestions.push(suggestion);
+  });
+
+  return suggestions;
+};
+
 const getFileExtension = (fileName: string) => {
   const parts = fileName.toLowerCase().split(".");
   return parts.length > 1 ? parts[parts.length - 1] : "";
@@ -359,6 +452,7 @@ const getFileExtension = (fileName: string) => {
 
 const isSpreadsheetExtension = (extension: string) => extension === "xls" || extension === "xlsx" || extension === "csv";
 const isImageExtension = (extension: string) => extension === "png" || extension === "jpg" || extension === "jpeg" || extension === "webp";
+const isOfxExtension = (extension: string) => extension === "ofx";
 
 export async function parseCashflowFiles(files: File[]): Promise<ParseCashflowFilesResult> {
   const warnings: string[] = [];
@@ -377,6 +471,8 @@ export async function parseCashflowFiles(files: File[]): Promise<ParseCashflowFi
 
       if (isSpreadsheetExtension(extension)) {
         suggestions = await parseSpreadsheetFile(file);
+      } else if (isOfxExtension(extension)) {
+        suggestions = await parseOfxFile(file);
       } else if (extension === "pdf") {
         suggestions = await parsePdfFile(file);
       } else if (isImageExtension(extension)) {
