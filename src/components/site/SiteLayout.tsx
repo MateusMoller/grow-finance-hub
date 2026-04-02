@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, Layers3, Newspaper, Phone } from "lucide-react";
 import { SiteHeader } from "./SiteHeader";
 import { SiteFooter } from "./SiteFooter";
+import { SiteWhatsAppButton } from "./SiteWhatsAppButton";
 import { cn } from "@/lib/utils";
 
 const mobileNavItems = [
@@ -37,6 +38,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <SiteHeader />
       <main className="flex-1 pt-16 pb-20 sm:pt-20 md:pb-0">{children}</main>
       <SiteFooter />
+      <SiteWhatsAppButton />
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 backdrop-blur md:hidden">
         <div

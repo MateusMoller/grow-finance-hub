@@ -804,6 +804,46 @@ export default function PortalClientePage() {
     return true;
   };
 
+  const handleCreateCashflowEntriesBatch = async (payloads: NewPortalCashflowEntryPayload[]) => {
+    if (!user || !clientProfile?.id) {
+      toast.error("Cliente nao vinculado ao portal para registrar lancamentos.");
+      return { success: false, inserted: 0 };
+    }
+
+    if (!clientProfile.portal_cashflow_enabled) {
+      toast.error("Controle de caixa ainda nao liberado para este cliente.");
+      return { success: false, inserted: 0 };
+    }
+
+    if (payloads.length === 0) {
+      toast.error("Nenhum lancamento selecionado para importacao.");
+      return { success: false, inserted: 0 };
+    }
+
+    setCreatingCashflowEntry(true);
+    const { error } = await supabase.from("client_cashflow_entries").insert(
+      payloads.map((payload) => ({
+        client_id: clientProfile.id,
+        entry_date: payload.entry_date,
+        entry_type: payload.entry_type,
+        category: payload.category,
+        description: payload.description,
+        amount: payload.amount,
+        status: payload.status,
+        created_by: user.id,
+      })),
+    );
+    setCreatingCashflowEntry(false);
+
+    if (error) {
+      toast.error("Nao foi possivel importar os lancamentos no controle de caixa.");
+      return { success: false, inserted: 0 };
+    }
+
+    await fetchPortalData();
+    return { success: true, inserted: payloads.length };
+  };
+
   const currentMonthLabel = useMemo(
     () => new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
     []
@@ -1127,6 +1167,7 @@ export default function PortalClientePage() {
               entries={cashflowEntries}
               creating={creatingCashflowEntry}
               onCreateEntry={handleCreateCashflowEntry}
+              onCreateEntriesBatch={handleCreateCashflowEntriesBatch}
               onRequestEnable={() =>
                 openNewRequestDialog({
                   sector: "Financeiro",

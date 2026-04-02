@@ -56,11 +56,8 @@ function normalizeRole(value: unknown): string | null {
   return manageableRoles.has(role) ? role : null;
 }
 
-function isStrongPassword(value: string) {
-  if (value.length < 8) return false;
-  if (!/[a-zA-Z]/.test(value)) return false;
-  if (!/[0-9]/.test(value)) return false;
-  return true;
+function isValidPassword(value: string) {
+  return value.length >= 6;
 }
 
 function extractBearerToken(req: Request): string | null {
@@ -168,9 +165,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Valid email is required" }, 400);
     }
 
-    if (!isStrongPassword(parsedPayload.password)) {
+    if (!isValidPassword(parsedPayload.password)) {
       return jsonResponse(
-        { error: "Password must have at least 8 characters and include letters and numbers" },
+        { error: "Password must have at least 6 characters" },
         400,
       );
     }
@@ -210,9 +207,14 @@ Deno.serve(async (req) => {
         throw existingRolesError;
       }
 
-      if ((existingRoles || []).length > 0) {
+      const existingRoleValues = (existingRoles || [])
+        .map((row) => String(row.role || "").trim().toLowerCase())
+        .filter(Boolean);
+
+      const hasInternalRole = existingRoleValues.some((role) => role !== "client");
+      if (hasInternalRole) {
         return jsonResponse(
-          { error: "This email is already linked to another profile in the system" },
+          { error: "This email is already linked to an internal profile in the system" },
           409,
         );
       }

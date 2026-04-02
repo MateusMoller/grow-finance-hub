@@ -63,6 +63,15 @@ export default function UsuariosPage() {
 
   const isAdmin = role === "admin";
 
+  const resetCreateForm = () => {
+    setForm({
+      displayName: "",
+      email: "",
+      password: "",
+      role: "employee",
+    });
+  };
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) {
       setUsers([]);
@@ -86,6 +95,40 @@ export default function UsuariosPage() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  const tryPromoteExistingPortalUser = async (email: string, nextRole: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return false;
+
+    const { data: clientRow, error: clientError } = await supabase
+      .from("clients")
+      .select("portal_user_id")
+      .ilike("email", normalizedEmail)
+      .maybeSingle();
+
+    if (clientError) {
+      toast.error("Nao foi possivel validar o usuario existente para promocao de perfil.");
+      return false;
+    }
+
+    const portalUserId = clientRow?.portal_user_id;
+    if (!portalUserId) return false;
+
+    const { error: upsertRoleError } = await supabase.from("user_roles").upsert(
+      {
+        user_id: portalUserId,
+        role: nextRole as "admin" | "director" | "manager" | "employee" | "commercial" | "partner" | "departamento_pessoal" | "fiscal" | "contabil" | "client",
+      },
+      { onConflict: "user_id,role" },
+    );
+
+    if (upsertRoleError) {
+      toast.error("Nao foi possivel aplicar o novo perfil no usuario existente.");
+      return false;
+    }
+
+    return true;
+  };
 
   const filteredUsers = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -120,9 +163,9 @@ export default function UsuariosPage() {
     }
 
     const password = form.password.trim();
-    const isStrongPassword = password.length >= 8 && /[a-zA-Z]/.test(password) && /[0-9]/.test(password);
-    if (!isStrongPassword) {
-      toast.error("A senha precisa ter no minimo 8 caracteres com letras e numeros.");
+    const isValidPassword = password.length >= 6;
+    if (!isValidPassword) {
+      toast.error("A senha precisa ter no minimo 6 caracteres.");
       return;
     }
 
@@ -138,16 +181,41 @@ export default function UsuariosPage() {
     setCreating(false);
 
     if (error) {
+      let detailedErrorMessage: string | null = null;
+
       if (error instanceof FunctionsHttpError) {
         try {
           const errorResponse = await error.context.json();
           if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
-            toast.error(String(errorResponse.error));
-            return;
+            detailedErrorMessage = String(errorResponse.error);
           }
         } catch {
           // ignore parsing errors and fallback to generic message
         }
+      }
+
+      const normalizedMessage = (detailedErrorMessage || error.message || "").toLowerCase();
+      const shouldTryPromotion =
+        normalizedMessage.includes("already linked to another profile") ||
+        normalizedMessage.includes("linked to an internal profile");
+
+      if (shouldTryPromotion) {
+        setCreating(true);
+        const promoted = await tryPromoteExistingPortalUser(form.email, form.role);
+        setCreating(false);
+
+        if (promoted) {
+          toast.success("Usuario existente encontrado. Perfil interno aplicado com sucesso.");
+          setCreateOpen(false);
+          resetCreateForm();
+          void loadUsers();
+          return;
+        }
+      }
+
+      if (detailedErrorMessage) {
+        toast.error(detailedErrorMessage);
+        return;
       }
 
       toast.error(error.message || "Nao foi possivel cadastrar usuario.");
@@ -156,12 +224,7 @@ export default function UsuariosPage() {
 
     toast.success("Usuario cadastrado com sucesso.");
     setCreateOpen(false);
-    setForm({
-      displayName: "",
-      email: "",
-      password: "",
-      role: "employee",
-    });
+    resetCreateForm();
     void loadUsers();
   };
 
@@ -330,7 +393,7 @@ export default function UsuariosPage() {
               <Label>Senha temporaria *</Label>
               <Input
                 type="password"
-                placeholder="Minimo 8 caracteres com letras e numeros"
+                placeholder="Minimo 6 caracteres"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
               />

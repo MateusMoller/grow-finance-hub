@@ -1,13 +1,16 @@
-import { useMemo, useState } from "react";
+import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   CalendarDays,
+  CheckCircle2,
   CircleDollarSign,
   Loader2,
   LockKeyhole,
   Plus,
+  Trash2,
   TrendingDown,
   TrendingUp,
+  Upload,
   Wallet,
 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -26,6 +29,7 @@ import {
   type PortalCashflowEntryStatus,
   type PortalCashflowEntryType,
 } from "@/components/portal/types";
+import { parseCashflowFiles, type ParsedCashflowSuggestion } from "@/lib/cashflowImportParser";
 
 interface ClientPortalCashflowProps {
   enabled: boolean;
@@ -33,6 +37,9 @@ interface ClientPortalCashflowProps {
   entries: PortalCashflowEntry[];
   creating: boolean;
   onCreateEntry: (payload: NewPortalCashflowEntryPayload) => Promise<boolean>;
+  onCreateEntriesBatch: (
+    payloads: NewPortalCashflowEntryPayload[],
+  ) => Promise<{ success: boolean; inserted: number }>;
   onRequestEnable: () => void;
 }
 
@@ -67,12 +74,48 @@ const typeLabel: Record<PortalCashflowEntryType, string> = {
 const getSignedAmount = (entry: PortalCashflowEntry) =>
   entry.entry_type === "income" ? entry.amount : -entry.amount;
 
+interface ImportDraftRow {
+  id: string;
+  selected: boolean;
+  entryDate: string;
+  entryType: PortalCashflowEntryType;
+  category: string;
+  description: string;
+  amountText: string;
+  status: PortalCashflowEntryStatus;
+  sourceFile: string;
+  sourceLine: string;
+  confidence: number;
+}
+
+const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: number): ImportDraftRow => {
+  const defaultCategory =
+    suggestion.entryType === "income"
+      ? cashflowCategoriesByType.income[0]
+      : cashflowCategoriesByType.expense[0];
+
+  return {
+    id: `${suggestion.sourceFile}-${index}-${suggestion.entryDate}`,
+    selected: true,
+    entryDate: suggestion.entryDate,
+    entryType: suggestion.entryType,
+    category: defaultCategory,
+    description: suggestion.description,
+    amountText: suggestion.amount.toFixed(2),
+    status: "predicted",
+    sourceFile: suggestion.sourceFile,
+    sourceLine: suggestion.sourceLine,
+    confidence: suggestion.confidence,
+  };
+};
+
 export function ClientPortalCashflow({
   enabled,
   loading,
   entries,
   creating,
   onCreateEntry,
+  onCreateEntriesBatch,
   onRequestEnable,
 }: ClientPortalCashflowProps) {
   const today = useMemo(() => new Date(), []);
@@ -83,6 +126,11 @@ export function ClientPortalCashflow({
   const [entryStatus, setEntryStatus] = useState<PortalCashflowEntryStatus>("confirmed");
   const [entryDescription, setEntryDescription] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
+  const [importFiles, setImportFiles] = useState<File[]>([]);
+  const [parsingImport, setParsingImport] = useState(false);
+  const [importingDrafts, setImportingDrafts] = useState(false);
+  const [importDrafts, setImportDrafts] = useState<ImportDraftRow[]>([]);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const monthlyEntries = useMemo(
     () =>
@@ -207,6 +255,126 @@ export function ClientPortalCashflow({
     setEntryDescription("");
     setEntryAmount("");
     setEntryStatus("confirmed");
+  };
+
+  const handleImportFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    setImportFiles(Array.from(event.target.files || []));
+  };
+
+  const removeImportFile = (index: number) => {
+    setImportFiles((currentFiles) => currentFiles.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const clearImportData = () => {
+    setImportFiles([]);
+    setImportDrafts([]);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = "";
+    }
+  };
+
+  const updateImportDraft = (id: string, updater: (draft: ImportDraftRow) => ImportDraftRow) => {
+    setImportDrafts((currentDrafts) =>
+      currentDrafts.map((draft) => (draft.id === id ? updater(draft) : draft)),
+    );
+  };
+
+  const handleDraftTypeChange = (id: string, type: PortalCashflowEntryType) => {
+    updateImportDraft(id, (draft) => {
+      const categories = cashflowCategoriesByType[type];
+      const keepCategory = categories.includes(draft.category);
+
+      return {
+        ...draft,
+        entryType: type,
+        category: keepCategory ? draft.category : categories[0],
+      };
+    });
+  };
+
+  const selectedDrafts = useMemo(
+    () => importDrafts.filter((draft) => draft.selected),
+    [importDrafts],
+  );
+
+  const handleParseImportFiles = async () => {
+    if (!enabled) {
+      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      return;
+    }
+
+    if (importFiles.length === 0) {
+      toast.error("Selecione ao menos um arquivo para importar.");
+      return;
+    }
+
+    setParsingImport(true);
+    const result = await parseCashflowFiles(importFiles);
+    setParsingImport(false);
+
+    if (result.warnings.length > 0) {
+      result.warnings.forEach((warning) => toast.warning(warning));
+    }
+
+    if (result.entries.length === 0) {
+      setImportDrafts([]);
+      return;
+    }
+
+    const drafts = result.entries.map((entry, index) => suggestionToDraftRow(entry, index));
+    setImportDrafts(drafts);
+    toast.success(`${drafts.length} sugestao(oes) de lancamento gerada(s) para revisao.`);
+  };
+
+  const handleImportSelectedDrafts = async () => {
+    if (!enabled) {
+      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      return;
+    }
+
+    if (selectedDrafts.length === 0) {
+      toast.error("Selecione ao menos um lancamento sugerido para importar.");
+      return;
+    }
+
+    const payloads: NewPortalCashflowEntryPayload[] = [];
+    for (const draft of selectedDrafts) {
+      const description = draft.description.trim();
+      const amount = Number(draft.amountText.replace(",", "."));
+
+      if (!draft.entryDate) {
+        toast.error(`Data obrigatoria na sugestao "${description || draft.sourceFile}".`);
+        return;
+      }
+
+      if (description.length < 3) {
+        toast.error(`Descricao invalida na sugestao de ${draft.sourceFile}.`);
+        return;
+      }
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error(`Valor invalido na sugestao de ${draft.sourceFile}.`);
+        return;
+      }
+
+      payloads.push({
+        entry_date: draft.entryDate,
+        entry_type: draft.entryType,
+        category: draft.category,
+        description,
+        amount: Number(amount.toFixed(2)),
+        status: draft.status,
+      });
+    }
+
+    setImportingDrafts(true);
+    const result = await onCreateEntriesBatch(payloads);
+    setImportingDrafts(false);
+
+    if (!result.success) return;
+
+    toast.success(`${result.inserted} lancamento(s) importado(s) com sucesso.`);
+    clearImportData();
   };
 
   if (!enabled) {
@@ -389,6 +557,271 @@ export function ClientPortalCashflow({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Upload className="h-4 w-4 text-primary" />
+            Importacao automatica de extratos
+          </CardTitle>
+          <CardDescription>
+            Envie PDF, Excel, CSV ou imagem do extrato. O sistema gera os lancamentos automaticamente para voce revisar e confirmar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-0">
+          <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto] xl:items-end">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Arquivos do extrato</Label>
+              <Input
+                ref={importFileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                onChange={handleImportFileSelection}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => void handleParseImportFiles()}
+              disabled={parsingImport || importFiles.length === 0}
+            >
+              {parsingImport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {parsingImport ? "Lendo arquivos..." : "Gerar sugestoes"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={clearImportData}
+              disabled={parsingImport || importingDrafts}
+            >
+              Limpar
+            </Button>
+          </div>
+
+          {importFiles.length > 0 ? (
+            <div className="rounded-lg border p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Arquivos selecionados</p>
+              <div className="flex flex-wrap gap-2">
+                {importFiles.map((file, index) => (
+                  <Badge key={`${file.name}-${index}`} variant="secondary" className="gap-1.5 py-1.5">
+                    {file.name}
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => removeImportFile(index)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {importDrafts.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {selectedDrafts.length} de {importDrafts.length} sugestao(oes) selecionada(s)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setImportDrafts((currentDrafts) =>
+                        currentDrafts.map((draft) => ({ ...draft, selected: true })),
+                      )
+                    }
+                  >
+                    Selecionar tudo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setImportDrafts((currentDrafts) =>
+                        currentDrafts.map((draft) => ({ ...draft, selected: false })),
+                      )
+                    }
+                  >
+                    Limpar selecao
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">Ok</TableHead>
+                      <TableHead className="w-[130px]">Data</TableHead>
+                      <TableHead className="w-[120px]">Tipo</TableHead>
+                      <TableHead className="w-[170px]">Categoria</TableHead>
+                      <TableHead>Descricao</TableHead>
+                      <TableHead className="w-[120px]">Valor</TableHead>
+                      <TableHead className="w-[140px]">Status</TableHead>
+                      <TableHead className="w-[150px]">Origem</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importDrafts.map((draft) => (
+                      <TableRow key={draft.id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={draft.selected}
+                            className="h-4 w-4 rounded border-input bg-background"
+                            onChange={(event) =>
+                              updateImportDraft(draft.id, (currentDraft) => ({
+                                ...currentDraft,
+                                selected: event.target.checked,
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="date"
+                            value={draft.entryDate}
+                            onChange={(event) =>
+                              updateImportDraft(draft.id, (currentDraft) => ({
+                                ...currentDraft,
+                                entryDate: event.target.value,
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={draft.entryType}
+                            onValueChange={(value) => handleDraftTypeChange(draft.id, value as PortalCashflowEntryType)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="income">Entrada</SelectItem>
+                              <SelectItem value="expense">Saida</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={draft.category}
+                            onValueChange={(value) =>
+                              updateImportDraft(draft.id, (currentDraft) => ({
+                                ...currentDraft,
+                                category: value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {cashflowCategoriesByType[draft.entryType].map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {category}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={draft.description}
+                            onChange={(event) =>
+                              updateImportDraft(draft.id, (currentDraft) => ({
+                                ...currentDraft,
+                                description: event.target.value,
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={draft.amountText}
+                            onChange={(event) =>
+                              updateImportDraft(draft.id, (currentDraft) => ({
+                                ...currentDraft,
+                                amountText: event.target.value,
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={draft.status}
+                            onValueChange={(value) =>
+                              updateImportDraft(draft.id, (currentDraft) => ({
+                                ...currentDraft,
+                                status: value as PortalCashflowEntryStatus,
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="confirmed">Confirmado</SelectItem>
+                              <SelectItem value="predicted">Previsto</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium line-clamp-1">{draft.sourceFile}</p>
+                            <p className="text-[11px] text-muted-foreground line-clamp-1">{draft.sourceLine}</p>
+                            <Badge variant="outline" className="text-[10px]">
+                              Confianca {Math.round(draft.confidence * 100)}%
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              setImportDrafts((currentDrafts) =>
+                                currentDrafts.filter((currentDraft) => currentDraft.id !== draft.id),
+                              )
+                            }
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  className="gap-1.5"
+                  disabled={selectedDrafts.length === 0 || importingDrafts}
+                  onClick={() => void handleImportSelectedDrafts()}
+                >
+                  {importingDrafts ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {importingDrafts ? "Importando..." : `Importar selecionados (${selectedDrafts.length})`}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
         <Card className="xl:col-span-2">
