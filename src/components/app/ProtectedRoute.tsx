@@ -28,6 +28,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       "/app/tarefas",
       "/app/clientes",
       "/app/solicitacoes",
+      "/app/formularios",
+      "/app/relatorios",
       "/app/manual",
     ];
     const isAllowed = allowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));

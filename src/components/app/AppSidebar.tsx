@@ -108,8 +108,10 @@ export function AppSidebar() {
     ? operationalItems.filter(
         (item) =>
           item.url === "/app/solicitacoes" ||
+          item.url === "/app/formularios" ||
           item.url === "/app/processos" ||
-          item.url === "/app/chat-interno",
+          item.url === "/app/chat-interno" ||
+          item.url === "/app/relatorios",
       )
     : role === "admin"
       ? operationalItems

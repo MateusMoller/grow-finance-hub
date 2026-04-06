@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft, Building2, Save, Upload, FileText, Trash2, Download,
-  Loader2, Plus, Calculator, Receipt, Users, FolderOpen,
+  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -289,13 +289,16 @@ export default function ClientDetailPage() {
             <config.icon className={`h-5 w-5 ${config.color}`} />
             <h3 className="font-semibold">{config.label}</h3>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground">Período:</Label>
+          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-2 py-1.5 shadow-sm">
+            <div className="inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5 text-primary" />
+              <Label className="cursor-default text-[11px] font-medium leading-none text-muted-foreground">Período</Label>
+            </div>
             <Input
               type="month"
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
-              className="w-40 h-8 text-sm"
+              className="h-9 w-44 border-primary/20 bg-background/80 text-sm font-medium shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-primary/35"
             />
           </div>
         </div>
@@ -516,3 +519,4 @@ export default function ClientDetailPage() {
     </AppLayout>
   );
 }
+
