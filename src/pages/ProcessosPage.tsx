@@ -616,7 +616,7 @@ export default function ProcessosPage() {
   };
 
   const handleDeleteDocument = async (document: ProcessDocumentRow) => {
-    const shouldDelete = window.confirm(`Excluir o arquivo \"${document.file_name}\" do repositorio?`);
+    const shouldDelete = window.confirm(`Excluir o arquivo "${document.file_name}" do repositorio?`);
     if (!shouldDelete) return;
 
     setDeletingDocumentId(document.id);
