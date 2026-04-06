@@ -41,12 +41,12 @@ const mainItems = [
 
 const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
-  { title: "Processos", url: "/app/processos", icon: FolderOpen },
   { title: "Formularios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "Processos", url: "/app/processos", icon: FolderOpen },
 ];
 
 const systemItems = [

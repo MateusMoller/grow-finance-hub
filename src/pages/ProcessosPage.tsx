@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -41,6 +41,11 @@ interface DepartmentShowcaseCard {
   value: string;
   title: string;
   imageUrl: string;
+}
+
+interface UploadQueueItem {
+  file: File;
+  relativePath: string;
 }
 
 const departmentOptions = [
@@ -124,6 +129,39 @@ const sanitizeFileName = (fileName: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9._-]/g, "_");
 
+const sanitizePathSegment = (segment: string) => {
+  const sanitized = sanitizeFileName(segment).trim();
+  if (!sanitized || sanitized === "." || sanitized === "..") return "item";
+  return sanitized;
+};
+
+const sanitizeRelativePath = (relativePath: string) => {
+  const parts = relativePath
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => sanitizePathSegment(segment));
+
+  if (parts.length === 0) return "arquivo";
+  return parts.join("/");
+};
+
+const getBrowserRelativePath = (file: File) => {
+  const candidate = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  if (typeof candidate === "string" && candidate.trim().length > 0) {
+    return candidate.replace(/\\/g, "/");
+  }
+  return file.name;
+};
+
+const getRepositoryRelativePath = (document: ProcessDocumentRow) => {
+  const processPrefix = `${document.process_id}/`;
+  if (document.file_path.startsWith(processPrefix)) {
+    return document.file_path.slice(processPrefix.length);
+  }
+  return document.file_name;
+};
+
 export default function ProcessosPage() {
   const { user } = useAuth();
 
@@ -139,12 +177,13 @@ export default function ProcessosPage() {
   const [processDepartment, setProcessDepartment] = useState("geral");
   const [processStatus, setProcessStatus] = useState("aberto");
   const [selectedProcessId, setSelectedProcessId] = useState("none");
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
 
   const [uploadingDocuments, setUploadingDocuments] = useState(false);
   const [updatingProcessId, setUpdatingProcessId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = useCallback(async () => {
     setLoadingDocuments(true);
@@ -167,6 +206,12 @@ export default function ProcessosPage() {
   useEffect(() => {
     void fetchDocuments();
   }, [fetchDocuments]);
+
+  useEffect(() => {
+    if (!folderInputRef.current) return;
+    folderInputRef.current.setAttribute("webkitdirectory", "");
+    folderInputRef.current.setAttribute("directory", "");
+  }, []);
 
   const processGroups = useMemo<ProcessGroup[]>(() => {
     const grouped = new Map<string, ProcessGroup>();
@@ -230,7 +275,13 @@ export default function ProcessosPage() {
 
       if (matchProcess) return true;
 
-      return group.documents.some((document) => normalizeText(document.file_name).includes(term));
+      return group.documents.some((document) => {
+        const repositoryPath = getRepositoryRelativePath(document);
+        return (
+          normalizeText(document.file_name).includes(term) ||
+          normalizeText(repositoryPath).includes(term)
+        );
+      });
     });
   }, [departmentFilter, processGroups, search, statusFilter]);
 
@@ -257,11 +308,32 @@ export default function ProcessosPage() {
     setDepartmentFilter((previous) => (previous === department ? "all" : department));
   };
 
-  const resetFileInput = () => {
-    setSelectedFiles([]);
+  const resetUploadSelection = () => {
+    setUploadQueue([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    if (folderInputRef.current) {
+      folderInputRef.current.value = "";
+    }
+  };
+
+  const buildUploadQueue = (files: File[]) =>
+    files.map((file) => ({
+      file,
+      relativePath: getBrowserRelativePath(file),
+    }));
+
+  const handleSelectFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    setUploadQueue(buildUploadQueue(files));
+  };
+
+  const handleSelectFolder = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    setUploadQueue(buildUploadQueue(files));
   };
 
   const resetNewProcessFields = () => {
@@ -277,8 +349,8 @@ export default function ProcessosPage() {
       return;
     }
 
-    if (selectedFiles.length === 0) {
-      toast.error("Selecione ao menos um documento para upload.");
+    if (uploadQueue.length === 0) {
+      toast.error("Selecione arquivos ou uma pasta completa para upload.");
       return;
     }
 
@@ -324,32 +396,32 @@ export default function ProcessosPage() {
     let successCount = 0;
     let failCount = 0;
 
-    for (const file of selectedFiles) {
-      const safeName = sanitizeFileName(file.name);
-      const filePath = `${targetProcessId}/${Date.now()}_${safeName}`;
+    for (const item of uploadQueue) {
+      const normalizedRelativePath = sanitizeRelativePath(item.relativePath);
+      const filePath = `${targetProcessId}/${normalizedRelativePath}`;
 
       const { error: uploadError } = await supabase.storage
         .from("process-documents")
-        .upload(filePath, file, { upsert: false });
+        .upload(filePath, item.file, { upsert: true });
 
       if (uploadError) {
         failCount += 1;
         continue;
       }
 
-      const { error: insertError } = await supabase.from("process_documents").insert({
+      const { error: upsertError } = await supabase.from("process_documents").upsert({
         process_id: targetProcessId,
         process_name: targetProcessName,
         process_description: targetDescription,
         department: targetDepartment,
         status: targetStatus,
-        file_name: file.name,
+        file_name: item.file.name,
         file_path: filePath,
-        file_size: file.size,
+        file_size: item.file.size,
         created_by: user.id,
-      });
+      }, { onConflict: "file_path" });
 
-      if (insertError) {
+      if (upsertError) {
         failCount += 1;
         await supabase.storage.from("process-documents").remove([filePath]);
         continue;
@@ -362,7 +434,7 @@ export default function ProcessosPage() {
 
     if (successCount > 0) {
       await fetchDocuments();
-      resetFileInput();
+      resetUploadSelection();
 
       if (uploadMode === "new") {
         resetNewProcessFields();
@@ -454,7 +526,7 @@ export default function ProcessosPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold">Processos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Cadastre processos e concentre todos os documentos em um unico lugar.
+            Cadastre processos e mantenha um repositorio com pastas e arquivos na estrutura que voce ja usa.
           </p>
         </motion.div>
 
@@ -525,7 +597,7 @@ export default function ProcessosPage() {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Documentos hospedados</p>
+              <p className="text-xs text-muted-foreground">Arquivos hospedados</p>
               <p className="text-2xl font-semibold mt-1">{processStats.totalDocuments}</p>
             </CardContent>
           </Card>
@@ -539,7 +611,7 @@ export default function ProcessosPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Novo upload de processo</CardTitle>
+            <CardTitle className="text-base">Repositorio do processo</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Tabs value={uploadMode} onValueChange={(value) => setUploadMode(value as UploadMode)}>
@@ -629,25 +701,44 @@ export default function ProcessosPage() {
                 >
                   <Upload className="h-4 w-4" /> Selecionar arquivos
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => folderInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <FolderOpen className="h-4 w-4" /> Selecionar pasta
+                </Button>
                 <input
                   ref={fileInputRef}
                   type="file"
                   multiple
                   className="hidden"
-                  onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
+                  onChange={handleSelectFiles}
                 />
-                {selectedFiles.length > 0 && (
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleSelectFolder}
+                />
+                {uploadQueue.length > 0 && (
                   <span className="text-xs text-muted-foreground">
-                    {selectedFiles.length} arquivo(s) selecionado(s)
+                    {uploadQueue.length} arquivo(s) selecionado(s)
                   </span>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Use <strong>Selecionar pasta</strong> para enviar a estrutura completa (subpastas e arquivos).
+                Pastas vazias nao sao enviadas pelo navegador.
+              </p>
 
-              {selectedFiles.length > 0 && (
+              {uploadQueue.length > 0 && (
                 <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
-                  {selectedFiles.map((file) => (
-                    <div key={`${file.name}-${file.size}`} className="text-sm text-muted-foreground truncate">
-                      {file.name} - {formatBytes(file.size)}
+                  {uploadQueue.map((item) => (
+                    <div key={`${item.relativePath}-${item.file.size}`} className="text-sm text-muted-foreground truncate">
+                      {item.relativePath} - {formatBytes(item.file.size)}
                     </div>
                   ))}
                 </div>
@@ -657,13 +748,13 @@ export default function ProcessosPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={() => void handleUpload()} disabled={uploadingDocuments} className="gap-2">
                 {uploadingDocuments ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Enviar documentos
+                Enviar para repositorio
               </Button>
               <Button
                 type="button"
                 variant="ghost"
-                onClick={resetFileInput}
-                disabled={uploadingDocuments || selectedFiles.length === 0}
+                onClick={resetUploadSelection}
+                disabled={uploadingDocuments || uploadQueue.length === 0}
               >
                 Limpar selecao
               </Button>
@@ -677,7 +768,7 @@ export default function ProcessosPage() {
               <Search className="h-4 w-4 text-muted-foreground" />
               <input
                 className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                placeholder="Buscar por processo, descricao ou documento..."
+                placeholder="Buscar por processo, descricao, arquivo ou caminho..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -787,6 +878,7 @@ export default function ProcessosPage() {
                           <thead>
                             <tr className="border-b bg-muted/40">
                               <th className="text-left p-3 font-medium text-muted-foreground">Documento</th>
+                              <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Caminho</th>
                               <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Data</th>
                               <th className="text-left p-3 font-medium text-muted-foreground">Tamanho</th>
                               <th className="p-3 w-[120px]" />
@@ -798,8 +890,16 @@ export default function ProcessosPage() {
                                 <td className="p-3">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                                    <span className="truncate">{document.file_name}</span>
+                                    <div className="min-w-0">
+                                      <p className="truncate">{document.file_name}</p>
+                                      <p className="truncate text-xs text-muted-foreground lg:hidden">
+                                        {getRepositoryRelativePath(document)}
+                                      </p>
+                                    </div>
                                   </div>
+                                </td>
+                                <td className="p-3 hidden lg:table-cell text-muted-foreground">
+                                  <span className="truncate block max-w-[380px]">{getRepositoryRelativePath(document)}</span>
                                 </td>
                                 <td className="p-3 hidden md:table-cell text-muted-foreground">
                                   {new Date(document.created_at).toLocaleDateString("pt-BR")}
