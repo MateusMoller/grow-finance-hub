@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.email-inbox-webhook]
 verify_jwt = false
+
+[functions.process-repository]
+verify_jwt = true

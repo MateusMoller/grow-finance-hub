@@ -37,6 +37,17 @@ Comando unico para validar ambiente + lint + build:
 npm run verify:deploy
 ```
 
+## Integracao de Processos no GitHub
+
+A aba `Processos` usa a Edge Function `process-repository` para gravar arquivos no repositório GitHub.
+
+Defina estes secrets no Supabase antes de publicar a function:
+
+- `GITHUB_PROCESS_REPO_TOKEN` (PAT com permissao de `contents:write` no repo)
+- `GITHUB_PROCESS_REPO` (opcional, padrao: `MateusMoller/processos-contabeis`)
+- `GITHUB_PROCESS_REPO_BRANCH` (opcional, padrao: `main`)
+- `GITHUB_PROCESS_REPO_BASE_PATH` (opcional, vazio = raiz do repo)
+
 ## Deploy no GitHub Pages
 
 Ja existe script pronto para publicar na branch `gh-pages`.

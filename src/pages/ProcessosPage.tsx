@@ -1,3 +1,4 @@
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -18,12 +19,56 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
-type ProcessDocumentRow = Database["public"]["Tables"]["process_documents"]["Row"];
 type UploadMode = "new" | "existing";
+type ProcessRepositoryAction =
+  | "list"
+  | "upsert_file"
+  | "delete_file"
+  | "download_file"
+  | "update_process_metadata";
+
+interface ProcessDocumentRow {
+  id: string;
+  process_id: string;
+  process_name: string;
+  process_description: string | null;
+  department: string;
+  status: string;
+  file_name: string;
+  repository_path: string;
+  relative_path: string;
+  file_size: number | null;
+  sha: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RepositoryInfo {
+  owner: string;
+  name: string;
+  branch: string;
+  base_path: string;
+  web_url: string;
+}
+
+interface ProcessRepositoryListResponse {
+  ok: boolean;
+  repo: RepositoryInfo;
+  documents: ProcessDocumentRow[];
+}
+
+interface ProcessRepositoryActionResponse {
+  ok: boolean;
+  message?: string;
+  repository_path?: string;
+  sha?: string;
+  file_name?: string;
+  content_base64?: string;
+  content_type?: string;
+}
 
 interface ProcessGroup {
   processId: string;
@@ -47,6 +92,8 @@ interface UploadQueueItem {
   file: File;
   relativePath: string;
 }
+
+const repositoryFunctionName = "process-repository";
 
 const departmentOptions = [
   { value: "geral", label: "Geral" },
@@ -123,16 +170,15 @@ const getStatusLabel = (status: string) =>
 const getDepartmentLabel = (department: string) =>
   departmentOptions.find((option) => option.value === department)?.label || department;
 
-const sanitizeFileName = (fileName: string) =>
-  fileName
+const sanitizePathSegment = (segment: string) => {
+  const normalized = segment
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9._-]/g, "_");
+    .replace(/[^a-zA-Z0-9._-\s]/g, "")
+    .trim();
 
-const sanitizePathSegment = (segment: string) => {
-  const sanitized = sanitizeFileName(segment).trim();
-  if (!sanitized || sanitized === "." || sanitized === "..") return "item";
-  return sanitized;
+  if (!normalized || normalized === "." || normalized === "..") return "item";
+  return normalized;
 };
 
 const sanitizeRelativePath = (relativePath: string) => {
@@ -155,17 +201,102 @@ const getBrowserRelativePath = (file: File) => {
 };
 
 const getRepositoryRelativePath = (document: ProcessDocumentRow) => {
-  const processPrefix = `${document.process_id}/`;
-  if (document.file_path.startsWith(processPrefix)) {
-    return document.file_path.slice(processPrefix.length);
-  }
+  if (document.relative_path?.trim()) return document.relative_path;
   return document.file_name;
+};
+
+const toProcessSlug = (value: string) => {
+  const slug = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || `processo-${Date.now()}`;
+};
+
+const normalizeUploadRelativePath = (relativePath: string, processId: string) => {
+  const normalized = sanitizeRelativePath(relativePath);
+  const segments = normalized.split("/");
+  if (segments.length === 0) return normalized;
+
+  if (segments[0].toLowerCase() === processId.toLowerCase()) {
+    const trimmed = segments.slice(1).join("/");
+    return trimmed || segments[segments.length - 1];
+  }
+
+  return normalized;
+};
+
+const fileToBase64 = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+        return;
+      }
+
+      const base64 = reader.result.split(",")[1] || "";
+      if (!base64) {
+        reject(new Error("Arquivo invalido para upload."));
+        return;
+      }
+
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("Falha ao converter arquivo para base64."));
+    reader.readAsDataURL(file);
+  });
+
+const base64ToBlob = (base64: string, contentType: string) => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new Blob([bytes], { type: contentType || "application/octet-stream" });
+};
+
+const triggerBlobDownload = (blob: Blob, fileName: string) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+};
+
+const extractFunctionErrorMessage = async (error: unknown, fallback: string) => {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const payload = await error.context.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        const detailed = String((payload as { error?: unknown }).error || "").trim();
+        if (detailed) return detailed;
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
 };
 
 export default function ProcessosPage() {
   const { user } = useAuth();
 
   const [documents, setDocuments] = useState<ProcessDocumentRow[]>([]);
+  const [repositoryInfo, setRepositoryInfo] = useState<RepositoryInfo | null>(null);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -185,23 +316,32 @@ export default function ProcessosPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
+  const invokeRepositoryFunction = useCallback(
+    async <TData,>(body: Record<string, unknown>) => {
+      const { data, error } = await supabase.functions.invoke(repositoryFunctionName, { body });
+      if (error) throw error;
+      return data as TData;
+    },
+    [],
+  );
+
   const fetchDocuments = useCallback(async () => {
     setLoadingDocuments(true);
 
-    const { data, error } = await supabase
-      .from("process_documents")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast.error("Erro ao carregar documentos dos processos.");
+    try {
+      const data = await invokeRepositoryFunction<ProcessRepositoryListResponse>({
+        action: "list" as ProcessRepositoryAction,
+      });
+      setDocuments(data.documents || []);
+      setRepositoryInfo(data.repo || null);
+    } catch (error) {
+      const message = await extractFunctionErrorMessage(error, "Erro ao carregar repositorio de processos.");
+      toast.error(message);
+      setDocuments([]);
+    } finally {
       setLoadingDocuments(false);
-      return;
     }
-
-    setDocuments((data || []) as ProcessDocumentRow[]);
-    setLoadingDocuments(false);
-  }, []);
+  }, [invokeRepositoryFunction]);
 
   useEffect(() => {
     void fetchDocuments();
@@ -254,7 +394,7 @@ export default function ProcessosPage() {
       .map((group) => ({
         ...group,
         documents: [...group.documents].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
         ),
       }))
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -368,7 +508,17 @@ export default function ProcessosPage() {
         return;
       }
 
-      targetProcessId = crypto.randomUUID();
+      const existingIds = new Set(processGroups.map((group) => group.processId.toLowerCase()));
+      const baseId = toProcessSlug(trimmedProcessName);
+      let nextId = baseId;
+      let suffix = 2;
+
+      while (existingIds.has(nextId.toLowerCase())) {
+        nextId = `${baseId}-${suffix}`;
+        suffix += 1;
+      }
+
+      targetProcessId = nextId;
       targetProcessName = trimmedProcessName;
       targetDescription = processDescription.trim() || null;
       targetDepartment = processDepartment;
@@ -395,39 +545,34 @@ export default function ProcessosPage() {
     setUploadingDocuments(true);
     let successCount = 0;
     let failCount = 0;
+    let firstErrorMessage: string | null = null;
 
     for (const item of uploadQueue) {
-      const normalizedRelativePath = sanitizeRelativePath(item.relativePath);
-      const filePath = `${targetProcessId}/${normalizedRelativePath}`;
+      try {
+        const relativePath = normalizeUploadRelativePath(item.relativePath, targetProcessId);
+        const contentBase64 = await fileToBase64(item.file);
 
-      const { error: uploadError } = await supabase.storage
-        .from("process-documents")
-        .upload(filePath, item.file, { upsert: true });
+        await invokeRepositoryFunction<ProcessRepositoryActionResponse>({
+          action: "upsert_file" as ProcessRepositoryAction,
+          process_id: targetProcessId,
+          process_name: targetProcessName,
+          process_description: targetDescription,
+          department: targetDepartment,
+          status: targetStatus,
+          relative_path: relativePath,
+          file_name: item.file.name,
+          file_size: item.file.size,
+          mime_type: item.file.type || "application/octet-stream",
+          content_base64: contentBase64,
+        });
 
-      if (uploadError) {
+        successCount += 1;
+      } catch (error) {
         failCount += 1;
-        continue;
+        if (!firstErrorMessage) {
+          firstErrorMessage = await extractFunctionErrorMessage(error, "Falha no envio para o repositorio.");
+        }
       }
-
-      const { error: upsertError } = await supabase.from("process_documents").upsert({
-        process_id: targetProcessId,
-        process_name: targetProcessName,
-        process_description: targetDescription,
-        department: targetDepartment,
-        status: targetStatus,
-        file_name: item.file.name,
-        file_path: filePath,
-        file_size: item.file.size,
-        created_by: user.id,
-      }, { onConflict: "file_path" });
-
-      if (upsertError) {
-        failCount += 1;
-        await supabase.storage.from("process-documents").remove([filePath]);
-        continue;
-      }
-
-      successCount += 1;
     }
 
     setUploadingDocuments(false);
@@ -442,82 +587,85 @@ export default function ProcessosPage() {
     }
 
     if (failCount > 0) {
-      toast.warning(`Upload concluido com ressalvas: ${successCount} arquivo(s) enviado(s), ${failCount} falha(s).`);
+      const baseMessage = `Upload concluido com ressalvas: ${successCount} arquivo(s) enviado(s), ${failCount} falha(s).`;
+      toast.warning(firstErrorMessage ? `${baseMessage} ${firstErrorMessage}` : baseMessage);
       return;
     }
 
-    toast.success(`${successCount} arquivo(s) enviado(s) para o processo.`);
+    toast.success(`${successCount} arquivo(s) enviado(s) para o repositorio do processo.`);
   };
 
   const handleDownload = async (document: ProcessDocumentRow) => {
-    const { data, error } = await supabase.storage
-      .from("process-documents")
-      .createSignedUrl(document.file_path, 120);
+    try {
+      const data = await invokeRepositoryFunction<ProcessRepositoryActionResponse>({
+        action: "download_file" as ProcessRepositoryAction,
+        repository_path: document.repository_path,
+      });
 
-    if (error || !data?.signedUrl) {
-      toast.error("Nao foi possivel gerar o link de download.");
-      return;
+      if (!data.content_base64) {
+        toast.error("Nao foi possivel baixar o arquivo selecionado.");
+        return;
+      }
+
+      const blob = base64ToBlob(data.content_base64, data.content_type || "application/octet-stream");
+      triggerBlobDownload(blob, data.file_name || document.file_name);
+    } catch (error) {
+      const message = await extractFunctionErrorMessage(error, "Nao foi possivel baixar o arquivo.");
+      toast.error(message);
     }
-
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleDeleteDocument = async (document: ProcessDocumentRow) => {
-    const shouldDelete = window.confirm(`Excluir o documento \"${document.file_name}\"?`);
+    const shouldDelete = window.confirm(`Excluir o arquivo \"${document.file_name}\" do repositorio?`);
     if (!shouldDelete) return;
 
     setDeletingDocumentId(document.id);
 
-    const { error: deleteError } = await supabase
-      .from("process_documents")
-      .delete()
-      .eq("id", document.id);
+    try {
+      await invokeRepositoryFunction<ProcessRepositoryActionResponse>({
+        action: "delete_file" as ProcessRepositoryAction,
+        repository_path: document.repository_path,
+        sha: document.sha,
+      });
 
-    if (deleteError) {
+      setDocuments((previous) => previous.filter((item) => item.id !== document.id));
+      toast.success("Arquivo removido do repositorio.");
+    } catch (error) {
+      const message = await extractFunctionErrorMessage(error, "Erro ao excluir arquivo no repositorio.");
+      toast.error(message);
+    } finally {
       setDeletingDocumentId(null);
-      toast.error("Erro ao excluir documento do processo.");
-      return;
     }
-
-    const { error: storageError } = await supabase.storage
-      .from("process-documents")
-      .remove([document.file_path]);
-
-    setDeletingDocumentId(null);
-
-    if (storageError) {
-      toast.warning("Documento removido da lista, mas houve falha ao excluir o arquivo fisico.");
-    } else {
-      toast.success("Documento removido.");
-    }
-
-    setDocuments((previous) => previous.filter((item) => item.id !== document.id));
   };
 
-  const handleProcessStatusChange = async (processId: string, nextStatus: string) => {
-    setUpdatingProcessId(processId);
+  const handleProcessStatusChange = async (group: ProcessGroup, nextStatus: string) => {
+    setUpdatingProcessId(group.processId);
 
-    const { error } = await supabase
-      .from("process_documents")
-      .update({ status: nextStatus })
-      .eq("process_id", processId);
+    try {
+      await invokeRepositoryFunction<ProcessRepositoryActionResponse>({
+        action: "update_process_metadata" as ProcessRepositoryAction,
+        process_id: group.processId,
+        process_name: group.processName,
+        process_description: group.processDescription,
+        department: group.department,
+        status: nextStatus,
+      });
 
-    setUpdatingProcessId(null);
+      setDocuments((previous) =>
+        previous.map((document) =>
+          document.process_id === group.processId
+            ? { ...document, status: nextStatus, updated_at: new Date().toISOString() }
+            : document,
+        ),
+      );
 
-    if (error) {
-      toast.error("Nao foi possivel atualizar o status do processo.");
-      return;
+      toast.success("Status do processo atualizado.");
+    } catch (error) {
+      const message = await extractFunctionErrorMessage(error, "Nao foi possivel atualizar o status do processo.");
+      toast.error(message);
+    } finally {
+      setUpdatingProcessId(null);
     }
-
-    setDocuments((previous) =>
-      previous.map((document) =>
-        document.process_id === processId
-          ? { ...document, status: nextStatus, updated_at: new Date().toISOString() }
-          : document,
-      ),
-    );
-
-    toast.success("Status do processo atualizado.");
   };
 
   return (
@@ -526,9 +674,31 @@ export default function ProcessosPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold">Processos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Cadastre processos e mantenha um repositorio com pastas e arquivos na estrutura que voce ja usa.
+            Repositorio de pastas integrado ao GitHub para armazenar os processos da Grow.
           </p>
         </motion.div>
+
+        {repositoryInfo && (
+          <Card>
+            <CardContent className="p-4 text-sm space-y-1">
+              <p>
+                Repositorio conectado:{" "}
+                <a
+                  href={repositoryInfo.web_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  {repositoryInfo.owner}/{repositoryInfo.name}
+                </a>
+              </p>
+              <p className="text-muted-foreground">
+                Branch: <strong>{repositoryInfo.branch}</strong>
+                {repositoryInfo.base_path ? ` | Pasta base: ${repositoryInfo.base_path}` : " | Pasta base: raiz do repositorio"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="rounded-2xl border bg-zinc-950 p-3 sm:p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -597,7 +767,7 @@ export default function ProcessosPage() {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Arquivos hospedados</p>
+              <p className="text-xs text-muted-foreground">Arquivos versionados</p>
               <p className="text-2xl font-semibold mt-1">{processStats.totalDocuments}</p>
             </CardContent>
           </Card>
@@ -839,7 +1009,7 @@ export default function ProcessosPage() {
                           {getStatusLabel(group.status)}
                         </Badge>
                         <Badge variant="secondary">{getDepartmentLabel(group.department)}</Badge>
-                        <Badge variant="outline">{group.documents.length} documento(s)</Badge>
+                        <Badge variant="outline">{group.documents.length} arquivo(s)</Badge>
                       </div>
                     </div>
 
@@ -854,7 +1024,7 @@ export default function ProcessosPage() {
                     <div className="max-w-[260px]">
                       <Select
                         value={group.status}
-                        onValueChange={(value) => void handleProcessStatusChange(group.processId, value)}
+                        onValueChange={(value) => void handleProcessStatusChange(group, value)}
                         disabled={updatingProcessId === group.processId}
                       >
                         <SelectTrigger>
@@ -877,9 +1047,9 @@ export default function ProcessosPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-muted/40">
-                              <th className="text-left p-3 font-medium text-muted-foreground">Documento</th>
+                              <th className="text-left p-3 font-medium text-muted-foreground">Arquivo</th>
                               <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Caminho</th>
-                              <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Data</th>
+                              <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Atualizado</th>
                               <th className="text-left p-3 font-medium text-muted-foreground">Tamanho</th>
                               <th className="p-3 w-[120px]" />
                             </tr>
@@ -902,7 +1072,7 @@ export default function ProcessosPage() {
                                   <span className="truncate block max-w-[380px]">{getRepositoryRelativePath(document)}</span>
                                 </td>
                                 <td className="p-3 hidden md:table-cell text-muted-foreground">
-                                  {new Date(document.created_at).toLocaleDateString("pt-BR")}
+                                  {new Date(document.updated_at).toLocaleDateString("pt-BR")}
                                 </td>
                                 <td className="p-3 text-muted-foreground">{formatBytes(document.file_size)}</td>
                                 <td className="p-3">

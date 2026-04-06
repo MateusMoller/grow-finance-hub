@@ -1,101 +1,1097 @@
+
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BarChart3,
-  Download,
-  FileText,
-  Filter,
-  Users,
-  TrendingUp,
-  ClipboardList,
-  Calendar,
+  ArrowDown,
+  ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  BarChart3,
+  Briefcase,
+  ClipboardList,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  RefreshCw,
+  TrendingUp,
+  Users,
+  Wallet,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import type { LucideIcon } from "lucide-react";
+import { toast } from "sonner";
+
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const reportCategories = [
-  { name: "Clientes", description: "Relatórios de clientes ativos, inativos e análise de carteira", icon: Users, count: 8, color: "bg-primary/10 text-primary" },
-  { name: "Leads & CRM", description: "Pipeline de vendas, conversões e origem de leads", icon: TrendingUp, count: 6, color: "bg-amber-100 text-amber-700 dark:bg-amber-900/20" },
-  { name: "Tarefas", description: "Produtividade, tarefas por setor e prazos", icon: ClipboardList, count: 10, color: "bg-blue-100 text-blue-700 dark:bg-blue-900/20" },
-  { name: "Formulários", description: "Envios de formulários por tipo e período", icon: FileText, count: 5, color: "bg-purple-100 text-purple-700 dark:bg-purple-900/20" },
-  { name: "Financeiro", description: "Receita, inadimplência e ticket médio", icon: BarChart3, count: 7, color: "bg-primary/10 text-primary" },
-  { name: "Equipe", description: "Produtividade individual e por setor", icon: Users, count: 4, color: "bg-orange-100 text-orange-700 dark:bg-orange-900/20" },
-];
+type ReportDatasetId = "clientes" | "leads_crm" | "tarefas" | "equipe" | "financeiro";
+type ExportFormat = "csv" | "xlsx";
+type ReportRow = Record<string, unknown>;
 
-const recentReports = [
-  { name: "Relatório de Clientes Ativos", category: "Clientes", generatedAt: "18/03/2026 14:30", format: "PDF", size: "1.2 MB" },
-  { name: "Pipeline de Vendas - Março", category: "Leads & CRM", generatedAt: "17/03/2026 09:15", format: "XLSX", size: "890 KB" },
-  { name: "Produtividade da Equipe - Fev", category: "Equipe", generatedAt: "05/03/2026 16:00", format: "PDF", size: "2.4 MB" },
-  { name: "Tarefas por Setor - Q1", category: "Tarefas", generatedAt: "01/03/2026 10:45", format: "PDF", size: "1.8 MB" },
-  { name: "Formulários Enviados - Fev", category: "Formulários", generatedAt: "28/02/2026 18:20", format: "XLSX", size: "560 KB" },
-];
+type ClientRow = Pick<
+  Tables<"clients">,
+  "id" | "name" | "cnpj" | "regime" | "sector" | "status" | "contact" | "email" | "phone" | "created_at" | "updated_at"
+>;
 
-const formatColors: Record<string, string> = {
-  PDF: "bg-destructive/10 text-destructive",
-  XLSX: "bg-primary/10 text-primary",
+type LeadRow = Pick<
+  Tables<"site_leads">,
+  "id" | "full_name" | "company_name" | "email" | "phone" | "source_tag" | "origin_page" | "created_at"
+>;
+
+type TaskRow = Pick<
+  Tables<"kanban_tasks">,
+  "id" | "title" | "client_name" | "assignee" | "sector" | "priority" | "status" | "due_date" | "created_at" | "updated_at"
+>;
+
+type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name" | "created_at" | "updated_at">;
+type RoleRow = Pick<Tables<"user_roles">, "user_id" | "role" | "created_at">;
+
+type FinanceRow = Pick<
+  Tables<"client_cashflow_entries">,
+  "id" | "client_id" | "description" | "amount" | "category" | "entry_type" | "status" | "entry_date" | "created_at" | "updated_at"
+>;
+
+interface TeamReportRow {
+  user_id: string;
+  display_name: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+  role_created_at: string | null;
+}
+
+interface FinanceReportRow extends FinanceRow {
+  client_name: string;
+}
+
+interface ReportColumnDefinition {
+  key: string;
+  label: string;
+  formatter?: (value: unknown) => string;
+}
+
+interface ReportDatasetDefinition {
+  id: ReportDatasetId;
+  name: string;
+  description: string;
+  icon: LucideIcon;
+  colorClass: string;
+  columns: ReportColumnDefinition[];
+  defaultColumns: string[];
+}
+
+interface AutomaticReportCard {
+  datasetId: ReportDatasetId;
+  count: number;
+  stats: Array<{ label: string; value: string }>;
+}
+
+const roleOrder = [
+  "admin",
+  "director",
+  "manager",
+  "employee",
+  "commercial",
+  "departamento_pessoal",
+  "fiscal",
+  "contabil",
+] as const;
+
+const rolePriority = new Map(roleOrder.map((role, index) => [role, index]));
+const doneTaskStatuses = new Set(["done", "archived", "concluido", "concluida", "completed", "fechado"]);
+const expenseKeywords = ["despesa", "saida", "expense", "outflow", "debito", "debit"];
+const incomeKeywords = ["receita", "entrada", "income", "inflow", "credito", "credit"];
+
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const formatDateTime = (value: unknown) => {
+  if (typeof value !== "string" || !value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("pt-BR");
+};
+
+const formatDate = (value: unknown) => {
+  if (typeof value !== "string" || !value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("pt-BR");
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+
+const formatRole = (role: string) =>
+  role
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const pickPrimaryRole = (roles: string[]) => {
+  if (roles.length === 0) return "";
+  const sorted = [...roles].sort((a, b) => {
+    const aPriority = rolePriority.get(a as (typeof roleOrder)[number]) ?? 999;
+    const bPriority = rolePriority.get(b as (typeof roleOrder)[number]) ?? 999;
+    return aPriority - bPriority;
+  });
+  return sorted[0];
+};
+
+const isTaskDone = (status: string) => {
+  const normalized = normalizeText(status || "");
+  return doneTaskStatuses.has(normalized);
+};
+
+const taskStatusLabel = (status: string) => {
+  const normalized = normalizeText(status || "");
+  if (normalized === "todo") return "A fazer";
+  if (normalized === "doing") return "Em andamento";
+  if (normalized === "review") return "Em revisao";
+  if (normalized === "done") return "Concluido";
+  if (normalized === "archived") return "Arquivado";
+  return status || "Sem status";
+};
+
+const getSignedFinanceAmount = (entryType: string, amount: number) => {
+  const normalizedType = normalizeText(entryType || "");
+  const absoluteAmount = Math.abs(amount || 0);
+
+  if (expenseKeywords.some((keyword) => normalizedType.includes(keyword))) {
+    return absoluteAmount * -1;
+  }
+  if (incomeKeywords.some((keyword) => normalizedType.includes(keyword))) {
+    return absoluteAmount;
+  }
+  return amount;
+};
+
+const sanitizeFileName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w-]+/g, "-")
+    .replace(/--+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+
+const formatCellValue = (value: unknown, formatter?: (value: unknown) => string) => {
+  if (formatter) return formatter(value);
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
+  return JSON.stringify(value);
+};
+
+const triggerBlobDownload = (blob: Blob, fileName: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+};
+const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
+  clientes: {
+    id: "clientes",
+    name: "Clientes",
+    description: "Carteira de clientes ativos, inativos e dados cadastrais.",
+    icon: Users,
+    colorClass: "bg-primary/10 text-primary",
+    columns: [
+      { key: "nome", label: "Nome" },
+      { key: "cnpj", label: "CNPJ" },
+      { key: "regime", label: "Regime" },
+      { key: "segmento", label: "Segmento" },
+      { key: "status", label: "Status" },
+      { key: "contato", label: "Contato" },
+      { key: "email", label: "E-mail" },
+      { key: "telefone", label: "Telefone" },
+      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
+      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
+    ],
+    defaultColumns: ["nome", "status", "segmento", "contato", "email", "telefone"],
+  },
+  leads_crm: {
+    id: "leads_crm",
+    name: "Leads e CRM",
+    description: "Leads capturados no site e distribuicao por origem.",
+    icon: TrendingUp,
+    colorClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/20",
+    columns: [
+      { key: "nome", label: "Nome" },
+      { key: "empresa", label: "Empresa" },
+      { key: "email", label: "E-mail" },
+      { key: "telefone", label: "Telefone" },
+      { key: "origem", label: "Origem" },
+      { key: "pagina_origem", label: "Pagina de origem" },
+      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
+    ],
+    defaultColumns: ["nome", "empresa", "email", "telefone", "origem", "criado_em"],
+  },
+  tarefas: {
+    id: "tarefas",
+    name: "Tarefas",
+    description: "Produtividade da operacao com status, prioridade e prazos.",
+    icon: ClipboardList,
+    colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
+    columns: [
+      { key: "titulo", label: "Titulo" },
+      { key: "cliente", label: "Cliente" },
+      { key: "responsavel", label: "Responsavel" },
+      { key: "setor", label: "Setor" },
+      { key: "prioridade", label: "Prioridade" },
+      { key: "status", label: "Status" },
+      { key: "prazo", label: "Prazo", formatter: formatDate },
+      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
+      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
+    ],
+    defaultColumns: ["titulo", "cliente", "setor", "responsavel", "prioridade", "status", "prazo"],
+  },
+  equipe: {
+    id: "equipe",
+    name: "Equipe",
+    description: "Visao da equipe interna com papeis e datas de cadastro.",
+    icon: Briefcase,
+    colorClass: "bg-orange-100 text-orange-700 dark:bg-orange-900/20",
+    columns: [
+      { key: "colaborador", label: "Colaborador" },
+      { key: "papel", label: "Papel" },
+      { key: "usuario_id", label: "Usuario ID" },
+      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
+      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
+      { key: "papel_definido_em", label: "Papel definido em", formatter: formatDateTime },
+    ],
+    defaultColumns: ["colaborador", "papel", "usuario_id", "criado_em", "atualizado_em"],
+  },
+  financeiro: {
+    id: "financeiro",
+    name: "Financeiro",
+    description: "Fluxo financeiro por cliente, categoria e tipo de lancamento.",
+    icon: Wallet,
+    colorClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20",
+    columns: [
+      { key: "cliente", label: "Cliente" },
+      { key: "descricao", label: "Descricao" },
+      { key: "categoria", label: "Categoria" },
+      { key: "tipo", label: "Tipo" },
+      { key: "status", label: "Status" },
+      { key: "valor", label: "Valor", formatter: (value) => formatCurrency(Number(value) || 0) },
+      { key: "data_lancamento", label: "Data do lancamento", formatter: formatDate },
+      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
+      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
+    ],
+    defaultColumns: ["cliente", "descricao", "categoria", "tipo", "status", "valor", "data_lancamento"],
+  },
 };
 
 export default function RelatoriosPage() {
+  const { selectedCompany, selectedCompetence } = useGlobalFilters();
+
+  const [loading, setLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [clients, setClients] = useState<ClientRow[]>([]);
+  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [team, setTeam] = useState<TeamReportRow[]>([]);
+  const [finance, setFinance] = useState<FinanceReportRow[]>([]);
+
+  const [customDatasetId, setCustomDatasetId] = useState<ReportDatasetId>("clientes");
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(reportDefinitions.clientes.defaultColumns);
+  const [leftSelectedKeys, setLeftSelectedKeys] = useState<string[]>([]);
+  const [rightSelectedKeys, setRightSelectedKeys] = useState<string[]>([]);
+
+  const loadReportData = useCallback(async () => {
+    setLoading(true);
+
+    const [clientsRes, leadsRes, tasksRes, profilesRes, rolesRes, financeRes] = await Promise.all([
+      supabase
+        .from("clients")
+        .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
+        .order("name"),
+      supabase
+        .from("site_leads")
+        .select("id, full_name, company_name, email, phone, source_tag, origin_page, created_at")
+        .order("created_at", { ascending: false })
+        .limit(2000),
+      supabase
+        .from("kanban_tasks")
+        .select("id, title, client_name, assignee, sector, priority, status, due_date, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(3000),
+      supabase
+        .from("profiles")
+        .select("user_id, display_name, created_at, updated_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("user_roles")
+        .select("user_id, role, created_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("client_cashflow_entries")
+        .select("id, client_id, description, amount, category, entry_type, status, entry_date, created_at, updated_at")
+        .order("entry_date", { ascending: false })
+        .limit(5000),
+    ]);
+
+    const firstError =
+      clientsRes.error ||
+      leadsRes.error ||
+      tasksRes.error ||
+      profilesRes.error ||
+      rolesRes.error ||
+      financeRes.error;
+
+    if (firstError) {
+      toast.error(`Falha ao carregar relatorios: ${firstError.message}`);
+    }
+
+    const nextClients = (clientsRes.data || []) as ClientRow[];
+    const nextLeads = (leadsRes.data || []) as LeadRow[];
+    const nextTasks = (tasksRes.data || []) as TaskRow[];
+    const nextProfiles = (profilesRes.data || []) as ProfileRow[];
+    const nextRoles = (rolesRes.data || []) as RoleRow[];
+    const nextFinance = (financeRes.data || []) as FinanceRow[];
+
+    const profileByUserId = new Map(nextProfiles.map((profile) => [profile.user_id, profile]));
+    const rolesByUserId = new Map<string, RoleRow[]>();
+    nextRoles.forEach((role) => {
+      const current = rolesByUserId.get(role.user_id) || [];
+      current.push(role);
+      rolesByUserId.set(role.user_id, current);
+    });
+
+    const allTeamUserIds = new Set<string>();
+    nextProfiles.forEach((profile) => allTeamUserIds.add(profile.user_id));
+    nextRoles.forEach((role) => allTeamUserIds.add(role.user_id));
+
+    const teamRows = Array.from(allTeamUserIds)
+      .map((userId) => {
+        const profile = profileByUserId.get(userId);
+        const userRoles = (rolesByUserId.get(userId) || []).map((item) => item.role);
+        const mainRole = pickPrimaryRole(userRoles);
+        const firstRoleCreatedAt = (rolesByUserId.get(userId) || [])[0]?.created_at || null;
+
+        return {
+          user_id: userId,
+          display_name: profile?.display_name || `Usuario ${userId.slice(0, 6)}`,
+          role: mainRole ? formatRole(mainRole) : "Sem papel",
+          created_at: profile?.created_at || firstRoleCreatedAt || "",
+          updated_at: profile?.updated_at || profile?.created_at || firstRoleCreatedAt || "",
+          role_created_at: firstRoleCreatedAt,
+        };
+      })
+      .sort((a, b) => a.display_name.localeCompare(b.display_name, "pt-BR"));
+
+    const clientNameById = new Map(nextClients.map((client) => [client.id, client.name]));
+    const financeRows = nextFinance.map((entry) => ({
+      ...entry,
+      client_name: clientNameById.get(entry.client_id) || "Cliente nao encontrado",
+    }));
+
+    setClients(nextClients);
+    setLeads(nextLeads);
+    setTasks(nextTasks);
+    setTeam(teamRows);
+    setFinance(financeRows);
+    setLastUpdatedAt(new Date().toISOString());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadReportData();
+  }, [loadReportData]);
+
+  useEffect(() => {
+    setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns);
+    setLeftSelectedKeys([]);
+    setRightSelectedKeys([]);
+  }, [customDatasetId]);
+
+  const filteredClients = useMemo(
+    () =>
+      clients.filter(
+        (client) =>
+          matchesSelectedCompany(client.name, selectedCompany) &&
+          matchesSelectedCompetence(client.created_at, selectedCompetence),
+      ),
+    [clients, selectedCompany, selectedCompetence],
+  );
+
+  const filteredLeads = useMemo(
+    () =>
+      leads.filter(
+        (lead) =>
+          matchesSelectedCompany(lead.company_name || lead.full_name, selectedCompany) &&
+          matchesSelectedCompetence(lead.created_at, selectedCompetence),
+      ),
+    [leads, selectedCompany, selectedCompetence],
+  );
+
+  const filteredTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          matchesSelectedCompany(task.client_name, selectedCompany) &&
+          matchesSelectedCompetence(getTaskCompetence(task.due_date, task.created_at), selectedCompetence),
+      ),
+    [tasks, selectedCompany, selectedCompetence],
+  );
+
+  const filteredTeam = useMemo(
+    () =>
+      team.filter((member) =>
+        selectedCompetence ? matchesSelectedCompetence(member.created_at, selectedCompetence) : true,
+      ),
+    [team, selectedCompetence],
+  );
+
+  const filteredFinance = useMemo(
+    () =>
+      finance.filter(
+        (entry) =>
+          matchesSelectedCompany(entry.client_name, selectedCompany) &&
+          matchesSelectedCompetence(entry.entry_date || entry.created_at, selectedCompetence),
+      ),
+    [finance, selectedCompany, selectedCompetence],
+  );
+
+  const rowsByDataset = useMemo<Record<ReportDatasetId, ReportRow[]>>(
+    () => ({
+      clientes: filteredClients.map((client) => ({
+        id: client.id,
+        nome: client.name,
+        cnpj: client.cnpj || "",
+        regime: client.regime || "",
+        segmento: client.sector || "",
+        status: client.status || "",
+        contato: client.contact || "",
+        email: client.email || "",
+        telefone: client.phone || "",
+        criado_em: client.created_at,
+        atualizado_em: client.updated_at,
+      })),
+      leads_crm: filteredLeads.map((lead) => ({
+        id: lead.id,
+        nome: lead.full_name,
+        empresa: lead.company_name || "",
+        email: lead.email,
+        telefone: lead.phone || "",
+        origem: lead.source_tag,
+        pagina_origem: lead.origin_page || "",
+        criado_em: lead.created_at,
+      })),
+      tarefas: filteredTasks.map((task) => ({
+        id: task.id,
+        titulo: task.title,
+        cliente: task.client_name || "",
+        responsavel: task.assignee || "",
+        setor: task.sector,
+        prioridade: task.priority,
+        status: taskStatusLabel(task.status),
+        prazo: task.due_date || "",
+        criado_em: task.created_at,
+        atualizado_em: task.updated_at,
+      })),
+      equipe: filteredTeam.map((member) => ({
+        id: member.user_id,
+        colaborador: member.display_name,
+        papel: member.role,
+        usuario_id: member.user_id,
+        criado_em: member.created_at,
+        atualizado_em: member.updated_at,
+        papel_definido_em: member.role_created_at,
+      })),
+      financeiro: filteredFinance.map((entry) => ({
+        id: entry.id,
+        cliente: entry.client_name,
+        descricao: entry.description,
+        categoria: entry.category || "",
+        tipo: entry.entry_type || "",
+        status: entry.status || "",
+        valor: getSignedFinanceAmount(entry.entry_type || "", entry.amount),
+        data_lancamento: entry.entry_date,
+        criado_em: entry.created_at,
+        atualizado_em: entry.updated_at,
+      })),
+    }),
+    [filteredClients, filteredLeads, filteredTasks, filteredTeam, filteredFinance],
+  );
+
+  const automaticCards = useMemo<AutomaticReportCard[]>(() => {
+    const activeClients = filteredClients.filter((client) => normalizeText(client.status || "") === "ativo").length;
+    const clientsWithContact = filteredClients.filter((client) => Boolean(client.contact || client.email)).length;
+
+    const leadsFromSite = filteredLeads.filter((lead) => normalizeText(lead.source_tag || "").includes("site")).length;
+    const leadsIn30Days = filteredLeads.filter((lead) => {
+      const createdAt = new Date(lead.created_at).getTime();
+      if (Number.isNaN(createdAt)) return false;
+      const now = Date.now();
+      const last30DaysMs = 30 * 24 * 60 * 60 * 1000;
+      return now - createdAt <= last30DaysMs;
+    }).length;
+
+    const doneTasks = filteredTasks.filter((task) => isTaskDone(task.status)).length;
+    const openTasks = filteredTasks.length - doneTasks;
+
+    const teamWithRole = filteredTeam.filter((member) => normalizeText(member.role) !== "sem papel").length;
+    const teamWithoutRole = filteredTeam.length - teamWithRole;
+
+    const financeSigned = filteredFinance.map((entry) => getSignedFinanceAmount(entry.entry_type || "", entry.amount));
+    const totalInflow = financeSigned.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
+    const totalOutflow = Math.abs(financeSigned.filter((value) => value < 0).reduce((sum, value) => sum + value, 0));
+    const pendingEntries = filteredFinance.filter((entry) => normalizeText(entry.status || "").includes("pend")).length;
+
+    return [
+      {
+        datasetId: "clientes",
+        count: rowsByDataset.clientes.length,
+        stats: [
+          { label: "Ativos", value: String(activeClients) },
+          { label: "Com contato", value: String(clientsWithContact) },
+        ],
+      },
+      {
+        datasetId: "leads_crm",
+        count: rowsByDataset.leads_crm.length,
+        stats: [
+          { label: "Ultimos 30 dias", value: String(leadsIn30Days) },
+          { label: "Origem site", value: String(leadsFromSite) },
+        ],
+      },
+      {
+        datasetId: "tarefas",
+        count: rowsByDataset.tarefas.length,
+        stats: [
+          { label: "Concluidas", value: String(doneTasks) },
+          { label: "Em aberto", value: String(openTasks) },
+        ],
+      },
+      {
+        datasetId: "equipe",
+        count: rowsByDataset.equipe.length,
+        stats: [
+          { label: "Com papel", value: String(teamWithRole) },
+          { label: "Sem papel", value: String(teamWithoutRole) },
+        ],
+      },
+      {
+        datasetId: "financeiro",
+        count: rowsByDataset.financeiro.length,
+        stats: [
+          { label: "Entradas", value: formatCurrency(totalInflow) },
+          { label: "Saidas", value: formatCurrency(totalOutflow) },
+          { label: "Pendentes", value: String(pendingEntries) },
+        ],
+      },
+    ];
+  }, [filteredClients, filteredLeads, filteredTasks, filteredTeam, filteredFinance, rowsByDataset]);
+
+  const activeFilterBadges = useMemo(() => {
+    const items: string[] = [];
+    if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
+    if (selectedCompetence) items.push(`Competencia: ${selectedCompetence}`);
+    return items;
+  }, [selectedCompany, selectedCompetence]);
+
+  const customDefinition = reportDefinitions[customDatasetId];
+
+  const selectedColumnDefinitions = useMemo(
+    () =>
+      selectedColumns
+        .map((columnKey) => customDefinition.columns.find((column) => column.key === columnKey))
+        .filter((column): column is ReportColumnDefinition => Boolean(column)),
+    [customDefinition.columns, selectedColumns],
+  );
+
+  const availableColumns = useMemo(
+    () => customDefinition.columns.filter((column) => !selectedColumns.includes(column.key)),
+    [customDefinition.columns, selectedColumns],
+  );
+
+  useEffect(() => {
+    const availableSet = new Set(availableColumns.map((column) => column.key));
+    setLeftSelectedKeys((current) => current.filter((key) => availableSet.has(key)));
+  }, [availableColumns]);
+
+  useEffect(() => {
+    const selectedSet = new Set(selectedColumns);
+    setRightSelectedKeys((current) => current.filter((key) => selectedSet.has(key)));
+  }, [selectedColumns]);
+
+  const toggleLeftSelection = (columnKey: string) => {
+    setLeftSelectedKeys((current) =>
+      current.includes(columnKey) ? current.filter((key) => key !== columnKey) : [...current, columnKey],
+    );
+  };
+
+  const toggleRightSelection = (columnKey: string) => {
+    setRightSelectedKeys((current) =>
+      current.includes(columnKey) ? current.filter((key) => key !== columnKey) : [...current, columnKey],
+    );
+  };
+
+  const handleAddColumns = () => {
+    if (leftSelectedKeys.length === 0) return;
+    const orderedKeys = customDefinition.columns.map((column) => column.key);
+
+    setSelectedColumns((current) => {
+      const merged = Array.from(new Set([...current, ...leftSelectedKeys]));
+      merged.sort((a, b) => orderedKeys.indexOf(a) - orderedKeys.indexOf(b));
+      return merged;
+    });
+    setLeftSelectedKeys([]);
+  };
+
+  const handleRemoveColumns = () => {
+    if (rightSelectedKeys.length === 0) return;
+    setSelectedColumns((current) => current.filter((key) => !rightSelectedKeys.includes(key)));
+    setRightSelectedKeys([]);
+  };
+
+  const canMoveSelectedColumn = rightSelectedKeys.length === 1;
+  const selectedColumnForMove = canMoveSelectedColumn ? rightSelectedKeys[0] : null;
+  const selectedColumnIndex = selectedColumnForMove ? selectedColumns.indexOf(selectedColumnForMove) : -1;
+
+  const handleMoveSelectedColumn = (direction: "up" | "down") => {
+    if (!selectedColumnForMove || selectedColumnIndex < 0) return;
+    const targetIndex = direction === "up" ? selectedColumnIndex - 1 : selectedColumnIndex + 1;
+    if (targetIndex < 0 || targetIndex >= selectedColumns.length) return;
+
+    const next = [...selectedColumns];
+    const [moved] = next.splice(selectedColumnIndex, 1);
+    next.splice(targetIndex, 0, moved);
+    setSelectedColumns(next);
+  };
+
+  const buildExportRows = useCallback(
+    (datasetId: ReportDatasetId, columnKeys: string[]) => {
+      const definition = reportDefinitions[datasetId];
+      const sourceRows = rowsByDataset[datasetId];
+
+      return sourceRows.map((row) => {
+        const output: Record<string, string> = {};
+        columnKeys.forEach((columnKey) => {
+          const column = definition.columns.find((item) => item.key === columnKey);
+          if (!column) return;
+          output[column.label] = formatCellValue(row[column.key], column.formatter);
+        });
+        return output;
+      });
+    },
+    [rowsByDataset],
+  );
+
+  const handleExport = useCallback(
+    async (datasetId: ReportDatasetId, columnKeys: string[], format: ExportFormat, scopeLabel: string) => {
+      const definition = reportDefinitions[datasetId];
+      const totalRows = rowsByDataset[datasetId].length;
+
+      if (totalRows === 0) {
+        toast.warning("Nao ha dados para exportar neste relatorio.");
+        return;
+      }
+      if (columnKeys.length === 0) {
+        toast.warning("Selecione ao menos uma coluna para exportar.");
+        return;
+      }
+
+      const XLSX = await import("xlsx");
+      const exportRows = buildExportRows(datasetId, columnKeys);
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const now = new Date().toISOString().replace(/[:.]/g, "-");
+      const baseName = sanitizeFileName(`${definition.name}-${scopeLabel}-${now}`);
+
+      if (format === "xlsx") {
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, definition.name.slice(0, 30));
+        XLSX.writeFile(workbook, `${baseName}.xlsx`);
+      } else {
+        const csv = XLSX.utils.sheet_to_csv(worksheet);
+        const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+        triggerBlobDownload(blob, `${baseName}.csv`);
+      }
+
+      toast.success(`Relatorio ${definition.name} exportado com sucesso.`);
+    },
+    [buildExportRows, rowsByDataset],
+  );
+
+  const customRows = rowsByDataset[customDatasetId];
+  const customPreviewRows = customRows.slice(0, 10);
+
   return (
     <AppLayout>
       <div className="space-y-6 max-w-7xl">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Relatórios</h1>
-            <p className="text-sm text-muted-foreground">Geração e exportação de relatórios gerenciais</p>
+            <h1 className="font-heading text-2xl font-bold">Relatorios</h1>
+            <p className="text-sm text-muted-foreground">
+              Relatorios automaticos com dados do banco e construtor personalizado.
+            </p>
+            {lastUpdatedAt && (
+              <p className="text-xs text-muted-foreground mt-1">Atualizado em {formatDateTime(lastUpdatedAt)}</p>
+            )}
           </div>
-          <Button className="gap-2">
-            <BarChart3 className="h-4 w-4" /> Gerar Relatório
+          <Button variant="outline" className="gap-2 w-fit" onClick={() => void loadReportData()} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Atualizar dados
           </Button>
         </div>
 
-        {/* Categories */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reportCategories.map((cat, i) => (
-            <motion.div key={cat.name} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-xl border bg-card p-5 hover:shadow-md transition-all cursor-pointer group">
-              <div className="flex items-start justify-between">
-                <div className={`h-10 w-10 rounded-lg ${cat.color} flex items-center justify-center`}>
-                  <cat.icon className="h-5 w-5" />
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-              </div>
-              <h3 className="font-medium mt-3">{cat.name}</h3>
-              <p className="text-xs text-muted-foreground mt-1">{cat.description}</p>
-              <span className="text-xs text-muted-foreground mt-2 block">{cat.count} relatórios disponíveis</span>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Recent reports */}
-        <div className="rounded-xl border bg-card">
-          <div className="p-5 border-b">
-            <h2 className="font-heading font-semibold">Relatórios Recentes</h2>
-          </div>
-          <div className="divide-y">
-            {recentReports.map((report, i) => (
-              <div key={i} className="p-4 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">{report.name}</div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2">
-                      <span>{report.category}</span>
-                      <span>·</span>
-                      <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{report.generatedAt}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <Badge variant="outline" className={`text-xs border-0 ${formatColors[report.format] || "bg-muted"}`}>{report.format}</Badge>
-                  <span className="text-xs text-muted-foreground">{report.size}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
-                </div>
-              </div>
+        {activeFilterBadges.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {activeFilterBadges.map((badge) => (
+              <Badge key={badge} variant="secondary">
+                <FilterBadgeLabel text={badge} />
+              </Badge>
             ))}
           </div>
-        </div>
+        )}
+
+        <Tabs defaultValue="automaticos" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="automaticos">Relatorios automaticos</TabsTrigger>
+            <TabsTrigger value="personalizado">Gerar relatorio personalizado</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="automaticos" className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {automaticCards.map((card, index) => {
+                const definition = reportDefinitions[card.datasetId];
+                const Icon = definition.icon;
+
+                return (
+                  <motion.div
+                    key={card.datasetId}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="rounded-xl border bg-card p-5 space-y-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={`h-10 w-10 rounded-lg ${definition.colorClass} flex items-center justify-center`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline">{card.count} registros</Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="font-medium">{definition.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">{definition.description}</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {card.stats.map((stat) => (
+                        <div key={`${card.datasetId}-${stat.label}`} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">{stat.label}</span>
+                          <span className="font-medium">{stat.value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() =>
+                          void handleExport(
+                            card.datasetId,
+                            reportDefinitions[card.datasetId].defaultColumns,
+                            "csv",
+                            "automatico",
+                          )
+                        }
+                      >
+                        <Download className="h-4 w-4" />
+                        CSV
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-2"
+                        onClick={() =>
+                          void handleExport(
+                            card.datasetId,
+                            reportDefinitions[card.datasetId].defaultColumns,
+                            "xlsx",
+                            "automatico",
+                          )
+                        }
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        XLSX
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-xl border bg-card">
+              <div className="p-4 border-b flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-heading font-semibold">Resumo rapido</h2>
+                <span className="text-xs text-muted-foreground">
+                  Totais carregados:{" "}
+                  {Object.values(rowsByDataset)
+                    .reduce((sum, rows) => sum + rows.length, 0)
+                    .toLocaleString("pt-BR")}{" "}
+                  registros
+                </span>
+              </div>
+              <div className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+                {Object.values(reportDefinitions).map((definition) => (
+                  <div key={definition.id} className="rounded-lg border p-3">
+                    <p className="font-medium">{definition.name}</p>
+                    <p className="text-2xl font-bold mt-1">{rowsByDataset[definition.id].length}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="personalizado" className="space-y-4">
+            <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="font-heading font-semibold">Gerar relatorio</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Escolha o modulo, selecione as colunas e exporte seu modelo customizado.
+                  </p>
+                </div>
+                <div className="w-full lg:w-[280px]">
+                  <Select value={customDatasetId} onValueChange={(value) => setCustomDatasetId(value as ReportDatasetId)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(reportDefinitions).map((definition) => (
+                        <SelectItem key={definition.id} value={definition.id}>
+                          {definition.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr]">
+                <div className="rounded-lg border p-3">
+                  <p className="text-sm font-medium">Colunas disponiveis</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {availableColumns.length} campo(s) disponivel(is)
+                  </p>
+                  <div className="mt-3 max-h-72 overflow-auto space-y-1">
+                    {availableColumns.length === 0 && (
+                      <p className="text-sm text-muted-foreground py-6 text-center">Sem colunas para adicionar.</p>
+                    )}
+                    {availableColumns.map((column) => {
+                      const selected = leftSelectedKeys.includes(column.key);
+                      return (
+                        <button
+                          key={column.key}
+                          type="button"
+                          onClick={() => toggleLeftSelection(column.key)}
+                          className={`w-full text-left text-sm rounded-md px-2.5 py-2 border transition-colors ${
+                            selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
+                          }`}
+                        >
+                          {column.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-row lg:flex-col items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={handleAddColumns}
+                    disabled={leftSelectedKeys.length === 0}
+                    aria-label="Adicionar colunas"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={handleRemoveColumns}
+                    disabled={rightSelectedKeys.length === 0}
+                    aria-label="Remover colunas"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Colunas selecionadas</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {selectedColumnDefinitions.length} campo(s) no relatorio
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => handleMoveSelectedColumn("up")}
+                        disabled={!canMoveSelectedColumn || selectedColumnIndex <= 0}
+                        aria-label="Mover coluna para cima"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => handleMoveSelectedColumn("down")}
+                        disabled={!canMoveSelectedColumn || selectedColumnIndex < 0 || selectedColumnIndex >= selectedColumns.length - 1}
+                        aria-label="Mover coluna para baixo"
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 max-h-72 overflow-auto space-y-1">
+                    {selectedColumnDefinitions.length === 0 && (
+                      <p className="text-sm text-muted-foreground py-6 text-center">Adicione colunas para montar o relatorio.</p>
+                    )}
+                    {selectedColumnDefinitions.map((column) => {
+                      const selected = rightSelectedKeys.includes(column.key);
+                      return (
+                        <button
+                          key={column.key}
+                          type="button"
+                          onClick={() => toggleRightSelection(column.key)}
+                          className={`w-full text-left text-sm rounded-md px-2.5 py-2 border transition-colors ${
+                            selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
+                          }`}
+                        >
+                          {column.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns)}
+                >
+                  Usar colunas padrao
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setSelectedColumns([])}>
+                  Limpar selecao
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => void handleExport(customDatasetId, selectedColumns, "csv", "personalizado")}
+                >
+                  <Download className="h-4 w-4" />
+                  Exportar CSV
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => void handleExport(customDatasetId, selectedColumns, "xlsx", "personalizado")}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Exportar XLSX
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card">
+              <div className="p-4 border-b flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-heading font-semibold">Preview do relatorio</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Mostrando ate 10 linhas de {customRows.length} registro(s) da base.
+                  </p>
+                </div>
+                <Badge variant="outline">{reportDefinitions[customDatasetId].name}</Badge>
+              </div>
+
+              {selectedColumnDefinitions.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Selecione colunas para exibir o preview do relatorio.
+                </div>
+              ) : customRows.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Nenhum dado encontrado para os filtros atuais.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b bg-muted/30">
+                        {selectedColumnDefinitions.map((column) => (
+                          <th key={column.key} className="text-left text-xs font-semibold text-muted-foreground p-3 whitespace-nowrap">
+                            {column.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {customPreviewRows.map((row, rowIndex) => {
+                        const rowKey = String(row.id || `${customDatasetId}-${rowIndex}`);
+                        return (
+                          <tr key={rowKey} className="hover:bg-muted/20 transition-colors">
+                            {selectedColumnDefinitions.map((column) => {
+                              const value = formatCellValue(row[column.key], column.formatter);
+                              return (
+                                <td key={`${rowKey}-${column.key}`} className="p-3 text-sm whitespace-nowrap">
+                                  {value || "-"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
+  );
+}
+
+function FilterBadgeLabel({ text }: { text: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <BarChart3 className="h-3.5 w-3.5" />
+      {text}
+    </span>
   );
 }
