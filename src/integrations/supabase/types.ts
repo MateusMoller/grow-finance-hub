@@ -204,6 +204,59 @@ export type Database = {
           },
         ]
       }
+      process_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          department: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          process_description: string | null
+          process_id: string
+          process_name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          department?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          process_description?: string | null
+          process_id: string
+          process_name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          department?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          process_description?: string | null
+          process_id?: string
+          process_name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_requests: {
         Row: {
           admin_notes: string | null

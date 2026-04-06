@@ -14,6 +14,7 @@ import {
   Newspaper,
   MessagesSquare,
   UserCog,
+  FolderOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -40,6 +41,7 @@ const mainItems = [
 
 const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
+  { title: "Processos", url: "/app/processos", icon: FolderOpen },
   { title: "Formularios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
@@ -103,7 +105,12 @@ export function AppSidebar() {
     : mainItems;
 
   const visibleOperationalItems = isDepartmentRole
-    ? operationalItems.filter((item) => item.url === "/app/solicitacoes" || item.url === "/app/chat-interno")
+    ? operationalItems.filter(
+        (item) =>
+          item.url === "/app/solicitacoes" ||
+          item.url === "/app/processos" ||
+          item.url === "/app/chat-interno",
+      )
     : role === "admin"
       ? operationalItems
       : operationalItems.filter((item) => item.url !== "/app/newsletter");
