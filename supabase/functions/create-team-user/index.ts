@@ -258,6 +258,26 @@ Deno.serve(async (req) => {
       throw profileUpsertError;
     }
 
+    // Internal users must not remain linked to client records.
+    const { error: removeClientRoleError } = await supabaseAdmin
+      .from("user_roles")
+      .delete()
+      .eq("user_id", userId)
+      .eq("role", "client");
+
+    if (removeClientRoleError) {
+      throw removeClientRoleError;
+    }
+
+    const { error: removeClientRecordError } = await supabaseAdmin
+      .from("clients")
+      .delete()
+      .eq("portal_user_id", userId);
+
+    if (removeClientRecordError) {
+      throw removeClientRecordError;
+    }
+
     return jsonResponse({
       ok: true,
       user: {

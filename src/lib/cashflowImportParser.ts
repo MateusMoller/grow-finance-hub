@@ -1,10 +1,11 @@
-﻿import type { PortalCashflowEntryType } from "@/components/portal/types";
+import { cashflowCategoriesByType, type PortalCashflowEntryType } from "@/components/portal/types";
 
 export interface ParsedCashflowSuggestion {
   entryDate: string;
   description: string;
   amount: number;
   entryType: PortalCashflowEntryType;
+  category: string;
   sourceFile: string;
   sourceLine: string;
   confidence: number;
@@ -113,6 +114,34 @@ const inferEntryType = (line: string, value: number): PortalCashflowEntryType =>
   return "income";
 };
 
+const inferCategory = (
+  description: string,
+  line: string,
+  entryType: PortalCashflowEntryType,
+): string => {
+  const normalized = `${description} ${line}`.toLowerCase();
+  const categories = cashflowCategoriesByType[entryType];
+  const fallbackCategory = categories[categories.length - 1];
+
+  if (entryType === "income") {
+    if (/(aporte|capital social|socio|sócio)/.test(normalized)) return "Aporte dos socios";
+    if (/(emprestimo|empréstimo|financiamento|credito bancario|crédito bancário)/.test(normalized)) return "Credito bancario";
+    if (/(pix|transferencia recebida|transferência recebida|ted|doc|deposito|depósito|receb)/.test(normalized)) {
+      return "Recebimento de clientes";
+    }
+    return fallbackCategory;
+  }
+
+  if (/(pro-?labore)/.test(normalized)) return "Pro-labore";
+  if (/(imposto|das|tribut|irpj|csll|pis|cofins|icms|iss)/.test(normalized)) return "Impostos";
+  if (/(salario|salário|folha|inss|fgts|ferias|férias|decimo|13o|13º|vale)/.test(normalized)) return "Folha de pagamento";
+  if (/(fornecedor|boleto|nota fiscal|nf-e|nfe|material|insumo|compra)/.test(normalized)) return "Fornecedores";
+  if (/(aluguel|energia|agua|água|internet|telefone|software|assinatura|honorario|honorário|despesa)/.test(normalized)) {
+    return "Despesas operacionais";
+  }
+  return fallbackCategory;
+};
+
 const buildSuggestion = (params: {
   date: string;
   description: string;
@@ -127,12 +156,15 @@ const buildSuggestion = (params: {
 
   const description = normalizeWhitespace(params.description || "");
   const finalDescription = description.length >= 3 ? description : `Lancamento importado de ${params.sourceFile}`;
+  const entryType = inferEntryType(params.line, params.value);
+  const category = inferCategory(finalDescription, params.line, entryType);
 
   return {
     entryDate: params.date,
     description: finalDescription,
     amount: Number(amount.toFixed(2)),
-    entryType: inferEntryType(params.line, params.value),
+    entryType,
+    category,
     sourceFile: params.sourceFile,
     sourceLine: params.sourceLine,
     confidence: Number(Math.min(1, Math.max(0.4, params.confidence)).toFixed(2)),

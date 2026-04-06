@@ -127,6 +127,27 @@ export default function UsuariosPage() {
       return false;
     }
 
+    const { error: removeClientRoleError } = await supabase
+      .from("user_roles")
+      .delete()
+      .eq("user_id", portalUserId)
+      .eq("role", "client");
+
+    if (removeClientRoleError) {
+      toast.error("Nao foi possivel remover o perfil de cliente do usuario promovido.");
+      return false;
+    }
+
+    const { error: removeClientRecordError } = await supabase
+      .from("clients")
+      .delete()
+      .eq("portal_user_id", portalUserId);
+
+    if (removeClientRecordError) {
+      toast.error("Nao foi possivel remover o vinculo de cliente do usuario promovido.");
+      return false;
+    }
+
     return true;
   };
 

@@ -89,10 +89,10 @@ interface ImportDraftRow {
 }
 
 const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: number): ImportDraftRow => {
-  const defaultCategory =
-    suggestion.entryType === "income"
-      ? cashflowCategoriesByType.income[0]
-      : cashflowCategoriesByType.expense[0];
+  const availableCategories = cashflowCategoriesByType[suggestion.entryType];
+  const defaultCategory = availableCategories.includes(suggestion.category)
+    ? suggestion.category
+    : availableCategories[0];
 
   return {
     id: `${suggestion.sourceFile}-${index}-${suggestion.entryDate}`,
@@ -102,7 +102,7 @@ const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: numbe
     category: defaultCategory,
     description: suggestion.description,
     amountText: suggestion.amount.toFixed(2),
-    status: "predicted",
+    status: suggestion.confidence >= 0.98 ? "confirmed" : "predicted",
     sourceFile: suggestion.sourceFile,
     sourceLine: suggestion.sourceLine,
     confidence: suggestion.confidence,
@@ -373,7 +373,22 @@ export function ClientPortalCashflow({
 
     if (!result.success) return;
 
+    const latestImportedDate = payloads
+      .map((payload) => payload.entry_date)
+      .sort()
+      .at(-1);
+    if (latestImportedDate) {
+      setReferenceMonth(latestImportedDate.slice(0, 7));
+    }
+
     toast.success(`${result.inserted} lancamento(s) importado(s) com sucesso.`);
+    if (latestImportedDate) {
+      const importedMonthLabel = new Date(`${latestImportedDate}T00:00:00`).toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+      });
+      toast.info(`Dashboard atualizado para ${importedMonthLabel}.`);
+    }
     clearImportData();
   };
 
