@@ -841,6 +841,50 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_reports: {
+        Row: {
+          auto_generate: boolean
+          column_keys: string[]
+          created_at: string
+          dataset_id: string
+          format: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_generate?: boolean
+          column_keys: string[]
+          created_at?: string
+          dataset_id: string
+          format?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_generate?: boolean
+          column_keys?: string[]
+          created_at?: string
+          dataset_id?: string
+          format?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_reports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       request_messages: {
         Row: {
           content: string

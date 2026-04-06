@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS public.process_documents (
   file_name text NOT NULL,
   file_path text NOT NULL UNIQUE,
   file_size bigint,
-  created_by uuid REFERENCES public.users(id) ON DELETE SET NULL,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
