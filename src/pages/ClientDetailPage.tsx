@@ -9,14 +9,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Building2, Save, Upload, FileText, Trash2, Download,
-  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays,
+  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { getClientSegmentOptions } from "@/lib/clientSegments";
+import { sectorOptions } from "@/components/portal/types";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -45,6 +47,9 @@ interface ClientDataEntry {
 }
 
 type ClientDataRow = Database["public"]["Tables"]["client_data"]["Row"];
+type ClientPortalTaskRow = Database["public"]["Tables"]["client_portal_tasks"]["Row"];
+type PortalTaskStatus = "pending_client" | "in_analysis" | "completed" | "cancelled";
+type PortalTaskType = "document" | "request_return" | "analysis" | "deliverable" | "general";
 
 interface ClientFile {
   id: string;
@@ -104,6 +109,43 @@ const categoryConfig = {
   dp: { fields: dpFields, icon: Users, label: "Dept. Pessoal", color: "text-emerald-600" },
 };
 
+const portalTaskStatusOptions: PortalTaskStatus[] = [
+  "pending_client",
+  "in_analysis",
+  "completed",
+  "cancelled",
+];
+
+const portalTaskStatusLabel: Record<PortalTaskStatus, string> = {
+  pending_client: "Aguardando cliente",
+  in_analysis: "Em analise",
+  completed: "Concluida",
+  cancelled: "Cancelada",
+};
+
+const portalTaskStatusClass: Record<PortalTaskStatus, string> = {
+  pending_client: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
+  in_analysis: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
+  completed: "bg-primary/10 text-primary",
+  cancelled: "bg-muted text-muted-foreground",
+};
+
+const portalTaskTypeOptions: PortalTaskType[] = [
+  "document",
+  "request_return",
+  "analysis",
+  "deliverable",
+  "general",
+];
+
+const portalTaskTypeLabel: Record<PortalTaskType, string> = {
+  document: "Documento",
+  request_return: "Informacao",
+  analysis: "Analise",
+  deliverable: "Entrega",
+  general: "Geral",
+};
+
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
 
 export default function ClientDetailPage() {
@@ -116,6 +158,7 @@ export default function ClientDetailPage() {
   const [clientForm, setClientForm] = useState<Partial<ClientRecord>>({});
   const [dataEntries, setDataEntries] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<ClientFile[]>([]);
+  const [portalTasks, setPortalTasks] = useState<ClientPortalTaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingData, setSavingData] = useState<string | null>(null);
@@ -128,16 +171,27 @@ export default function ClientDetailPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [portalTaskDraft, setPortalTaskDraft] = useState({
+    title: "",
+    description: "",
+    type: "document" as PortalTaskType,
+    sector: "Geral",
+    dueDate: "",
+  });
+  const [creatingPortalTask, setCreatingPortalTask] = useState(false);
+  const [updatingPortalTaskId, setUpdatingPortalTaskId] = useState<string | null>(null);
+  const [deletingPortalTaskId, setDeletingPortalTaskId] = useState<string | null>(null);
   const canManageCashflowAccess = role === "admin";
 
   const loadClient = useCallback(async () => {
     if (!id) return;
     setLoading(true);
 
-    const [clientRes, dataRes, filesRes] = await Promise.all([
+    const [clientRes, dataRes, filesRes, tasksRes] = await Promise.all([
       supabase.from("clients").select("*").eq("id", id).single(),
       supabase.from("client_data").select("*").eq("client_id", id),
       supabase.from("client_files").select("*").eq("client_id", id).order("created_at", { ascending: false }),
+      supabase.from("client_portal_tasks").select("*").eq("client_id", id).order("created_at", { ascending: false }),
     ]);
 
     if (clientRes.error || !clientRes.data) {
@@ -162,6 +216,11 @@ export default function ClientDetailPage() {
     setDataEntries(map);
 
     setFiles((filesRes.data || []) as ClientFile[]);
+    setPortalTasks((tasksRes.data || []) as ClientPortalTaskRow[]);
+
+    if (tasksRes.error) {
+      toast.error("Nao foi possivel carregar as pendencias do cliente.");
+    }
 
     if (normalizedClient.portal_user_id) {
       const { data: roleData, error: roleError } = await supabase
@@ -314,6 +373,87 @@ export default function ClientDetailPage() {
 
     setPortalAccessEnabled(false);
     toast.success("Acesso ao portal bloqueado para o cliente.");
+  };
+
+  const resetPortalTaskDraft = () => {
+    setPortalTaskDraft({
+      title: "",
+      description: "",
+      type: "document",
+      sector: "Geral",
+      dueDate: "",
+    });
+  };
+
+  const handleCreatePortalTask = async () => {
+    if (!id || !user?.id) return;
+
+    if (!client?.portal_user_id || !portalAccessEnabled) {
+      toast.error("Libere o acesso ao portal deste cliente antes de criar pendencias.");
+      return;
+    }
+
+    if (!portalTaskDraft.title.trim()) {
+      toast.error("Informe o titulo da pendencia.");
+      return;
+    }
+
+    setCreatingPortalTask(true);
+    const { data, error } = await supabase
+      .from("client_portal_tasks")
+      .insert({
+        client_id: id,
+        title: portalTaskDraft.title.trim(),
+        description: portalTaskDraft.description.trim() || null,
+        type: portalTaskDraft.type,
+        status: "pending_client",
+        due_date: portalTaskDraft.dueDate || null,
+        sector: portalTaskDraft.sector || "Geral",
+        created_by: user.id,
+      })
+      .select("*")
+      .single();
+    setCreatingPortalTask(false);
+
+    if (error) {
+      toast.error("Nao foi possivel criar a pendencia.");
+      return;
+    }
+
+    setPortalTasks((prev) => [data as ClientPortalTaskRow, ...prev]);
+    resetPortalTaskDraft();
+    toast.success("Pendencia criada e publicada para o cliente.");
+  };
+
+  const handlePortalTaskStatusChange = async (taskId: string, status: PortalTaskStatus) => {
+    setUpdatingPortalTaskId(taskId);
+    const { error } = await supabase.from("client_portal_tasks").update({ status }).eq("id", taskId);
+    setUpdatingPortalTaskId(null);
+
+    if (error) {
+      toast.error("Nao foi possivel atualizar o status da pendencia.");
+      return;
+    }
+
+    setPortalTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status } : task)));
+    toast.success("Status da pendencia atualizado.");
+  };
+
+  const handleDeletePortalTask = async (taskId: string) => {
+    const confirmed = window.confirm("Deseja excluir esta pendencia?");
+    if (!confirmed) return;
+
+    setDeletingPortalTaskId(taskId);
+    const { error } = await supabase.from("client_portal_tasks").delete().eq("id", taskId);
+    setDeletingPortalTaskId(null);
+
+    if (error) {
+      toast.error("Nao foi possivel excluir a pendencia.");
+      return;
+    }
+
+    setPortalTasks((prev) => prev.filter((task) => task.id !== taskId));
+    toast.success("Pendencia removida.");
   };
 
   const saveCategoryData = async (category: string) => {
@@ -548,11 +688,12 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
             <TabsTrigger value="contabilidade">Contabilidade</TabsTrigger>
             <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
             <TabsTrigger value="dp">Dept. Pessoal</TabsTrigger>
+            <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
           </TabsList>
 
           {/* General Info */}
@@ -679,6 +820,186 @@ export default function ClientDetailPage() {
                   Salvar Informações
                 </Button>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="pendencias" className="space-y-4">
+            <div className="rounded-xl border bg-card p-6 space-y-5">
+              <h3 className="font-semibold flex items-center gap-2">
+                <ClipboardList className="h-4 w-4" /> Pendencias do cliente
+              </h3>
+
+              {(!client?.portal_user_id || !portalAccessEnabled) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+                  Este cliente ainda nao tem acesso ativo ao portal. Libere o acesso para que as pendencias sejam exibidas para ele.
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs">Titulo da pendencia</Label>
+                  <Input
+                    value={portalTaskDraft.title}
+                    onChange={(event) => setPortalTaskDraft((prev) => ({ ...prev, title: event.target.value }))}
+                    placeholder="Ex.: Enviar extrato bancario do mes"
+                  />
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs">Descricao</Label>
+                  <Textarea
+                    rows={3}
+                    value={portalTaskDraft.description}
+                    onChange={(event) => setPortalTaskDraft((prev) => ({ ...prev, description: event.target.value }))}
+                    placeholder="Descreva as informacoes ou documentos que o cliente precisa enviar."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Tipo</Label>
+                  <Select
+                    value={portalTaskDraft.type}
+                    onValueChange={(value) => setPortalTaskDraft((prev) => ({ ...prev, type: value as PortalTaskType }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {portalTaskTypeOptions.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {portalTaskTypeLabel[type]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Setor</Label>
+                  <Select
+                    value={portalTaskDraft.sector}
+                    onValueChange={(value) => setPortalTaskDraft((prev) => ({ ...prev, sector: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sectorOptions.map((sector) => (
+                        <SelectItem key={sector} value={sector}>
+                          {sector}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Prazo (opcional)</Label>
+                  <Input
+                    type="date"
+                    value={portalTaskDraft.dueDate}
+                    onChange={(event) => setPortalTaskDraft((prev) => ({ ...prev, dueDate: event.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => void handleCreatePortalTask()} disabled={creatingPortalTask}>
+                  {creatingPortalTask ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Criar pendencia
+                </Button>
+                <Button type="button" variant="outline" onClick={resetPortalTaskDraft} disabled={creatingPortalTask}>
+                  Limpar campos
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  A pendencia aparece no portal do cliente em "Pendencias" e na visao geral.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <h3 className="font-semibold">Pendencias cadastradas</h3>
+
+              {portalTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma pendencia cadastrada para este cliente.</p>
+              ) : (
+                <div className="space-y-3">
+                  {portalTasks.map((task) => {
+                    const status = (portalTaskStatusOptions.includes(task.status as PortalTaskStatus)
+                      ? (task.status as PortalTaskStatus)
+                      : "pending_client");
+                    const type = (portalTaskTypeOptions.includes(task.type as PortalTaskType)
+                      ? (task.type as PortalTaskType)
+                      : "general");
+
+                    return (
+                      <div key={task.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">{task.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {task.description || "Sem descricao"} {task.due_date ? `• prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}` : ""}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={`border-0 ${portalTaskStatusClass[status]}`}>
+                            {portalTaskStatusLabel[status]}
+                          </Badge>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="text-[11px]">
+                            Tipo: {portalTaskTypeLabel[type]}
+                          </Badge>
+                          <Badge variant="outline" className="text-[11px]">
+                            Setor: {task.sector}
+                          </Badge>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Select
+                            value={status}
+                            onValueChange={(value) => void handlePortalTaskStatusChange(task.id, value as PortalTaskStatus)}
+                          >
+                            <SelectTrigger className="h-8 w-[220px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {portalTaskStatusOptions.map((statusOption) => (
+                                <SelectItem key={statusOption} value={statusOption}>
+                                  {portalTaskStatusLabel[statusOption]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={updatingPortalTaskId === task.id}
+                            onClick={() => void handlePortalTaskStatusChange(task.id, "completed")}
+                          >
+                            {updatingPortalTaskId === task.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                            Marcar concluida
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive"
+                            disabled={deletingPortalTaskId === task.id}
+                            onClick={() => void handleDeletePortalTask(task.id)}
+                          >
+                            {deletingPortalTaskId === task.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                            Excluir
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </TabsContent>
 

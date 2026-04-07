@@ -174,6 +174,13 @@ export default function PortalClientePage() {
   const [submittingForm, setSubmittingForm] = useState(false);
 
   const [selectedSupportRequestId, setSelectedSupportRequestId] = useState<string | null>(null);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [changingPortalPassword, setChangingPortalPassword] = useState(false);
+  const knownPortalTaskIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -370,6 +377,49 @@ export default function PortalClientePage() {
   useEffect(() => {
     if (user) void fetchPortalData();
   }, [fetchPortalData, user]);
+
+  useEffect(() => {
+    knownPortalTaskIdsRef.current = new Set(portalTasks.map((task) => task.id));
+  }, [portalTasks]);
+
+  useEffect(() => {
+    if (!clientProfile?.id) return;
+
+    const channel = supabase
+      .channel(`portal-client-tasks-${clientProfile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "client_portal_tasks",
+          filter: `client_id=eq.${clientProfile.id}`,
+        },
+        (payload) => {
+          const eventType = payload.eventType;
+          const insertedTaskId = eventType === "INSERT" ? String((payload.new as { id?: string })?.id || "") : "";
+
+          if (eventType === "INSERT" && insertedTaskId && !knownPortalTaskIdsRef.current.has(insertedTaskId)) {
+            toast.success("Nova pendencia recebida da equipe.");
+          }
+
+          if (eventType === "UPDATE") {
+            const nextStatus = String((payload.new as { status?: string })?.status || "");
+            if (nextStatus === "completed") {
+              toast.success("Uma pendencia foi concluida pela equipe.");
+            }
+          }
+
+          void fetchPortalData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clientProfile?.id, fetchPortalData]);
+
   const latestMessageByRequest = useMemo(() => {
     const map = new Map<string, PortalRequestMessage>();
     messages.forEach((message) => {
@@ -952,6 +1002,60 @@ export default function PortalClientePage() {
 
     await fetchPortalData();
     return { success: true, inserted: payloads.length };
+  };
+
+  const handlePortalPasswordChange = async () => {
+    const accountEmail = user?.email?.trim().toLowerCase();
+    if (!accountEmail) {
+      toast.error("Nao foi possivel identificar o e-mail da conta.");
+      return;
+    }
+
+    if (!passwordForm.currentPassword) {
+      toast.error("Informe a senha atual.");
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      toast.error("A nova senha precisa ter no minimo 6 caracteres.");
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("A confirmacao da nova senha nao confere.");
+      return;
+    }
+
+    setChangingPortalPassword(true);
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: accountEmail,
+      password: passwordForm.currentPassword,
+    });
+
+    if (signInError) {
+      setChangingPortalPassword(false);
+      toast.error("Senha atual invalida.");
+      return;
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: passwordForm.newPassword,
+    });
+
+    setChangingPortalPassword(false);
+
+    if (updateError) {
+      toast.error("Nao foi possivel alterar a senha do portal.");
+      return;
+    }
+
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    toast.success("Senha do portal alterada com sucesso.");
   };
 
   const currentMonthLabel = useMemo(
@@ -1585,7 +1689,38 @@ export default function PortalClientePage() {
                   <div className="rounded-lg border bg-muted/20 px-3 py-2">
                     <p className="text-sm font-medium">Troca de senha</p>
                     <p className="text-sm text-muted-foreground">
-                      Se precisar redefinir a senha do portal, abra uma solicitação para o time responsável.
+                      Altere sua senha de acesso ao portal diretamente nesta tela.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-3 space-y-2">
+                    <div className="grid grid-cols-1 gap-2">
+                      <Input
+                        type="password"
+                        placeholder="Senha atual"
+                        value={passwordForm.currentPassword}
+                        onChange={(event) =>
+                          setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
+                        }
+                      />
+                      <Input
+                        type="password"
+                        placeholder="Nova senha (minimo 6 caracteres)"
+                        value={passwordForm.newPassword}
+                        onChange={(event) =>
+                          setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
+                        }
+                      />
+                      <Input
+                        type="password"
+                        placeholder="Confirmar nova senha"
+                        value={passwordForm.confirmPassword}
+                        onChange={(event) =>
+                          setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Dica: use uma senha forte com letras, numeros e simbolos.
                     </p>
                   </div>
                   <div className="rounded-lg border bg-muted/20 px-3 py-2">
@@ -1600,18 +1735,29 @@ export default function PortalClientePage() {
                       Status atual: {clientProfile?.portal_cashflow_enabled ? "liberado pelo admin" : "aguardando liberacao do admin"}.
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      openNewRequestDialog({
-                        sector: "Geral",
-                        title: "Solicitação de troca de senha do portal",
-                        description: "Solicito suporte para redefinição de senha do portal do cliente.",
-                      })
-                    }
-                  >
-                    Abrir solicitação de acesso
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void handlePortalPasswordChange()}
+                      disabled={changingPortalPassword}
+                    >
+                      {changingPortalPassword ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                      Alterar senha
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        openNewRequestDialog({
+                          sector: "Geral",
+                          title: "Solicitação de suporte de acesso ao portal",
+                          description: "Preciso de suporte com acesso e seguranca no portal do cliente.",
+                        })
+                      }
+                    >
+                      Abrir solicitacao de suporte
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </div>
