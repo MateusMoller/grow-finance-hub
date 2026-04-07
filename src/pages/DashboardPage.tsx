@@ -15,8 +15,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 
@@ -68,12 +66,6 @@ interface UserIndicator extends MetricsSummary {
   roleLabel: string;
 }
 
-interface TeamMember {
-  userId: string;
-  displayName: string;
-  role: string;
-}
-
 interface DashboardCardDefinition {
   label: string;
   icon: typeof Clock3;
@@ -93,19 +85,6 @@ const teamRoles = new Set([
   "contabil",
 ]);
 
-const roleOptions = [
-  "admin",
-  "director",
-  "manager",
-  "employee",
-  "commercial",
-  "departamento_pessoal",
-  "fiscal",
-  "contabil",
-] as const;
-
-const rolePriority = new Map(roleOptions.map((role, index) => [role, index]));
-
 const normalizeText = (value: string) =>
   value
     .normalize("NFD")
@@ -124,16 +103,6 @@ const formatRole = (role: string) =>
   role
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
-
-const pickPrimaryRole = (roles: string[]) => {
-  if (roles.length === 0) return "employee";
-  const ordered = [...roles].sort((a, b) => {
-    const aPriority = rolePriority.get(a as (typeof roleOptions)[number]) ?? 999;
-    const bPriority = rolePriority.get(b as (typeof roleOptions)[number]) ?? 999;
-    return aPriority - bPriority;
-  });
-  return ordered[0];
-};
 
 const formatDuration = (ms: number | null) => {
   if (ms === null) return "-";
@@ -320,9 +289,6 @@ export default function DashboardPage() {
   const [recentTasks, setRecentTasks] = useState<KanbanTaskRow[]>([]);
   const [todayTasks, setTodayTasks] = useState<KanbanTaskRow[]>([]);
   const [userIndicators, setUserIndicators] = useState<UserIndicator[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [teamRoleDrafts, setTeamRoleDrafts] = useState<Record<string, string>>({});
-  const [savingTeamUserId, setSavingTeamUserId] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     if (!userId) return;
@@ -425,28 +391,8 @@ export default function DashboardPage() {
         .sort((a, b) => b.openTasks - a.openTasks || b.totalTasks - a.totalTasks);
 
       setUserIndicators(indicators);
-
-      const members = Array.from(rolesByUser.keys())
-        .map((userId) => {
-          const profile = profileById.get(userId);
-          const displayName = profile?.display_name || `Usuario ${userId.slice(0, 6)}`;
-          const primaryRole = pickPrimaryRole(rolesByUser.get(userId) || []);
-          return {
-            userId,
-            displayName,
-            role: primaryRole,
-          };
-        })
-        .sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-      setTeamMembers(members);
-      setTeamRoleDrafts(
-        Object.fromEntries(members.map((member) => [member.userId, member.role]))
-      );
     } else {
       setUserIndicators([]);
-      setTeamMembers([]);
-      setTeamRoleDrafts({});
     }
 
     setLoading(false);
@@ -456,42 +402,6 @@ export default function DashboardPage() {
     if (!userId) return;
     void fetchDashboardData();
   }, [fetchDashboardData, userId]);
-
-  const saveTeamRole = async (userId: string) => {
-    if (!isAdmin) return;
-    const selectedRole = teamRoleDrafts[userId];
-    const currentRole = teamMembers.find((member) => member.userId === userId)?.role;
-    if (!selectedRole || selectedRole === currentRole) return;
-
-    setSavingTeamUserId(userId);
-
-    const { error: insertError } = await supabase
-      .from("user_roles")
-      .insert({ user_id: userId, role: selectedRole as never });
-
-    const isDuplicate = insertError?.message?.toLowerCase().includes("duplicate key");
-    if (insertError && !isDuplicate) {
-      setSavingTeamUserId(null);
-      toast.error(`Nao foi possivel salvar o papel: ${insertError.message}`);
-      return;
-    }
-
-    const { error: cleanupError } = await supabase
-      .from("user_roles")
-      .delete()
-      .eq("user_id", userId)
-      .neq("role", selectedRole as never);
-
-    setSavingTeamUserId(null);
-
-    if (cleanupError) {
-      toast.error(`Papel atualizado parcialmente: ${cleanupError.message}`);
-      return;
-    }
-
-    toast.success("Papel atualizado com sucesso.");
-    await fetchDashboardData();
-  };
 
   const maxDailyDone = Math.max(1, ...summary.dailyDone.map((point) => point.count));
 
@@ -648,67 +558,6 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {isAdmin && (
-              <div className="rounded-xl border bg-card overflow-hidden">
-                <div className="p-5 border-b">
-                  <h2 className="font-heading font-semibold">Gerenciar equipe</h2>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Altere o papel dos usuarios internos
-                  </p>
-                </div>
-                <div className="divide-y">
-                  {teamMembers.length === 0 ? (
-                    <div className="p-8 text-center text-sm text-muted-foreground">
-                      Nenhum usuario interno encontrado.
-                    </div>
-                  ) : (
-                    teamMembers.map((member) => {
-                      const selectedRole = teamRoleDrafts[member.userId] || member.role;
-                      const isChanged = selectedRole !== member.role;
-                      const isSaving = savingTeamUserId === member.userId;
-
-                      return (
-                        <div key={member.userId} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:bg-muted/20">
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold truncate">{member.displayName}</div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              ID: {member.userId.slice(0, 8)}...
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <select
-                              className="h-9 min-w-[220px] rounded-md border bg-background px-3 text-sm outline-none"
-                              value={selectedRole}
-                              onChange={(event) =>
-                                setTeamRoleDrafts((prev) => ({
-                                  ...prev,
-                                  [member.userId]: event.target.value,
-                                }))
-                              }
-                            >
-                              {roleOptions.map((roleOption) => (
-                                <option key={roleOption} value={roleOption}>
-                                  {formatRole(roleOption)}
-                                </option>
-                              ))}
-                            </select>
-                            <Button
-                              size="sm"
-                              onClick={() => void saveTeamRole(member.userId)}
-                              disabled={!isChanged || isSaving}
-                            >
-                              {isSaving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-                              Salvar
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })
                   )}
                 </div>
               </div>
