@@ -12,6 +12,9 @@ verify_jwt = true
 [functions.reset-client-portal-passwords]
 verify_jwt = true
 
+[functions.ensure-client-portal-profile]
+verify_jwt = true
+
 [functions.create-admin]
 verify_jwt = true
 

@@ -50,7 +50,8 @@ export default function LoginPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
-    const { error } = await signIn(email, password);
+    const normalizedEmail = email.trim().toLowerCase();
+    const { error } = await signIn(normalizedEmail, password);
     setLoading(false);
 
     if (error) {

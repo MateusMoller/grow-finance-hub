@@ -63,7 +63,29 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
+
+const DEFAULT_PORTAL_ACCESS_MESSAGE =
+  "Este usuario ainda nao possui permissao de cliente para acessar o portal.";
+
+const parseFunctionError = async (error: unknown): Promise<{ message: string; status: number | null }> => {
+  const fallbackMessage = error instanceof Error ? error.message : "Erro desconhecido ao sincronizar acesso";
+  if (!(error instanceof FunctionsHttpError)) {
+    return { message: fallbackMessage, status: null };
+  }
+
+  try {
+    const payload = await error.context.json();
+    const payloadMessage =
+      payload && typeof payload === "object" && "error" in payload
+        ? String((payload as { error: unknown }).error || fallbackMessage)
+        : fallbackMessage;
+    return { message: payloadMessage, status: error.context.status };
+  } catch {
+    return { message: fallbackMessage, status: error.context.status };
+  }
+};
 
 const statusConfig: Record<RequestStatus, RequestStatusMeta> = {
   pending: {
@@ -109,6 +131,7 @@ export default function PortalClientePage() {
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
   const [loadingData, setLoadingData] = useState(true);
   const [portalAccessDenied, setPortalAccessDenied] = useState(false);
+  const [portalAccessMessage, setPortalAccessMessage] = useState(DEFAULT_PORTAL_ACCESS_MESSAGE);
 
   const [clientProfile, setClientProfile] = useState<PortalClientProfile | null>(null);
   const [requests, setRequests] = useState<PortalClientRequest[]>([]);
@@ -158,11 +181,39 @@ export default function PortalClientePage() {
     }
   }, [authLoading, user, navigate]);
 
+  const resetPortalCollections = useCallback(() => {
+    setClientProfile(null);
+    setRequests([]);
+    setDocuments([]);
+    setPublishedForms([]);
+    setPortalTasks([]);
+    setCashflowEntries([]);
+    setMessages([]);
+  }, []);
+
   const fetchPortalData = useCallback(async () => {
     if (!user) return;
 
     setLoadingData(true);
     setPortalAccessDenied(false);
+    setPortalAccessMessage(DEFAULT_PORTAL_ACCESS_MESSAGE);
+
+    let ensureStatus: number | null = null;
+    let ensureMessage = DEFAULT_PORTAL_ACCESS_MESSAGE;
+
+    const { error: ensurePortalError } = await supabase.functions.invoke("ensure-client-portal-profile", {
+      body: {},
+    });
+
+    if (ensurePortalError) {
+      const parsedEnsureError = await parseFunctionError(ensurePortalError);
+      ensureStatus = parsedEnsureError.status;
+      ensureMessage = parsedEnsureError.message || DEFAULT_PORTAL_ACCESS_MESSAGE;
+
+      if (ensureStatus !== 403 && ensureStatus !== 409) {
+        toast.error("Nao foi possivel sincronizar automaticamente o acesso do portal.");
+      }
+    }
 
     const { data: roleData, error: roleError } = await supabase
       .from("user_roles")
@@ -173,19 +224,16 @@ export default function PortalClientePage() {
 
     if (roleError) {
       toast.error("Nao foi possivel validar a permissao de acesso ao portal.");
+      setPortalAccessMessage("Nao foi possivel validar a permissao de acesso ao portal.");
+      resetPortalCollections();
       setLoadingData(false);
       setPortalAccessDenied(true);
       return;
     }
 
     if (!roleData) {
-      setClientProfile(null);
-      setRequests([]);
-      setDocuments([]);
-      setPublishedForms([]);
-      setPortalTasks([]);
-      setCashflowEntries([]);
-      setMessages([]);
+      setPortalAccessMessage(ensureMessage);
+      resetPortalCollections();
       setLoadingData(false);
       setPortalAccessDenied(true);
       return;
@@ -196,6 +244,8 @@ export default function PortalClientePage() {
         .from("clients")
         .select("id, name, contact, email, portal_user_id, portal_cashflow_enabled")
         .eq("portal_user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle(),
       supabase
         .from("client_requests")
@@ -213,6 +263,25 @@ export default function PortalClientePage() {
         .eq("is_published", true)
         .order("updated_at", { ascending: false }),
     ]);
+
+    if (clientRes.error) {
+      const isMultipleClientsForPortalUser = String(clientRes.error.message || "")
+        .toLowerCase()
+        .includes("multiple");
+
+      if (isMultipleClientsForPortalUser) {
+        setPortalAccessMessage(
+          "Encontramos mais de um cadastro de cliente para este portal. Solicite ajuste ao admin.",
+        );
+      } else {
+        setPortalAccessMessage("Nao foi possivel carregar o cadastro do cliente para este portal.");
+      }
+
+      resetPortalCollections();
+      setLoadingData(false);
+      setPortalAccessDenied(true);
+      return;
+    }
 
     if (requestRes.error) toast.error("Erro ao carregar solicitações.");
     if (docRes.error) toast.error("Erro ao carregar documentos.");
@@ -277,13 +346,12 @@ export default function PortalClientePage() {
     }
 
     if (!client) {
-      setClientProfile(null);
-      setRequests([]);
-      setDocuments([]);
-      setPublishedForms([]);
-      setPortalTasks([]);
-      setCashflowEntries([]);
-      setMessages([]);
+      const fallbackMessage =
+        ensureStatus === 403 || ensureStatus === 409
+          ? ensureMessage
+          : "Conta autenticada, mas sem cadastro de cliente vinculado ao portal.";
+      setPortalAccessMessage(fallbackMessage);
+      resetPortalCollections();
       setLoadingData(false);
       setPortalAccessDenied(true);
       return;
@@ -297,7 +365,7 @@ export default function PortalClientePage() {
     setCashflowEntries(fetchedCashflowEntries);
     setMessages(fetchedMessages);
     setLoadingData(false);
-  }, [user]);
+  }, [resetPortalCollections, user]);
 
   useEffect(() => {
     if (user) void fetchPortalData();
@@ -906,12 +974,12 @@ export default function PortalClientePage() {
           <CardHeader>
             <CardTitle className="text-base">Acesso ao portal não liberado</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Este usuário ainda não possui permissão de cliente para acessar o portal.
+              {portalAccessMessage}
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Peça para o administrador validar e liberar o acesso no cadastro do cliente.
+              Se o problema persistir, peca ao administrador para validar e liberar o acesso no cadastro do cliente.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
