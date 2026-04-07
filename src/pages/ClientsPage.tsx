@@ -182,12 +182,14 @@ export default function ClientsPage() {
       skipped_count?: number;
       auth_users_created?: number;
       portal_links_created?: number;
+      skipped_preview?: Array<{ email?: string | null; reason?: string | null }>;
     };
 
     const passwordsReset = Number(result.passwords_reset || 0);
     const skippedCount = Number(result.skipped_count || 0);
     const usersCreated = Number(result.auth_users_created || 0);
     const linksCreated = Number(result.portal_links_created || 0);
+    const skippedPreview = Array.isArray(result.skipped_preview) ? result.skipped_preview : [];
 
     toast.success(
       `${passwordsReset} senha(s) de portal redefinida(s) para 123456. ` +
@@ -195,7 +197,15 @@ export default function ClientsPage() {
     );
 
     if (skippedCount > 0) {
-      toast.warning(`${skippedCount} cliente(s) nao puderam ser processados. Verifique os logs da funcao.`);
+      const previewLabel = skippedPreview
+        .slice(0, 3)
+        .map((item) => `${item.email || "sem_email"} (${item.reason || "motivo_indefinido"})`)
+        .join(" | ");
+
+      toast.warning(
+        `${skippedCount} cliente(s) nao puderam ser processados.` +
+          (previewLabel ? ` Ex.: ${previewLabel}` : ""),
+      );
     }
 
     void loadClients();

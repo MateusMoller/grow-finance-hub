@@ -18,6 +18,7 @@ const internalRoles = new Set([
 ]);
 
 type JsonRecord = Record<string, unknown>;
+
 type ClientRow = {
   id: string;
   name: string | null;
@@ -26,8 +27,24 @@ type ClientRow = {
   portal_user_id: string | null;
 };
 
+type RoleRow = {
+  user_id: string;
+  role: string;
+};
+
+type ProfileRow = {
+  user_id: string;
+  display_name: string | null;
+};
+
+type AuthUserLite = {
+  id: string;
+  email: string | null;
+};
+
 type SkippedItem = {
-  client_id: string;
+  client_id: string | null;
+  user_id: string | null;
   email: string | null;
   reason: string;
 };
@@ -75,16 +92,46 @@ function isUserAlreadyRegisteredError(message?: string) {
   return lowered.includes("already been registered") || lowered.includes("already registered");
 }
 
+function buildRoleMap(rows: RoleRow[]) {
+  const map = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const current = map.get(row.user_id) || new Set<string>();
+    current.add(String(row.role || "").toLowerCase());
+    map.set(row.user_id, current);
+  }
+  return map;
+}
+
+function userHasInternalRole(rolesByUser: Map<string, Set<string>>, userId: string) {
+  const roles = rolesByUser.get(userId);
+  if (!roles) return false;
+  for (const role of roles) {
+    if (internalRoles.has(role)) return true;
+  }
+  return false;
+}
+
+function userHasRole(rolesByUser: Map<string, Set<string>>, userId: string, role: string) {
+  return rolesByUser.get(userId)?.has(role) || false;
+}
+
+function addRoleToMap(rolesByUser: Map<string, Set<string>>, userId: string, role: string) {
+  const current = rolesByUser.get(userId) || new Set<string>();
+  current.add(role);
+  rolesByUser.set(userId, current);
+}
+
 async function listAllAuthUsers(supabaseAdmin: ReturnType<typeof createClient>) {
   let page = 1;
   const perPage = 200;
-  const users: Array<{ id: string; email: string | null }> = [];
+  const users: AuthUserLite[] = [];
 
   while (true) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
     if (error) throw error;
 
     users.push(...data.users.map((user) => ({ id: user.id, email: user.email ?? null })));
+
     if (!data.nextPage) return users;
     page = data.nextPage;
   }
@@ -96,6 +143,46 @@ async function findAuthUserByEmail(
 ) {
   const users = await listAllAuthUsers(supabaseAdmin);
   return users.find((user) => user.email?.toLowerCase() === email) || null;
+}
+
+async function resolveOrCreateAuthUserByEmail(params: {
+  supabaseAdmin: ReturnType<typeof createClient>;
+  email: string;
+  password: string;
+  displayName: string;
+  authUserByEmail: Map<string, string>;
+  authEmailByUserId: Map<string, string>;
+}) {
+  const { supabaseAdmin, email, password, displayName, authUserByEmail, authEmailByUserId } = params;
+  const mappedUserId = authUserByEmail.get(email);
+  if (mappedUserId) return { userId: mappedUserId, createdNow: false };
+
+  const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { display_name: displayName },
+  });
+
+  if (createUserError) {
+    if (!isUserAlreadyRegisteredError(createUserError.message)) {
+      throw createUserError;
+    }
+
+    const existingUser = await findAuthUserByEmail(supabaseAdmin, email);
+    if (!existingUser) return { userId: null, createdNow: false };
+
+    authUserByEmail.set(email, existingUser.id);
+    authEmailByUserId.set(existingUser.id, email);
+    return { userId: existingUser.id, createdNow: false };
+  }
+
+  const createdUserId = createdUser.user?.id || null;
+  if (!createdUserId) return { userId: null, createdNow: false };
+
+  authUserByEmail.set(email, createdUserId);
+  authEmailByUserId.set(createdUserId, email);
+  return { userId: createdUserId, createdNow: true };
 }
 
 Deno.serve(async (req) => {
@@ -155,112 +242,124 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Password must have at least 6 characters" }, 400);
     }
 
-    const { data: clientRows, error: clientRowsError } = await supabaseAdmin
-      .from("clients")
-      .select("id, name, contact, email, portal_user_id")
-      .order("created_at", { ascending: true });
+    const [clientRowsRes, roleRowsRes, profileRowsRes] = await Promise.all([
+      supabaseAdmin
+        .from("clients")
+        .select("id, name, contact, email, portal_user_id")
+        .order("created_at", { ascending: true }),
+      supabaseAdmin
+        .from("user_roles")
+        .select("user_id, role")
+        .in("role", [...internalRoles, "client"]),
+      supabaseAdmin
+        .from("profiles")
+        .select("user_id, display_name"),
+    ]);
 
-    if (clientRowsError) throw clientRowsError;
+    if (clientRowsRes.error) throw clientRowsRes.error;
+    if (roleRowsRes.error) throw roleRowsRes.error;
+    if (profileRowsRes.error) throw profileRowsRes.error;
 
-    const clients = (clientRows || []) as ClientRow[];
+    const clients = (clientRowsRes.data || []) as ClientRow[];
+    const roleRows = (roleRowsRes.data || []) as RoleRow[];
+    const profileRows = (profileRowsRes.data || []) as ProfileRow[];
+    const profilesByUser = new Map(profileRows.map((row) => [row.user_id, asTrimmedString(row.display_name)]));
+
+    const rolesByUser = buildRoleMap(roleRows);
     const authUsers = await listAllAuthUsers(supabaseAdmin);
     const authUserByEmail = new Map<string, string>();
+    const authEmailByUserId = new Map<string, string>();
     authUsers.forEach((user) => {
-      const email = normalizeEmail(user.email);
-      if (email && !authUserByEmail.has(email)) {
-        authUserByEmail.set(email, user.id);
-      }
+      const normalized = normalizeEmail(user.email);
+      if (!normalized) return;
+      if (!authUserByEmail.has(normalized)) authUserByEmail.set(normalized, user.id);
+      authEmailByUserId.set(user.id, normalized);
     });
 
     const processedUsers = new Set<string>();
+    const linkedClientUserIds = new Set(
+      clients
+        .map((client) => client.portal_user_id)
+        .filter((userId): userId is string => Boolean(userId)),
+    );
+
     const skipped: SkippedItem[] = [];
 
     let authUsersCreated = 0;
     let portalLinksCreated = 0;
+    let clientRowsCreated = 0;
     let rolesUpserted = 0;
     let passwordsReset = 0;
 
     for (const client of clients) {
       const normalizedEmail = normalizeEmail(client.email);
+      const displayName =
+        asTrimmedString(client.contact) ||
+        asTrimmedString(client.name) ||
+        normalizedEmail?.split("@")[0] ||
+        "Cliente";
+
       let portalUserId = client.portal_user_id;
 
-      if (!portalUserId && normalizedEmail) {
-        const mappedUserId = authUserByEmail.get(normalizedEmail);
-        if (mappedUserId) {
-          portalUserId = mappedUserId;
-        } else {
-          const displayName = asTrimmedString(client.contact) || asTrimmedString(client.name) || normalizedEmail.split("@")[0];
-          const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+      if (normalizedEmail) {
+        try {
+          const resolved = await resolveOrCreateAuthUserByEmail({
+            supabaseAdmin,
             email: normalizedEmail,
             password: requestedPassword,
-            email_confirm: true,
-            user_metadata: { display_name: displayName },
+            displayName,
+            authUserByEmail,
+            authEmailByUserId,
           });
 
-          if (createUserError) {
-            if (!isUserAlreadyRegisteredError(createUserError.message)) {
-              skipped.push({
-                client_id: client.id,
-                email: normalizedEmail,
-                reason: `create_auth_user_failed: ${createUserError.message}`,
-              });
-              continue;
-            }
+          if (resolved.createdNow) authUsersCreated += 1;
 
-            const existingUser = await findAuthUserByEmail(supabaseAdmin, normalizedEmail);
-            if (!existingUser) {
-              skipped.push({
-                client_id: client.id,
-                email: normalizedEmail,
-                reason: "auth_user_exists_but_not_found",
-              });
-              continue;
-            }
-            portalUserId = existingUser.id;
-          } else {
-            portalUserId = createdUser.user?.id || null;
-            if (portalUserId) {
-              authUsersCreated += 1;
-              authUserByEmail.set(normalizedEmail, portalUserId);
+          const preferredUserId = resolved.userId;
+          if (preferredUserId) {
+            const currentLinkedEmail = normalizeEmail(
+              portalUserId ? authEmailByUserId.get(portalUserId) : null,
+            );
+
+            if (!portalUserId || currentLinkedEmail !== normalizedEmail) {
+              portalUserId = preferredUserId;
             }
           }
+        } catch (error) {
+          const reason =
+            error instanceof Error && error.message
+              ? `resolve_or_create_user_failed: ${error.message}`
+              : "resolve_or_create_user_failed";
+          skipped.push({
+            client_id: client.id,
+            user_id: portalUserId,
+            email: normalizedEmail,
+            reason,
+          });
+          continue;
         }
       }
 
       if (!portalUserId) {
         skipped.push({
           client_id: client.id,
+          user_id: null,
           email: normalizedEmail,
           reason: "missing_portal_user_and_unable_to_resolve_by_email",
         });
         continue;
       }
 
-      const { data: userRoles, error: userRolesError } = await supabaseAdmin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", portalUserId);
-
-      if (userRolesError) {
+      if (userHasInternalRole(rolesByUser, portalUserId)) {
         skipped.push({
           client_id: client.id,
-          email: normalizedEmail,
-          reason: `read_user_roles_failed: ${userRolesError.message}`,
-        });
-        continue;
-      }
-
-      const hasInternalRole = (userRoles || []).some((row) => internalRoles.has(String(row.role || "")));
-      if (hasInternalRole) {
-        skipped.push({
-          client_id: client.id,
+          user_id: portalUserId,
           email: normalizedEmail,
           reason: "portal_user_has_internal_role",
         });
         continue;
       }
 
-      if (!client.portal_user_id) {
+      if (client.portal_user_id !== portalUserId) {
         const { error: linkError } = await supabaseAdmin
           .from("clients")
           .update({ portal_user_id: portalUserId, updated_at: new Date().toISOString() })
@@ -269,31 +368,37 @@ Deno.serve(async (req) => {
         if (linkError) {
           skipped.push({
             client_id: client.id,
+            user_id: portalUserId,
             email: normalizedEmail,
             reason: `link_portal_user_failed: ${linkError.message}`,
           });
           continue;
         }
 
+        linkedClientUserIds.add(portalUserId);
         portalLinksCreated += 1;
       }
 
-      const { error: roleUpsertError } = await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id: portalUserId, role: "client" }, { onConflict: "user_id,role" });
+      if (!userHasRole(rolesByUser, portalUserId, "client")) {
+        const { error: roleUpsertError } = await supabaseAdmin
+          .from("user_roles")
+          .upsert({ user_id: portalUserId, role: "client" }, { onConflict: "user_id,role" });
 
-      if (roleUpsertError) {
-        skipped.push({
-          client_id: client.id,
-          email: normalizedEmail,
-          reason: `upsert_client_role_failed: ${roleUpsertError.message}`,
-        });
-        continue;
+        if (roleUpsertError) {
+          skipped.push({
+            client_id: client.id,
+            user_id: portalUserId,
+            email: normalizedEmail,
+            reason: `upsert_client_role_failed: ${roleUpsertError.message}`,
+          });
+          continue;
+        }
+
+        addRoleToMap(rolesByUser, portalUserId, "client");
       }
 
       rolesUpserted += 1;
 
-      const displayName = asTrimmedString(client.contact) || asTrimmedString(client.name) || normalizedEmail || portalUserId.slice(0, 8);
       const { error: profileUpsertError } = await supabaseAdmin
         .from("profiles")
         .upsert(
@@ -307,11 +412,14 @@ Deno.serve(async (req) => {
       if (profileUpsertError) {
         skipped.push({
           client_id: client.id,
+          user_id: portalUserId,
           email: normalizedEmail,
           reason: `upsert_profile_failed: ${profileUpsertError.message}`,
         });
         continue;
       }
+
+      profilesByUser.set(portalUserId, displayName);
 
       if (!processedUsers.has(portalUserId)) {
         const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(portalUserId, {
@@ -322,6 +430,7 @@ Deno.serve(async (req) => {
         if (passwordError) {
           skipped.push({
             client_id: client.id,
+            user_id: portalUserId,
             email: normalizedEmail,
             reason: `reset_password_failed: ${passwordError.message}`,
           });
@@ -329,6 +438,111 @@ Deno.serve(async (req) => {
         }
 
         processedUsers.add(portalUserId);
+        passwordsReset += 1;
+      }
+    }
+
+    const usersWithClientRole = [...rolesByUser.entries()]
+      .filter(([, roles]) => roles.has("client"))
+      .map(([userId]) => userId);
+
+    for (const userId of usersWithClientRole) {
+      if (userHasInternalRole(rolesByUser, userId)) continue;
+
+      const userEmail = normalizeEmail(authEmailByUserId.get(userId));
+
+      if (!linkedClientUserIds.has(userId)) {
+        if (!userEmail) {
+          skipped.push({
+            client_id: null,
+            user_id: userId,
+            email: null,
+            reason: "client_role_user_without_email_cannot_link_client_record",
+          });
+          continue;
+        }
+
+        const { data: unlinkedClient, error: unlinkedClientError } = await supabaseAdmin
+          .from("clients")
+          .select("id")
+          .ilike("email", userEmail)
+          .is("portal_user_id", null)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (unlinkedClientError) {
+          skipped.push({
+            client_id: null,
+            user_id: userId,
+            email: userEmail,
+            reason: `lookup_unlinked_client_failed: ${unlinkedClientError.message}`,
+          });
+          continue;
+        }
+
+        if (unlinkedClient?.id) {
+          const { error: linkError } = await supabaseAdmin
+            .from("clients")
+            .update({ portal_user_id: userId, updated_at: new Date().toISOString() })
+            .eq("id", unlinkedClient.id);
+
+          if (linkError) {
+            skipped.push({
+              client_id: unlinkedClient.id,
+              user_id: userId,
+              email: userEmail,
+              reason: `link_existing_unlinked_client_failed: ${linkError.message}`,
+            });
+            continue;
+          }
+
+          linkedClientUserIds.add(userId);
+          portalLinksCreated += 1;
+        } else {
+          const displayName = profilesByUser.get(userId) || userEmail.split("@")[0];
+          const { error: createClientError } = await supabaseAdmin.from("clients").insert({
+            name: displayName,
+            contact: displayName,
+            email: userEmail,
+            regime: "Simples Nacional",
+            sector: "Servicos",
+            status: "Ativo",
+            portal_user_id: userId,
+          });
+
+          if (createClientError) {
+            skipped.push({
+              client_id: null,
+              user_id: userId,
+              email: userEmail,
+              reason: `create_missing_client_record_failed: ${createClientError.message}`,
+            });
+            continue;
+          }
+
+          linkedClientUserIds.add(userId);
+          clientRowsCreated += 1;
+        }
+      }
+
+      if (!processedUsers.has(userId)) {
+        const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: requestedPassword,
+          email_confirm: true,
+        });
+
+        if (passwordError) {
+          skipped.push({
+            client_id: null,
+            user_id: userId,
+            email: userEmail,
+            reason: `reset_password_failed_secondary: ${passwordError.message}`,
+          });
+          continue;
+        }
+
+        processedUsers.add(userId);
         passwordsReset += 1;
       }
     }
@@ -341,9 +555,10 @@ Deno.serve(async (req) => {
       passwords_reset: passwordsReset,
       auth_users_created: authUsersCreated,
       portal_links_created: portalLinksCreated,
+      client_rows_created: clientRowsCreated,
       client_roles_upserted: rolesUpserted,
       skipped_count: skipped.length,
-      skipped_preview: skipped.slice(0, 20),
+      skipped_preview: skipped.slice(0, 30),
     });
   } catch (error: unknown) {
     const message =
