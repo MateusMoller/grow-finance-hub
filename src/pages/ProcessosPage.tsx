@@ -1,28 +1,14 @@
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  CalendarDays,
-  Download,
-  FileText,
-  FolderOpen,
-  Loader2,
-  Search,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { Download, FileText, FolderOpen, Loader2, Trash2, Upload } from "lucide-react";
 import { AppLayout } from "@/components/app/AppLayout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
-type UploadMode = "new" | "existing";
 const processStorageBucket = "process-documents";
 
 type ProcessDocumentDbRow = Pick<
@@ -36,7 +22,6 @@ type ProcessDocumentDbRow = Pick<
   | "file_name"
   | "file_path"
   | "file_size"
-  | "created_at"
   | "updated_at"
 >;
 
@@ -50,77 +35,15 @@ interface ProcessGroup {
   processDescription: string | null;
   department: string;
   status: string;
-  createdAt: string;
   updatedAt: string;
   documents: ProcessDocumentRow[];
   totalBytes: number;
-}
-
-interface DepartmentShowcaseCard {
-  value: string;
-  title: string;
-  imageUrl: string;
 }
 
 interface UploadQueueItem {
   file: File;
   relativePath: string;
 }
-
-const departmentOptions = [
-  { value: "geral", label: "Geral" },
-  { value: "contabilidade", label: "Contabilidade" },
-  { value: "fiscal", label: "Fiscal" },
-  { value: "dp", label: "Departamento Pessoal" },
-  { value: "financeiro", label: "Financeiro" },
-  { value: "comercial", label: "Comercial" },
-];
-
-const departmentShowcaseCards: DepartmentShowcaseCard[] = [
-  {
-    value: "dp",
-    title: "Departamento Pessoal",
-    imageUrl: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80",
-  },
-  {
-    value: "fiscal",
-    title: "Fiscal",
-    imageUrl: "https://images.unsplash.com/photo-1565514020179-026b92b2d95b?auto=format&fit=crop&w=1200&q=80",
-  },
-  {
-    value: "contabilidade",
-    title: "Contabil",
-    imageUrl: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80",
-  },
-  {
-    value: "geral",
-    title: "Gerencia",
-    imageUrl: "https://images.unsplash.com/photo-1531545514256-b1400bc00f31?auto=format&fit=crop&w=1200&q=80",
-  },
-];
-
-const statusOptions = [
-  { value: "aberto", label: "Aberto" },
-  { value: "em_andamento", label: "Em andamento" },
-  { value: "aguardando_documentos", label: "Aguardando documentos" },
-  { value: "concluido", label: "Concluido" },
-  { value: "arquivado", label: "Arquivado" },
-];
-
-const statusClassMap: Record<string, string> = {
-  aberto: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  em_andamento: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  aguardando_documentos: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
-  concluido: "bg-primary/10 text-primary",
-  arquivado: "bg-muted text-muted-foreground",
-};
-
-const normalizeText = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
 
 const formatBytes = (bytes: number | null) => {
   if (!bytes || bytes <= 0) return "-";
@@ -135,12 +58,6 @@ const formatBytes = (bytes: number | null) => {
 
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 };
-
-const getStatusLabel = (status: string) =>
-  statusOptions.find((option) => option.value === status)?.label || status;
-
-const getDepartmentLabel = (department: string) =>
-  departmentOptions.find((option) => option.value === department)?.label || department;
 
 const sanitizePathSegment = (segment: string) => {
   const normalized = segment
@@ -182,7 +99,6 @@ const generateProcessId = () => {
     return crypto.randomUUID();
   }
 
-  // RFC4122-ish fallback for older browsers.
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
     const random = Math.floor(Math.random() * 16);
     const value = char === "x" ? random : (random & 0x3) | 0x8;
@@ -221,24 +137,14 @@ const triggerBlobDownload = (blob: Blob, fileName: string) => {
 
 export default function ProcessosPage() {
   const { user } = useAuth();
-
   const [documents, setDocuments] = useState<ProcessDocumentRow[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
-
-  const [uploadMode, setUploadMode] = useState<UploadMode>("new");
-  const [processName, setProcessName] = useState("");
-  const [processDescription, setProcessDescription] = useState("");
-  const [processDepartment, setProcessDepartment] = useState("geral");
-  const [processStatus, setProcessStatus] = useState("aberto");
-  const [selectedProcessId, setSelectedProcessId] = useState("none");
+  const [selectedProcessId, setSelectedProcessId] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
-
   const [uploadingDocuments, setUploadingDocuments] = useState(false);
-  const [updatingProcessId, setUpdatingProcessId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -248,12 +154,12 @@ export default function ProcessosPage() {
     const { data, error } = await supabase
       .from("process_documents")
       .select(
-        "id, process_id, process_name, process_description, department, status, file_name, file_path, file_size, created_at, updated_at",
+        "id, process_id, process_name, process_description, department, status, file_name, file_path, file_size, updated_at",
       )
       .order("updated_at", { ascending: false });
 
     if (error) {
-      toast.error(`Erro ao carregar processos: ${error.message}`);
+      toast.error(`Erro ao carregar pastas: ${error.message}`);
       setDocuments([]);
       setLoadingDocuments(false);
       return;
@@ -299,7 +205,6 @@ export default function ProcessosPage() {
           processDescription: document.process_description,
           department: document.department,
           status: document.status,
-          createdAt: document.created_at,
           updatedAt: document.updated_at,
           documents: [document],
           totalBytes: document.file_size || 0,
@@ -310,16 +215,12 @@ export default function ProcessosPage() {
       current.documents.push(document);
       current.totalBytes += document.file_size || 0;
 
-      if (new Date(document.created_at).getTime() < new Date(current.createdAt).getTime()) {
-        current.createdAt = document.created_at;
-      }
-
       if (new Date(document.updated_at).getTime() >= new Date(current.updatedAt).getTime()) {
         current.updatedAt = document.updated_at;
-        current.status = document.status;
-        current.department = document.department;
         current.processName = document.process_name;
         current.processDescription = document.process_description;
+        current.department = document.department;
+        current.status = document.status;
       }
     }
 
@@ -333,62 +234,27 @@ export default function ProcessosPage() {
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [documents]);
 
-  const filteredProcesses = useMemo(() => {
-    const term = normalizeText(search);
-
-    return processGroups.filter((group) => {
-      if (statusFilter !== "all" && group.status !== statusFilter) return false;
-      if (departmentFilter !== "all" && group.department !== departmentFilter) return false;
-
-      if (!term) return true;
-
-      const matchProcess =
-        normalizeText(group.processName).includes(term) ||
-        normalizeText(group.processDescription || "").includes(term);
-
-      if (matchProcess) return true;
-
-      return group.documents.some((document) => {
-        const relativePath = getDocumentRelativePath(document);
-        return (
-          normalizeText(document.file_name).includes(term) ||
-          normalizeText(relativePath).includes(term)
-        );
-      });
-    });
-  }, [departmentFilter, processGroups, search, statusFilter]);
-
-  const processStats = useMemo(
-    () => ({
-      totalProcesses: processGroups.length,
-      totalDocuments: documents.length,
-      completedProcesses: processGroups.filter((group) => group.status === "concluido").length,
-    }),
-    [documents.length, processGroups],
-  );
-
-  const departmentCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-
-    for (const group of processGroups) {
-      counts[group.department] = (counts[group.department] || 0) + 1;
+  useEffect(() => {
+    if (processGroups.length === 0) {
+      setSelectedProcessId("");
+      return;
     }
 
-    return counts;
-  }, [processGroups]);
+    const selectedExists = processGroups.some((group) => group.processId === selectedProcessId);
+    if (!selectedExists) {
+      setSelectedProcessId(processGroups[0].processId);
+    }
+  }, [processGroups, selectedProcessId]);
 
-  const handleDepartmentShowcaseClick = (department: string) => {
-    setDepartmentFilter((previous) => (previous === department ? "all" : department));
-  };
+  const selectedGroup = useMemo(
+    () => processGroups.find((group) => group.processId === selectedProcessId) || null,
+    [processGroups, selectedProcessId],
+  );
 
   const resetUploadSelection = () => {
     setUploadQueue([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-    if (folderInputRef.current) {
-      folderInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
   };
 
   const buildUploadQueue = (files: File[]) =>
@@ -409,13 +275,6 @@ export default function ProcessosPage() {
     setUploadQueue(buildUploadQueue(files));
   };
 
-  const resetNewProcessFields = () => {
-    setProcessName("");
-    setProcessDescription("");
-    setProcessDepartment("geral");
-    setProcessStatus("aberto");
-  };
-
   const handleUpload = async () => {
     if (!user) {
       toast.error("Sessao invalida. Entre novamente no sistema.");
@@ -423,46 +282,31 @@ export default function ProcessosPage() {
     }
 
     if (uploadQueue.length === 0) {
-      toast.error("Selecione arquivos ou uma pasta completa para upload.");
+      toast.error("Selecione arquivos para upload.");
       return;
     }
 
-    const trimmedProcessName = processName.trim();
-
+    const trimmedFolderName = newFolderName.trim();
     let targetProcessId = "";
     let targetProcessName = "";
     let targetDescription: string | null = null;
     let targetDepartment = "geral";
     let targetStatus = "aberto";
 
-    if (uploadMode === "new") {
-      if (!trimmedProcessName) {
-        toast.error("Informe o nome do processo.");
-        return;
-      }
-
+    if (trimmedFolderName) {
       targetProcessId = generateProcessId();
-      targetProcessName = trimmedProcessName;
-      targetDescription = processDescription.trim() || null;
-      targetDepartment = processDepartment;
-      targetStatus = processStatus;
+      targetProcessName = trimmedFolderName;
     } else {
-      if (selectedProcessId === "none") {
-        toast.error("Selecione um processo para anexar os documentos.");
+      if (!selectedGroup) {
+        toast.error("Selecione uma pasta ou informe o nome de uma nova pasta.");
         return;
       }
 
-      const selected = processGroups.find((group) => group.processId === selectedProcessId);
-      if (!selected) {
-        toast.error("Processo selecionado nao encontrado.");
-        return;
-      }
-
-      targetProcessId = selected.processId;
-      targetProcessName = selected.processName;
-      targetDescription = selected.processDescription;
-      targetDepartment = selected.department;
-      targetStatus = selected.status;
+      targetProcessId = selectedGroup.processId;
+      targetProcessName = selectedGroup.processName;
+      targetDescription = selectedGroup.processDescription;
+      targetDepartment = selectedGroup.department;
+      targetStatus = selectedGroup.status;
     }
 
     setUploadingDocuments(true);
@@ -523,10 +367,8 @@ export default function ProcessosPage() {
     if (successCount > 0) {
       await fetchDocuments();
       resetUploadSelection();
-
-      if (uploadMode === "new") {
-        resetNewProcessFields();
-      }
+      setNewFolderName("");
+      setSelectedProcessId(targetProcessId);
     }
 
     if (failCount > 0) {
@@ -535,7 +377,7 @@ export default function ProcessosPage() {
       return;
     }
 
-    toast.success(`${successCount} arquivo(s) enviado(s) para a biblioteca de processos.`);
+    toast.success(`${successCount} arquivo(s) enviado(s).`);
   };
 
   const handleDownload = async (document: ProcessDocumentRow) => {
@@ -549,233 +391,111 @@ export default function ProcessosPage() {
   };
 
   const handleDeleteDocument = async (document: ProcessDocumentRow) => {
-    const shouldDelete = window.confirm(`Excluir o arquivo "${document.file_name}" da biblioteca de processos?`);
+    const shouldDelete = window.confirm(`Excluir o arquivo "${document.file_name}"?`);
     if (!shouldDelete) return;
 
     setDeletingDocumentId(document.id);
 
     try {
       const { error: storageError } = await supabase.storage.from(processStorageBucket).remove([document.file_path]);
-      if (storageError) {
-        throw new Error(storageError.message || "Erro ao remover arquivo do armazenamento.");
-      }
+      if (storageError) throw new Error(storageError.message || "Erro ao remover arquivo do armazenamento.");
 
-      const { error: deleteError } = await supabase
-        .from("process_documents")
-        .delete()
-        .eq("id", document.id);
-      if (deleteError) {
-        throw new Error(deleteError.message || "Erro ao remover registro do processo.");
-      }
+      const { error: deleteError } = await supabase.from("process_documents").delete().eq("id", document.id);
+      if (deleteError) throw new Error(deleteError.message || "Erro ao remover registro do processo.");
 
       setDocuments((previous) => previous.filter((item) => item.id !== document.id));
-      toast.success("Arquivo removido da biblioteca de processos.");
+      toast.success("Arquivo removido.");
     } catch (error) {
       const message =
-        error instanceof Error && error.message
-          ? error.message
-          : "Erro ao excluir arquivo da biblioteca de processos.";
+        error instanceof Error && error.message ? error.message : "Erro ao excluir arquivo da biblioteca.";
       toast.error(message);
     } finally {
       setDeletingDocumentId(null);
     }
   };
 
-  const handleProcessStatusChange = async (group: ProcessGroup, nextStatus: string) => {
-    setUpdatingProcessId(group.processId);
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from("process_documents")
-      .update({ status: nextStatus, updated_at: now })
-      .eq("process_id", group.processId);
-    if (error) {
-      toast.error(error.message || "Nao foi possivel atualizar o status do processo.");
-      setUpdatingProcessId(null);
-      return;
-    }
-
-    setDocuments((previous) =>
-      previous.map((document) =>
-        document.process_id === group.processId
-          ? { ...document, status: nextStatus, updated_at: now }
-          : document,
-      ),
-    );
-
-    toast.success("Status do processo atualizado.");
-    setUpdatingProcessId(null);
-  };
-
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-7xl">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="space-y-6 max-w-6xl">
+        <div>
           <h1 className="text-2xl font-bold">Processos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Biblioteca interna de pastas e arquivos para organizar os processos da Grow no Supabase.
+            Biblioteca simples em formato de pastas para guardar e enviar arquivos.
           </p>
-        </motion.div>
-
-        <div className="rounded-2xl border bg-zinc-950 p-3 sm:p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {departmentShowcaseCards.map((department, index) => {
-              const isActive = departmentFilter === department.value;
-              const processCount = departmentCounts[department.value] || 0;
-
-              return (
-                <motion.button
-                  type="button"
-                  key={department.value}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.04 }}
-                  onClick={() => handleDepartmentShowcaseClick(department.value)}
-                  className={`group relative overflow-hidden rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/80 ${
-                    isActive
-                      ? "border-primary ring-2 ring-primary/80 ring-offset-2 ring-offset-zinc-950"
-                      : "border-white/15 hover:border-white/40"
-                  }`}
-                >
-                  <div className="relative h-[188px]">
-                    <img
-                      src={department.imageUrl}
-                      alt={department.title}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-black/5" />
-                    <div className="absolute inset-x-0 bottom-0 px-3 py-2.5">
-                      <p className="text-[22px] font-semibold text-white leading-tight">{department.title}</p>
-                      <p className="text-xs text-white/75 mt-0.5">{processCount} processo(s)</p>
-                    </div>
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-300">
-            <span>
-              Filtro rapido por setor:{" "}
-              <strong className="text-zinc-100">
-                {departmentFilter === "all" ? "Todos os setores" : getDepartmentLabel(departmentFilter)}
-              </strong>
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white disabled:opacity-50"
-              onClick={() => setDepartmentFilter("all")}
-              disabled={departmentFilter === "all"}
-            >
-              Limpar filtro
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Processos ativos</p>
-              <p className="text-2xl font-semibold mt-1">{processStats.totalProcesses}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Arquivos armazenados</p>
-              <p className="text-2xl font-semibold mt-1">{processStats.totalDocuments}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Processos concluidos</p>
-              <p className="text-2xl font-semibold mt-1">{processStats.completedProcesses}</p>
-            </CardContent>
-          </Card>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Arquivos do processo</CardTitle>
+            <CardTitle className="text-base">Pastas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingDocuments ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            ) : processGroups.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-8 text-center">
+                <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma pasta criada ainda. Envie arquivos para criar a primeira pasta.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {processGroups.map((group) => {
+                  const isSelected = selectedProcessId === group.processId;
+                  return (
+                    <button
+                      key={group.processId}
+                      type="button"
+                      onClick={() => setSelectedProcessId(group.processId)}
+                      className={`rounded-lg border p-4 text-left transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{group.processName}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {group.documents.length} arquivo(s) - {formatBytes(group.totalBytes)}
+                          </p>
+                        </div>
+                        <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Atualizado em {new Date(group.updatedAt).toLocaleString("pt-BR")}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Upload de arquivos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Tabs value={uploadMode} onValueChange={(value) => setUploadMode(value as UploadMode)}>
-              <TabsList className="grid grid-cols-2 w-full sm:w-[320px]">
-                <TabsTrigger value="new">Novo processo</TabsTrigger>
-                <TabsTrigger value="existing">Processo existente</TabsTrigger>
-              </TabsList>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nova pasta (opcional)</label>
+              <Input
+                value={newFolderName}
+                onChange={(event) => setNewFolderName(event.target.value)}
+                placeholder="Ex: Admissao - Colaborador Joao"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se preencher, o upload cria uma nova pasta. Se deixar em branco, envia para a pasta selecionada.
+              </p>
+            </div>
 
-              <TabsContent value="new" className="space-y-3 pt-3">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-sm font-medium">Nome do processo</label>
-                    <Input
-                      value={processName}
-                      onChange={(event) => setProcessName(event.target.value)}
-                      placeholder="Ex: Admissao - Colaborador Joao"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Setor</label>
-                    <Select value={processDepartment} onValueChange={setProcessDepartment}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {departmentOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Status inicial</label>
-                    <Select value={processStatus} onValueChange={setProcessStatus}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-sm font-medium">Descricao (opcional)</label>
-                    <Input
-                      value={processDescription}
-                      onChange={(event) => setProcessDescription(event.target.value)}
-                      placeholder="Resumo rapido para contextualizar o processo"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="existing" className="space-y-3 pt-3">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Selecione o processo</label>
-                  <Select value={selectedProcessId} onValueChange={setSelectedProcessId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha um processo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Selecionar...</SelectItem>
-                      {processGroups.map((group) => (
-                        <SelectItem key={group.processId} value={group.processId}>
-                          {group.processName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </TabsContent>
-            </Tabs>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+              Pasta selecionada:{" "}
+              <strong>{selectedGroup ? selectedGroup.processName : "Nenhuma pasta selecionada"}</strong>
+            </div>
 
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -815,15 +535,14 @@ export default function ProcessosPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Use <strong>Selecionar pasta</strong> para enviar a estrutura completa (subpastas e arquivos).
-                Pastas vazias nao sao enviadas pelo navegador.
-              </p>
 
               {uploadQueue.length > 0 && (
-                <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                <div className="rounded-lg border bg-muted/30 p-3 max-h-52 overflow-auto">
                   {uploadQueue.map((item) => (
-                    <div key={`${item.relativePath}-${item.file.size}`} className="text-sm text-muted-foreground truncate">
+                    <div
+                      key={`${item.relativePath}-${item.file.size}`}
+                      className="text-sm text-muted-foreground truncate"
+                    >
                       {item.relativePath} - {formatBytes(item.file.size)}
                     </div>
                   ))}
@@ -834,7 +553,7 @@ export default function ProcessosPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={() => void handleUpload()} disabled={uploadingDocuments} className="gap-2">
                 {uploadingDocuments ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Enviar para biblioteca
+                Enviar arquivos
               </Button>
               <Button
                 type="button"
@@ -849,187 +568,82 @@ export default function ProcessosPage() {
         </Card>
 
         <Card>
-          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px_220px] gap-3">
-            <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                placeholder="Buscar por processo, descricao, arquivo ou caminho..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
-                {statusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os setores</SelectItem>
-                {departmentOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <CardHeader>
+            <CardTitle className="text-base">Arquivos da pasta selecionada</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!selectedGroup ? (
+              <div className="rounded-lg border border-dashed p-8 text-center">
+                <p className="text-sm text-muted-foreground">Selecione uma pasta para visualizar os arquivos.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-3 font-medium text-muted-foreground">Arquivo</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">
+                          Caminho
+                        </th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">Tamanho</th>
+                        <th className="p-3 w-[120px]" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {selectedGroup.documents.map((document) => (
+                        <tr key={document.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="p-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <div className="min-w-0">
+                                <p className="truncate">{document.file_name}</p>
+                                <p className="truncate text-xs text-muted-foreground md:hidden">
+                                  {getDocumentRelativePath(document)}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3 hidden md:table-cell text-muted-foreground">
+                            <span className="truncate block max-w-[420px]">{getDocumentRelativePath(document)}</span>
+                          </td>
+                          <td className="p-3 text-muted-foreground">{formatBytes(document.file_size)}</td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                onClick={() => void handleDownload(document)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => void handleDeleteDocument(document)}
+                                disabled={deletingDocumentId === document.id}
+                              >
+                                {deletingDocumentId === document.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
-
-        {loadingDocuments ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        ) : filteredProcesses.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <FolderOpen className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-              <p className="font-medium">Nenhum processo encontrado com os filtros atuais.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {filteredProcesses.map((group, index) => (
-              <motion.div
-                key={group.processId}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-              >
-                <Card>
-                  <CardHeader className="space-y-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <CardTitle className="text-base truncate">{group.processName}</CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {group.processDescription || "Sem descricao cadastrada."}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className={`border-0 ${statusClassMap[group.status] || "bg-muted text-muted-foreground"}`}>
-                          {getStatusLabel(group.status)}
-                        </Badge>
-                        <Badge variant="secondary">{getDepartmentLabel(group.department)}</Badge>
-                        <Badge variant="outline">{group.documents.length} arquivo(s)</Badge>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <CalendarDays className="h-3.5 w-3.5" />
-                        Atualizado em {new Date(group.updatedAt).toLocaleString("pt-BR")}
-                      </span>
-                      <span>Total de arquivos: {formatBytes(group.totalBytes)}</span>
-                    </div>
-
-                    <div className="max-w-[260px]">
-                      <Select
-                        value={group.status}
-                        onValueChange={(value) => void handleProcessStatusChange(group, value)}
-                        disabled={updatingProcessId === group.processId}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent>
-                    <div className="rounded-lg border overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/40">
-                              <th className="text-left p-3 font-medium text-muted-foreground">Arquivo</th>
-                              <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Caminho</th>
-                              <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Atualizado</th>
-                              <th className="text-left p-3 font-medium text-muted-foreground">Tamanho</th>
-                              <th className="p-3 w-[120px]" />
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {group.documents.map((document) => (
-                              <tr key={document.id} className="hover:bg-muted/20 transition-colors">
-                                <td className="p-3">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                                    <div className="min-w-0">
-                                      <p className="truncate">{document.file_name}</p>
-                                      <p className="truncate text-xs text-muted-foreground lg:hidden">
-                                        {getDocumentRelativePath(document)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="p-3 hidden lg:table-cell text-muted-foreground">
-                                  <span className="truncate block max-w-[380px]">{getDocumentRelativePath(document)}</span>
-                                </td>
-                                <td className="p-3 hidden md:table-cell text-muted-foreground">
-                                  {new Date(document.updated_at).toLocaleDateString("pt-BR")}
-                                </td>
-                                <td className="p-3 text-muted-foreground">{formatBytes(document.file_size)}</td>
-                                <td className="p-3">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-8 w-8"
-                                      onClick={() => void handleDownload(document)}
-                                    >
-                                      <Download className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-8 w-8 text-destructive"
-                                      onClick={() => void handleDeleteDocument(document)}
-                                      disabled={deletingDocumentId === document.id}
-                                    >
-                                      {deletingDocumentId === document.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="h-4 w-4" />
-                                      )}
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-        )}
       </div>
     </AppLayout>
   );
