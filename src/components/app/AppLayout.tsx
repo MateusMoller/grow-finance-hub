@@ -66,7 +66,6 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
-    { title: "Processos", url: "/app/processos" },
     { title: "Formularios", url: "/app/formularios" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
@@ -88,7 +87,6 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
         item.url === "/app/clientes" ||
         item.url === "/app/solicitacoes" ||
         item.url === "/app/formularios" ||
-        item.url === "/app/processos" ||
         item.url === "/app/chat-interno" ||
         item.url === "/app/relatorios" ||
         item.url === "/app/manual",
@@ -104,7 +102,6 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
       item.url === "/app/clientes" ||
       item.url === "/app/solicitacoes" ||
       item.url === "/app/formularios" ||
-      item.url === "/app/processos" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
       item.url === "/app/manual",

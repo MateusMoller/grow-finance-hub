@@ -14,7 +14,6 @@ import {
   Newspaper,
   MessagesSquare,
   UserCog,
-  FolderOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -46,7 +45,6 @@ const operationalItems = [
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Processos", url: "/app/processos", icon: FolderOpen },
 ];
 
 const systemItems = [
@@ -109,7 +107,6 @@ export function AppSidebar() {
         (item) =>
           item.url === "/app/solicitacoes" ||
           item.url === "/app/formularios" ||
-          item.url === "/app/processos" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios",
       )

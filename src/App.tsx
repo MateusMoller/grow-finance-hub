@@ -31,7 +31,6 @@ import PortalClientePage from "./pages/PortalClientePage";
 import SolicitacoesPage from "./pages/SolicitacoesPage";
 import ManualPage from "./pages/ManualPage";
 import UsuariosPage from "./pages/UsuariosPage";
-import ProcessosPage from "./pages/ProcessosPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,8 +62,8 @@ const App = () => (
                 <Route path="/app/clientes/:id" element={<ProtectedRoute><ClientDetailPage /></ProtectedRoute>} />
                 <Route path="/app/tarefas" element={<ProtectedRoute><TarefasPage /></ProtectedRoute>} />
                 <Route path="/app/formularios" element={<ProtectedRoute><FormulariosPage /></ProtectedRoute>} />
-                <Route path="/app/processos" element={<ProtectedRoute><ProcessosPage /></ProtectedRoute>} />
-                <Route path="/app/documentos" element={<ProtectedRoute><Navigate to="/app/processos" replace /></ProtectedRoute>} />
+                <Route path="/app/processos" element={<ProtectedRoute><Navigate to="/app" replace /></ProtectedRoute>} />
+                <Route path="/app/documentos" element={<ProtectedRoute><Navigate to="/app" replace /></ProtectedRoute>} />
                 <Route path="/app/crm" element={<ProtectedRoute><CRMPage /></ProtectedRoute>} />
                 <Route path="/app/chat-interno" element={<ProtectedRoute><ChatInternoPage /></ProtectedRoute>} />
                 <Route path="/app/newsletter" element={<ProtectedRoute><NewsletterAdminPage /></ProtectedRoute>} />
