@@ -32,6 +32,7 @@ interface ClientRecord {
   phone: string | null;
   address: string | null;
   notes: string | null;
+  portal_user_id: string | null;
   portal_cashflow_enabled: boolean;
 }
 
@@ -103,6 +104,8 @@ const categoryConfig = {
   dp: { fields: dpFields, icon: Users, label: "Dept. Pessoal", color: "text-emerald-600" },
 };
 
+const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
+
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -118,6 +121,9 @@ export default function ClientDetailPage() {
   const [savingData, setSavingData] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadCategory, setUploadCategory] = useState("contabilidade");
+  const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
+  const [checkingPortalAccess, setCheckingPortalAccess] = useState(false);
+  const [savingPortalAccess, setSavingPortalAccess] = useState(false);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -141,8 +147,12 @@ export default function ClientDetailPage() {
     }
 
     const c = clientRes.data;
-    setClient(c as ClientRecord);
-    setClientForm(c as ClientRecord);
+    const normalizedClient: ClientRecord = {
+      ...(c as ClientRecord),
+      email: c.email ? normalizeEmail(c.email) : c.email,
+    };
+    setClient(normalizedClient);
+    setClientForm(normalizedClient);
 
     // Build data map: category__field_name -> value
     const map: Record<string, string> = {};
@@ -152,6 +162,25 @@ export default function ClientDetailPage() {
     setDataEntries(map);
 
     setFiles((filesRes.data || []) as ClientFile[]);
+
+    if (normalizedClient.portal_user_id) {
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("user_id", normalizedClient.portal_user_id)
+        .eq("role", "client")
+        .maybeSingle();
+
+      if (roleError) {
+        toast.error("Nao foi possivel validar a permissao atual do portal.");
+        setPortalAccessEnabled(false);
+      } else {
+        setPortalAccessEnabled(Boolean(roleData));
+      }
+    } else {
+      setPortalAccessEnabled(false);
+    }
+
     setLoading(false);
   }, [id, navigate]);
 
@@ -163,6 +192,7 @@ export default function ClientDetailPage() {
 
   const saveClientInfo = async () => {
     if (!id) return;
+    const normalizedEmail = normalizeEmail(clientForm.email);
     setSaving(true);
     const { error } = await supabase.from("clients").update({
       name: clientForm.name,
@@ -171,7 +201,7 @@ export default function ClientDetailPage() {
       sector: clientForm.sector,
       status: clientForm.status,
       contact: clientForm.contact,
-      email: clientForm.email,
+      email: normalizedEmail || null,
       phone: clientForm.phone,
       address: clientForm.address,
       notes: clientForm.notes,
@@ -180,7 +210,110 @@ export default function ClientDetailPage() {
     setSaving(false);
     if (error) return toast.error("Erro ao salvar dados do cliente");
     toast.success("Dados do cliente salvos");
-    setClient({ ...client!, ...clientForm } as ClientRecord);
+    setClient({ ...client!, ...clientForm, email: normalizedEmail || null } as ClientRecord);
+    setClientForm((prev) => ({ ...prev, email: normalizedEmail || null }));
+  };
+
+  const handleValidateAndAllowPortalAccess = async () => {
+    if (!canManageCashflowAccess) {
+      toast.error("Apenas usuario admin pode validar este acesso.");
+      return;
+    }
+
+    if (!client?.portal_user_id) {
+      toast.error("Cliente sem usuario do portal vinculado. Cadastre pelo fluxo de cliente com acesso ao portal.");
+      return;
+    }
+
+    setCheckingPortalAccess(true);
+    const { data: existingRole, error: existingRoleError } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("user_id", client.portal_user_id)
+      .eq("role", "client")
+      .maybeSingle();
+
+    if (existingRoleError) {
+      setCheckingPortalAccess(false);
+      toast.error("Nao foi possivel validar a permissao atual do portal.");
+      return;
+    }
+
+    if (existingRole) {
+      setPortalAccessEnabled(true);
+      setCheckingPortalAccess(false);
+      toast.success("Acesso ao portal ja estava liberado.");
+      return;
+    }
+
+    const { error: upsertError } = await supabase.from("user_roles").upsert(
+      {
+        user_id: client.portal_user_id,
+        role: "client" as Database["public"]["Enums"]["app_role"],
+      },
+      { onConflict: "user_id,role" },
+    );
+
+    setCheckingPortalAccess(false);
+
+    if (upsertError) {
+      toast.error("Nao foi possivel liberar o acesso ao portal.");
+      return;
+    }
+
+    setPortalAccessEnabled(true);
+    toast.success("Acesso ao portal validado e liberado.");
+  };
+
+  const handlePortalAccessChange = async (checked: boolean) => {
+    if (!canManageCashflowAccess) {
+      toast.error("Apenas usuario admin pode alterar este acesso.");
+      return;
+    }
+
+    if (!client?.portal_user_id) {
+      toast.error("Cliente sem usuario do portal vinculado. Cadastre pelo fluxo de cliente com acesso ao portal.");
+      return;
+    }
+
+    setSavingPortalAccess(true);
+
+    if (checked) {
+      const { error: upsertError } = await supabase.from("user_roles").upsert(
+        {
+          user_id: client.portal_user_id,
+          role: "client" as Database["public"]["Enums"]["app_role"],
+        },
+        { onConflict: "user_id,role" },
+      );
+
+      setSavingPortalAccess(false);
+
+      if (upsertError) {
+        toast.error("Nao foi possivel liberar acesso ao portal.");
+        return;
+      }
+
+      setPortalAccessEnabled(true);
+      toast.success("Acesso ao portal liberado para o cliente.");
+      return;
+    }
+
+    const { error: deleteError } = await supabase
+      .from("user_roles")
+      .delete()
+      .eq("user_id", client.portal_user_id)
+      .eq("role", "client");
+
+    setSavingPortalAccess(false);
+
+    if (deleteError) {
+      toast.error("Nao foi possivel bloquear acesso ao portal.");
+      return;
+    }
+
+    setPortalAccessEnabled(false);
+    toast.success("Acesso ao portal bloqueado para o cliente.");
   };
 
   const saveCategoryData = async (category: string) => {
@@ -461,7 +594,7 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">E-mail</Label>
-                  <Input type="email" value={clientForm.email || ""} onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value }))} />
+                  <Input type="email" value={clientForm.email || ""} onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Telefone</Label>
@@ -474,6 +607,49 @@ export default function ClientDetailPage() {
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs">Observações</Label>
                   <Textarea value={clientForm.notes || ""} onChange={(e) => setClientForm((p) => ({ ...p, notes: e.target.value }))} rows={3} />
+                </div>
+                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Acesso ao portal do cliente</p>
+                      <p className="text-xs text-muted-foreground">
+                        Valide o vinculo e libere o login do cliente no portal.
+                      </p>
+                      <p className="text-xs mt-1">
+                        Status atual:{" "}
+                        <span className={portalAccessEnabled ? "text-primary font-medium" : "text-muted-foreground"}>
+                          {portalAccessEnabled ? "liberado" : "bloqueado"}
+                        </span>
+                      </p>
+                    </div>
+                    <Switch
+                      checked={portalAccessEnabled}
+                      disabled={!canManageCashflowAccess || savingPortalAccess}
+                      onCheckedChange={(checked) => void handlePortalAccessChange(checked)}
+                      aria-label="Liberar acesso ao portal do cliente"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleValidateAndAllowPortalAccess()}
+                      disabled={!canManageCashflowAccess || checkingPortalAccess || savingPortalAccess}
+                    >
+                      {checkingPortalAccess ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                      Validar e permitir acesso
+                    </Button>
+                    {client?.portal_user_id ? (
+                      <p className="text-xs text-muted-foreground">
+                        Usuario do portal vinculado: {client.portal_user_id.slice(0, 8)}...
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Cliente sem usuario de portal vinculado.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
                   <div className="flex items-start justify-between gap-3">

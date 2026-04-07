@@ -97,7 +97,7 @@ export function ClientDetailSheet({ client, open, onOpenChange }: ClientDetailSh
               </div>
               <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                 <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{client.email}</span>
+                <span className="text-sm">{client.email.toLowerCase()}</span>
               </div>
               <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                 <Phone className="h-4 w-4 text-muted-foreground" />

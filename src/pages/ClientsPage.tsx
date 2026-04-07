@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Filter, Building2, Loader2 } from "lucide-react";
+import { Search, Plus, Filter, Building2, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -23,7 +23,10 @@ interface Client {
   contact: string | null;
   email: string | null;
   phone: string | null;
+  portal_user_id: string | null;
 }
+
+const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
 
 const statusColors: Record<string, string> = {
   Ativo: "bg-primary/10 text-primary",
@@ -51,6 +54,7 @@ export default function ClientsPage() {
   });
 
   const canCreateClients = role === "admin" || role === "director" || role === "manager" || role === "commercial";
+  const canManagePortalPermissions = role === "admin";
 
   useEffect(() => {
     void loadClients();
@@ -60,7 +64,7 @@ export default function ClientsPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
-      .select("id, name, cnpj, regime, sector, status, contact, email, phone")
+      .select("id, name, cnpj, regime, sector, status, contact, email, phone, portal_user_id")
       .order("name");
     setLoading(false);
 
@@ -69,7 +73,71 @@ export default function ClientsPage() {
       return;
     }
 
-    setClients((data || []) as Client[]);
+    setClients(
+      ((data || []) as Client[]).map((client) => ({
+        ...client,
+        email: client.email ? normalizeEmail(client.email) : client.email,
+      })),
+    );
+  };
+
+  const ensurePortalClientRole = async (portalUserIds: string[], notifySuccess: boolean) => {
+    if (!canManagePortalPermissions || portalUserIds.length === 0) return;
+
+    const deduplicatedIds = [...new Set(portalUserIds)];
+
+    const { data: existingRoles, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .in("user_id", deduplicatedIds)
+      .eq("role", "client");
+
+    if (rolesError) {
+      toast.error("Nao foi possivel validar permissoes atuais do portal.");
+      return;
+    }
+
+    const alreadyAllowed = new Set((existingRoles || []).map((row) => row.user_id));
+    const missingRoleIds = deduplicatedIds.filter((userId) => !alreadyAllowed.has(userId));
+
+    if (missingRoleIds.length === 0) {
+      if (notifySuccess) toast.success("Todos os clientes ja possuem permissao do portal.");
+      return;
+    }
+
+    const { error: upsertError } = await supabase
+      .from("user_roles")
+      .upsert(
+        missingRoleIds.map((userId) => ({
+          user_id: userId,
+          role: "client" as const,
+        })),
+        { onConflict: "user_id,role" },
+      );
+
+    if (upsertError) {
+      toast.error("Nao foi possivel aplicar permissao do portal para todos os clientes.");
+      return;
+    }
+
+    if (notifySuccess) {
+      toast.success(`${missingRoleIds.length} cliente(s) receberam permissao de portal.`);
+    }
+  };
+
+  const syncPortalPermissionsForLoadedClients = async () => {
+    if (!canManagePortalPermissions) return;
+
+    const userIds = clients
+      .map((client) => client.portal_user_id)
+      .filter((userId): userId is string => Boolean(userId));
+
+    if (userIds.length === 0) {
+      toast.error("Nenhum cliente com usuario de portal vinculado para sincronizar.");
+      return;
+    }
+
+    await ensurePortalClientRole(userIds, true);
   };
 
   const filtered = clients.filter(
@@ -102,6 +170,7 @@ export default function ClientsPage() {
     }
 
     setCreating(true);
+    const normalizedEmail = normalizeEmail(newClient.email);
     const { error } = await supabase.functions.invoke("create-client-with-portal", {
       body: {
         name: newClient.name,
@@ -109,7 +178,7 @@ export default function ClientsPage() {
         regime: newClient.regime,
         sector: newClient.sector,
         contact: newClient.contact || null,
-        email: newClient.email,
+        email: normalizedEmail,
         phone: newClient.phone || null,
         password,
       },
@@ -146,6 +215,21 @@ export default function ClientsPage() {
     });
     toast.success("Cliente cadastrado e acesso do portal criado com sucesso");
     void loadClients();
+
+    if (canManagePortalPermissions) {
+      const { data: createdClient } = await supabase
+        .from("clients")
+        .select("portal_user_id")
+        .eq("email", normalizedEmail)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const portalUserId = createdClient?.portal_user_id || null;
+      if (portalUserId) {
+        await ensurePortalClientRole([portalUserId], false);
+      }
+    }
   };
 
   return (
@@ -157,9 +241,16 @@ export default function ClientsPage() {
             <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados</p>
           </div>
           {canCreateClients && (
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Novo Cliente
-            </Button>
+            <div className="flex items-center gap-2">
+              {canManagePortalPermissions && (
+                <Button size="sm" variant="outline" onClick={() => void syncPortalPermissionsForLoadedClients()}>
+                  <ShieldCheck className="h-4 w-4 mr-1" /> Sincronizar portal
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Novo Cliente
+              </Button>
+            </div>
           )}
         </div>
 
@@ -277,7 +368,7 @@ export default function ClientsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>E-mail do Portal *</Label>
-                <Input type="email" placeholder="email@empresa.com" value={newClient.email} onChange={(event) => setNewClient((prev) => ({ ...prev, email: event.target.value }))} />
+                <Input type="email" placeholder="email@empresa.com" value={newClient.email} onChange={(event) => setNewClient((prev) => ({ ...prev, email: event.target.value.toLowerCase() }))} />
               </div>
               <div className="space-y-2">
                 <Label>Telefone</Label>

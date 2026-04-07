@@ -108,6 +108,7 @@ export default function PortalClientePage() {
 
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
   const [loadingData, setLoadingData] = useState(true);
+  const [portalAccessDenied, setPortalAccessDenied] = useState(false);
 
   const [clientProfile, setClientProfile] = useState<PortalClientProfile | null>(null);
   const [requests, setRequests] = useState<PortalClientRequest[]>([]);
@@ -161,6 +162,34 @@ export default function PortalClientePage() {
     if (!user) return;
 
     setLoadingData(true);
+    setPortalAccessDenied(false);
+
+    const { data: roleData, error: roleError } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .eq("role", "client")
+      .maybeSingle();
+
+    if (roleError) {
+      toast.error("Nao foi possivel validar a permissao de acesso ao portal.");
+      setLoadingData(false);
+      setPortalAccessDenied(true);
+      return;
+    }
+
+    if (!roleData) {
+      setClientProfile(null);
+      setRequests([]);
+      setDocuments([]);
+      setPublishedForms([]);
+      setPortalTasks([]);
+      setCashflowEntries([]);
+      setMessages([]);
+      setLoadingData(false);
+      setPortalAccessDenied(true);
+      return;
+    }
 
     const [clientRes, requestRes, docRes, formsRes] = await Promise.all([
       supabase
@@ -245,6 +274,19 @@ export default function PortalClientePage() {
       } else {
         fetchedMessages = (messageData || []) as PortalRequestMessage[];
       }
+    }
+
+    if (!client) {
+      setClientProfile(null);
+      setRequests([]);
+      setDocuments([]);
+      setPublishedForms([]);
+      setPortalTasks([]);
+      setCashflowEntries([]);
+      setMessages([]);
+      setLoadingData(false);
+      setPortalAccessDenied(true);
+      return;
     }
 
     setClientProfile(client);
@@ -856,6 +898,39 @@ export default function PortalClientePage() {
       </div>
     );
   }
+
+  if (!loadingData && (portalAccessDenied || !clientProfile)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-xl">
+          <CardHeader>
+            <CardTitle className="text-base">Acesso ao portal não liberado</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Este usuário ainda não possui permissão de cliente para acessar o portal.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Peça para o administrador validar e liberar o acesso no cadastro do cliente.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void signOut();
+                  navigate("/login");
+                }}
+              >
+                Sair
+              </Button>
+              <Button onClick={() => navigate("/login")}>Voltar ao login</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -1416,7 +1491,7 @@ export default function PortalClientePage() {
                   </div>
                   <div className="rounded-lg border bg-muted/20 px-3 py-2">
                     <p className="text-xs text-muted-foreground">Email de acesso</p>
-                    <p className="text-sm font-medium">{clientProfile?.email || user?.email || "Não informado"}</p>
+                    <p className="text-sm font-medium">{clientProfile?.email?.toLowerCase() || user?.email?.toLowerCase() || "Não informado"}</p>
                   </div>
                   <Button
                     type="button"

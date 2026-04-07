@@ -590,7 +590,7 @@ export default function RelatoriosPage() {
         segmento: client.sector || "",
         status: client.status || "",
         contato: client.contact || "",
-        email: client.email || "",
+        email: (client.email || "").toLowerCase(),
         telefone: client.phone || "",
         criado_em: client.created_at,
         atualizado_em: client.updated_at,

@@ -1265,7 +1265,7 @@ export default function SolicitacoesPage() {
                         </p>
                         <p>
                           <span className="text-muted-foreground">Email:</span>{" "}
-                          {selectedRequest.client?.email || "Nao informado"}
+                          {selectedRequest.client?.email?.toLowerCase() || "Nao informado"}
                         </p>
                         <p>
                           <span className="text-muted-foreground">Categoria:</span> {selectedRequest.category}
