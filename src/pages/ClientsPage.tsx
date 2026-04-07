@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Filter, Building2, Loader2, ShieldCheck } from "lucide-react";
+import { Search, Plus, Filter, Building2, Loader2, ShieldCheck, KeyRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -40,6 +40,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [resettingPortalPasswords, setResettingPortalPasswords] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -138,6 +139,66 @@ export default function ClientsPage() {
     }
 
     await ensurePortalClientRole(userIds, true);
+  };
+
+  const resetAllPortalPasswords = async () => {
+    if (!canManagePortalPermissions) {
+      toast.error("Apenas admin pode redefinir senhas de portal.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Confirma redefinir a senha de todos os clientes do portal para 123456?",
+    );
+    if (!confirmed) return;
+
+    setResettingPortalPasswords(true);
+
+    const { data, error } = await supabase.functions.invoke("reset-client-portal-passwords", {
+      body: { password: "123456" },
+    });
+
+    setResettingPortalPasswords(false);
+
+    if (error) {
+      if (error instanceof FunctionsHttpError) {
+        try {
+          const errorResponse = await error.context.json();
+          if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
+            toast.error(String(errorResponse.error));
+            return;
+          }
+        } catch {
+          // ignore parsing errors and fallback to generic message
+        }
+      }
+
+      toast.error(error.message || "Nao foi possivel redefinir as senhas do portal.");
+      return;
+    }
+
+    const result = (data || {}) as {
+      passwords_reset?: number;
+      skipped_count?: number;
+      auth_users_created?: number;
+      portal_links_created?: number;
+    };
+
+    const passwordsReset = Number(result.passwords_reset || 0);
+    const skippedCount = Number(result.skipped_count || 0);
+    const usersCreated = Number(result.auth_users_created || 0);
+    const linksCreated = Number(result.portal_links_created || 0);
+
+    toast.success(
+      `${passwordsReset} senha(s) de portal redefinida(s) para 123456. ` +
+        `${usersCreated} usuario(s) criado(s), ${linksCreated} vinculo(s) criados.`,
+    );
+
+    if (skippedCount > 0) {
+      toast.warning(`${skippedCount} cliente(s) nao puderam ser processados. Verifique os logs da funcao.`);
+    }
+
+    void loadClients();
   };
 
   const filtered = clients.filter(
@@ -245,6 +306,17 @@ export default function ClientsPage() {
               {canManagePortalPermissions && (
                 <Button size="sm" variant="outline" onClick={() => void syncPortalPermissionsForLoadedClients()}>
                   <ShieldCheck className="h-4 w-4 mr-1" /> Sincronizar portal
+                </Button>
+              )}
+              {canManagePortalPermissions && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void resetAllPortalPasswords()}
+                  disabled={resettingPortalPasswords}
+                >
+                  {resettingPortalPasswords ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
+                  Senhas portal 123456
                 </Button>
               )}
               <Button size="sm" onClick={() => setCreateOpen(true)}>
