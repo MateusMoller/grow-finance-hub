@@ -14,6 +14,7 @@ import {
   Newspaper,
   MessagesSquare,
   UserCog,
+  Lightbulb,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -50,6 +51,7 @@ const operationalItems = [
 const systemItems = [
   { title: "Notificacoes", url: "/app/notificacoes", icon: Bell },
   { title: "Usuarios", url: "/app/usuarios", icon: UserCog },
+  { title: "Sugestoes", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
   { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
 ];
@@ -115,7 +117,7 @@ export function AppSidebar() {
       : operationalItems.filter((item) => item.url !== "/app/newsletter");
 
   const visibleSystemItems = isDepartmentRole
-    ? systemItems.filter((item) => item.url === "/app/manual")
+    ? systemItems.filter((item) => item.url === "/app/manual" || item.url === "/app/sugestoes")
     : role === "admin"
       ? systemItems
       : systemItems.filter((item) => item.url !== "/app/usuarios");

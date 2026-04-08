@@ -30,6 +30,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       "/app/solicitacoes",
       "/app/formularios",
       "/app/relatorios",
+      "/app/sugestoes",
       "/app/manual",
     ];
     const isAllowed = allowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));

@@ -72,6 +72,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
     { title: "Relatorios", url: "/app/relatorios" },
     { title: "Notificacoes", url: "/app/notificacoes" },
     { title: "Usuarios", url: "/app/usuarios" },
+    { title: "Sugestoes", url: "/app/sugestoes" },
     { title: "Configuracoes", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
   ];
@@ -89,6 +90,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
         item.url === "/app/formularios" ||
         item.url === "/app/chat-interno" ||
         item.url === "/app/relatorios" ||
+        item.url === "/app/sugestoes" ||
         item.url === "/app/manual",
     );
   }
@@ -104,6 +106,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
       item.url === "/app/formularios" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
+      item.url === "/app/sugestoes" ||
       item.url === "/app/manual",
   );
 };
