@@ -65,14 +65,24 @@ function readBooleanSetting(
   return fallback;
 }
 
+function normalizeThemePreference(value: unknown, fallback: ThemePreference = "system"): ThemePreference {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "light" || normalized === "dark" || normalized === "system") {
+    return normalized;
+  }
+  return fallback;
+}
+
 export default function ConfiguracoesPage() {
   const { user } = useAuth();
-  const { setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [activeSection, setActiveSection] = useState<SettingSectionId>("profile");
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<SettingSectionId | "avatar" | null>(null);
+  const [savingThemePreference, setSavingThemePreference] = useState(false);
 
   const [profileForm, setProfileForm] = useState({ displayName: "", email: "", phone: "", jobTitle: "", avatarUrl: "" });
   const [companyForm, setCompanyForm] = useState({ companyName: "", companyDocument: "", companyEmail: "", companyPhone: "", companyWebsite: "" });
@@ -100,7 +110,8 @@ export default function ConfiguracoesPage() {
 
     const profile = profileRes.data;
     const settings = (settingsRes.data || {}) as Record<string, unknown>;
-    const initialTheme = (typeof settings.theme_preference === "string" ? settings.theme_preference : "system") as ThemePreference;
+    const currentTheme = normalizeThemePreference(theme, "system");
+    const initialTheme = normalizeThemePreference(settings.theme_preference, currentTheme);
 
     setProfileForm({
       displayName: profile?.display_name || user.email?.split("@")[0] || "",
@@ -128,7 +139,9 @@ export default function ConfiguracoesPage() {
       languageCode: typeof settings.language_code === "string" ? settings.language_code : "pt-BR",
       compactMode: typeof settings.compact_mode === "boolean" ? settings.compact_mode : false,
     });
-    setTheme(initialTheme);
+    if (initialTheme !== currentTheme) {
+      setTheme(initialTheme);
+    }
     setIntegrationSettings({
       calendarSync: readBooleanSetting(settings, "calendar_sync", "integrations_calendar_sync"),
       driveSync: readBooleanSetting(settings, "drive_sync", "integrations_drive_sync"),
@@ -137,7 +150,7 @@ export default function ConfiguracoesPage() {
       apiToken: readStringSetting(settings, "api_token", "integrations_api_token"),
     });
     setLoading(false);
-  }, [setTheme, user]);
+  }, [setTheme, theme, user]);
 
   useEffect(() => {
     if (user) {
@@ -146,6 +159,15 @@ export default function ConfiguracoesPage() {
       setLoading(false);
     }
   }, [loadSettings, user]);
+
+  useEffect(() => {
+    const normalizedTheme = normalizeThemePreference(theme, "system");
+    setAppearanceSettings((prev) =>
+      prev.themePreference === normalizedTheme
+        ? prev
+        : { ...prev, themePreference: normalizedTheme },
+    );
+  }, [theme]);
 
   const saveProfile = async () => {
     if (!user) return;
@@ -218,11 +240,31 @@ export default function ConfiguracoesPage() {
     toast.success("Notificacoes salvas.");
   };
 
+  const handleThemePreferenceChange = (value: ThemePreference) => {
+    const normalized = normalizeThemePreference(value, appearanceSettings.themePreference);
+    if (normalized === appearanceSettings.themePreference) return;
+
+    setAppearanceSettings((prev) => ({ ...prev, themePreference: normalized }));
+    setTheme(normalized);
+
+    setSavingThemePreference(true);
+    void upsertUserSettings({ theme_preference: normalized })
+      .then(({ error }) => {
+        if (error) {
+          toast.error("Nao foi possivel salvar o tema automaticamente.");
+        }
+      })
+      .finally(() => {
+        setSavingThemePreference(false);
+      });
+  };
+
   const saveAppearance = async () => {
     setSavingSection("appearance");
-    setTheme(appearanceSettings.themePreference);
+    const normalizedTheme = normalizeThemePreference(appearanceSettings.themePreference, "system");
+    setTheme(normalizedTheme);
     const { error } = await upsertUserSettings({
-      theme_preference: appearanceSettings.themePreference,
+      theme_preference: normalizedTheme,
       language_code: appearanceSettings.languageCode,
       compact_mode: appearanceSettings.compactMode,
     });
@@ -298,7 +340,7 @@ export default function ConfiguracoesPage() {
             {activeSection === "profile" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Perfil</h2><input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={uploadAvatar} /><div className="flex items-center gap-4 mb-6"><div className="h-16 w-16 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center">{profileForm.avatarUrl ? <img src={profileForm.avatarUrl} alt="Avatar" className="h-full w-full object-cover" /> : <span className="text-xl font-bold text-primary">{profileForm.displayName.charAt(0).toUpperCase() || "U"}</span>}</div><div><div className="font-medium">{profileForm.email || "Usuario"}</div><div className="text-sm text-muted-foreground">{profileForm.jobTitle || "Sem cargo definido"}</div><Button variant="outline" size="sm" className="mt-2 text-xs" onClick={() => avatarInputRef.current?.click()} disabled={savingSection === "avatar"}>{savingSection === "avatar" ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}Alterar foto</Button></div></div><div className="grid sm:grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-sm">Nome completo</Label><Input value={profileForm.displayName} onChange={(event) => setProfileForm((prev) => ({ ...prev, displayName: event.target.value }))} /></div><div className="space-y-2"><Label className="text-sm">E-mail</Label><Input value={profileForm.email} disabled /></div><div className="space-y-2"><Label className="text-sm">Telefone</Label><Input value={profileForm.phone} onChange={(event) => setProfileForm((prev) => ({ ...prev, phone: event.target.value }))} /></div><div className="space-y-2"><Label className="text-sm">Cargo</Label><Input value={profileForm.jobTitle} onChange={(event) => setProfileForm((prev) => ({ ...prev, jobTitle: event.target.value }))} /></div></div><Button className="mt-4" onClick={saveProfile} disabled={savingSection === "profile"}>{savingSection === "profile" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar alteracoes</Button></div>}
             {activeSection === "company" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Empresa</h2><div className="grid sm:grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-sm">Nome da empresa</Label><Input value={companyForm.companyName} onChange={(event) => setCompanyForm((prev) => ({ ...prev, companyName: event.target.value }))} /></div><div className="space-y-2"><Label className="text-sm">Documento</Label><Input value={companyForm.companyDocument} onChange={(event) => setCompanyForm((prev) => ({ ...prev, companyDocument: event.target.value }))} /></div><div className="space-y-2"><Label className="text-sm">E-mail corporativo</Label><Input value={companyForm.companyEmail} onChange={(event) => setCompanyForm((prev) => ({ ...prev, companyEmail: event.target.value }))} /></div><div className="space-y-2"><Label className="text-sm">Telefone corporativo</Label><Input value={companyForm.companyPhone} onChange={(event) => setCompanyForm((prev) => ({ ...prev, companyPhone: event.target.value }))} /></div><div className="sm:col-span-2 space-y-2"><Label className="text-sm">Website</Label><Input value={companyForm.companyWebsite} onChange={(event) => setCompanyForm((prev) => ({ ...prev, companyWebsite: event.target.value }))} /></div></div><Button className="mt-4" onClick={saveCompany} disabled={savingSection === "company"}>{savingSection === "company" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar dados da empresa</Button></div>}
             {activeSection === "notifications" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Notificacoes</h2><div className="space-y-4">{notificationLabels.map((item) => <div key={item.key} className="flex items-center justify-between gap-3"><div><div className="text-sm font-medium">{item.title}</div><div className="text-xs text-muted-foreground">{item.desc}</div></div><Switch checked={notificationSettings[item.key]} onCheckedChange={(checked) => setNotificationSettings((prev) => ({ ...prev, [item.key]: checked }))} /></div>)}</div><Button className="mt-4" onClick={saveNotifications} disabled={savingSection === "notifications"}>{savingSection === "notifications" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar notificacoes</Button></div>}
-            {activeSection === "appearance" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Aparencia</h2><div className="grid sm:grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-sm">Tema</Label><Select value={appearanceSettings.themePreference} onValueChange={(value: ThemePreference) => { setAppearanceSettings((prev) => ({ ...prev, themePreference: value })); setTheme(value); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="system">Sistema</SelectItem><SelectItem value="light">Claro</SelectItem><SelectItem value="dark">Escuro</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label className="text-sm">Idioma</Label><Select value={appearanceSettings.languageCode} onValueChange={(value) => setAppearanceSettings((prev) => ({ ...prev, languageCode: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pt-BR">Portugues (Brasil)</SelectItem><SelectItem value="en-US">English (US)</SelectItem><SelectItem value="es-ES">Espanol</SelectItem></SelectContent></Select></div></div><div className="mt-4 flex items-center justify-between gap-3 border rounded-lg p-3"><div><div className="text-sm font-medium">Modo compacto</div><div className="text-xs text-muted-foreground">Reduz espacos da interface</div></div><Switch checked={appearanceSettings.compactMode} onCheckedChange={(checked) => setAppearanceSettings((prev) => ({ ...prev, compactMode: checked }))} /></div><Button className="mt-4" onClick={saveAppearance} disabled={savingSection === "appearance"}>{savingSection === "appearance" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar aparencia</Button></div>}
+            {activeSection === "appearance" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Aparencia</h2><div className="grid sm:grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-sm">Tema</Label><Select value={appearanceSettings.themePreference} onValueChange={handleThemePreferenceChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="system">Sistema</SelectItem><SelectItem value="light">Claro</SelectItem><SelectItem value="dark">Escuro</SelectItem></SelectContent></Select>{savingThemePreference && <p className="text-xs text-muted-foreground">Salvando tema...</p>}</div><div className="space-y-2"><Label className="text-sm">Idioma</Label><Select value={appearanceSettings.languageCode} onValueChange={(value) => setAppearanceSettings((prev) => ({ ...prev, languageCode: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pt-BR">Portugues (Brasil)</SelectItem><SelectItem value="en-US">English (US)</SelectItem><SelectItem value="es-ES">Espanol</SelectItem></SelectContent></Select></div></div><div className="mt-4 flex items-center justify-between gap-3 border rounded-lg p-3"><div><div className="text-sm font-medium">Modo compacto</div><div className="text-xs text-muted-foreground">Reduz espacos da interface</div></div><Switch checked={appearanceSettings.compactMode} onCheckedChange={(checked) => setAppearanceSettings((prev) => ({ ...prev, compactMode: checked }))} /></div><Button className="mt-4" onClick={saveAppearance} disabled={savingSection === "appearance" || savingThemePreference}>{savingSection === "appearance" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar aparencia</Button></div>}
             {activeSection === "integrations" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Integracoes</h2><div className="space-y-4"><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-medium">Sincronizacao com calendario</div><div className="text-xs text-muted-foreground">Atualiza compromissos automaticamente</div></div><Switch checked={integrationSettings.calendarSync} onCheckedChange={(checked) => setIntegrationSettings((prev) => ({ ...prev, calendarSync: checked }))} /></div><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-medium">Integracao com drive</div><div className="text-xs text-muted-foreground">Sincroniza arquivos enviados</div></div><Switch checked={integrationSettings.driveSync} onCheckedChange={(checked) => setIntegrationSettings((prev) => ({ ...prev, driveSync: checked }))} /></div><div className="space-y-2"><Label className="text-sm">Webhook</Label><Input value={integrationSettings.webhookUrl} onChange={(event) => setIntegrationSettings((prev) => ({ ...prev, webhookUrl: event.target.value }))} /></div><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-medium">Acesso por API</div><div className="text-xs text-muted-foreground">Permite integracao via token</div></div><Switch checked={integrationSettings.apiAccess} onCheckedChange={(checked) => setIntegrationSettings((prev) => ({ ...prev, apiAccess: checked }))} /></div><div className="space-y-2"><Label className="text-sm">Token da API</Label><div className="flex gap-2"><Input value={integrationSettings.apiToken} onChange={(event) => setIntegrationSettings((prev) => ({ ...prev, apiToken: event.target.value }))} /><Button type="button" variant="outline" onClick={() => setIntegrationSettings((prev) => ({ ...prev, apiToken: generateApiToken() }))}><KeyRound className="h-4 w-4 mr-1" />Gerar</Button></div></div></div><Button className="mt-4" onClick={saveIntegrations} disabled={savingSection === "integrations"}>{savingSection === "integrations" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Salvar integracoes</Button></div>}
             {activeSection === "security" && <div className="rounded-xl border bg-card p-6"><h2 className="font-heading font-semibold mb-4">Seguranca</h2><div className="space-y-4"><div className="grid sm:grid-cols-2 gap-4"><div className="space-y-2"><Label className="text-sm">Senha atual</Label><Input type="password" value={securityForm.currentPassword} onChange={(event) => setSecurityForm((prev) => ({ ...prev, currentPassword: event.target.value }))} /></div><div className="space-y-2"><Label className="text-sm">Nova senha</Label><Input type="password" value={securityForm.newPassword} onChange={(event) => setSecurityForm((prev) => ({ ...prev, newPassword: event.target.value }))} /></div><div className="space-y-2 sm:col-span-2"><Label className="text-sm">Confirmar nova senha</Label><Input type="password" value={securityForm.confirmPassword} onChange={(event) => setSecurityForm((prev) => ({ ...prev, confirmPassword: event.target.value }))} /></div></div><Button variant="outline" onClick={changePassword} disabled={savingSection === "security"}>{savingSection === "security" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Alterar senha</Button></div></div>}
           </div>
