@@ -20,7 +20,6 @@ import {
   Trash2,
   TrendingUp,
   Users,
-  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -37,7 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
-type ReportDatasetId = "clientes" | "leads_crm" | "tarefas" | "equipe" | "financeiro";
+type ReportDatasetId = "clientes" | "leads_crm" | "tarefas" | "equipe";
 type ExportFormat = "csv" | "xlsx";
 type ReportRow = Record<string, unknown>;
 
@@ -59,11 +58,6 @@ type TaskRow = Pick<
 type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name" | "created_at" | "updated_at">;
 type RoleRow = Pick<Tables<"user_roles">, "user_id" | "role" | "created_at">;
 
-type FinanceRow = Pick<
-  Tables<"client_cashflow_entries">,
-  "id" | "client_id" | "description" | "amount" | "category" | "entry_type" | "status" | "entry_date" | "created_at" | "updated_at"
->;
-
 type SavedReportRow = Pick<
   Tables<"saved_reports">,
   "id" | "name" | "dataset_id" | "column_keys" | "format" | "auto_generate" | "created_at" | "updated_at"
@@ -76,10 +70,6 @@ interface TeamReportRow {
   created_at: string;
   updated_at: string;
   role_created_at: string | null;
-}
-
-interface FinanceReportRow extends FinanceRow {
-  client_name: string;
 }
 
 interface ReportColumnDefinition {
@@ -128,8 +118,6 @@ const roleOrder = [
 
 const rolePriority = new Map(roleOrder.map((role, index) => [role, index]));
 const doneTaskStatuses = new Set(["done", "archived", "concluido", "concluida", "completed", "fechado"]);
-const expenseKeywords = ["despesa", "saida", "expense", "outflow", "debito", "debit"];
-const incomeKeywords = ["receita", "entrada", "income", "inflow", "credito", "credit"];
 
 const normalizeText = (value: string) =>
   value
@@ -151,12 +139,6 @@ const formatDate = (value: unknown) => {
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("pt-BR");
 };
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
 
 const formatRole = (role: string) =>
   role
@@ -186,19 +168,6 @@ const taskStatusLabel = (status: string) => {
   if (normalized === "done") return "Concluido";
   if (normalized === "archived") return "Arquivado";
   return status || "Sem status";
-};
-
-const getSignedFinanceAmount = (entryType: string, amount: number) => {
-  const normalizedType = normalizeText(entryType || "");
-  const absoluteAmount = Math.abs(amount || 0);
-
-  if (expenseKeywords.some((keyword) => normalizedType.includes(keyword))) {
-    return absoluteAmount * -1;
-  }
-  if (incomeKeywords.some((keyword) => normalizedType.includes(keyword))) {
-    return absoluteAmount;
-  }
-  return amount;
 };
 
 const sanitizeFileName = (value: string) =>
@@ -302,25 +271,6 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
     ],
     defaultColumns: ["colaborador", "papel", "usuario_id", "criado_em", "atualizado_em"],
   },
-  financeiro: {
-    id: "financeiro",
-    name: "Financeiro",
-    description: "Fluxo financeiro por cliente, categoria e tipo de lancamento.",
-    icon: Wallet,
-    colorClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20",
-    columns: [
-      { key: "cliente", label: "Cliente" },
-      { key: "descricao", label: "Descricao" },
-      { key: "categoria", label: "Categoria" },
-      { key: "tipo", label: "Tipo" },
-      { key: "status", label: "Status" },
-      { key: "valor", label: "Valor", formatter: (value) => formatCurrency(Number(value) || 0) },
-      { key: "data_lancamento", label: "Data do lancamento", formatter: formatDate },
-      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
-      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
-    ],
-    defaultColumns: ["cliente", "descricao", "categoria", "tipo", "status", "valor", "data_lancamento"],
-  },
 };
 
 const reportDatasetIds = Object.keys(reportDefinitions) as ReportDatasetId[];
@@ -375,7 +325,6 @@ export default function RelatoriosPage() {
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [team, setTeam] = useState<TeamReportRow[]>([]);
-  const [finance, setFinance] = useState<FinanceReportRow[]>([]);
 
   const [customDatasetId, setCustomDatasetId] = useState<ReportDatasetId>("clientes");
   const [selectedColumns, setSelectedColumns] = useState<string[]>(reportDefinitions.clientes.defaultColumns);
@@ -391,7 +340,7 @@ export default function RelatoriosPage() {
   const loadReportData = useCallback(async () => {
     setLoading(true);
 
-    const [clientsRes, leadsRes, tasksRes, profilesRes, rolesRes, financeRes] = await Promise.all([
+    const [clientsRes, leadsRes, tasksRes, profilesRes, rolesRes] = await Promise.all([
       supabase
         .from("clients")
         .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
@@ -414,11 +363,6 @@ export default function RelatoriosPage() {
         .from("user_roles")
         .select("user_id, role, created_at")
         .order("created_at", { ascending: false }),
-      supabase
-        .from("client_cashflow_entries")
-        .select("id, client_id, description, amount, category, entry_type, status, entry_date, created_at, updated_at")
-        .order("entry_date", { ascending: false })
-        .limit(5000),
     ]);
 
     const firstError =
@@ -426,8 +370,7 @@ export default function RelatoriosPage() {
       leadsRes.error ||
       tasksRes.error ||
       profilesRes.error ||
-      rolesRes.error ||
-      financeRes.error;
+      rolesRes.error;
 
     if (firstError) {
       toast.error(`Falha ao carregar relatorios: ${firstError.message}`);
@@ -438,7 +381,6 @@ export default function RelatoriosPage() {
     const nextTasks = (tasksRes.data || []) as TaskRow[];
     const nextProfiles = (profilesRes.data || []) as ProfileRow[];
     const nextRoles = (rolesRes.data || []) as RoleRow[];
-    const nextFinance = (financeRes.data || []) as FinanceRow[];
 
     const profileByUserId = new Map(nextProfiles.map((profile) => [profile.user_id, profile]));
     const rolesByUserId = new Map<string, RoleRow[]>();
@@ -470,17 +412,10 @@ export default function RelatoriosPage() {
       })
       .sort((a, b) => a.display_name.localeCompare(b.display_name, "pt-BR"));
 
-    const clientNameById = new Map(nextClients.map((client) => [client.id, client.name]));
-    const financeRows = nextFinance.map((entry) => ({
-      ...entry,
-      client_name: clientNameById.get(entry.client_id) || "Cliente nao encontrado",
-    }));
-
     setClients(nextClients);
     setLeads(nextLeads);
     setTasks(nextTasks);
     setTeam(teamRows);
-    setFinance(financeRows);
     setLastUpdatedAt(new Date().toISOString());
     setLoading(false);
   }, []);
@@ -570,16 +505,6 @@ export default function RelatoriosPage() {
     [team, selectedCompetence],
   );
 
-  const filteredFinance = useMemo(
-    () =>
-      finance.filter(
-        (entry) =>
-          matchesSelectedCompany(entry.client_name, selectedCompany) &&
-          matchesSelectedCompetence(entry.entry_date || entry.created_at, selectedCompetence),
-      ),
-    [finance, selectedCompany, selectedCompetence],
-  );
-
   const rowsByDataset = useMemo<Record<ReportDatasetId, ReportRow[]>>(
     () => ({
       clientes: filteredClients.map((client) => ({
@@ -626,20 +551,8 @@ export default function RelatoriosPage() {
         atualizado_em: member.updated_at,
         papel_definido_em: member.role_created_at,
       })),
-      financeiro: filteredFinance.map((entry) => ({
-        id: entry.id,
-        cliente: entry.client_name,
-        descricao: entry.description,
-        categoria: entry.category || "",
-        tipo: entry.entry_type || "",
-        status: entry.status || "",
-        valor: getSignedFinanceAmount(entry.entry_type || "", entry.amount),
-        data_lancamento: entry.entry_date,
-        criado_em: entry.created_at,
-        atualizado_em: entry.updated_at,
-      })),
     }),
-    [filteredClients, filteredLeads, filteredTasks, filteredTeam, filteredFinance],
+    [filteredClients, filteredLeads, filteredTasks, filteredTeam],
   );
 
   const automaticCards = useMemo<AutomaticReportCard[]>(() => {
@@ -660,11 +573,6 @@ export default function RelatoriosPage() {
 
     const teamWithRole = filteredTeam.filter((member) => normalizeText(member.role) !== "sem papel").length;
     const teamWithoutRole = filteredTeam.length - teamWithRole;
-
-    const financeSigned = filteredFinance.map((entry) => getSignedFinanceAmount(entry.entry_type || "", entry.amount));
-    const totalInflow = financeSigned.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
-    const totalOutflow = Math.abs(financeSigned.filter((value) => value < 0).reduce((sum, value) => sum + value, 0));
-    const pendingEntries = filteredFinance.filter((entry) => normalizeText(entry.status || "").includes("pend")).length;
 
     return [
       {
@@ -699,17 +607,8 @@ export default function RelatoriosPage() {
           { label: "Sem papel", value: String(teamWithoutRole) },
         ],
       },
-      {
-        datasetId: "financeiro",
-        count: rowsByDataset.financeiro.length,
-        stats: [
-          { label: "Entradas", value: formatCurrency(totalInflow) },
-          { label: "Saidas", value: formatCurrency(totalOutflow) },
-          { label: "Pendentes", value: String(pendingEntries) },
-        ],
-      },
     ];
-  }, [filteredClients, filteredLeads, filteredTasks, filteredTeam, filteredFinance, rowsByDataset]);
+  }, [filteredClients, filteredLeads, filteredTasks, filteredTeam, rowsByDataset]);
 
   const activeFilterBadges = useMemo(() => {
     const items: string[] = [];

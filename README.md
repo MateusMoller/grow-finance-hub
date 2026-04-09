@@ -19,6 +19,23 @@ cp .env.example .env
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_WEB_PUSH_PUBLIC_KEY` (chave publica VAPID para notificacoes push do PWA)
+
+## Push do PWA
+
+Para o push funcionar em dispositivos instalados, configure tambem estes secrets no Supabase (Edge Functions):
+
+- `WEB_PUSH_VAPID_PUBLIC_KEY`
+- `WEB_PUSH_VAPID_PRIVATE_KEY`
+- `WEB_PUSH_CONTACT_EMAIL` (opcional, fallback: `contato@contabilidadegrow.com.br`)
+
+A function responsável pelo envio é `send-push-notification`.
+
+Geracao rapida das chaves VAPID:
+
+```bash
+npx web-push generate-vapid-keys
+```
 
 ## Comandos principais
 
