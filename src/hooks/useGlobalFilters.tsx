@@ -11,6 +11,7 @@ import {
 
 type TaskDateRow = Pick<Tables<"kanban_tasks">, "due_date" | "created_at">;
 type ClientRow = Pick<Tables<"clients">, "name">;
+type ClientDataPeriodRow = Pick<Tables<"client_data">, "period">;
 
 interface GlobalFiltersContextType {
   selectedCompany: string | null;
@@ -78,15 +79,17 @@ export function GlobalFiltersProvider({ children }: { children: React.ReactNode 
     const loadOptions = async () => {
       setLoadingOptions(true);
 
-      const [clientsRes, tasksRes] = await Promise.all([
+      const [clientsRes, tasksRes, clientDataRes] = await Promise.all([
         supabase.from("clients").select("name").order("name"),
         supabase.from("kanban_tasks").select("due_date, created_at").limit(2000),
+        supabase.from("client_data").select("period").not("period", "is", null).limit(5000),
       ]);
 
       if (cancelled) return;
 
       const clients = (clientsRes.data || []) as ClientRow[];
       const taskDates = (tasksRes.data || []) as TaskDateRow[];
+      const clientDataPeriods = (clientDataRes.data || []) as ClientDataPeriodRow[];
 
       const companies = Array.from(
         new Set(
@@ -102,6 +105,11 @@ export function GlobalFiltersProvider({ children }: { children: React.ReactNode 
         const createdCompetence = normalizeCompetence(task.created_at);
         if (dueCompetence) competenceSet.add(dueCompetence);
         if (createdCompetence) competenceSet.add(createdCompetence);
+      });
+
+      clientDataPeriods.forEach((entry) => {
+        const normalized = normalizeCompetence(entry.period);
+        if (normalized) competenceSet.add(normalized);
       });
 
       const competences = Array.from(competenceSet).sort((a, b) => b.localeCompare(a));

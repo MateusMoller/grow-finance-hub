@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,11 @@ type RoleRow = Pick<Tables<"user_roles">, "user_id" | "role" | "created_at">;
 type SavedReportRow = Pick<
   Tables<"saved_reports">,
   "id" | "name" | "dataset_id" | "column_keys" | "format" | "auto_generate" | "created_at" | "updated_at"
+>;
+
+type ClientDataRow = Pick<
+  Tables<"client_data">,
+  "client_id" | "category" | "field_name" | "field_value" | "period"
 >;
 
 interface TeamReportRow {
@@ -198,6 +203,200 @@ const triggerBlobDownload = (blob: Blob, fileName: string) => {
   anchor.remove();
   window.URL.revokeObjectURL(url);
 };
+
+const getCurrentCompetence = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const monthlyClientDataCategories = ["contabilidade", "fiscal", "dp"] as const;
+type MonthlyClientDataCategory = (typeof monthlyClientDataCategories)[number];
+
+const cadastralClientDataCategories = [
+  "cadastro_clientes",
+  "cadastro_fiscal",
+  "cadastro_departamento_pessoal",
+  "cadastro_contabil",
+  "cadastro_obrigacoes",
+  "cadastro_honorarios",
+  "cadastro_documentos",
+] as const;
+type CadastralClientDataCategory = (typeof cadastralClientDataCategories)[number];
+type ClientDataCategory = MonthlyClientDataCategory | CadastralClientDataCategory;
+
+interface ClientDataFieldDefinition {
+  name: string;
+  label: string;
+}
+
+const monthlyClientDataCategoryLabel: Record<MonthlyClientDataCategory, string> = {
+  contabilidade: "Contabilidade",
+  fiscal: "Fiscal",
+  dp: "Dept. Pessoal",
+};
+
+const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, string> = {
+  cadastro_clientes: "Cadastro Clientes",
+  cadastro_fiscal: "Setor Fiscal",
+  cadastro_departamento_pessoal: "Setor DP",
+  cadastro_contabil: "Setor Contabil",
+  cadastro_obrigacoes: "Obrigacoes",
+  cadastro_honorarios: "Honorarios",
+  cadastro_documentos: "Documentos",
+};
+
+const monthlyClientDataFieldsByCategory: Record<MonthlyClientDataCategory, ClientDataFieldDefinition[]> = {
+  contabilidade: [
+    { name: "faturamento_mensal", label: "Faturamento Mensal (R$)" },
+    { name: "despesas_operacionais", label: "Despesas Operacionais (R$)" },
+    { name: "lucro_liquido", label: "Lucro Liquido (R$)" },
+    { name: "ativo_total", label: "Ativo Total (R$)" },
+    { name: "passivo_total", label: "Passivo Total (R$)" },
+    { name: "patrimonio_liquido", label: "Patrimonio Liquido (R$)" },
+    { name: "capital_social", label: "Capital Social (R$)" },
+    { name: "contas_a_receber", label: "Contas a Receber (R$)" },
+    { name: "contas_a_pagar", label: "Contas a Pagar (R$)" },
+    { name: "estoque", label: "Estoque (R$)" },
+  ],
+  fiscal: [
+    { name: "regime_tributario", label: "Regime Tributario" },
+    { name: "aliquota_irpj", label: "Aliquota IRPJ (%)" },
+    { name: "aliquota_csll", label: "Aliquota CSLL (%)" },
+    { name: "aliquota_pis", label: "Aliquota PIS (%)" },
+    { name: "aliquota_cofins", label: "Aliquota COFINS (%)" },
+    { name: "aliquota_iss", label: "Aliquota ISS (%)" },
+    { name: "aliquota_icms", label: "Aliquota ICMS (%)" },
+    { name: "inscricao_estadual", label: "Inscricao Estadual" },
+    { name: "inscricao_municipal", label: "Inscricao Municipal" },
+    { name: "cnae_principal", label: "CNAE Principal" },
+    { name: "nfe_emitidas", label: "NF-e Emitidas no Periodo" },
+    { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
+  ],
+  dp: [
+    { name: "total_funcionarios", label: "Total de Funcionarios" },
+    { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
+    { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
+    { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
+    { name: "inss_patronal", label: "INSS Patronal (R$)" },
+    { name: "vale_transporte", label: "Vale Transporte (R$)" },
+    { name: "vale_alimentacao", label: "Vale Alimentacao (R$)" },
+    { name: "admissoes_periodo", label: "Admissoes no Periodo" },
+    { name: "demissoes_periodo", label: "Demissoes no Periodo" },
+    { name: "ferias_programadas", label: "Ferias Programadas" },
+    { name: "sindical_contribuicao", label: "Contribuicao Sindical (R$)" },
+  ],
+};
+
+const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, ClientDataFieldDefinition[]> = {
+  cadastro_clientes: [
+    { name: "codigo", label: "Codigo" },
+    { name: "nome_fantasia", label: "Nome Fantasia" },
+    { name: "inscricao_estadual", label: "Inscricao Estadual" },
+    { name: "inscricao_municipal", label: "Inscricao Municipal" },
+    { name: "regime_tributario", label: "Regime Tributario" },
+    { name: "cnae_principal", label: "CNAE Principal" },
+    { name: "data_abertura", label: "Data de Abertura" },
+    { name: "cidade", label: "Cidade" },
+    { name: "estado", label: "Estado" },
+    { name: "endereco", label: "Endereco" },
+    { name: "ddd", label: "DDD" },
+    { name: "telefone", label: "Telefone" },
+    { name: "whatsapp", label: "WhatsApp" },
+  ],
+  cadastro_fiscal: [
+    { name: "regime_icms", label: "Regime ICMS" },
+    { name: "contribuinte_icms", label: "Contribuinte ICMS" },
+    { name: "contribuinte_ipi", label: "Contribuinte IPI" },
+    { name: "tipo_operacao", label: "Tipo de Operacao" },
+    { name: "emite_nfe", label: "Emite NF-e" },
+    { name: "emite_nfse", label: "Emite NFS-e" },
+    { name: "portal_nf_utilizado", label: "Portal NF utilizado" },
+    { name: "possui_st", label: "Possui ST" },
+    { name: "estados_que_opera", label: "Estados que Opera" },
+    { name: "controle_estoque", label: "Controle de Estoque" },
+    { name: "sistema_vendas", label: "Sistema de Vendas" },
+    { name: "integracao_contabil", label: "Integracao Contabil" },
+    { name: "entrega_gia", label: "Entrega GIA" },
+    { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
+  ],
+  cadastro_departamento_pessoal: [
+    { name: "convencao_coletiva", label: "Convencao Coletiva" },
+    { name: "possui_pro_labore", label: "Possui Pro-labore" },
+    { name: "possui_funcionarios", label: "Possui Funcionarios" },
+    { name: "possui_variaveis", label: "Possui Variaveis" },
+    { name: "possui_inss", label: "Possui INSS" },
+    { name: "possui_fgts", label: "Possui FGTS" },
+    { name: "possui_adiantamento_salarial", label: "Possui adiantamento salarial?" },
+    { name: "envia_folha_ponto", label: "Envia Folha Ponto?" },
+    { name: "beneficios", label: "Beneficios" },
+    { name: "hora_extra_banco_horas", label: "Hora extra / Banco de horas" },
+    { name: "envia_relatorio_ferias", label: "Envia relatorio de ferias?" },
+    { name: "clinica_parceira", label: "Clinica parceira" },
+    { name: "possui_decimo_terceiro", label: "Possui 13o?" },
+  ],
+  cadastro_contabil: [
+    { name: "obrigacao_contabil", label: "Obrigacao Contabil" },
+    { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
+    { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
+    { name: "controle_financeiro", label: "Controle Financeiro" },
+    { name: "sistema_financeiro", label: "Sistema Financeiro" },
+    { name: "integracao_contabil", label: "Integracao Contabil" },
+    { name: "balanco_anual", label: "Balanco Anual" },
+    { name: "responsavel_contabil_grow", label: "Responsavel Contabil Grow" },
+    { name: "periodicidade_relatorios", label: "Periodicidade Relatorios" },
+    { name: "observacoes_contabeis", label: "Observacoes Contabeis" },
+  ],
+  cadastro_obrigacoes: [
+    { name: "pgdas", label: "PGDAS" },
+    { name: "gia", label: "GIA" },
+    { name: "sped_fiscal", label: "SPED Fiscal" },
+    { name: "efd_contribuicoes", label: "EFD Contribuicoes" },
+    { name: "dctf", label: "DCTF" },
+    { name: "defis", label: "DEFIS" },
+    { name: "ecd", label: "ECD" },
+    { name: "ecf", label: "ECF" },
+  ],
+  cadastro_honorarios: [
+    { name: "plano", label: "Plano" },
+    { name: "valor_mensal", label: "Valor Mensal (R$)" },
+    { name: "forma_pagamento", label: "Forma de Pagamento" },
+    { name: "vencimento", label: "Vencimento" },
+    { name: "situacao", label: "Situacao" },
+  ],
+  cadastro_documentos: [
+    { name: "contrato", label: "Contrato" },
+    { name: "procuracao", label: "Procuracao" },
+    { name: "certificado_digital", label: "Certificado Digital" },
+    { name: "contrato_social", label: "Contrato Social" },
+    { name: "alteracoes_contratuais", label: "Alteracoes Contratuais" },
+    { name: "outros_documentos", label: "Outros Documentos" },
+  ],
+};
+
+const toMonthlyClientDataColumnKey = (category: MonthlyClientDataCategory, fieldName: string) =>
+  `mensal_${category}_${fieldName}`;
+const toCadastralClientDataColumnKey = (category: CadastralClientDataCategory, fieldName: string) =>
+  `cadastral_${category}_${fieldName}`;
+
+const monthlyClientDataCategorySet = new Set<string>(monthlyClientDataCategories);
+const cadastralClientDataCategorySet = new Set<string>(cadastralClientDataCategories);
+
+const clientDataReportColumns: ReportColumnDefinition[] = [
+  { key: "dados_mensais_periodo", label: "Dados Mensais: Periodo" },
+  ...monthlyClientDataCategories.flatMap((category) =>
+    monthlyClientDataFieldsByCategory[category].map((field) => ({
+      key: toMonthlyClientDataColumnKey(category, field.name),
+      label: `Mensal ${monthlyClientDataCategoryLabel[category]}: ${field.label}`,
+    })),
+  ),
+  ...cadastralClientDataCategories.flatMap((category) =>
+    cadastralClientDataFieldsByCategory[category].map((field) => ({
+      key: toCadastralClientDataColumnKey(category, field.name),
+      label: `Cadastral ${cadastralClientDataCategoryLabel[category]}: ${field.label}`,
+    })),
+  ),
+];
+
 const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
   clientes: {
     id: "clientes",
@@ -216,8 +415,23 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
       { key: "telefone", label: "Telefone" },
       { key: "criado_em", label: "Criado em", formatter: formatDateTime },
       { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
+      ...clientDataReportColumns,
     ],
-    defaultColumns: ["nome", "status", "segmento", "contato", "email", "telefone"],
+    defaultColumns: [
+      "nome",
+      "status",
+      "segmento",
+      "contato",
+      "email",
+      "telefone",
+      "dados_mensais_periodo",
+      "mensal_contabilidade_faturamento_mensal",
+      "mensal_contabilidade_lucro_liquido",
+      "mensal_fiscal_regime_tributario",
+      "mensal_dp_total_funcionarios",
+      "cadastral_cadastro_clientes_nome_fantasia",
+      "cadastral_cadastro_clientes_regime_tributario",
+    ],
   },
   leads_crm: {
     id: "leads_crm",
@@ -317,11 +531,13 @@ export default function RelatoriosPage() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const autoGeneratedReportIdsRef = useRef<Set<string>>(new Set());
+  const clientDataReportPeriod = normalizeCompetence(selectedCompetence) || getCurrentCompetence();
 
   const [loading, setLoading] = useState(true);
   const [loadingSavedReports, setLoadingSavedReports] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [clientDataEntries, setClientDataEntries] = useState<ClientDataRow[]>([]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [team, setTeam] = useState<TeamReportRow[]>([]);
@@ -340,11 +556,21 @@ export default function RelatoriosPage() {
   const loadReportData = useCallback(async () => {
     setLoading(true);
 
-    const [clientsRes, leadsRes, tasksRes, profilesRes, rolesRes] = await Promise.all([
+    const [clientsRes, monthlyClientDataRes, cadastralClientDataRes, leadsRes, tasksRes, profilesRes, rolesRes] = await Promise.all([
       supabase
         .from("clients")
         .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
         .order("name"),
+      supabase
+        .from("client_data")
+        .select("client_id, category, field_name, field_value, period")
+        .in("category", [...monthlyClientDataCategories])
+        .eq("period", clientDataReportPeriod),
+      supabase
+        .from("client_data")
+        .select("client_id, category, field_name, field_value, period")
+        .in("category", [...cadastralClientDataCategories])
+        .is("period", null),
       supabase
         .from("site_leads")
         .select("id, full_name, company_name, email, phone, source_tag, origin_page, created_at")
@@ -367,6 +593,8 @@ export default function RelatoriosPage() {
 
     const firstError =
       clientsRes.error ||
+      monthlyClientDataRes.error ||
+      cadastralClientDataRes.error ||
       leadsRes.error ||
       tasksRes.error ||
       profilesRes.error ||
@@ -377,6 +605,10 @@ export default function RelatoriosPage() {
     }
 
     const nextClients = (clientsRes.data || []) as ClientRow[];
+    const nextClientData = [
+      ...((monthlyClientDataRes.data || []) as ClientDataRow[]),
+      ...((cadastralClientDataRes.data || []) as ClientDataRow[]),
+    ];
     const nextLeads = (leadsRes.data || []) as LeadRow[];
     const nextTasks = (tasksRes.data || []) as TaskRow[];
     const nextProfiles = (profilesRes.data || []) as ProfileRow[];
@@ -413,12 +645,13 @@ export default function RelatoriosPage() {
       .sort((a, b) => a.display_name.localeCompare(b.display_name, "pt-BR"));
 
     setClients(nextClients);
+    setClientDataEntries(nextClientData);
     setLeads(nextLeads);
     setTasks(nextTasks);
     setTeam(teamRows);
     setLastUpdatedAt(new Date().toISOString());
     setLoading(false);
-  }, []);
+  }, [clientDataReportPeriod]);
 
   const loadSavedReports = useCallback(async () => {
     if (!user?.id) {
@@ -505,6 +738,28 @@ export default function RelatoriosPage() {
     [team, selectedCompetence],
   );
 
+  const clientDataByClientId = useMemo(() => {
+    const byClientId = new Map<string, Record<string, string>>();
+
+    clientDataEntries.forEach((entry) => {
+      let columnKey: string | null = null;
+
+      if (entry.period && monthlyClientDataCategorySet.has(entry.category)) {
+        columnKey = toMonthlyClientDataColumnKey(entry.category as MonthlyClientDataCategory, entry.field_name);
+      } else if (!entry.period && cadastralClientDataCategorySet.has(entry.category)) {
+        columnKey = toCadastralClientDataColumnKey(entry.category as CadastralClientDataCategory, entry.field_name);
+      }
+
+      if (!columnKey) return;
+
+      const current = byClientId.get(entry.client_id) || {};
+      current[columnKey] = entry.field_value || "";
+      byClientId.set(entry.client_id, current);
+    });
+
+    return byClientId;
+  }, [clientDataEntries]);
+
   const rowsByDataset = useMemo<Record<ReportDatasetId, ReportRow[]>>(
     () => ({
       clientes: filteredClients.map((client) => ({
@@ -519,6 +774,8 @@ export default function RelatoriosPage() {
         telefone: client.phone || "",
         criado_em: client.created_at,
         atualizado_em: client.updated_at,
+        dados_mensais_periodo: clientDataReportPeriod,
+        ...(clientDataByClientId.get(client.id) || {}),
       })),
       leads_crm: filteredLeads.map((lead) => ({
         id: lead.id,
@@ -552,7 +809,7 @@ export default function RelatoriosPage() {
         papel_definido_em: member.role_created_at,
       })),
     }),
-    [filteredClients, filteredLeads, filteredTasks, filteredTeam],
+    [clientDataByClientId, clientDataReportPeriod, filteredClients, filteredLeads, filteredTasks, filteredTeam],
   );
 
   const automaticCards = useMemo<AutomaticReportCard[]>(() => {
@@ -614,8 +871,9 @@ export default function RelatoriosPage() {
     const items: string[] = [];
     if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
     if (selectedCompetence) items.push(`Competencia: ${selectedCompetence}`);
+    items.push(`Dados mensais (relatorio): ${clientDataReportPeriod}`);
     return items;
-  }, [selectedCompany, selectedCompetence]);
+  }, [clientDataReportPeriod, selectedCompany, selectedCompetence]);
 
   const customDefinition = reportDefinitions[customDatasetId];
 
