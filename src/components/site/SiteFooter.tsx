@@ -115,7 +115,10 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-8 flex flex-col gap-3 border-t border-border pt-5 text-xs text-muted-foreground md:mt-10 md:flex-row md:items-center md:justify-between">
-          <p>© {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
+          <div className="space-y-1">
+            <p>© {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
+            <p>Criado por Mateus Henrique Moller.</p>
+          </div>
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <Link to="/privacidade" className="hover:text-foreground">Politica de Privacidade</Link>
             <Link to="/termos" className="hover:text-foreground">Termos</Link>

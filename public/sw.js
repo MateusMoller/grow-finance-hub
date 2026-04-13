@@ -1,12 +1,33 @@
-const CACHE_NAME = "grow-finance-hub-cache-v1";
+const CACHE_NAME = "grow-finance-hub-cache-v2";
+const FUNCTIONAL_PATH_PREFIXES = ["/login", "/portal", "/app"];
 const APP_SHELL = [
-  "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
 ];
+
+const normalizePath = (value) => (value.startsWith("/") ? value : `/${value}`);
+
+const toScopeRelativePath = (pathname) => {
+  const scopePath = new URL(self.registration.scope).pathname;
+  const normalizedScopePath = scopePath.endsWith("/") ? scopePath : `${scopePath}/`;
+  const normalizedPathname = normalizePath(pathname);
+
+  if (normalizedScopePath === "/") return normalizedPathname;
+  if (!normalizedPathname.startsWith(normalizedScopePath)) return normalizedPathname;
+
+  const suffix = normalizedPathname.slice(normalizedScopePath.length - 1);
+  return normalizePath(suffix);
+};
+
+const isFunctionalPath = (pathname) => {
+  const relativePath = toScopeRelativePath(pathname);
+  return FUNCTIONAL_PATH_PREFIXES.some(
+    (prefix) => relativePath === prefix || relativePath.startsWith(`${prefix}/`),
+  );
+};
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -35,6 +56,8 @@ self.addEventListener("fetch", (event) => {
   if (requestUrl.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
+    if (!isFunctionalPath(requestUrl.pathname)) return;
+
     event.respondWith(
       fetch(request)
         .then((response) => {

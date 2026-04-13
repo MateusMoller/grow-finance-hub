@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { GlobalFiltersProvider } from "@/hooks/useGlobalFilters";
 import { ProtectedRoute } from "@/components/app/ProtectedRoute";
 import { ThemeProvider } from "next-themes";
+import { syncPwaModeForPath } from "@/lib/pwaScope";
 
 import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
@@ -36,6 +38,16 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const PwaModeSync = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    void syncPwaModeForPath(location.pathname);
+  }, [location.pathname]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider
@@ -49,6 +61,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <PwaModeSync />
           <AuthProvider>
             <GlobalFiltersProvider>
               <Routes>

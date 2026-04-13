@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isFunctionalPwaRoute, normalizePwaBasePath, syncPwaModeForPath } from "@/lib/pwaScope";
 
 const WEB_PUSH_PUBLIC_KEY = (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || "").trim();
 
@@ -12,13 +13,7 @@ export interface PushSubscriptionStatus {
   endpoint: string | null;
 }
 
-const normalizeBasePath = () => {
-  const base = String(import.meta.env.BASE_URL || "/").trim();
-  if (!base) return "/";
-  return base.endsWith("/") ? base : `${base}/`;
-};
-
-const getServiceWorkerUrl = () => `${normalizeBasePath()}sw.js`;
+const getServiceWorkerUrl = () => `${normalizePwaBasePath()}sw.js`;
 
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -44,7 +39,13 @@ const ensureServiceWorkerRegistration = async () => {
     throw new Error("Push notifications nao sao suportadas neste navegador.");
   }
 
-  const scope = normalizeBasePath();
+  if (!isFunctionalPwaRoute(window.location.pathname)) {
+    throw new Error("Notificacoes push so podem ser ativadas no login, portal e area interna.");
+  }
+
+  await syncPwaModeForPath(window.location.pathname);
+
+  const scope = normalizePwaBasePath();
   let registration = await navigator.serviceWorker.getRegistration(scope);
 
   if (!registration) {
