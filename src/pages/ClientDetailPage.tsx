@@ -288,6 +288,331 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
   },
 };
 
+type FieldValidationType = "yesNo" | "number" | "integer" | "percent" | "date" | "state" | "phone";
+
+interface FieldValidationRule {
+  type: FieldValidationType;
+  min?: number;
+  max?: number;
+}
+
+const yesNoRule: FieldValidationRule = { type: "yesNo" };
+const currencyRule: FieldValidationRule = { type: "number", min: 0 };
+
+const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, FieldValidationRule>>> = {
+  contabilidade: {
+    faturamento_mensal: currencyRule,
+    despesas_operacionais: currencyRule,
+    lucro_liquido: currencyRule,
+    ativo_total: currencyRule,
+    passivo_total: currencyRule,
+    patrimonio_liquido: currencyRule,
+    capital_social: currencyRule,
+    contas_a_receber: currencyRule,
+    contas_a_pagar: currencyRule,
+    estoque: currencyRule,
+  },
+  fiscal: {
+    aliquota_irpj: { type: "percent", min: 0, max: 100 },
+    aliquota_csll: { type: "percent", min: 0, max: 100 },
+    aliquota_pis: { type: "percent", min: 0, max: 100 },
+    aliquota_cofins: { type: "percent", min: 0, max: 100 },
+    aliquota_iss: { type: "percent", min: 0, max: 100 },
+    aliquota_icms: { type: "percent", min: 0, max: 100 },
+    nfe_emitidas: { type: "integer", min: 0 },
+    valor_total_nfe: currencyRule,
+  },
+  dp: {
+    total_funcionarios: { type: "integer", min: 0 },
+    folha_pagamento: currencyRule,
+    encargos_sociais: currencyRule,
+    fgts_mensal: currencyRule,
+    inss_patronal: currencyRule,
+    vale_transporte: currencyRule,
+    vale_alimentacao: currencyRule,
+    admissoes_periodo: { type: "integer", min: 0 },
+    demissoes_periodo: { type: "integer", min: 0 },
+    sindical_contribuicao: currencyRule,
+  },
+  cadastro_clientes: {
+    codigo: { type: "integer", min: 0 },
+    data_abertura: { type: "date" },
+    estado: { type: "state" },
+    ddd: { type: "integer", min: 0, max: 999 },
+    telefone: { type: "phone" },
+    whatsapp: { type: "phone" },
+  },
+  cadastro_fiscal: {
+    contribuinte_icms: yesNoRule,
+    contribuinte_ipi: yesNoRule,
+    emite_nfe: yesNoRule,
+    emite_nfse: yesNoRule,
+    possui_st: yesNoRule,
+    controle_estoque: yesNoRule,
+    integracao_contabil: yesNoRule,
+    entrega_gia: yesNoRule,
+    entrega_sped_fiscal: yesNoRule,
+  },
+  cadastro_departamento_pessoal: {
+    possui_pro_labore: yesNoRule,
+    possui_funcionarios: yesNoRule,
+    possui_variaveis: yesNoRule,
+    possui_inss: yesNoRule,
+    possui_fgts: yesNoRule,
+    possui_adiantamento_salarial: yesNoRule,
+    envia_folha_ponto: yesNoRule,
+    hora_extra_banco_horas: yesNoRule,
+    envia_relatorio_ferias: yesNoRule,
+    possui_decimo_terceiro: yesNoRule,
+  },
+  cadastro_contabil: {
+    envia_extratos_bancarios: yesNoRule,
+    envia_notas_fiscais: yesNoRule,
+    controle_financeiro: yesNoRule,
+    integracao_contabil: yesNoRule,
+    balanco_anual: yesNoRule,
+  },
+  cadastro_obrigacoes: {
+    pgdas: yesNoRule,
+    gia: yesNoRule,
+    sped_fiscal: yesNoRule,
+    efd_contribuicoes: yesNoRule,
+    dctf: yesNoRule,
+    defis: yesNoRule,
+    ecd: yesNoRule,
+    ecf: yesNoRule,
+  },
+  cadastro_honorarios: {
+    valor_mensal: currencyRule,
+    vencimento: { type: "integer", min: 1, max: 31 },
+  },
+  cadastro_documentos: {
+    contrato: yesNoRule,
+    procuracao: yesNoRule,
+    certificado_digital: yesNoRule,
+    contrato_social: yesNoRule,
+    alteracoes_contratuais: yesNoRule,
+    outros_documentos: yesNoRule,
+  },
+};
+
+const normalizeYesNoValue = (value: string) => {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (!normalized) return "";
+  if (["sim", "s", "yes", "true", "1"].includes(normalized)) return "sim";
+  if (["nao", "n", "no", "false", "0"].includes(normalized)) return "nao";
+  return normalized;
+};
+
+const parseNumericValue = (value: string) => {
+  const cleaned = value.replace(/\s+/g, "").replace(/r\$/gi, "");
+  if (!cleaned) return null;
+
+  let normalized = cleaned;
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = cleaned.replace(",", ".");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value: string) => {
+  const trimmed = value.trim();
+  if (!rule) return trimmed;
+
+  if (rule.type === "yesNo") return normalizeYesNoValue(trimmed);
+  if (rule.type === "state") return trimmed.toUpperCase();
+  return trimmed;
+};
+
+const validateFieldValue = (rule: FieldValidationRule | undefined, value: string) => {
+  const normalizedValue = value.trim();
+  if (!rule || !normalizedValue) return null;
+
+  if (rule.type === "yesNo") {
+    const normalized = normalizeYesNoValue(normalizedValue);
+    if (normalized !== "sim" && normalized !== "nao") {
+      return "Use apenas Sim ou Nao.";
+    }
+    return null;
+  }
+
+  if (rule.type === "date") {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(normalizedValue)) return "Informe uma data valida (AAAA-MM-DD).";
+    const parsed = new Date(`${normalizedValue}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return "Informe uma data valida.";
+    return null;
+  }
+
+  if (rule.type === "state") {
+    const stateRegex = /^[A-Za-z]{2}$/;
+    if (!stateRegex.test(normalizedValue)) return "Use a UF com 2 letras (ex.: RS).";
+    return null;
+  }
+
+  if (rule.type === "phone") {
+    const digits = normalizedValue.replace(/\D/g, "");
+    if (digits.length < 8 || digits.length > 13) return "Telefone invalido.";
+    return null;
+  }
+
+  if (rule.type === "number" || rule.type === "integer" || rule.type === "percent") {
+    const numeric = parseNumericValue(normalizedValue);
+    if (numeric === null) return "Informe um numero valido.";
+    if (rule.type === "integer" && !Number.isInteger(numeric)) return "Informe um numero inteiro.";
+    if (typeof rule.min === "number" && numeric < rule.min) return `Valor minimo: ${rule.min}.`;
+    if (typeof rule.max === "number" && numeric > rule.max) return `Valor maximo: ${rule.max}.`;
+    return null;
+  }
+
+  return null;
+};
+
+const cadastroClientesPartnersFieldName = "socios";
+const cadastroClientesPartnersEntryKey = `cadastro_clientes__${cadastroClientesPartnersFieldName}`;
+
+interface ClientPartnerForm {
+  id: string;
+  name: string;
+  ownershipPercent: string;
+  proLabore: string;
+  govPassword: string;
+}
+
+type ClientPartnerField = Exclude<keyof ClientPartnerForm, "id">;
+
+interface StoredClientPartner {
+  nome: string;
+  percentual_participacao: number;
+  pro_labore: number;
+  senha_gov: string;
+}
+
+const createPartnerId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const createEmptyPartner = (): ClientPartnerForm => ({
+  id: createPartnerId(),
+  name: "",
+  ownershipPercent: "",
+  proLabore: "",
+  govPassword: "",
+});
+
+const partnerErrorKey = (partnerId: string, field: ClientPartnerField) => `${partnerId}__${field}`;
+
+const parsePartnersEntry = (rawValue: string | undefined): ClientPartnerForm[] => {
+  if (!rawValue?.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((item): ClientPartnerForm | null => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+
+        const row = item as Record<string, unknown>;
+        const name = typeof row.nome === "string"
+          ? row.nome
+          : typeof row.name === "string"
+            ? row.name
+            : "";
+        const ownershipSource = row.percentual_participacao ?? row.percentual ?? row.ownership_percent ?? row.percent;
+        const proLaboreSource = row.pro_labore ?? row.prolabore ?? row.pro_labore_mensal;
+        const govPassword = typeof row.senha_gov === "string"
+          ? row.senha_gov
+          : typeof row.gov_password === "string"
+            ? row.gov_password
+            : "";
+
+        const ownershipPercent = typeof ownershipSource === "number"
+          ? String(ownershipSource)
+          : typeof ownershipSource === "string"
+            ? ownershipSource
+            : "";
+        const proLabore = typeof proLaboreSource === "number"
+          ? String(proLaboreSource)
+          : typeof proLaboreSource === "string"
+            ? proLaboreSource
+            : "";
+
+        return {
+          id: createPartnerId(),
+          name,
+          ownershipPercent,
+          proLabore,
+          govPassword,
+        };
+      })
+      .filter((partner): partner is ClientPartnerForm => Boolean(partner));
+  } catch {
+    return [];
+  }
+};
+
+const validatePartnerFieldValue = (field: ClientPartnerField, value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "Campo obrigatorio.";
+
+  if (field === "ownershipPercent") {
+    const numeric = parseNumericValue(trimmed);
+    if (numeric === null) return "Informe um percentual valido.";
+    if (numeric <= 0 || numeric > 100) return "Informe um percentual entre 0,01 e 100.";
+    return null;
+  }
+
+  if (field === "proLabore") {
+    const numeric = parseNumericValue(trimmed);
+    if (numeric === null) return "Informe um valor valido.";
+    if (numeric < 0) return "Valor minimo: 0.";
+    return null;
+  }
+
+  return null;
+};
+
+const validatePartners = (partners: ClientPartnerForm[]) => {
+  const errors: Record<string, string> = {};
+
+  partners.forEach((partner) => {
+    const fieldsToValidate: ClientPartnerField[] = ["name", "ownershipPercent", "proLabore", "govPassword"];
+    fieldsToValidate.forEach((field) => {
+      const value = partner[field];
+      const error = validatePartnerFieldValue(field, value);
+      if (error) errors[partnerErrorKey(partner.id, field)] = error;
+    });
+  });
+
+  const totalOwnership = partners.reduce((acc, partner) => {
+    const numeric = parseNumericValue(partner.ownershipPercent);
+    return acc + (numeric ?? 0);
+  }, 0);
+
+  if (partners.length > 0 && totalOwnership > 100) {
+    errors.__total = "A soma das participacoes dos socios nao pode passar de 100%.";
+  }
+
+  return errors;
+};
+
+const normalizePartnersForSave = (partners: ClientPartnerForm[]): StoredClientPartner[] => (
+  partners.map((partner) => ({
+    nome: partner.name.trim(),
+    percentual_participacao: parseNumericValue(partner.ownershipPercent) ?? 0,
+    pro_labore: parseNumericValue(partner.proLabore) ?? 0,
+    senha_gov: partner.govPassword.trim(),
+  }))
+);
+
 const portalTaskStatusOptions: PortalTaskStatus[] = [
   "pending_client",
   "in_analysis",
@@ -336,6 +661,9 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<ClientRecord | null>(null);
   const [clientForm, setClientForm] = useState<Partial<ClientRecord>>({});
   const [dataEntries, setDataEntries] = useState<Record<string, string>>({});
+  const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
+  const [clientPartners, setClientPartners] = useState<ClientPartnerForm[]>([]);
+  const [partnerFieldErrors, setPartnerFieldErrors] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<ClientFile[]>([]);
   const [portalTasks, setPortalTasks] = useState<ClientPortalTaskRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -391,6 +719,9 @@ export default function ClientDetailPage() {
     });
 
     setDataEntries(map);
+    setClientPartners(parsePartnersEntry(map[cadastroClientesPartnersEntryKey]));
+    setDataFieldErrors({});
+    setPartnerFieldErrors({});
   }, [id, period]);
 
   const loadClient = useCallback(async () => {
@@ -456,6 +787,87 @@ export default function ClientDetailPage() {
       void loadClientData();
     }
   }, [id, loadClientData, period]);
+
+  const getFieldRule = (category: ClientCategoryKey, fieldName: string) =>
+    fieldValidationRules[category]?.[fieldName];
+
+  const handleDataFieldChange = (category: ClientCategoryKey, fieldName: string, value: string) => {
+    const key = `${category}__${fieldName}`;
+    const rule = getFieldRule(category, fieldName);
+    const normalizedValue = normalizeFieldValueForSave(rule, value);
+
+    setDataEntries((prev) => ({ ...prev, [key]: normalizedValue }));
+
+    const error = validateFieldValue(rule, normalizedValue);
+    setDataFieldErrors((prev) => {
+      const next = { ...prev };
+      if (error) next[key] = error;
+      else delete next[key];
+      return next;
+    });
+  };
+
+  const handleAddPartner = () => {
+    setClientPartners((prev) => [...prev, createEmptyPartner()]);
+  };
+
+  const handlePartnerFieldChange = (partnerId: string, field: ClientPartnerField, value: string) => {
+    setClientPartners((prev) => {
+      const next = prev.map((partner) => (partner.id === partnerId ? { ...partner, [field]: value } : partner));
+      const changedPartner = next.find((partner) => partner.id === partnerId);
+      const fieldError = changedPartner ? validatePartnerFieldValue(field, changedPartner[field]) : null;
+      const totalOwnership = next.reduce((acc, partner) => {
+        const numeric = parseNumericValue(partner.ownershipPercent);
+        return acc + (numeric ?? 0);
+      }, 0);
+
+      setPartnerFieldErrors((previousErrors) => {
+        const nextErrors = { ...previousErrors };
+        const key = partnerErrorKey(partnerId, field);
+        if (fieldError) nextErrors[key] = fieldError;
+        else delete nextErrors[key];
+
+        if (next.length > 0 && totalOwnership > 100) {
+          nextErrors.__total = "A soma das participacoes dos socios nao pode passar de 100%.";
+        } else {
+          delete nextErrors.__total;
+        }
+
+        return nextErrors;
+      });
+
+      return next;
+    });
+  };
+
+  const handleRemovePartner = (partnerId: string) => {
+    setClientPartners((prev) => {
+      const next = prev.filter((partner) => partner.id !== partnerId);
+      const totalOwnership = next.reduce((acc, partner) => {
+        const numeric = parseNumericValue(partner.ownershipPercent);
+        return acc + (numeric ?? 0);
+      }, 0);
+
+      setPartnerFieldErrors((previousErrors) => {
+        const nextErrors = { ...previousErrors };
+        Object.keys(nextErrors).forEach((errorKey) => {
+          if (errorKey.startsWith(`${partnerId}__`)) {
+            delete nextErrors[errorKey];
+          }
+        });
+
+        if (next.length > 0 && totalOwnership > 100) {
+          nextErrors.__total = "A soma das participacoes dos socios nao pode passar de 100%.";
+        } else {
+          delete nextErrors.__total;
+        }
+
+        return nextErrors;
+      });
+
+      return next;
+    });
+  };
 
   const saveClientInfo = async () => {
     if (!id) return;
@@ -670,14 +1082,62 @@ export default function ClientDetailPage() {
 
     const config = categoryConfig[category];
     const entryPeriod = config.mode === "monthly" ? period : null;
-    const entries = config.fields.map((f) => ({
-      client_id: id,
-      category,
-      field_name: f.name,
-      field_value: dataEntries[`${category}__${f.name}`] || null,
-      period: entryPeriod,
-      created_by: user.id,
-    }));
+    const nextCategoryErrors: Record<string, string> = {};
+    let nextPartnerErrors: Record<string, string> = {};
+
+    const entries = config.fields.map((f) => {
+      const key = `${category}__${f.name}`;
+      const rule = getFieldRule(category, f.name);
+      const currentValue = dataEntries[key] || "";
+      const normalizedValue = normalizeFieldValueForSave(rule, currentValue);
+      const validationError = validateFieldValue(rule, normalizedValue);
+
+      if (validationError) {
+        nextCategoryErrors[key] = validationError;
+      }
+
+      return {
+        client_id: id,
+        category,
+        field_name: f.name,
+        field_value: normalizedValue || null,
+        period: entryPeriod,
+        created_by: user.id,
+      };
+    });
+
+    if (category === "cadastro_clientes") {
+      nextPartnerErrors = validatePartners(clientPartners);
+      entries.push({
+        client_id: id,
+        category,
+        field_name: cadastroClientesPartnersFieldName,
+        field_value: clientPartners.length > 0 ? JSON.stringify(normalizePartnersForSave(clientPartners)) : null,
+        period: entryPeriod,
+        created_by: user.id,
+      });
+    }
+
+    if (Object.keys(nextCategoryErrors).length > 0 || Object.keys(nextPartnerErrors).length > 0) {
+      setSavingData(null);
+      setDataFieldErrors((prev) => ({ ...prev, ...nextCategoryErrors }));
+      if (category === "cadastro_clientes") {
+        setPartnerFieldErrors(nextPartnerErrors);
+      }
+      toast.error("Existem campos com dados invalidos. Revise antes de salvar.");
+      return;
+    }
+
+    setDataFieldErrors((prev) => {
+      const next = { ...prev };
+      config.fields.forEach((field) => {
+        delete next[`${category}__${field.name}`];
+      });
+      return next;
+    });
+    if (category === "cadastro_clientes") {
+      setPartnerFieldErrors({});
+    }
 
     let deleteQuery = supabase.from("client_data")
       .delete()
@@ -777,6 +1237,7 @@ export default function ClientDetailPage() {
   const renderDataFields = (category: ClientCategoryKey) => {
     const config = categoryConfig[category];
     const categoryFiles = files.filter((file) => file.category === category);
+    const isCadastroClientes = category === "cadastro_clientes";
     return (
       <div className="space-y-6">
         <div className="space-y-2">
@@ -789,19 +1250,140 @@ export default function ClientDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {config.fields.map((field) => {
             const key = `${category}__${field.name}`;
+            const rule = getFieldRule(category, field.name);
+            const fieldError = dataFieldErrors[key];
+            const isYesNoField = rule?.type === "yesNo";
+            const inputMode = rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
+              ? "decimal"
+              : rule?.type === "phone"
+                ? "tel"
+                : "text";
+
             return (
               <div key={key} className="space-y-1.5">
                 <Label className="text-xs">{field.label}</Label>
-                <Input
-                  value={dataEntries[key] || ""}
-                  onChange={(e) => setDataEntries((prev) => ({ ...prev, [key]: e.target.value }))}
-                  placeholder="-"
-                  className="h-9"
-                />
+                {isYesNoField ? (
+                  <select
+                    className={`h-9 w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none ${fieldError ? "border-destructive" : ""}`}
+                    value={normalizeYesNoValue(dataEntries[key] || "")}
+                    onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
+                  >
+                    <option value="">-</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Nao</option>
+                  </select>
+                ) : (
+                  <Input
+                    value={dataEntries[key] || ""}
+                    onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
+                    inputMode={inputMode}
+                    type={rule?.type === "date" ? "date" : "text"}
+                    placeholder="-"
+                    className={`h-9 ${fieldError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+                  />
+                )}
+                {fieldError && (
+                  <p className="text-[11px] text-destructive">{fieldError}</p>
+                )}
               </div>
             );
           })}
         </div>
+        {isCadastroClientes && (
+          <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h4 className="text-sm font-medium">Socios</h4>
+                <p className="text-xs text-muted-foreground">
+                  Cadastre os socios com participacao, pro-labore e senha GOV para relatorios.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={handleAddPartner}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Adicionar socio
+              </Button>
+            </div>
+
+            {partnerFieldErrors.__total && (
+              <p className="text-xs text-destructive">{partnerFieldErrors.__total}</p>
+            )}
+
+            {clientPartners.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum socio cadastrado.</p>
+            ) : (
+              <div className="space-y-3">
+                {clientPartners.map((partner, index) => {
+                  const nameError = partnerFieldErrors[partnerErrorKey(partner.id, "name")];
+                  const ownershipError = partnerFieldErrors[partnerErrorKey(partner.id, "ownershipPercent")];
+                  const proLaboreError = partnerFieldErrors[partnerErrorKey(partner.id, "proLabore")];
+                  const govPasswordError = partnerFieldErrors[partnerErrorKey(partner.id, "govPassword")];
+
+                  return (
+                    <div key={partner.id} className="space-y-3 rounded-lg border bg-card p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium">Socio {index + 1}</p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => handleRemovePartner(partner.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Nome do Socio</Label>
+                          <Input
+                            value={partner.name}
+                            onChange={(event) => handlePartnerFieldChange(partner.id, "name", event.target.value)}
+                            placeholder="Nome"
+                            className={`h-9 ${nameError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+                          />
+                          {nameError && <p className="text-[11px] text-destructive">{nameError}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Participacao (%)</Label>
+                          <Input
+                            value={partner.ownershipPercent}
+                            onChange={(event) => handlePartnerFieldChange(partner.id, "ownershipPercent", event.target.value)}
+                            placeholder="0,00"
+                            inputMode="decimal"
+                            className={`h-9 ${ownershipError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+                          />
+                          {ownershipError && <p className="text-[11px] text-destructive">{ownershipError}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Pro-labore (R$)</Label>
+                          <Input
+                            value={partner.proLabore}
+                            onChange={(event) => handlePartnerFieldChange(partner.id, "proLabore", event.target.value)}
+                            placeholder="0,00"
+                            inputMode="decimal"
+                            className={`h-9 ${proLaboreError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+                          />
+                          {proLaboreError && <p className="text-[11px] text-destructive">{proLaboreError}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Senha GOV</Label>
+                          <Input
+                            type="password"
+                            value={partner.govPassword}
+                            onChange={(event) => handlePartnerFieldChange(partner.id, "govPassword", event.target.value)}
+                            placeholder="Senha"
+                            className={`h-9 ${govPasswordError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+                          />
+                          {govPasswordError && <p className="text-[11px] text-destructive">{govPasswordError}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex justify-end">
           <Button onClick={() => saveCategoryData(category)} disabled={savingData === category} size="sm">
             {savingData === category ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
@@ -1086,9 +1668,6 @@ export default function ClientDetailPage() {
                 <h3 className="font-semibold flex items-center gap-2">
                   <Building2 className="h-4 w-4" /> Dados cadastrais por setor
                 </h3>
-                <p className="text-xs text-muted-foreground">
-                  Estrutura baseada na planilha de cadastro de clientes enviada.
-                </p>
               </div>
 
               <Tabs defaultValue={cadastralCategoryKeys[0]} className="space-y-4">

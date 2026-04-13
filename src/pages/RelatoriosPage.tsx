@@ -145,6 +145,47 @@ const formatDate = (value: unknown) => {
   return date.toLocaleDateString("pt-BR");
 };
 
+const parseNumericValue = (value: unknown): number | null => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string") return null;
+
+  const cleaned = value.trim().replace(/\s+/g, "").replace(/r\$/gi, "");
+  if (!cleaned) return null;
+
+  let normalized = cleaned;
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = cleaned.replace(",", ".");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatDecimal = (value: unknown, fractionDigits = 2) => {
+  const numeric = parseNumericValue(value);
+  if (numeric === null) return "-";
+  return numeric.toLocaleString("pt-BR", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+};
+
+const formatCurrency = (value: unknown) => {
+  const numeric = parseNumericValue(value);
+  if (numeric === null) return "-";
+  return numeric.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+};
+
+const formatPercent = (value: unknown) => {
+  const decimal = formatDecimal(value, 2);
+  if (decimal === "-") return "-";
+  return `${decimal}%`;
+};
+
 const formatRole = (role: string) =>
   role
     .replace(/_/g, " ")
@@ -227,6 +268,13 @@ type ClientDataCategory = MonthlyClientDataCategory | CadastralClientDataCategor
 interface ClientDataFieldDefinition {
   name: string;
   label: string;
+}
+
+interface ClientPartnerReportEntry {
+  nome: string;
+  percentual_participacao: number;
+  pro_labore: number;
+  senha_gov: string;
 }
 
 const monthlyClientDataCategoryLabel: Record<MonthlyClientDataCategory, string> = {
@@ -373,6 +421,70 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
   ],
 };
 
+const parseClientPartnersField = (rawValue: string | null | undefined): ClientPartnerReportEntry[] => {
+  if (!rawValue?.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((item): ClientPartnerReportEntry | null => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+        const row = item as Record<string, unknown>;
+
+        const nome = typeof row.nome === "string"
+          ? row.nome.trim()
+          : typeof row.name === "string"
+            ? row.name.trim()
+            : "";
+        const percentual = parseNumericValue(row.percentual_participacao ?? row.percentual ?? row.ownershipPercent);
+        const proLabore = parseNumericValue(row.pro_labore ?? row.proLabore ?? row.prolabore);
+        const senhaGov = typeof row.senha_gov === "string"
+          ? row.senha_gov.trim()
+          : typeof row.govPassword === "string"
+            ? row.govPassword.trim()
+            : "";
+
+        return {
+          nome,
+          percentual_participacao: percentual ?? 0,
+          pro_labore: proLabore ?? 0,
+          senha_gov: senhaGov,
+        };
+      })
+      .filter((partner): partner is ClientPartnerReportEntry => Boolean(partner));
+  } catch {
+    return [];
+  }
+};
+
+const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
+  const total = partners.length;
+  const names = partners.map((partner) => partner.nome).filter(Boolean).join("; ");
+  const totalOwnership = partners.reduce((sum, partner) => sum + partner.percentual_participacao, 0);
+  const totalProLabore = partners.reduce((sum, partner) => sum + partner.pro_labore, 0);
+  const withGovPassword = partners.filter((partner) => Boolean(partner.senha_gov)).length;
+  const govPasswordStatus =
+    total === 0 ? "Nao informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Nao";
+  const ownershipByPartner = partners
+    .map((partner) => {
+      const partnerName = partner.nome || "Socio sem nome";
+      return `${partnerName}: ${formatPercent(partner.percentual_participacao)}`;
+    })
+    .join(" | ");
+
+  return {
+    total,
+    names,
+    totalOwnership,
+    totalProLabore,
+    withGovPassword,
+    govPasswordStatus,
+    ownershipByPartner,
+  };
+};
+
 const toMonthlyClientDataColumnKey = (category: MonthlyClientDataCategory, fieldName: string) =>
   `mensal_${category}_${fieldName}`;
 const toCadastralClientDataColumnKey = (category: CadastralClientDataCategory, fieldName: string) =>
@@ -395,6 +507,36 @@ const clientDataReportColumns: ReportColumnDefinition[] = [
       label: `Cadastral ${cadastralClientDataCategoryLabel[category]}: ${field.label}`,
     })),
   ),
+  {
+    key: "cadastral_cadastro_clientes_socios_quantidade",
+    label: "Cadastral Cadastro Clientes: Socios - Quantidade",
+  },
+  {
+    key: "cadastral_cadastro_clientes_socios_nomes",
+    label: "Cadastral Cadastro Clientes: Socios - Nomes",
+  },
+  {
+    key: "cadastral_cadastro_clientes_socios_participacao_total",
+    label: "Cadastral Cadastro Clientes: Socios - Participacao Total (%)",
+    formatter: formatPercent,
+  },
+  {
+    key: "cadastral_cadastro_clientes_socios_participacao_por_socio",
+    label: "Cadastral Cadastro Clientes: Socios - Participacao por Socio",
+  },
+  {
+    key: "cadastral_cadastro_clientes_socios_pro_labore_total",
+    label: "Cadastral Cadastro Clientes: Socios - Pro-labore Total (R$)",
+    formatter: formatCurrency,
+  },
+  {
+    key: "cadastral_cadastro_clientes_socios_com_senha_gov",
+    label: "Cadastral Cadastro Clientes: Socios com Senha GOV",
+  },
+  {
+    key: "cadastral_cadastro_clientes_socios_status_senha_gov",
+    label: "Cadastral Cadastro Clientes: Socios - Status Senha GOV",
+  },
 ];
 
 const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
@@ -431,6 +573,8 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
       "mensal_dp_total_funcionarios",
       "cadastral_cadastro_clientes_nome_fantasia",
       "cadastral_cadastro_clientes_regime_tributario",
+      "cadastral_cadastro_clientes_socios_quantidade",
+      "cadastral_cadastro_clientes_socios_pro_labore_total",
     ],
   },
   leads_crm: {
@@ -488,6 +632,67 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
 };
 
 const reportDatasetIds = Object.keys(reportDefinitions) as ReportDatasetId[];
+
+const clientGeneralColumnKeys = new Set([
+  "nome",
+  "cnpj",
+  "regime",
+  "segmento",
+  "status",
+  "contato",
+  "email",
+  "telefone",
+]);
+
+const clientTimelineColumnKeys = new Set(["criado_em", "atualizado_em"]);
+const leadsSourceColumnKeys = new Set(["origem", "pagina_origem"]);
+const leadsContactColumnKeys = new Set(["nome", "empresa", "email", "telefone"]);
+const taskExecutionColumnKeys = new Set(["titulo", "cliente", "responsavel", "setor", "prioridade", "status"]);
+const taskTimelineColumnKeys = new Set(["prazo", "criado_em", "atualizado_em"]);
+const teamIdentityColumnKeys = new Set(["colaborador", "papel", "usuario_id"]);
+const teamTimelineColumnKeys = new Set(["criado_em", "atualizado_em", "papel_definido_em"]);
+
+const resolveMonthlyCategoryFromColumnKey = (columnKey: string): MonthlyClientDataCategory | null =>
+  monthlyClientDataCategories.find((category) => columnKey.startsWith(`mensal_${category}_`)) || null;
+
+const resolveCadastralCategoryFromColumnKey = (columnKey: string): CadastralClientDataCategory | null =>
+  cadastralClientDataCategories.find((category) => columnKey.startsWith(`cadastral_${category}_`)) || null;
+
+const getColumnModulePath = (datasetId: ReportDatasetId, columnKey: string): [string, string] => {
+  if (datasetId === "clientes") {
+    if (columnKey === "dados_mensais_periodo") return ["Clientes", "Dados Mensais > Periodo"];
+
+    const monthlyCategory = resolveMonthlyCategoryFromColumnKey(columnKey);
+    if (monthlyCategory) {
+      return ["Clientes", `Dados Mensais > ${monthlyClientDataCategoryLabel[monthlyCategory]}`];
+    }
+
+    const cadastralCategory = resolveCadastralCategoryFromColumnKey(columnKey);
+    if (cadastralCategory) {
+      return ["Clientes", `Dados Cadastrais > ${cadastralClientDataCategoryLabel[cadastralCategory]}`];
+    }
+
+    if (clientGeneralColumnKeys.has(columnKey)) return ["Clientes", "Dados Gerais"];
+    if (clientTimelineColumnKeys.has(columnKey)) return ["Clientes", "Datas de Controle"];
+    return ["Clientes", "Outros"];
+  }
+
+  if (datasetId === "leads_crm") {
+    if (leadsSourceColumnKeys.has(columnKey)) return ["Leads e CRM", "Origem e Captacao"];
+    if (leadsContactColumnKeys.has(columnKey)) return ["Leads e CRM", "Identificacao e Contato"];
+    return ["Leads e CRM", "Datas e Controle"];
+  }
+
+  if (datasetId === "tarefas") {
+    if (taskExecutionColumnKeys.has(columnKey)) return ["Tarefas", "Execucao e Responsabilidade"];
+    if (taskTimelineColumnKeys.has(columnKey)) return ["Tarefas", "Datas e Prazos"];
+    return ["Tarefas", "Outros"];
+  }
+
+  if (teamIdentityColumnKeys.has(columnKey)) return ["Equipe", "Identificacao e Papel"];
+  if (teamTimelineColumnKeys.has(columnKey)) return ["Equipe", "Datas de Controle"];
+  return ["Equipe", "Outros"];
+};
 
 const isReportDatasetId = (value: string): value is ReportDatasetId =>
   reportDatasetIds.includes(value as ReportDatasetId);
@@ -742,6 +947,22 @@ export default function RelatoriosPage() {
     const byClientId = new Map<string, Record<string, string>>();
 
     clientDataEntries.forEach((entry) => {
+      const current = byClientId.get(entry.client_id) || {};
+
+      if (entry.category === "cadastro_clientes" && !entry.period && entry.field_name === "socios") {
+        const partners = parseClientPartnersField(entry.field_value);
+        const summary = summarizeClientPartners(partners);
+        current.cadastral_cadastro_clientes_socios_quantidade = String(summary.total);
+        current.cadastral_cadastro_clientes_socios_nomes = summary.names;
+        current.cadastral_cadastro_clientes_socios_participacao_total = String(summary.totalOwnership);
+        current.cadastral_cadastro_clientes_socios_participacao_por_socio = summary.ownershipByPartner;
+        current.cadastral_cadastro_clientes_socios_pro_labore_total = String(summary.totalProLabore);
+        current.cadastral_cadastro_clientes_socios_com_senha_gov = `${summary.withGovPassword}/${summary.total}`;
+        current.cadastral_cadastro_clientes_socios_status_senha_gov = summary.govPasswordStatus;
+        byClientId.set(entry.client_id, current);
+        return;
+      }
+
       let columnKey: string | null = null;
 
       if (entry.period && monthlyClientDataCategorySet.has(entry.category)) {
@@ -752,7 +973,6 @@ export default function RelatoriosPage() {
 
       if (!columnKey) return;
 
-      const current = byClientId.get(entry.client_id) || {};
       current[columnKey] = entry.field_value || "";
       byClientId.set(entry.client_id, current);
     });
@@ -889,6 +1109,45 @@ export default function RelatoriosPage() {
     () => customDefinition.columns.filter((column) => !selectedColumns.includes(column.key)),
     [customDefinition.columns, selectedColumns],
   );
+
+  const availableColumnsByModule = useMemo(() => {
+    const moduleMap = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        subfolders: Map<string, { id: string; label: string; columns: ReportColumnDefinition[] }>;
+      }
+    >();
+
+    availableColumns.forEach((column) => {
+      const [moduleLabel, subfolderLabel] = getColumnModulePath(customDatasetId, column.key);
+      const moduleId = normalizeText(moduleLabel);
+      const subfolderId = normalizeText(subfolderLabel);
+
+      if (!moduleMap.has(moduleId)) {
+        moduleMap.set(moduleId, { id: moduleId, label: moduleLabel, subfolders: new Map() });
+      }
+
+      const moduleEntry = moduleMap.get(moduleId)!;
+      if (!moduleEntry.subfolders.has(subfolderId)) {
+        moduleEntry.subfolders.set(subfolderId, { id: subfolderId, label: subfolderLabel, columns: [] });
+      }
+
+      moduleEntry.subfolders.get(subfolderId)!.columns.push(column);
+    });
+
+    return Array.from(moduleMap.values()).map((moduleEntry) => {
+      const subfolderList = Array.from(moduleEntry.subfolders.values());
+      const totalColumns = subfolderList.reduce((sum, subfolder) => sum + subfolder.columns.length, 0);
+      return {
+        id: moduleEntry.id,
+        label: moduleEntry.label,
+        subfolders: subfolderList,
+        totalColumns,
+      };
+    });
+  }, [availableColumns, customDatasetId]);
 
   useEffect(() => {
     const availableSet = new Set(availableColumns.map((column) => column.key));
@@ -1387,25 +1646,44 @@ export default function RelatoriosPage() {
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {availableColumns.length} campo(s) disponivel(is)
                   </p>
-                  <div className="mt-3 max-h-72 overflow-auto space-y-1">
+                  <div className="mt-3 max-h-72 overflow-auto space-y-2 pr-1">
                     {availableColumns.length === 0 && (
                       <p className="text-sm text-muted-foreground py-6 text-center">Sem colunas para adicionar.</p>
                     )}
-                    {availableColumns.map((column) => {
-                      const selected = leftSelectedKeys.includes(column.key);
-                      return (
-                        <button
-                          key={column.key}
-                          type="button"
-                          onClick={() => toggleLeftSelection(column.key)}
-                          className={`w-full text-left text-sm rounded-md px-2.5 py-2 border transition-colors ${
-                            selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
-                          }`}
-                        >
-                          {column.label}
-                        </button>
-                      );
-                    })}
+                    {availableColumnsByModule.map((moduleEntry) => (
+                      <div key={moduleEntry.id} className="rounded-md border bg-muted/20 p-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            {moduleEntry.label}
+                          </p>
+                          <Badge variant="outline" className="h-5 text-[10px]">
+                            {moduleEntry.totalColumns}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          {moduleEntry.subfolders.map((subfolder) => (
+                            <div key={`${moduleEntry.id}-${subfolder.id}`} className="rounded-md border bg-background p-2 space-y-1">
+                              <p className="text-[11px] font-medium text-muted-foreground">{subfolder.label}</p>
+                              {subfolder.columns.map((column) => {
+                                const selected = leftSelectedKeys.includes(column.key);
+                                return (
+                                  <button
+                                    key={column.key}
+                                    type="button"
+                                    onClick={() => toggleLeftSelection(column.key)}
+                                    className={`w-full text-left text-sm rounded-md px-2.5 py-2 border transition-colors ${
+                                      selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
+                                    }`}
+                                  >
+                                    {column.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
