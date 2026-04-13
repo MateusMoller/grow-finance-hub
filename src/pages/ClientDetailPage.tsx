@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Building2, Save, Upload, FileText, Trash2, Download,
-  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList,
+  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList, type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -38,18 +38,11 @@ interface ClientRecord {
   portal_cashflow_enabled: boolean;
 }
 
-interface ClientDataEntry {
-  id: string;
-  field_name: string;
-  field_value: string | null;
-  category: string;
-  period: string | null;
-}
-
 type ClientDataRow = Database["public"]["Tables"]["client_data"]["Row"];
 type ClientPortalTaskRow = Database["public"]["Tables"]["client_portal_tasks"]["Row"];
 type PortalTaskStatus = "pending_client" | "in_analysis" | "completed" | "cancelled";
 type PortalTaskType = "document" | "request_return" | "analysis" | "deliverable" | "general";
+type DataMode = "monthly" | "cadastral";
 
 interface ClientFile {
   id: string;
@@ -60,53 +53,239 @@ interface ClientFile {
   created_at: string;
 }
 
-// Field definitions for each category
+interface ClientDataField {
+  name: string;
+  label: string;
+}
+interface ClientCategoryConfig {
+  fields: ClientDataField[];
+  icon: LucideIcon;
+  label: string;
+  color: string;
+  mode: DataMode;
+  description: string;
+  allowFiles?: boolean;
+}
+const monthlyCategoryKeys = ["contabilidade", "fiscal", "dp"] as const;
+type MonthlyCategoryKey = (typeof monthlyCategoryKeys)[number];
+const cadastralCategoryKeys = [
+  "cadastro_clientes",
+  "cadastro_fiscal",
+  "cadastro_departamento_pessoal",
+  "cadastro_contabil",
+  "cadastro_obrigacoes",
+  "cadastro_honorarios",
+  "cadastro_documentos",
+] as const;
+type CadastralCategoryKey = (typeof cadastralCategoryKeys)[number];
+type ClientCategoryKey = MonthlyCategoryKey | CadastralCategoryKey;
 const contabilidadeFields = [
   { name: "faturamento_mensal", label: "Faturamento Mensal (R$)" },
   { name: "despesas_operacionais", label: "Despesas Operacionais (R$)" },
-  { name: "lucro_liquido", label: "Lucro Líquido (R$)" },
+  { name: "lucro_liquido", label: "Lucro Liquido (R$)" },
   { name: "ativo_total", label: "Ativo Total (R$)" },
   { name: "passivo_total", label: "Passivo Total (R$)" },
-  { name: "patrimonio_liquido", label: "Patrimônio Líquido (R$)" },
+  { name: "patrimonio_liquido", label: "Patrimonio Liquido (R$)" },
   { name: "capital_social", label: "Capital Social (R$)" },
   { name: "contas_a_receber", label: "Contas a Receber (R$)" },
   { name: "contas_a_pagar", label: "Contas a Pagar (R$)" },
   { name: "estoque", label: "Estoque (R$)" },
 ];
-
 const fiscalFields = [
-  { name: "regime_tributario", label: "Regime Tributário" },
-  { name: "aliquota_irpj", label: "Alíquota IRPJ (%)" },
-  { name: "aliquota_csll", label: "Alíquota CSLL (%)" },
-  { name: "aliquota_pis", label: "Alíquota PIS (%)" },
-  { name: "aliquota_cofins", label: "Alíquota COFINS (%)" },
-  { name: "aliquota_iss", label: "Alíquota ISS (%)" },
-  { name: "aliquota_icms", label: "Alíquota ICMS (%)" },
-  { name: "inscricao_estadual", label: "Inscrição Estadual" },
-  { name: "inscricao_municipal", label: "Inscrição Municipal" },
+  { name: "regime_tributario", label: "Regime Tributario" },
+  { name: "aliquota_irpj", label: "Aliquota IRPJ (%)" },
+  { name: "aliquota_csll", label: "Aliquota CSLL (%)" },
+  { name: "aliquota_pis", label: "Aliquota PIS (%)" },
+  { name: "aliquota_cofins", label: "Aliquota COFINS (%)" },
+  { name: "aliquota_iss", label: "Aliquota ISS (%)" },
+  { name: "aliquota_icms", label: "Aliquota ICMS (%)" },
+  { name: "inscricao_estadual", label: "Inscricao Estadual" },
+  { name: "inscricao_municipal", label: "Inscricao Municipal" },
   { name: "cnae_principal", label: "CNAE Principal" },
-  { name: "nfe_emitidas", label: "NF-e Emitidas no Período" },
+  { name: "nfe_emitidas", label: "NF-e Emitidas no Periodo" },
   { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
 ];
-
 const dpFields = [
-  { name: "total_funcionarios", label: "Total de Funcionários" },
+  { name: "total_funcionarios", label: "Total de Funcionarios" },
   { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
   { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
   { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
   { name: "inss_patronal", label: "INSS Patronal (R$)" },
   { name: "vale_transporte", label: "Vale Transporte (R$)" },
-  { name: "vale_alimentacao", label: "Vale Alimentação (R$)" },
-  { name: "admissoes_periodo", label: "Admissões no Período" },
-  { name: "demissoes_periodo", label: "Demissões no Período" },
-  { name: "ferias_programadas", label: "Férias Programadas" },
-  { name: "sindical_contribuicao", label: "Contribuição Sindical (R$)" },
+  { name: "vale_alimentacao", label: "Vale Alimentacao (R$)" },
+  { name: "admissoes_periodo", label: "Admissoes no Periodo" },
+  { name: "demissoes_periodo", label: "Demissoes no Periodo" },
+  { name: "ferias_programadas", label: "Ferias Programadas" },
+  { name: "sindical_contribuicao", label: "Contribuicao Sindical (R$)" },
 ];
-
-const categoryConfig = {
-  contabilidade: { fields: contabilidadeFields, icon: Calculator, label: "Contabilidade", color: "text-primary" },
-  fiscal: { fields: fiscalFields, icon: Receipt, label: "Fiscal", color: "text-amber-600" },
-  dp: { fields: dpFields, icon: Users, label: "Dept. Pessoal", color: "text-emerald-600" },
+const cadastroClientesFields = [
+  { name: "codigo", label: "Codigo" },
+  { name: "nome_fantasia", label: "Nome Fantasia" },
+  { name: "inscricao_estadual", label: "Inscricao Estadual" },
+  { name: "inscricao_municipal", label: "Inscricao Municipal" },
+  { name: "regime_tributario", label: "Regime Tributario" },
+  { name: "cnae_principal", label: "CNAE Principal" },
+  { name: "data_abertura", label: "Data de Abertura" },
+  { name: "cidade", label: "Cidade" },
+  { name: "estado", label: "Estado" },
+  { name: "endereco", label: "Endereco" },
+  { name: "ddd", label: "DDD" },
+  { name: "telefone", label: "Telefone" },
+  { name: "whatsapp", label: "WhatsApp" },
+];
+const cadastroFiscalFields = [
+  { name: "regime_icms", label: "Regime ICMS" },
+  { name: "contribuinte_icms", label: "Contribuinte ICMS" },
+  { name: "contribuinte_ipi", label: "Contribuinte IPI" },
+  { name: "tipo_operacao", label: "Tipo de Operacao" },
+  { name: "emite_nfe", label: "Emite NF-e" },
+  { name: "emite_nfse", label: "Emite NFS-e" },
+  { name: "portal_nf_utilizado", label: "Portal NF utilizado" },
+  { name: "possui_st", label: "Possui ST" },
+  { name: "estados_que_opera", label: "Estados que Opera" },
+  { name: "controle_estoque", label: "Controle de Estoque" },
+  { name: "sistema_vendas", label: "Sistema de Vendas" },
+  { name: "integracao_contabil", label: "Integracao Contabil" },
+  { name: "entrega_gia", label: "Entrega GIA" },
+  { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
+];
+const cadastroDpFields = [
+  { name: "convencao_coletiva", label: "Convencao Coletiva" },
+  { name: "possui_pro_labore", label: "Possui Pro-labore" },
+  { name: "possui_funcionarios", label: "Possui Funcionarios" },
+  { name: "possui_variaveis", label: "Possui Variaveis" },
+  { name: "possui_inss", label: "Possui INSS" },
+  { name: "possui_fgts", label: "Possui FGTS" },
+  { name: "possui_adiantamento_salarial", label: "Possui adiantamento salarial?" },
+  { name: "envia_folha_ponto", label: "Envia Folha Ponto?" },
+  { name: "beneficios", label: "Beneficios" },
+  { name: "hora_extra_banco_horas", label: "Hora extra / Banco de horas" },
+  { name: "envia_relatorio_ferias", label: "Envia relatorio de ferias?" },
+  { name: "clinica_parceira", label: "Clinica parceira" },
+  { name: "possui_decimo_terceiro", label: "Possui 13o?" },
+];
+const cadastroContabilFields = [
+  { name: "obrigacao_contabil", label: "Obrigacao Contabil" },
+  { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
+  { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
+  { name: "controle_financeiro", label: "Controle Financeiro" },
+  { name: "sistema_financeiro", label: "Sistema Financeiro" },
+  { name: "integracao_contabil", label: "Integracao Contabil" },
+  { name: "balanco_anual", label: "Balanco Anual" },
+  { name: "responsavel_contabil_grow", label: "Responsavel Contabil Grow" },
+  { name: "periodicidade_relatorios", label: "Periodicidade Relatorios" },
+  { name: "observacoes_contabeis", label: "Observacoes Contabeis" },
+];
+const cadastroObrigacoesFields = [
+  { name: "pgdas", label: "PGDAS" },
+  { name: "gia", label: "GIA" },
+  { name: "sped_fiscal", label: "SPED Fiscal" },
+  { name: "efd_contribuicoes", label: "EFD Contribuicoes" },
+  { name: "dctf", label: "DCTF" },
+  { name: "defis", label: "DEFIS" },
+  { name: "ecd", label: "ECD" },
+  { name: "ecf", label: "ECF" },
+];
+const cadastroHonorariosFields = [
+  { name: "plano", label: "Plano" },
+  { name: "valor_mensal", label: "Valor Mensal (R$)" },
+  { name: "forma_pagamento", label: "Forma de Pagamento" },
+  { name: "vencimento", label: "Vencimento" },
+  { name: "situacao", label: "Situacao" },
+];
+const cadastroDocumentosFields = [
+  { name: "contrato", label: "Contrato" },
+  { name: "procuracao", label: "Procuracao" },
+  { name: "certificado_digital", label: "Certificado Digital" },
+  { name: "contrato_social", label: "Contrato Social" },
+  { name: "alteracoes_contratuais", label: "Alteracoes Contratuais" },
+  { name: "outros_documentos", label: "Outros Documentos" },
+];
+const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
+  contabilidade: {
+    fields: contabilidadeFields,
+    icon: Calculator,
+    label: "Contabilidade",
+    color: "text-primary",
+    mode: "monthly",
+    description: "Indicadores mensais para relatorio gerencial financeiro e contabil.",
+    allowFiles: true,
+  },
+  fiscal: {
+    fields: fiscalFields,
+    icon: Receipt,
+    label: "Fiscal",
+    color: "text-amber-600",
+    mode: "monthly",
+    description: "Indicadores mensais da area fiscal para analise gerencial.",
+    allowFiles: true,
+  },
+  dp: {
+    fields: dpFields,
+    icon: Users,
+    label: "Dept. Pessoal",
+    color: "text-emerald-600",
+    mode: "monthly",
+    description: "Indicadores mensais de Departamento Pessoal para acompanhamento.",
+    allowFiles: true,
+  },
+  cadastro_clientes: {
+    fields: cadastroClientesFields,
+    icon: Building2,
+    label: "Cadastro Clientes",
+    color: "text-primary",
+    mode: "cadastral",
+    description: "Campos da aba Cadastro_Clientes da planilha (Razao Social e CNPJ ficam em Dados Gerais).",
+  },
+  cadastro_fiscal: {
+    fields: cadastroFiscalFields,
+    icon: Receipt,
+    label: "Setor Fiscal",
+    color: "text-amber-600",
+    mode: "cadastral",
+    description: "Informacoes cadastrais do setor Fiscal conforme planilha.",
+  },
+  cadastro_departamento_pessoal: {
+    fields: cadastroDpFields,
+    icon: Users,
+    label: "Setor DP",
+    color: "text-emerald-600",
+    mode: "cadastral",
+    description: "Informacoes cadastrais do setor Departamento Pessoal conforme planilha.",
+  },
+  cadastro_contabil: {
+    fields: cadastroContabilFields,
+    icon: Calculator,
+    label: "Setor Contabil",
+    color: "text-primary",
+    mode: "cadastral",
+    description: "Informacoes cadastrais do setor Contabil conforme planilha.",
+  },
+  cadastro_obrigacoes: {
+    fields: cadastroObrigacoesFields,
+    icon: ClipboardList,
+    label: "Obrigacoes",
+    color: "text-violet-600",
+    mode: "cadastral",
+    description: "Obrigacoes acessorias cadastradas por cliente conforme planilha.",
+  },
+  cadastro_honorarios: {
+    fields: cadastroHonorariosFields,
+    icon: FileText,
+    label: "Honorarios",
+    color: "text-cyan-700",
+    mode: "cadastral",
+    description: "Dados cadastrais de plano e cobranca de honorarios conforme planilha.",
+  },
+  cadastro_documentos: {
+    fields: cadastroDocumentosFields,
+    icon: FolderOpen,
+    label: "Documentos",
+    color: "text-muted-foreground",
+    mode: "cadastral",
+    description: "Checklist cadastral de documentos conforme planilha.",
+    allowFiles: true,
+  },
 };
 
 const portalTaskStatusOptions: PortalTaskStatus[] = [
@@ -161,9 +340,9 @@ export default function ClientDetailPage() {
   const [portalTasks, setPortalTasks] = useState<ClientPortalTaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [savingData, setSavingData] = useState<string | null>(null);
+  const [savingData, setSavingData] = useState<ClientCategoryKey | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadCategory, setUploadCategory] = useState("contabilidade");
+  const [uploadCategory, setUploadCategory] = useState<ClientCategoryKey>("contabilidade");
   const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
   const [checkingPortalAccess, setCheckingPortalAccess] = useState(false);
   const [savingPortalAccess, setSavingPortalAccess] = useState(false);
@@ -183,13 +362,43 @@ export default function ClientDetailPage() {
   const [deletingPortalTaskId, setDeletingPortalTaskId] = useState<string | null>(null);
   const canManageCashflowAccess = role === "admin";
 
+  const loadClientData = useCallback(async () => {
+    if (!id) return;
+
+    const [monthlyRes, cadastralRes] = await Promise.all([
+      supabase
+        .from("client_data")
+        .select("*")
+        .eq("client_id", id)
+        .in("category", [...monthlyCategoryKeys])
+        .eq("period", period),
+      supabase
+        .from("client_data")
+        .select("*")
+        .eq("client_id", id)
+        .in("category", [...cadastralCategoryKeys])
+        .is("period", null),
+    ]);
+
+    if (monthlyRes.error || cadastralRes.error) {
+      toast.error("Nao foi possivel carregar os dados mensais e cadastrais.");
+      return;
+    }
+
+    const map: Record<string, string> = {};
+    [...(monthlyRes.data || []), ...(cadastralRes.data || [])].forEach((dataRow: ClientDataRow) => {
+      map[`${dataRow.category}__${dataRow.field_name}`] = dataRow.field_value || "";
+    });
+
+    setDataEntries(map);
+  }, [id, period]);
+
   const loadClient = useCallback(async () => {
     if (!id) return;
     setLoading(true);
 
-    const [clientRes, dataRes, filesRes, tasksRes] = await Promise.all([
+    const [clientRes, filesRes, tasksRes] = await Promise.all([
       supabase.from("clients").select("*").eq("id", id).single(),
-      supabase.from("client_data").select("*").eq("client_id", id),
       supabase.from("client_files").select("*").eq("client_id", id).order("created_at", { ascending: false }),
       supabase.from("client_portal_tasks").select("*").eq("client_id", id).order("created_at", { ascending: false }),
     ]);
@@ -207,13 +416,6 @@ export default function ClientDetailPage() {
     };
     setClient(normalizedClient);
     setClientForm(normalizedClient);
-
-    // Build data map: category__field_name -> value
-    const map: Record<string, string> = {};
-    (dataRes.data || []).forEach((d: ClientDataRow) => {
-      map[`${d.category}__${d.field_name}`] = d.field_value || "";
-    });
-    setDataEntries(map);
 
     setFiles((filesRes.data || []) as ClientFile[]);
     setPortalTasks((tasksRes.data || []) as ClientPortalTaskRow[]);
@@ -248,6 +450,12 @@ export default function ClientDetailPage() {
       void loadClient();
     }
   }, [id, loadClient]);
+
+  useEffect(() => {
+    if (id) {
+      void loadClientData();
+    }
+  }, [id, loadClientData, period]);
 
   const saveClientInfo = async () => {
     if (!id) return;
@@ -456,31 +664,44 @@ export default function ClientDetailPage() {
     toast.success("Pendencia removida.");
   };
 
-  const saveCategoryData = async (category: string) => {
+  const saveCategoryData = async (category: ClientCategoryKey) => {
     if (!id || !user) return;
     setSavingData(category);
 
-    const config = categoryConfig[category as keyof typeof categoryConfig];
+    const config = categoryConfig[category];
+    const entryPeriod = config.mode === "monthly" ? period : null;
     const entries = config.fields.map((f) => ({
       client_id: id,
       category,
       field_name: f.name,
       field_value: dataEntries[`${category}__${f.name}`] || null,
-      period,
+      period: entryPeriod,
       created_by: user.id,
     }));
 
-    // Delete existing entries for this client+category+period, then insert
-    await supabase.from("client_data")
+    let deleteQuery = supabase.from("client_data")
       .delete()
       .eq("client_id", id)
-      .eq("category", category)
-      .eq("period", period);
+      .eq("category", category);
+
+    if (config.mode === "monthly") {
+      deleteQuery = deleteQuery.eq("period", period);
+    } else {
+      deleteQuery = deleteQuery.is("period", null);
+    }
+
+    const { error: deleteError } = await deleteQuery;
+    if (deleteError) {
+      setSavingData(null);
+      toast.error("Erro ao preparar os dados para salvamento");
+      return;
+    }
 
     const { error } = await supabase.from("client_data").insert(entries);
     setSavingData(null);
     if (error) return toast.error("Erro ao salvar dados");
     toast.success(`Dados de ${config.label} salvos`);
+    void loadClientData();
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -553,29 +774,18 @@ export default function ClientDetailPage() {
 
   if (!client) return null;
 
-  const renderDataFields = (category: keyof typeof categoryConfig) => {
+  const renderDataFields = (category: ClientCategoryKey) => {
     const config = categoryConfig[category];
+    const categoryFiles = files.filter((file) => file.category === category);
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
             <config.icon className={`h-5 w-5 ${config.color}`} />
             <h3 className="font-semibold">{config.label}</h3>
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-2 py-1.5 shadow-sm">
-            <div className="inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
-              <CalendarDays className="h-3.5 w-3.5 text-primary" />
-              <Label className="cursor-default text-[11px] font-medium leading-none text-muted-foreground">Período</Label>
-            </div>
-            <Input
-              type="month"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="h-9 w-44 border-primary/20 bg-background/80 text-sm font-medium shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-primary/35"
-            />
-          </div>
+          <p className="text-xs text-muted-foreground">{config.description}</p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {config.fields.map((field) => {
             const key = `${category}__${field.name}`;
@@ -585,73 +795,79 @@ export default function ClientDetailPage() {
                 <Input
                   value={dataEntries[key] || ""}
                   onChange={(e) => setDataEntries((prev) => ({ ...prev, [key]: e.target.value }))}
-                  placeholder="–"
+                  placeholder="-"
                   className="h-9"
                 />
               </div>
             );
           })}
         </div>
-
         <div className="flex justify-end">
           <Button onClick={() => saveCategoryData(category)} disabled={savingData === category} size="sm">
             {savingData === category ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
             Salvar {config.label}
           </Button>
         </div>
-
-        <Separator />
-
-        {/* Files section for this category */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium flex items-center gap-2">
-              <FolderOpen className="h-4 w-4" /> Documentos – {config.label}
-            </h4>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setUploadCategory(category); fileInputRef.current?.click(); }}
-              disabled={uploading}
-            >
-              {uploading && uploadCategory === category ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
-              Enviar Arquivo
-            </Button>
-          </div>
-
-          {files.filter((f) => f.category === category).length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Nenhum documento nesta categoria</p>
-          ) : (
-            <div className="space-y-2">
-              {files.filter((f) => f.category === category).map((file) => (
-                <motion.div
-                  key={file.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
+        {config.allowFiles && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4" /> Documentos - {config.label}
+                </h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setUploadCategory(category);
+                    fileInputRef.current?.click();
+                  }}
+                  disabled={uploading}
                 >
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">{file.file_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatBytes(file.file_size)} · {new Date(file.created_at).toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => downloadFile(file.file_path, file.file_name)}>
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteFile(file.id, file.file_path)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </motion.div>
-              ))}
+                  {uploading && uploadCategory === category ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  Enviar Arquivo
+                </Button>
+              </div>
+              {categoryFiles.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">Nenhum documento nesta categoria</p>
+              ) : (
+                <div className="space-y-2">
+                  {categoryFiles.map((file) => (
+                    <motion.div
+                      key={file.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">{file.file_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBytes(file.file_size)} - {new Date(file.created_at).toLocaleDateString("pt-BR")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => downloadFile(file.file_path, file.file_name)}>
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteFile(file.id, file.file_path)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     );
   };
@@ -688,11 +904,10 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
-            <TabsTrigger value="contabilidade">Contabilidade</TabsTrigger>
-            <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-            <TabsTrigger value="dp">Dept. Pessoal</TabsTrigger>
+            <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
+            <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
             <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
           </TabsList>
 
@@ -820,6 +1035,79 @@ export default function ClientDetailPage() {
                   Salvar Informações
                 </Button>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="dados_mensais" className="space-y-4">
+            <div className="rounded-xl border bg-card p-6 space-y-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="space-y-1">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4" /> Dados mensais
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Informacoes necessarias para o relatorio gerencial mensal.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Periodo de referencia</Label>
+                  <Input
+                    type="month"
+                    value={period}
+                    onChange={(event) => setPeriod(event.target.value)}
+                    className="h-9 w-48"
+                  />
+                </div>
+              </div>
+
+              <Tabs defaultValue={monthlyCategoryKeys[0]} className="space-y-4">
+                <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
+                  {monthlyCategoryKeys.map((category) => (
+                    <TabsTrigger key={category} value={category}>
+                      {categoryConfig[category].label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {monthlyCategoryKeys.map((category) => (
+                  <TabsContent key={category} value={category}>
+                    <div className="rounded-lg border p-4">
+                      {renderDataFields(category)}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="dados_cadastrais" className="space-y-4">
+            <div className="rounded-xl border bg-card p-6 space-y-5">
+              <div className="space-y-1">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Building2 className="h-4 w-4" /> Dados cadastrais por setor
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Estrutura baseada na planilha de cadastro de clientes enviada.
+                </p>
+              </div>
+
+              <Tabs defaultValue={cadastralCategoryKeys[0]} className="space-y-4">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+                  {cadastralCategoryKeys.map((category) => (
+                    <TabsTrigger key={category} value={category}>
+                      {categoryConfig[category].label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {cadastralCategoryKeys.map((category) => (
+                  <TabsContent key={category} value={category}>
+                    <div className="rounded-lg border p-4">
+                      {renderDataFields(category)}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
             </div>
           </TabsContent>
 
@@ -1003,17 +1291,8 @@ export default function ClientDetailPage() {
             </div>
           </TabsContent>
 
-          {/* Category tabs */}
-          {(["contabilidade", "fiscal", "dp"] as const).map((cat) => (
-            <TabsContent key={cat} value={cat}>
-              <div className="rounded-xl border bg-card p-6">
-                {renderDataFields(cat)}
-              </div>
-            </TabsContent>
-          ))}
         </Tabs>
       </div>
     </AppLayout>
   );
 }
-
