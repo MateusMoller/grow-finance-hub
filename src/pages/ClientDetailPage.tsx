@@ -1061,9 +1061,9 @@ export default function ClientDetailPage() {
               </div>
 
               <Tabs defaultValue={monthlyCategoryKeys[0]} className="space-y-4">
-                <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
+                <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
                   {monthlyCategoryKeys.map((category) => (
-                    <TabsTrigger key={category} value={category}>
+                    <TabsTrigger key={category} value={category} className="h-9">
                       {categoryConfig[category].label}
                     </TabsTrigger>
                   ))}
@@ -1092,9 +1092,9 @@ export default function ClientDetailPage() {
               </div>
 
               <Tabs defaultValue={cadastralCategoryKeys[0]} className="space-y-4">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-4">
                   {cadastralCategoryKeys.map((category) => (
-                    <TabsTrigger key={category} value={category}>
+                    <TabsTrigger key={category} value={category} className="h-9 px-2 text-xs sm:text-sm">
                       {categoryConfig[category].label}
                     </TabsTrigger>
                   ))}
