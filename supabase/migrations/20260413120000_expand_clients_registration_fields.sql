@@ -1,0 +1,17 @@
+﻿ALTER TABLE public.clients
+  ADD COLUMN IF NOT EXISTS code text,
+  ADD COLUMN IF NOT EXISTS trade_name text,
+  ADD COLUMN IF NOT EXISTS state_registration text,
+  ADD COLUMN IF NOT EXISTS municipal_registration text,
+  ADD COLUMN IF NOT EXISTS cnae_main text,
+  ADD COLUMN IF NOT EXISTS simples_annex text,
+  ADD COLUMN IF NOT EXISTS opened_at date,
+  ADD COLUMN IF NOT EXISTS cnpj_status text,
+  ADD COLUMN IF NOT EXISTS city text,
+  ADD COLUMN IF NOT EXISTS state text,
+  ADD COLUMN IF NOT EXISTS ddd text,
+  ADD COLUMN IF NOT EXISTS whatsapp text,
+  ADD COLUMN IF NOT EXISTS has_digital_certificate boolean,
+  ADD COLUMN IF NOT EXISTS certificate_type text,
+  ADD COLUMN IF NOT EXISTS certificate_expires_on date,
+  ADD COLUMN IF NOT EXISTS gov_password text;

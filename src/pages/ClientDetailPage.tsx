@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Building2, Save, Upload, FileText, Trash2, Download,
-  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList,
+  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList, Wallet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -24,16 +24,32 @@ import { motion } from "framer-motion";
 
 interface ClientRecord {
   id: string;
+  code: string | null;
   name: string;
+  trade_name: string | null;
   cnpj: string | null;
+  state_registration: string | null;
+  municipal_registration: string | null;
+  cnae_main: string | null;
   regime: string | null;
+  simples_annex: string | null;
+  opened_at: string | null;
+  cnpj_status: string | null;
+  city: string | null;
+  state: string | null;
   sector: string | null;
   status: string | null;
   contact: string | null;
   email: string | null;
+  ddd: string | null;
   phone: string | null;
+  whatsapp: string | null;
   address: string | null;
+  has_digital_certificate: boolean | null;
+  certificate_type: string | null;
+  certificate_expires_on: string | null;
   notes: string | null;
+  gov_password: string | null;
   portal_user_id: string | null;
   portal_cashflow_enabled: boolean;
 }
@@ -62,52 +78,101 @@ interface ClientFile {
 
 // Field definitions for each category
 const contabilidadeFields = [
-  { name: "faturamento_mensal", label: "Faturamento Mensal (R$)" },
-  { name: "despesas_operacionais", label: "Despesas Operacionais (R$)" },
-  { name: "lucro_liquido", label: "Lucro Líquido (R$)" },
-  { name: "ativo_total", label: "Ativo Total (R$)" },
-  { name: "passivo_total", label: "Passivo Total (R$)" },
-  { name: "patrimonio_liquido", label: "Patrimônio Líquido (R$)" },
-  { name: "capital_social", label: "Capital Social (R$)" },
-  { name: "contas_a_receber", label: "Contas a Receber (R$)" },
-  { name: "contas_a_pagar", label: "Contas a Pagar (R$)" },
-  { name: "estoque", label: "Estoque (R$)" },
+  { name: "obrigacao_contabil", label: "Obrigacao Contabil" },
+  { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
+  { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
+  { name: "controle_financeiro", label: "Controle Financeiro" },
+  { name: "sistema_financeiro", label: "Sistema Financeiro" },
+  { name: "integracao_contabil", label: "Integracao Contabil" },
+  { name: "balanco_anual", label: "Balanco Anual" },
+  { name: "responsavel_contabil_grow", label: "Responsavel Contabil Grow" },
+  { name: "periodicidade_relatorios", label: "Periodicidade Relatorios" },
+  { name: "observacoes_contabeis", label: "Observacoes Contabeis" },
 ];
 
 const fiscalFields = [
-  { name: "regime_tributario", label: "Regime Tributário" },
-  { name: "aliquota_irpj", label: "Alíquota IRPJ (%)" },
-  { name: "aliquota_csll", label: "Alíquota CSLL (%)" },
-  { name: "aliquota_pis", label: "Alíquota PIS (%)" },
-  { name: "aliquota_cofins", label: "Alíquota COFINS (%)" },
-  { name: "aliquota_iss", label: "Alíquota ISS (%)" },
-  { name: "aliquota_icms", label: "Alíquota ICMS (%)" },
-  { name: "inscricao_estadual", label: "Inscrição Estadual" },
-  { name: "inscricao_municipal", label: "Inscrição Municipal" },
-  { name: "cnae_principal", label: "CNAE Principal" },
-  { name: "nfe_emitidas", label: "NF-e Emitidas no Período" },
-  { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
+  { name: "regime_icms", label: "Regime ICMS" },
+  { name: "contribuinte_icms", label: "Contribuinte ICMS" },
+  { name: "contribuinte_ipi", label: "Contribuinte IPI" },
+  { name: "tipo_operacao", label: "Tipo de Operacao" },
+  { name: "emite_nfe", label: "Emite NF-e" },
+  { name: "emite_nfse", label: "Emite NFS-e" },
+  { name: "portal_nf_utilizado", label: "Portal NF utilizado" },
+  { name: "possui_st", label: "Possui ST" },
+  { name: "estados_que_opera", label: "Estados que Opera" },
+  { name: "controle_estoque", label: "Controle de Estoque" },
+  { name: "sistema_vendas", label: "Sistema de Vendas" },
+  { name: "integracao_contabil", label: "Integracao Contabil" },
+  { name: "entrega_gia", label: "Entrega GIA" },
+  { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
+  { name: "entrega_efd_contribuicoes", label: "Entrega EFD Contribuicoes" },
+  { name: "observacoes_fiscais", label: "Observacoes Fiscais" },
 ];
 
 const dpFields = [
-  { name: "total_funcionarios", label: "Total de Funcionários" },
-  { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
-  { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
-  { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
-  { name: "inss_patronal", label: "INSS Patronal (R$)" },
-  { name: "vale_transporte", label: "Vale Transporte (R$)" },
-  { name: "vale_alimentacao", label: "Vale Alimentação (R$)" },
-  { name: "admissoes_periodo", label: "Admissões no Período" },
-  { name: "demissoes_periodo", label: "Demissões no Período" },
-  { name: "ferias_programadas", label: "Férias Programadas" },
-  { name: "sindical_contribuicao", label: "Contribuição Sindical (R$)" },
+  { name: "possui_funcionarios", label: "Possui Funcionarios" },
+  { name: "quantidade_funcionarios", label: "Quantidade Funcionarios" },
+  { name: "possui_pro_labore", label: "Possui Pro-labore" },
+  { name: "quantidade_socios", label: "Quantidade Socios" },
+  { name: "convencao_coletiva", label: "Convencao Coletiva" },
+  { name: "rat_percentual", label: "RAT (%)" },
+  { name: "fgts_digital", label: "FGTS Digital" },
+  { name: "envia_ponto", label: "Envia Ponto" },
+  { name: "tipo_ponto", label: "Tipo de Ponto" },
+  { name: "beneficios", label: "Beneficios" },
+  { name: "sistema_folha", label: "Sistema de Folha" },
+  { name: "responsavel_envio_documentos", label: "Responsavel Envio Documentos" },
+  { name: "data_envio_folha", label: "Data Envio Folha" },
+  { name: "observacoes_dp", label: "Observacoes DP" },
+];
+
+const obrigacoesFields = [
+  { name: "pgdas", label: "PGDAS" },
+  { name: "gia", label: "GIA" },
+  { name: "sped_fiscal", label: "SPED Fiscal" },
+  { name: "efd_contribuicoes", label: "EFD Contribuicoes" },
+  { name: "dctf", label: "DCTF" },
+  { name: "defis", label: "DEFIS" },
+  { name: "ecd", label: "ECD" },
+  { name: "ecf", label: "ECF" },
+];
+
+const honorariosFields = [
+  { name: "plano", label: "Plano" },
+  { name: "valor_mensal", label: "Valor Mensal (R$)" },
+  { name: "forma_pagamento", label: "Forma de Pagamento" },
+  { name: "vencimento", label: "Vencimento" },
+  { name: "situacao", label: "Situacao" },
+];
+
+const documentosFields = [
+  { name: "contrato", label: "Contrato" },
+  { name: "procuracao", label: "Procuracao" },
+  { name: "certificado_digital", label: "Certificado Digital" },
+  { name: "contrato_social", label: "Contrato Social" },
+  { name: "alteracoes_contratuais", label: "Alteracoes Contratuais" },
+  { name: "outros_documentos", label: "Outros Documentos" },
 ];
 
 const categoryConfig = {
-  contabilidade: { fields: contabilidadeFields, icon: Calculator, label: "Contabilidade", color: "text-primary" },
+  contabilidade: { fields: contabilidadeFields, icon: Calculator, label: "Contabil", color: "text-primary" },
   fiscal: { fields: fiscalFields, icon: Receipt, label: "Fiscal", color: "text-amber-600" },
   dp: { fields: dpFields, icon: Users, label: "Dept. Pessoal", color: "text-emerald-600" },
+  obrigacoes: { fields: obrigacoesFields, icon: ClipboardList, label: "Obrigacoes", color: "text-violet-600" },
+  honorarios: { fields: honorariosFields, icon: Wallet, label: "Honorarios", color: "text-sky-600" },
+  documentos: { fields: documentosFields, icon: FolderOpen, label: "Documentos", color: "text-rose-600" },
 };
+
+type ClientDataCategory = keyof typeof categoryConfig;
+
+const categoryOrder: ClientDataCategory[] = [
+  "contabilidade",
+  "fiscal",
+  "dp",
+  "obrigacoes",
+  "honorarios",
+  "documentos",
+];
 
 const portalTaskStatusOptions: PortalTaskStatus[] = [
   "pending_client",
@@ -163,7 +228,7 @@ export default function ClientDetailPage() {
   const [saving, setSaving] = useState(false);
   const [savingData, setSavingData] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadCategory, setUploadCategory] = useState("contabilidade");
+  const [uploadCategory, setUploadCategory] = useState<ClientDataCategory>("contabilidade");
   const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
   const [checkingPortalAccess, setCheckingPortalAccess] = useState(false);
   const [savingPortalAccess, setSavingPortalAccess] = useState(false);
@@ -195,7 +260,7 @@ export default function ClientDetailPage() {
     ]);
 
     if (clientRes.error || !clientRes.data) {
-      toast.error("Cliente não encontrado");
+      toast.error("Cliente nao encontrado");
       navigate("/app/clientes");
       return;
     }
@@ -254,16 +319,32 @@ export default function ClientDetailPage() {
     const normalizedEmail = normalizeEmail(clientForm.email);
     setSaving(true);
     const { error } = await supabase.from("clients").update({
+      code: clientForm.code,
       name: clientForm.name,
+      trade_name: clientForm.trade_name,
       cnpj: clientForm.cnpj,
+      state_registration: clientForm.state_registration,
+      municipal_registration: clientForm.municipal_registration,
+      cnae_main: clientForm.cnae_main,
       regime: clientForm.regime,
+      simples_annex: clientForm.simples_annex,
+      opened_at: clientForm.opened_at,
+      cnpj_status: clientForm.cnpj_status,
+      city: clientForm.city,
+      state: clientForm.state,
+      ddd: clientForm.ddd,
       sector: clientForm.sector,
       status: clientForm.status,
       contact: clientForm.contact,
       email: normalizedEmail || null,
       phone: clientForm.phone,
+      whatsapp: clientForm.whatsapp,
       address: clientForm.address,
+      has_digital_certificate: clientForm.has_digital_certificate,
+      certificate_type: clientForm.certificate_type,
+      certificate_expires_on: clientForm.certificate_expires_on,
       notes: clientForm.notes,
+      gov_password: clientForm.gov_password,
       portal_cashflow_enabled: Boolean(clientForm.portal_cashflow_enabled),
     }).eq("id", id);
     setSaving(false);
@@ -456,11 +537,11 @@ export default function ClientDetailPage() {
     toast.success("Pendencia removida.");
   };
 
-  const saveCategoryData = async (category: string) => {
+  const saveCategoryData = async (category: ClientDataCategory) => {
     if (!id || !user) return;
     setSavingData(category);
 
-    const config = categoryConfig[category as keyof typeof categoryConfig];
+    const config = categoryConfig[category];
     const entries = config.fields.map((f) => ({
       client_id: id,
       category,
@@ -470,12 +551,13 @@ export default function ClientDetailPage() {
       created_by: user.id,
     }));
 
-    // Delete existing entries for this client+category+period, then insert
+    const fieldNames = config.fields.map((field) => field.name);
     await supabase.from("client_data")
       .delete()
       .eq("client_id", id)
       .eq("category", category)
-      .eq("period", period);
+      .eq("period", period)
+      .in("field_name", fieldNames);
 
     const { error } = await supabase.from("client_data").insert(entries);
     setSavingData(null);
@@ -519,7 +601,7 @@ export default function ClientDetailPage() {
     if (!confirm("Excluir este arquivo?")) return;
     await supabase.storage.from("client-files").remove([filePath]);
     await supabase.from("client_files").delete().eq("id", fileId);
-    toast.success("Arquivo excluído");
+    toast.success("Arquivo excluido");
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
@@ -535,7 +617,7 @@ export default function ClientDetailPage() {
   };
 
   const formatBytes = (bytes: number | null) => {
-    if (!bytes) return "–";
+    if (!bytes) return "-";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -553,7 +635,7 @@ export default function ClientDetailPage() {
 
   if (!client) return null;
 
-  const renderDataFields = (category: keyof typeof categoryConfig) => {
+  const renderDataFields = (category: ClientDataCategory) => {
     const config = categoryConfig[category];
     return (
       <div className="space-y-6">
@@ -565,7 +647,7 @@ export default function ClientDetailPage() {
           <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-2 py-1.5 shadow-sm">
             <div className="inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5 text-primary" />
-              <Label className="cursor-default text-[11px] font-medium leading-none text-muted-foreground">Período</Label>
+              <Label className="cursor-default text-[11px] font-medium leading-none text-muted-foreground">Periodo</Label>
             </div>
             <Input
               type="month"
@@ -585,7 +667,7 @@ export default function ClientDetailPage() {
                 <Input
                   value={dataEntries[key] || ""}
                   onChange={(e) => setDataEntries((prev) => ({ ...prev, [key]: e.target.value }))}
-                  placeholder="–"
+                  placeholder="-"
                   className="h-9"
                 />
               </div>
@@ -606,7 +688,7 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium flex items-center gap-2">
-              <FolderOpen className="h-4 w-4" /> Documentos – {config.label}
+              <FolderOpen className="h-4 w-4" /> Documentos - {config.label}
             </h4>
             <Button
               variant="outline"
@@ -635,7 +717,7 @@ export default function ClientDetailPage() {
                     <div>
                       <p className="text-sm font-medium">{file.file_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatBytes(file.file_size)} · {new Date(file.created_at).toLocaleDateString("pt-BR")}
+                        {formatBytes(file.file_size)} - {new Date(file.created_at).toLocaleDateString("pt-BR")}
                       </p>
                     </div>
                   </div>
@@ -688,33 +770,76 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
-            <TabsTrigger value="info">Dados Gerais</TabsTrigger>
-            <TabsTrigger value="contabilidade">Contabilidade</TabsTrigger>
-            <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-            <TabsTrigger value="dp">Dept. Pessoal</TabsTrigger>
-            <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto pb-1">
+            <TabsList className="inline-flex w-max min-w-full justify-start">
+              <TabsTrigger value="info">Dados Gerais</TabsTrigger>
+              <TabsTrigger value="contabilidade">Contabil</TabsTrigger>
+              <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+              <TabsTrigger value="dp">Dept. Pessoal</TabsTrigger>
+              <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
+              <TabsTrigger value="honorarios">Honorarios</TabsTrigger>
+              <TabsTrigger value="documentos">Documentos</TabsTrigger>
+              <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* General Info */}
           <TabsContent value="info" className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-4">
               <h3 className="font-semibold flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> Informações do Cliente
+                <Building2 className="h-4 w-4" /> Informacoes do Cliente
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Razão Social</Label>
+                  <Label className="text-xs">Codigo</Label>
+                  <Input value={clientForm.code || ""} onChange={(e) => setClientForm((p) => ({ ...p, code: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs">Razao Social</Label>
                   <Input value={clientForm.name || ""} onChange={(e) => setClientForm((p) => ({ ...p, name: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Nome Fantasia</Label>
+                  <Input value={clientForm.trade_name || ""} onChange={(e) => setClientForm((p) => ({ ...p, trade_name: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">CNPJ</Label>
                   <Input value={clientForm.cnpj || ""} onChange={(e) => setClientForm((p) => ({ ...p, cnpj: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Regime Tributário</Label>
+                  <Label className="text-xs">Situacao CNPJ</Label>
+                  <Input value={clientForm.cnpj_status || ""} onChange={(e) => setClientForm((p) => ({ ...p, cnpj_status: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Inscricao Estadual</Label>
+                  <Input value={clientForm.state_registration || ""} onChange={(e) => setClientForm((p) => ({ ...p, state_registration: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Inscricao Municipal</Label>
+                  <Input value={clientForm.municipal_registration || ""} onChange={(e) => setClientForm((p) => ({ ...p, municipal_registration: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">CNAE Principal</Label>
+                  <Input value={clientForm.cnae_main || ""} onChange={(e) => setClientForm((p) => ({ ...p, cnae_main: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Regime Tributario</Label>
                   <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.regime || ""} onChange={(e) => setClientForm((p) => ({ ...p, regime: e.target.value }))}>
                     {["Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI"].map((r) => <option key={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Anexo Simples</Label>
+                  <Input value={clientForm.simples_annex || ""} onChange={(e) => setClientForm((p) => ({ ...p, simples_annex: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data de Abertura</Label>
+                  <Input type="date" value={clientForm.opened_at || ""} onChange={(e) => setClientForm((p) => ({ ...p, opened_at: e.target.value || null }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Status</Label>
+                  <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.status || ""} onChange={(e) => setClientForm((p) => ({ ...p, status: e.target.value }))}>
+                    {["Ativo", "Onboarding", "Inativo"].map((s) => <option key={s}>{s}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
@@ -724,32 +849,78 @@ export default function ClientDetailPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Status</Label>
-                  <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.status || ""} onChange={(e) => setClientForm((p) => ({ ...p, status: e.target.value }))}>
-                    {["Ativo", "Onboarding", "Inativo"].map((s) => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
                   <Label className="text-xs">Contato Principal</Label>
                   <Input value={clientForm.contact || ""} onChange={(e) => setClientForm((p) => ({ ...p, contact: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">E-mail</Label>
-                  <Input type="email" value={clientForm.email || ""} onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))} />
+                  <Label className="text-xs">Cidade</Label>
+                  <Input value={clientForm.city || ""} onChange={(e) => setClientForm((p) => ({ ...p, city: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Estado</Label>
+                  <Input value={clientForm.state || ""} onChange={(e) => setClientForm((p) => ({ ...p, state: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">DDD</Label>
+                  <Input value={clientForm.ddd || ""} onChange={(e) => setClientForm((p) => ({ ...p, ddd: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Telefone</Label>
                   <Input value={clientForm.phone || ""} onChange={(e) => setClientForm((p) => ({ ...p, phone: e.target.value }))} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">WhatsApp</Label>
+                  <Input value={clientForm.whatsapp || ""} onChange={(e) => setClientForm((p) => ({ ...p, whatsapp: e.target.value }))} />
+                </div>
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Endereço</Label>
+                  <Label className="text-xs">E-mail</Label>
+                  <Input type="email" value={clientForm.email || ""} onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))} />
+                </div>
+                <div className="space-y-1.5 md:col-span-3">
+                  <Label className="text-xs">Endereco</Label>
                   <Input value={clientForm.address || ""} onChange={(e) => setClientForm((p) => ({ ...p, address: e.target.value }))} />
                 </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Observações</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Certificado Digital</Label>
+                  <select
+                    className="w-full text-sm bg-background border rounded-lg px-3 py-2"
+                    value={
+                      clientForm.has_digital_certificate === null || clientForm.has_digital_certificate === undefined
+                        ? ""
+                        : clientForm.has_digital_certificate
+                          ? "sim"
+                          : "nao"
+                    }
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setClientForm((prev) => ({
+                        ...prev,
+                        has_digital_certificate: nextValue === "" ? null : nextValue === "sim",
+                      }));
+                    }}
+                  >
+                    <option value="">Nao informado</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Nao</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Tipo Certificado</Label>
+                  <Input value={clientForm.certificate_type || ""} onChange={(e) => setClientForm((p) => ({ ...p, certificate_type: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Vencimento Certificado</Label>
+                  <Input type="date" value={clientForm.certificate_expires_on || ""} onChange={(e) => setClientForm((p) => ({ ...p, certificate_expires_on: e.target.value || null }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Senha do gov</Label>
+                  <Input value={clientForm.gov_password || ""} onChange={(e) => setClientForm((p) => ({ ...p, gov_password: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5 md:col-span-2 lg:col-span-3">
+                  <Label className="text-xs">Observacoes</Label>
                   <Textarea value={clientForm.notes || ""} onChange={(e) => setClientForm((p) => ({ ...p, notes: e.target.value }))} rows={3} />
                 </div>
-                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                <div className="md:col-span-2 lg:col-span-3 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Acesso ao portal do cliente</p>
@@ -792,7 +963,7 @@ export default function ClientDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                <div className="md:col-span-2 lg:col-span-3 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Liberar controle de caixa no portal</p>
@@ -817,7 +988,7 @@ export default function ClientDetailPage() {
               <div className="flex justify-end">
                 <Button onClick={saveClientInfo} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-                  Salvar Informações
+                  Salvar Informacoes
                 </Button>
               </div>
             </div>
@@ -938,7 +1109,7 @@ export default function ClientDetailPage() {
                           <div className="space-y-1">
                             <p className="text-sm font-medium">{task.title}</p>
                             <p className="text-xs text-muted-foreground">
-                              {task.description || "Sem descricao"} {task.due_date ? `• prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}` : ""}
+                              {task.description || "Sem descricao"} {task.due_date ? `- prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}` : ""}
                             </p>
                           </div>
                           <Badge variant="outline" className={`border-0 ${portalTaskStatusClass[status]}`}>
@@ -1004,7 +1175,7 @@ export default function ClientDetailPage() {
           </TabsContent>
 
           {/* Category tabs */}
-          {(["contabilidade", "fiscal", "dp"] as const).map((cat) => (
+          {categoryOrder.map((cat) => (
             <TabsContent key={cat} value={cat}>
               <div className="rounded-xl border bg-card p-6">
                 {renderDataFields(cat)}
@@ -1016,4 +1187,5 @@ export default function ClientDetailPage() {
     </AppLayout>
   );
 }
+
 
