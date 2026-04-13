@@ -21,28 +21,9 @@ const clientCreatorRoles = new Set(["admin", "director", "manager", "commercial"
 
 type JsonRecord = Record<string, unknown>;
 type CreateClientPayload = {
-  code?: string;
   name: string;
-  trade_name?: string;
   cnpj?: string;
-  state_registration?: string;
-  municipal_registration?: string;
-  cnae_main?: string;
   regime?: string;
-  simples_annex?: string;
-  opened_at?: string;
-  cnpj_status?: string;
-  city?: string;
-  state?: string;
-  address?: string;
-  ddd?: string;
-  whatsapp?: string;
-  has_digital_certificate?: boolean;
-  certificate_type?: string;
-  certificate_expires_on?: string;
-  status?: string;
-  notes?: string;
-  gov_password?: string;
   sector?: string;
   contact?: string;
   email: string;
@@ -77,36 +58,6 @@ function normalizeEmail(value: unknown): string | null {
 
 function isValidPassword(value: string) {
   return value.length >= 6;
-}
-
-function asDateString(value: unknown): string | undefined {
-  const parsed = asTrimmedString(value);
-  if (!parsed) return undefined;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(parsed)) return undefined;
-  return parsed;
-}
-
-function asOptionalBoolean(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") return value;
-
-  if (typeof value === "number") {
-    if (value === 1) return true;
-    if (value === 0) return false;
-  }
-
-  if (typeof value === "string") {
-    const normalized = value
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    if (!normalized) return undefined;
-    if (["sim", "true", "1", "yes", "y"].includes(normalized)) return true;
-    if (["nao", "false", "0", "no", "n"].includes(normalized)) return false;
-  }
-
-  return undefined;
 }
 
 function extractBearerToken(req: Request): string | null {
@@ -206,28 +157,9 @@ Deno.serve(async (req) => {
     }
 
     const parsedPayload: CreateClientPayload = {
-      code: asTrimmedString(payload.code) || undefined,
       name: asTrimmedString(payload.name) || "",
-      trade_name: asTrimmedString(payload.trade_name) || undefined,
       cnpj: asTrimmedString(payload.cnpj) || undefined,
-      state_registration: asTrimmedString(payload.state_registration) || undefined,
-      municipal_registration: asTrimmedString(payload.municipal_registration) || undefined,
-      cnae_main: asTrimmedString(payload.cnae_main) || undefined,
       regime: asTrimmedString(payload.regime) || undefined,
-      simples_annex: asTrimmedString(payload.simples_annex) || undefined,
-      opened_at: asDateString(payload.opened_at),
-      cnpj_status: asTrimmedString(payload.cnpj_status) || undefined,
-      city: asTrimmedString(payload.city) || undefined,
-      state: asTrimmedString(payload.state) || undefined,
-      address: asTrimmedString(payload.address) || undefined,
-      ddd: asTrimmedString(payload.ddd) || undefined,
-      whatsapp: asTrimmedString(payload.whatsapp) || undefined,
-      has_digital_certificate: asOptionalBoolean(payload.has_digital_certificate),
-      certificate_type: asTrimmedString(payload.certificate_type) || undefined,
-      certificate_expires_on: asDateString(payload.certificate_expires_on),
-      status: asTrimmedString(payload.status) || undefined,
-      notes: asTrimmedString(payload.notes) || undefined,
-      gov_password: asTrimmedString(payload.gov_password) || undefined,
       sector: asTrimmedString(payload.sector) || undefined,
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
@@ -359,35 +291,13 @@ Deno.serve(async (req) => {
     const { data: createdClient, error: createClientError } = await supabaseAdmin
       .from("clients")
       .insert({
-        code: parsedPayload.code || null,
         name: parsedPayload.name,
-        trade_name: parsedPayload.trade_name || null,
         cnpj: parsedPayload.cnpj || null,
-        state_registration: parsedPayload.state_registration || null,
-        municipal_registration: parsedPayload.municipal_registration || null,
-        cnae_main: parsedPayload.cnae_main || null,
         regime: parsedPayload.regime || "Simples Nacional",
-        simples_annex: parsedPayload.simples_annex || null,
-        opened_at: parsedPayload.opened_at || null,
-        cnpj_status: parsedPayload.cnpj_status || null,
-        city: parsedPayload.city || null,
-        state: parsedPayload.state || null,
-        address: parsedPayload.address || null,
-        ddd: parsedPayload.ddd || null,
         sector: parsedPayload.sector || "Contabil",
-        status: parsedPayload.status || "Ativo",
         contact: parsedPayload.contact || null,
         email: parsedPayload.email,
         phone: parsedPayload.phone || null,
-        whatsapp: parsedPayload.whatsapp || null,
-        has_digital_certificate:
-          typeof parsedPayload.has_digital_certificate === "boolean"
-            ? parsedPayload.has_digital_certificate
-            : null,
-        certificate_type: parsedPayload.certificate_type || null,
-        certificate_expires_on: parsedPayload.certificate_expires_on || null,
-        notes: parsedPayload.notes || null,
-        gov_password: parsedPayload.gov_password || null,
         portal_user_id: portalUserId,
         created_by: callerUser.id,
       })

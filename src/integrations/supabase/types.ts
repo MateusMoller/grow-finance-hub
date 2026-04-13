@@ -352,105 +352,57 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
-          certificate_expires_on: string | null
-          certificate_type: string | null
-          city: string | null
-          cnae_main: string | null
           cnpj: string | null
-          cnpj_status: string | null
-          code: string | null
           contact: string | null
           created_at: string
           created_by: string | null
-          ddd: string | null
           email: string | null
-          gov_password: string | null
-          has_digital_certificate: boolean | null
           id: string
-          municipal_registration: string | null
           name: string
           notes: string | null
-          opened_at: string | null
           phone: string | null
           portal_cashflow_enabled: boolean
           portal_user_id: string | null
           regime: string | null
           sector: string | null
-          simples_annex: string | null
-          state: string | null
-          state_registration: string | null
           status: string | null
-          trade_name: string | null
           updated_at: string
-          whatsapp: string | null
         }
         Insert: {
           address?: string | null
-          certificate_expires_on?: string | null
-          certificate_type?: string | null
-          city?: string | null
-          cnae_main?: string | null
           cnpj?: string | null
-          cnpj_status?: string | null
-          code?: string | null
           contact?: string | null
           created_at?: string
           created_by?: string | null
-          ddd?: string | null
           email?: string | null
-          gov_password?: string | null
-          has_digital_certificate?: boolean | null
           id?: string
-          municipal_registration?: string | null
           name: string
           notes?: string | null
-          opened_at?: string | null
           phone?: string | null
           portal_cashflow_enabled?: boolean
           portal_user_id?: string | null
           regime?: string | null
           sector?: string | null
-          simples_annex?: string | null
-          state?: string | null
-          state_registration?: string | null
           status?: string | null
-          trade_name?: string | null
           updated_at?: string
-          whatsapp?: string | null
         }
         Update: {
           address?: string | null
-          certificate_expires_on?: string | null
-          certificate_type?: string | null
-          city?: string | null
-          cnae_main?: string | null
           cnpj?: string | null
-          cnpj_status?: string | null
-          code?: string | null
           contact?: string | null
           created_at?: string
           created_by?: string | null
-          ddd?: string | null
           email?: string | null
-          gov_password?: string | null
-          has_digital_certificate?: boolean | null
           id?: string
-          municipal_registration?: string | null
           name?: string
           notes?: string | null
-          opened_at?: string | null
           phone?: string | null
           portal_cashflow_enabled?: boolean
           portal_user_id?: string | null
           regime?: string | null
           sector?: string | null
-          simples_annex?: string | null
-          state?: string | null
-          state_registration?: string | null
           status?: string | null
-          trade_name?: string | null
           updated_at?: string
-          whatsapp?: string | null
         }
         Relationships: [
           {
