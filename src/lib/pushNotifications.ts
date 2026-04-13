@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { isFunctionalPwaRoute, normalizePwaBasePath, syncPwaModeForPath } from "@/lib/pwaScope";
+import { isFunctionalPwaRoute, normalizePwaAppScopePath, normalizePwaBasePath, syncPwaModeForPath } from "@/lib/pwaScope";
 
 const WEB_PUSH_PUBLIC_KEY = (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || "").trim();
 
@@ -45,7 +45,7 @@ const ensureServiceWorkerRegistration = async () => {
 
   await syncPwaModeForPath(window.location.pathname);
 
-  const scope = normalizePwaBasePath();
+  const scope = normalizePwaAppScopePath();
   let registration = await navigator.serviceWorker.getRegistration(scope);
 
   if (!registration) {
@@ -187,7 +187,7 @@ export const sendPushTestToCurrentUser = async (userId: string) => {
       target_user_id: userId,
       title: "Push de teste",
       body: "As notificacoes push do Grow Finance Hub estao ativas neste dispositivo.",
-      url: "./app/notificacoes",
+      url: "/app/notificacoes",
       tag: `grow-push-test-${Date.now()}`,
     },
   });

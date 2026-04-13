@@ -1,4 +1,4 @@
-const FUNCTIONAL_PWA_PATH_PREFIXES = ["/login", "/portal", "/app"] as const;
+const FUNCTIONAL_PWA_PATH_PREFIXES = ["/app"] as const;
 const MANIFEST_LINK_ID = "grow-functional-pwa-manifest";
 
 export const normalizePwaBasePath = () => {
@@ -6,6 +6,8 @@ export const normalizePwaBasePath = () => {
   if (!base) return "/";
   return base.endsWith("/") ? base : `${base}/`;
 };
+
+export const normalizePwaAppScopePath = () => `${normalizePwaBasePath()}app/`;
 
 const toScopeRelativePath = (pathname: string) => {
   const basePath = new URL(normalizePwaBasePath(), window.location.origin).pathname;
@@ -62,12 +64,13 @@ const isGrowServiceWorkerRegistration = (registration: ServiceWorkerRegistration
 
 const ensureGrowServiceWorker = async () => {
   if (!("serviceWorker" in navigator)) return;
-  const scopeUrl = new URL(normalizePwaBasePath(), window.location.origin).href;
+  const scopePath = normalizePwaAppScopePath();
+  const scopeUrl = new URL(scopePath, window.location.origin).href;
   let registration = await navigator.serviceWorker.getRegistration(scopeUrl);
 
   if (!registration || !isGrowServiceWorkerRegistration(registration)) {
     registration = await navigator.serviceWorker.register(`${normalizePwaBasePath()}sw.js`, {
-      scope: normalizePwaBasePath(),
+      scope: scopePath,
     });
   }
 

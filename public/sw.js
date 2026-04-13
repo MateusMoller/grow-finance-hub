@@ -1,5 +1,4 @@
 const CACHE_NAME = "grow-finance-hub-cache-v2";
-const FUNCTIONAL_PATH_PREFIXES = ["/login", "/portal", "/app"];
 const APP_SHELL = [
   "./index.html",
   "./manifest.webmanifest",
@@ -9,24 +8,18 @@ const APP_SHELL = [
 ];
 
 const normalizePath = (value) => (value.startsWith("/") ? value : `/${value}`);
-
-const toScopeRelativePath = (pathname) => {
+const getNormalizedScopePath = () => {
   const scopePath = new URL(self.registration.scope).pathname;
-  const normalizedScopePath = scopePath.endsWith("/") ? scopePath : `${scopePath}/`;
-  const normalizedPathname = normalizePath(pathname);
-
-  if (normalizedScopePath === "/") return normalizedPathname;
-  if (!normalizedPathname.startsWith(normalizedScopePath)) return normalizedPathname;
-
-  const suffix = normalizedPathname.slice(normalizedScopePath.length - 1);
-  return normalizePath(suffix);
+  return scopePath.endsWith("/") ? scopePath : `${scopePath}/`;
 };
 
-const isFunctionalPath = (pathname) => {
-  const relativePath = toScopeRelativePath(pathname);
-  return FUNCTIONAL_PATH_PREFIXES.some(
-    (prefix) => relativePath === prefix || relativePath.startsWith(`${prefix}/`),
-  );
+const isInServiceWorkerScope = (pathname) => {
+  const normalizedScopePath = getNormalizedScopePath();
+  const scopePathWithoutTrailingSlash = normalizedScopePath.slice(0, -1);
+  const normalizedPathname = normalizePath(pathname);
+
+  if (normalizedScopePath === "/") return true;
+  return normalizedPathname === scopePathWithoutTrailingSlash || normalizedPathname.startsWith(normalizedScopePath);
 };
 
 self.addEventListener("install", (event) => {
@@ -56,7 +49,7 @@ self.addEventListener("fetch", (event) => {
   if (requestUrl.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    if (!isFunctionalPath(requestUrl.pathname)) return;
+    if (!isInServiceWorkerScope(requestUrl.pathname)) return;
 
     event.respondWith(
       fetch(request)
@@ -102,7 +95,7 @@ self.addEventListener("push", (event) => {
 
   const title = payload?.title || "Grow Finance Hub";
   const body = payload?.body || "Voce recebeu uma nova notificacao.";
-  const targetUrl = payload?.url || "./app/notificacoes";
+  const targetUrl = payload?.url || "/app/notificacoes";
 
   const options = {
     body,
@@ -124,7 +117,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlFromPayload = event.notification?.data?.url || "./app/notificacoes";
+  const urlFromPayload = event.notification?.data?.url || "/app/notificacoes";
   const targetUrl = new URL(urlFromPayload, self.registration.scope).href;
 
   event.waitUntil(

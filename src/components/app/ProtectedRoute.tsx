@@ -16,7 +16,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const loginPath = location.pathname.startsWith("/app") ? "/app/login" : "/login";
+    return <Navigate to={loginPath} replace />;
   }
 
   const isDepartmentRole = role === "departamento_pessoal" || role === "fiscal" || role === "contabil";

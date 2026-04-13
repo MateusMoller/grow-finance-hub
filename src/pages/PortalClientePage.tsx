@@ -9,7 +9,6 @@ import {
   Download,
   FileText,
   Filter,
-  FolderOpen,
   Loader2,
   MessageSquare,
   Paperclip,
@@ -28,7 +27,6 @@ import {
   documentCategories,
   parsePortalFields,
   portalRequestTemplates,
-  recommendedMonthlyUploads,
   sectorOptions,
   supportSectors,
   type NewPortalCashflowEntryPayload,
@@ -144,11 +142,6 @@ export default function PortalClientePage() {
 
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("all");
-  const [documentCategoryFilter, setDocumentCategoryFilter] = useState<string>("all");
-  const [documentMonthFilter, setDocumentMonthFilter] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
 
   const [newRequestOpen, setNewRequestOpen] = useState(false);
   const [newRequestType, setNewRequestType] = useState(portalRequestTemplates[0].key);
@@ -184,7 +177,7 @@ export default function PortalClientePage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/login");
+      navigate("/app/login");
     }
   }, [authLoading, user, navigate]);
 
@@ -608,40 +601,6 @@ export default function PortalClientePage() {
       );
     });
   }, [requestSearch, requestStatusFilter, requests]);
-
-  const filteredDocuments = useMemo(
-    () =>
-      documents.filter((document) => {
-        if (documentCategoryFilter !== "all" && document.category !== documentCategoryFilter) return false;
-        if (documentMonthFilter && getMonthKey(document.created_at) !== documentMonthFilter) return false;
-        return true;
-      }),
-    [documentCategoryFilter, documentMonthFilter, documents]
-  );
-
-  const currentMonthUploads = useMemo(() => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return documents.filter((document) => getMonthKey(document.created_at) === currentMonth);
-  }, [documents]);
-
-  const monthlyChecklist = useMemo(() => {
-    const hasByKeyword = (keywords: string[]) =>
-      currentMonthUploads.some((document) => {
-        const source = `${document.file_name.toLowerCase()} ${document.category.toLowerCase()}`;
-        return keywords.some((keyword) => source.includes(keyword));
-      });
-
-    return recommendedMonthlyUploads.map((item) => {
-      let done = false;
-      if (item.id === "extratos") done = hasByKeyword(["extrato", "banco"]);
-      if (item.id === "notas") done = hasByKeyword(["xml", "nota", "nfe", "nf-e"]);
-      if (item.id === "folha") done = hasByKeyword(["folha", "recibo", "holerite"]);
-      if (item.id === "contratos") done = hasByKeyword(["contrato"]);
-      if (item.id === "cadastro") done = hasByKeyword(["cadastro", "cnpj", "social"]);
-      return { ...item, done };
-    });
-  }, [currentMonthUploads]);
 
   const selectedRequestDocuments = selectedRequest ? documentsByRequest.get(selectedRequest.id) || [] : [];
 
@@ -1090,12 +1049,12 @@ export default function PortalClientePage() {
                 variant="outline"
                 onClick={() => {
                   void signOut();
-                  navigate("/login");
+                  navigate("/app/login");
                 }}
               >
                 Sair
               </Button>
-              <Button onClick={() => navigate("/login")}>Voltar ao login</Button>
+              <Button onClick={() => navigate("/app/login")}>Voltar ao login</Button>
             </div>
           </CardContent>
         </Card>
@@ -1124,7 +1083,7 @@ export default function PortalClientePage() {
                 size="sm"
                 onClick={() => {
                   void signOut();
-                  navigate("/login");
+                  navigate("/app/login");
                 }}
               >
                 Sair
@@ -1278,135 +1237,6 @@ export default function PortalClientePage() {
               </div>
             )}
           </TabsContent>
-          <TabsContent value="documents" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Documentos</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Envie arquivos, acompanhe o processamento e baixe sempre que precisar.
-                </p>
-              </CardHeader>
-              <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Select value={documentCategoryFilter} onValueChange={setDocumentCategoryFilter}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as categorias</SelectItem>
-                    {documentCategories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  className="bg-background"
-                  type="month"
-                  value={documentMonthFilter}
-                  onChange={(event) => setDocumentMonthFilter(event.target.value)}
-                />
-                <Button variant="outline" className="gap-2" onClick={() => setUploadDialogOpen(true)}>
-                  <Upload className="h-4 w-4" /> Novo envio
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Envios recomendados do mês</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {monthlyChecklist.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`rounded-lg border px-3 py-2 text-sm flex items-center justify-between ${item.done ? "border-primary/40 bg-primary/5" : "bg-card"}`}
-                  >
-                    <span>{item.label}</span>
-                    {item.done ? (
-                      <Badge variant="outline" className="text-[10px] text-primary border-primary/40">Enviado</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px]">Pendente</Badge>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {filteredDocuments.length === 0 ? (
-              <Card>
-                <CardContent className="p-10 text-center">
-                  <FolderOpen className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                  <p className="font-medium">Nenhum documento encontrado para os filtros atuais.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-0 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="text-left p-4">Arquivo</th>
-                        <th className="text-left p-4 hidden md:table-cell">Categoria</th>
-                        <th className="text-left p-4 hidden md:table-cell">Data</th>
-                        <th className="text-left p-4">Status</th>
-                        <th className="text-right p-4">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {filteredDocuments.map((document) => {
-                        const canDelete = !document.processed_at;
-                        return (
-                          <tr key={document.id} className="hover:bg-muted/20">
-                            <td className="p-4">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate max-w-[240px]">{document.file_name}</p>
-                                  {document.request_id && (
-                                    <Badge variant="outline" className="text-[10px] mt-1">Vinculado a solicitação</Badge>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="p-4 hidden md:table-cell text-muted-foreground">{document.category}</td>
-                            <td className="p-4 hidden md:table-cell text-muted-foreground">
-                              {new Date(document.created_at).toLocaleDateString("pt-BR")}
-                            </td>
-                            <td className="p-4">
-                              {document.processed_at ? (
-                                <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">Processado</Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-[10px]">Recebido</Badge>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void handleDownloadDocument(document)}>
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-destructive"
-                                  disabled={!canDelete}
-                                  title={canDelete ? "Excluir arquivo" : "Arquivo já processado e bloqueado para exclusão"}
-                                  onClick={() => void handleDeleteDocument(document)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
           <TabsContent value="cashflow" className="space-y-4">
             <ClientPortalCashflow
               enabled={Boolean(clientProfile?.portal_cashflow_enabled)}
@@ -1572,11 +1402,11 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">2. Envie documentos</p>
                       <p className="text-sm text-muted-foreground">
-                        Na aba de documentos, faça upload dos arquivos do mês e acompanhe o status de processamento.
+                        Use o botao de envio para anexar os arquivos do mes de forma rapida e organizada.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("documents")}>
-                      Ir para documentos
+                    <Button type="button" variant="outline" size="sm" onClick={() => setUploadDialogOpen(true)}>
+                      Enviar documentos
                     </Button>
                   </div>
                 </div>

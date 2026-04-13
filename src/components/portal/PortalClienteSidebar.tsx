@@ -2,7 +2,6 @@ import {
   BookOpen,
   ClipboardList,
   FileText,
-  FolderOpen,
   Headset,
   LayoutDashboard,
   ListChecks,
@@ -26,7 +25,6 @@ export type PortalTab =
   | "overview"
   | "pending"
   | "requests"
-  | "documents"
   | "cashflow"
   | "forms"
   | "manual"
@@ -61,7 +59,6 @@ const menuSections: PortalMenuSection[] = [
     label: "Operação",
     items: [
       { key: "requests", title: "Solicitações", icon: ClipboardList },
-      { key: "documents", title: "Documentos", icon: FolderOpen },
       { key: "forms", title: "Formulários", icon: FileText },
     ],
   },
@@ -125,3 +122,4 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
     </Sidebar>
   );
 }
+

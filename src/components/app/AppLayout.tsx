@@ -216,7 +216,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/login");
+    navigate("/app/login");
   };
 
   const openLink = (url: string) => {
