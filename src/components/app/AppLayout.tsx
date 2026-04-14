@@ -73,6 +73,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatorios", url: "/app/relatorios" },
+    { title: "Acessorias", url: "/app/acessorias" },
     { title: "Notificacoes", url: "/app/notificacoes" },
     { title: "Usuarios", url: "/app/usuarios" },
     { title: "Sugestoes", url: "/app/sugestoes" },
@@ -87,14 +88,15 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     return withoutUsers.filter((item) =>
       item.url === "/app/kanban" ||
       item.url === "/app/calendario" ||
-        item.url === "/app/tarefas" ||
-        item.url === "/app/clientes" ||
-        item.url === "/app/solicitacoes" ||
-        item.url === "/app/formularios" ||
-        item.url === "/app/chat-interno" ||
-        item.url === "/app/relatorios" ||
-        item.url === "/app/sugestoes" ||
-        item.url === "/app/manual",
+      item.url === "/app/tarefas" ||
+      item.url === "/app/clientes" ||
+      item.url === "/app/solicitacoes" ||
+      item.url === "/app/formularios" ||
+      item.url === "/app/chat-interno" ||
+      item.url === "/app/relatorios" ||
+      item.url === "/app/acessorias" ||
+      item.url === "/app/sugestoes" ||
+      item.url === "/app/manual",
     );
   }
 
@@ -103,17 +105,17 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
   return base.filter((item) =>
     item.url === "/app/kanban" ||
     item.url === "/app/calendario" ||
-      item.url === "/app/tarefas" ||
-      item.url === "/app/clientes" ||
-      item.url === "/app/solicitacoes" ||
-      item.url === "/app/formularios" ||
-      item.url === "/app/chat-interno" ||
-      item.url === "/app/relatorios" ||
-      item.url === "/app/sugestoes" ||
-      item.url === "/app/manual",
+    item.url === "/app/tarefas" ||
+    item.url === "/app/clientes" ||
+    item.url === "/app/solicitacoes" ||
+    item.url === "/app/formularios" ||
+    item.url === "/app/chat-interno" ||
+    item.url === "/app/relatorios" ||
+    item.url === "/app/acessorias" ||
+    item.url === "/app/sugestoes" ||
+    item.url === "/app/manual",
   );
 };
-
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, role, roles, signOut } = useAuth();
   const {
@@ -256,35 +258,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     }
                   }}
                 />
-              </div>
-              <div className="hidden lg:flex items-center gap-2">
-                <select
-                  className="h-9 min-w-[220px] rounded-md border bg-background px-3 text-sm outline-none"
-                  value={selectedCompany || ""}
-                  onChange={(event) => setSelectedCompany(event.target.value || null)}
-                >
-                  <option value="">Empresa: Total</option>
-                  {companyOptions.map((company) => (
-                    <option key={company} value={company}>
-                      {company}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="h-9 min-w-[190px] rounded-md border bg-background px-3 text-sm outline-none"
-                  value={selectedCompetence || ""}
-                  onChange={(event) => setSelectedCompetence(event.target.value || null)}
-                >
-                  <option value="">Competencia: Total</option>
-                  {competenceOptions.map((competence) => (
-                    <option key={competence} value={competence}>
-                      {formatCompetence(competence)}
-                    </option>
-                  ))}
-                </select>
-                {loadingOptions && (
-                  <span className="text-xs text-muted-foreground">Atualizando filtros...</span>
-                )}
               </div>
             </div>
 

@@ -22,6 +22,7 @@ type ClientRow = {
   name: string | null;
   contact: string | null;
   email: string | null;
+  status: string | null;
   portal_user_id: string | null;
   created_at?: string | null;
 };
@@ -52,6 +53,10 @@ function extractBearerToken(req: Request): string | null {
   if (!authorization.toLowerCase().startsWith("bearer ")) return null;
   const token = authorization.slice(7).trim();
   return token.length > 0 ? token : null;
+}
+
+function isInactiveClientStatus(status: unknown): boolean {
+  return String(status || "").trim().toLowerCase() === "inativo";
 }
 
 Deno.serve(async (req) => {
@@ -106,7 +111,7 @@ Deno.serve(async (req) => {
 
     const { data: existingClientRows, error: existingClientError } = await supabaseAdmin
       .from("clients")
-      .select("id, name, contact, email, portal_user_id, created_at")
+      .select("id, name, contact, email, status, portal_user_id, created_at")
       .eq("portal_user_id", callerUser.id)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -114,6 +119,13 @@ Deno.serve(async (req) => {
     if (existingClientError) throw existingClientError;
     const existingClient = ((existingClientRows || [])[0] || null) as ClientRow | null;
     if (existingClient) {
+      if (isInactiveClientStatus(existingClient.status)) {
+        return jsonResponse(
+          { error: "Cliente inativo. O acesso ao portal esta bloqueado." },
+          403,
+        );
+      }
+
       await supabaseAdmin
         .from("user_roles")
         .upsert({ user_id: callerUser.id, role: "client" }, { onConflict: "user_id,role" });
@@ -127,13 +139,20 @@ Deno.serve(async (req) => {
 
     const { data: emailClientRows, error: emailClientError } = await supabaseAdmin
       .from("clients")
-      .select("id, name, contact, email, portal_user_id, created_at")
+      .select("id, name, contact, email, status, portal_user_id, created_at")
       .ilike("email", normalizedEmail)
       .order("created_at", { ascending: false })
       .limit(1);
 
     if (emailClientError) throw emailClientError;
     const emailClient = ((emailClientRows || [])[0] || null) as ClientRow | null;
+
+    if (emailClient && isInactiveClientStatus(emailClient.status)) {
+      return jsonResponse(
+        { error: "Cliente inativo. O acesso ao portal esta bloqueado." },
+        403,
+      );
+    }
 
     if (emailClient && emailClient.portal_user_id && emailClient.portal_user_id !== callerUser.id) {
       return jsonResponse(

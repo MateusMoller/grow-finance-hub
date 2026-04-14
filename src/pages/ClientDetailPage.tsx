@@ -852,6 +852,8 @@ const portalTaskTypeLabel: Record<PortalTaskType, string> = {
 };
 
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
+const isInactiveClientStatus = (status: string | null | undefined) =>
+  String(status || "").trim().toLowerCase() === "inativo";
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -873,7 +875,6 @@ export default function ClientDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadCategory, setUploadCategory] = useState<ClientCategoryKey>("contabilidade");
   const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
-  const [checkingPortalAccess, setCheckingPortalAccess] = useState(false);
   const [savingPortalAccess, setSavingPortalAccess] = useState(false);
   const [searchingCep, setSearchingCep] = useState(false);
   const [period, setPeriod] = useState(() => {
@@ -891,6 +892,7 @@ export default function ClientDetailPage() {
   const [updatingPortalTaskId, setUpdatingPortalTaskId] = useState<string | null>(null);
   const [deletingPortalTaskId, setDeletingPortalTaskId] = useState<string | null>(null);
   const canManageCashflowAccess = role === "admin";
+  const clientIsInactive = isInactiveClientStatus(clientForm.status);
 
   const loadClientData = useCallback(async () => {
     if (!id) return;
@@ -1192,6 +1194,8 @@ export default function ClientDetailPage() {
     );
 
     const normalizedAddress = buildAddressFromCadastralValues(generalValues);
+    const clientWillBeInactive = isInactiveClientStatus(clientForm.status);
+    const nextPortalCashflowEnabled = clientWillBeInactive ? false : Boolean(clientForm.portal_cashflow_enabled);
 
     setSaving(true);
 
@@ -1207,7 +1211,8 @@ export default function ClientDetailPage() {
         phone: clientForm.phone,
         address: normalizedAddress || clientForm.address || null,
         notes: clientForm.notes,
-        portal_cashflow_enabled: Boolean(clientForm.portal_cashflow_enabled),
+        portal_cashflow_enabled: nextPortalCashflowEnabled,
+        ...(clientWillBeInactive ? { portal_user_id: null } : {}),
       }).eq("id", id);
 
       if (error) {
@@ -1249,16 +1254,23 @@ export default function ClientDetailPage() {
 
       toast.success("Dados do cliente salvos");
 
+      if (clientWillBeInactive) {
+        setPortalAccessEnabled(false);
+      }
+
       setClient({
         ...client!,
         ...clientForm,
         email: normalizedEmail || null,
         address: normalizedAddress || clientForm.address || null,
+        portal_cashflow_enabled: nextPortalCashflowEnabled,
+        ...(clientWillBeInactive ? { portal_user_id: null } : {}),
       } as ClientRecord);
       setClientForm((prev) => ({
         ...prev,
         email: normalizedEmail || null,
         address: normalizedAddress || prev.address || null,
+        portal_cashflow_enabled: nextPortalCashflowEnabled,
       }));
       setDataEntries((prev) => {
         const next = { ...prev };
@@ -1272,60 +1284,14 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleValidateAndAllowPortalAccess = async () => {
-    if (!canManageCashflowAccess) {
-      toast.error("Apenas usuario admin pode validar este acesso.");
-      return;
-    }
-
-    if (!client?.portal_user_id) {
-      toast.error("Cliente sem usuario do portal vinculado. Cadastre pelo fluxo de cliente com acesso ao portal.");
-      return;
-    }
-
-    setCheckingPortalAccess(true);
-    const { data: existingRole, error: existingRoleError } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("user_id", client.portal_user_id)
-      .eq("role", "client")
-      .maybeSingle();
-
-    if (existingRoleError) {
-      setCheckingPortalAccess(false);
-      toast.error("Nao foi possivel validar a permissao atual do portal.");
-      return;
-    }
-
-    if (existingRole) {
-      setPortalAccessEnabled(true);
-      setCheckingPortalAccess(false);
-      toast.success("Acesso ao portal ja estava liberado.");
-      return;
-    }
-
-    const { error: upsertError } = await supabase.from("user_roles").upsert(
-      {
-        user_id: client.portal_user_id,
-        role: "client" as Database["public"]["Enums"]["app_role"],
-      },
-      { onConflict: "user_id,role" },
-    );
-
-    setCheckingPortalAccess(false);
-
-    if (upsertError) {
-      toast.error("Nao foi possivel liberar o acesso ao portal.");
-      return;
-    }
-
-    setPortalAccessEnabled(true);
-    toast.success("Acesso ao portal validado e liberado.");
-  };
-
   const handlePortalAccessChange = async (checked: boolean) => {
     if (!canManageCashflowAccess) {
       toast.error("Apenas usuario admin pode alterar este acesso.");
+      return;
+    }
+
+    if (checked && clientIsInactive) {
+      toast.error("Clientes inativos nao podem ter acesso ao portal.");
       return;
     }
 
@@ -2054,7 +2020,7 @@ export default function ClientDetailPage() {
                     <div>
                       <p className="text-sm font-medium">Acesso ao portal do cliente</p>
                       <p className="text-xs text-muted-foreground">
-                        Valide o vinculo e libere o login do cliente no portal.
+                        Gerencie a liberacao de login do cliente no portal.
                       </p>
                       <p className="text-xs mt-1">
                         Status atual:{" "}
@@ -2065,22 +2031,12 @@ export default function ClientDetailPage() {
                     </div>
                     <Switch
                       checked={portalAccessEnabled}
-                      disabled={!canManageCashflowAccess || savingPortalAccess}
+                      disabled={!canManageCashflowAccess || savingPortalAccess || clientIsInactive}
                       onCheckedChange={(checked) => void handlePortalAccessChange(checked)}
                       aria-label="Liberar acesso ao portal do cliente"
                     />
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleValidateAndAllowPortalAccess()}
-                      disabled={!canManageCashflowAccess || checkingPortalAccess || savingPortalAccess}
-                    >
-                      {checkingPortalAccess ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                      Validar e permitir acesso
-                    </Button>
                     {client?.portal_user_id ? (
                       <p className="text-xs text-muted-foreground">
                         Usuario do portal vinculado: {client.portal_user_id.slice(0, 8)}...
@@ -2101,12 +2057,17 @@ export default function ClientDetailPage() {
                       </p>
                     </div>
                     <Switch
-                      checked={Boolean(clientForm.portal_cashflow_enabled)}
-                      disabled={!canManageCashflowAccess}
+                      checked={clientIsInactive ? false : Boolean(clientForm.portal_cashflow_enabled)}
+                      disabled={!canManageCashflowAccess || clientIsInactive}
                       onCheckedChange={(checked) => setClientForm((prev) => ({ ...prev, portal_cashflow_enabled: checked }))}
                       aria-label="Liberar controle de caixa no portal"
                     />
                   </div>
+                  {clientIsInactive && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Cliente inativo: acesso ao portal e fluxo de caixa ficam bloqueados automaticamente.
+                    </p>
+                  )}
                   {!canManageCashflowAccess && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       Apenas usuario admin pode alterar esta liberacao.

@@ -5,6 +5,7 @@ import {
   KanbanSquare,
   CalendarDays,
   BarChart3,
+  FileSpreadsheet,
   Bell,
   Settings,
   TrendingUp,
@@ -47,6 +48,7 @@ const operationalItems = [
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "Acessorias", url: "/app/acessorias", icon: FileSpreadsheet },
 ];
 
 const systemItems = [
@@ -122,7 +124,8 @@ export function AppSidebar() {
           item.url === "/app/solicitacoes" ||
           item.url === "/app/formularios" ||
           item.url === "/app/chat-interno" ||
-          item.url === "/app/relatorios",
+          item.url === "/app/relatorios" ||
+          item.url === "/app/acessorias",
       )
     : isAdmin
       ? operationalItems

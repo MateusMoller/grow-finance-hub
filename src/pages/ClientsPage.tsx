@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Filter, Building2, Loader2, ShieldCheck, KeyRound } from "lucide-react";
+import { Search, Plus, Filter, Building2, Loader2, FolderClosed, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -40,7 +40,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [resettingPortalPasswords, setResettingPortalPasswords] = useState(false);
+  const [inactiveFolderOpen, setInactiveFolderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -126,96 +126,15 @@ export default function ClientsPage() {
     }
   };
 
-  const syncPortalPermissionsForLoadedClients = async () => {
-    if (!canManagePortalPermissions) return;
-
-    const userIds = clients
-      .map((client) => client.portal_user_id)
-      .filter((userId): userId is string => Boolean(userId));
-
-    if (userIds.length === 0) {
-      toast.error("Nenhum cliente com usuario de portal vinculado para sincronizar.");
-      return;
-    }
-
-    await ensurePortalClientRole(userIds, true);
-  };
-
-  const resetAllPortalPasswords = async () => {
-    if (!canManagePortalPermissions) {
-      toast.error("Apenas admin pode redefinir senhas de portal.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "Confirma redefinir a senha de todos os clientes do portal para 123456?",
-    );
-    if (!confirmed) return;
-
-    setResettingPortalPasswords(true);
-
-    const { data, error } = await supabase.functions.invoke("reset-client-portal-passwords", {
-      body: { password: "123456" },
-    });
-
-    setResettingPortalPasswords(false);
-
-    if (error) {
-      if (error instanceof FunctionsHttpError) {
-        try {
-          const errorResponse = await error.context.json();
-          if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
-            toast.error(String(errorResponse.error));
-            return;
-          }
-        } catch {
-          // ignore parsing errors and fallback to generic message
-        }
-      }
-
-      toast.error(error.message || "Nao foi possivel redefinir as senhas do portal.");
-      return;
-    }
-
-    const result = (data || {}) as {
-      passwords_reset?: number;
-      skipped_count?: number;
-      auth_users_created?: number;
-      portal_links_created?: number;
-      skipped_preview?: Array<{ email?: string | null; reason?: string | null }>;
-    };
-
-    const passwordsReset = Number(result.passwords_reset || 0);
-    const skippedCount = Number(result.skipped_count || 0);
-    const usersCreated = Number(result.auth_users_created || 0);
-    const linksCreated = Number(result.portal_links_created || 0);
-    const skippedPreview = Array.isArray(result.skipped_preview) ? result.skipped_preview : [];
-
-    toast.success(
-      `${passwordsReset} senha(s) de portal redefinida(s) para 123456. ` +
-        `${usersCreated} usuario(s) criado(s), ${linksCreated} vinculo(s) criados.`,
-    );
-
-    if (skippedCount > 0) {
-      const previewLabel = skippedPreview
-        .slice(0, 3)
-        .map((item) => `${item.email || "sem_email"} (${item.reason || "motivo_indefinido"})`)
-        .join(" | ");
-
-      toast.warning(
-        `${skippedCount} cliente(s) nao puderam ser processados.` +
-          (previewLabel ? ` Ex.: ${previewLabel}` : ""),
-      );
-    }
-
-    void loadClients();
-  };
-
   const filtered = clients.filter(
     (client) =>
       client.name.toLowerCase().includes(search.toLowerCase()) ||
       (client.cnpj || "").includes(search)
   );
+
+  const isInactiveClient = (client: Client) => String(client.status || "").trim().toLowerCase() === "inativo";
+  const activeClients = filtered.filter((client) => !isInactiveClient(client));
+  const inactiveClients = filtered.filter(isInactiveClient);
 
   const handleCreate = async () => {
     if (!canCreateClients) {
@@ -313,22 +232,6 @@ export default function ClientsPage() {
           </div>
           {canCreateClients && (
             <div className="flex items-center gap-2">
-              {canManagePortalPermissions && (
-                <Button size="sm" variant="outline" onClick={() => void syncPortalPermissionsForLoadedClients()}>
-                  <ShieldCheck className="h-4 w-4 mr-1" /> Sincronizar portal
-                </Button>
-              )}
-              {canManagePortalPermissions && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void resetAllPortalPasswords()}
-                  disabled={resettingPortalPasswords}
-                >
-                  {resettingPortalPasswords ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
-                  Senhas portal 123456
-                </Button>
-              )}
               <Button size="sm" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" /> Novo Cliente
               </Button>
@@ -369,7 +272,7 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filtered.map((client, index) => (
+                  {activeClients.map((client, index) => (
                     <motion.tr
                       key={client.id}
                       initial={{ opacity: 0 }}
@@ -399,7 +302,65 @@ export default function ClientsPage() {
                       </td>
                     </motion.tr>
                   ))}
-                  {filtered.length === 0 && (
+                  {inactiveClients.length > 0 && (
+                    <>
+                      <tr className="bg-muted/30">
+                        <td colSpan={5} className="p-0">
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                            onClick={() => setInactiveFolderOpen((prev) => !prev)}
+                          >
+                            <span className="flex items-center gap-2 text-sm font-medium">
+                              {inactiveFolderOpen ? (
+                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <FolderClosed className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              Empresas Inativas ({inactiveClients.length})
+                            </span>
+                            {inactiveFolderOpen ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                      {inactiveFolderOpen &&
+                        inactiveClients.map((client, index) => (
+                          <motion.tr
+                            key={client.id}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: index * 0.02 }}
+                            className="hover:bg-muted/20 cursor-pointer transition-colors opacity-85"
+                            onClick={() => navigate(`/app/clientes/${client.id}`)}
+                          >
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium">{client.name}</div>
+                                  <div className="text-xs text-muted-foreground">{client.contact}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">{client.cnpj}</td>
+                            <td className="p-4 text-sm hidden lg:table-cell">{client.regime}</td>
+                            <td className="p-4 text-sm hidden lg:table-cell">{client.sector || "Nao informado"}</td>
+                            <td className="p-4">
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[client.status || ""] || "bg-muted"}`}>
+                                {client.status}
+                              </span>
+                            </td>
+                          </motion.tr>
+                        ))}
+                    </>
+                  )}
+                  {activeClients.length === 0 && inactiveClients.length === 0 && (
                     <tr>
                       <td colSpan={5} className="text-center py-12 text-muted-foreground text-sm">
                         Nenhum cliente encontrado
