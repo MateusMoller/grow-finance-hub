@@ -1,65 +1,74 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session, AuthError } from "@supabase/supabase-js";
+import {
+  getPrimaryRole,
+  hasAnyDepartmentRole,
+  hasAnyInternalRole,
+  hasClientRole,
+  normalizeRoles,
+} from "@/lib/accessControl";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
   role: string | null;
+  roles: string[];
+  roleLoaded: boolean;
+  isInternalUser: boolean;
+  isClientUser: boolean;
+  isDepartmentUser: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const rolePriority: string[] = [
-  "admin",
-  "director",
-  "manager",
-  "employee",
-  "commercial",
-  "partner",
-  "departamento_pessoal",
-  "fiscal",
-  "contabil",
-  "client",
-];
-
-const pickPrimaryRole = (roles: string[]) => {
-  if (roles.length === 0) return null;
-  const normalized = roles.map((role) => role.trim().toLowerCase()).filter(Boolean);
-  for (const priorityRole of rolePriority) {
-    if (normalized.includes(priorityRole)) return priorityRole;
-  }
-  return normalized[0] ?? null;
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setTimeout(() => fetchRole(session.user.id), 0);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        setRoleLoaded(false);
+        setTimeout(() => {
+          void fetchRole(nextSession.user.id);
+        }, 0);
       } else {
         setRole(null);
+        setRoles([]);
+        setRoleLoaded(true);
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchRole(session.user.id);
+    const initializeAuth = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+
+      setSession(initialSession);
+      setUser(initialSession?.user ?? null);
+
+      if (initialSession?.user) {
+        setRoleLoaded(false);
+        await fetchRole(initialSession.user.id);
+      } else {
+        setRole(null);
+        setRoles([]);
+        setRoleLoaded(true);
       }
+
       setLoading(false);
-    });
+    };
+
+    void initializeAuth();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -72,14 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       setRole(null);
+      setRoles([]);
+      setRoleLoaded(true);
       return;
     }
 
-    const roles = (data || [])
+    const mappedRoles = (data || [])
       .map((item) => String(item.role || ""))
       .filter((value) => value.length > 0);
+    const normalizedRoles = normalizeRoles(mappedRoles);
 
-    setRole(pickPrimaryRole(roles));
+    setRoles(normalizedRoles);
+    setRole(getPrimaryRole(normalizedRoles));
+    setRoleLoaded(true);
   };
 
   const signIn = async (email: string, password: string) => {
@@ -92,10 +106,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setSession(null);
     setRole(null);
+    setRoles([]);
+    setRoleLoaded(true);
   };
 
+  const isInternalUser = hasAnyInternalRole(roles);
+  const isClientUser = hasClientRole(roles);
+  const isDepartmentUser = hasAnyDepartmentRole(roles);
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, role, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        loading,
+        role,
+        roles,
+        roleLoaded,
+        isInternalUser,
+        isClientUser,
+        isDepartmentUser,
+        signIn,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

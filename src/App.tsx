@@ -98,27 +98,27 @@ const App = () => (
                 <Route path="/app/login" element={<LoginPage />} />
 
                 {/* App Interno - Protegido */}
-                <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-                <Route path="/app/kanban" element={<ProtectedRoute><KanbanPage /></ProtectedRoute>} />
-                <Route path="/app/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
-                <Route path="/app/clientes" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
-                <Route path="/app/clientes/:id" element={<ProtectedRoute><ClientDetailPage /></ProtectedRoute>} />
-                <Route path="/app/tarefas" element={<ProtectedRoute><TarefasPage /></ProtectedRoute>} />
-                <Route path="/app/formularios" element={<ProtectedRoute><FormulariosPage /></ProtectedRoute>} />
-                <Route path="/app/processos" element={<ProtectedRoute><Navigate to="/app" replace /></ProtectedRoute>} />
-                <Route path="/app/documentos" element={<ProtectedRoute><Navigate to="/app" replace /></ProtectedRoute>} />
-                <Route path="/app/crm" element={<ProtectedRoute><CRMPage /></ProtectedRoute>} />
-                <Route path="/app/chat-interno" element={<ProtectedRoute><ChatInternoPage /></ProtectedRoute>} />
-                <Route path="/app/newsletter" element={<ProtectedRoute><NewsletterAdminPage /></ProtectedRoute>} />
-                <Route path="/app/comercial" element={<ProtectedRoute><Navigate to="/app/crm" replace /></ProtectedRoute>} />
-                <Route path="/app/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
-                <Route path="/app/notificacoes" element={<ProtectedRoute><NotificacoesPage /></ProtectedRoute>} />
-                <Route path="/app/configuracoes" element={<ProtectedRoute><ConfiguracoesPage /></ProtectedRoute>} />
-                <Route path="/app/solicitacoes" element={<ProtectedRoute><SolicitacoesPage /></ProtectedRoute>} />
-                <Route path="/app/manual" element={<ProtectedRoute><ManualPage /></ProtectedRoute>} />
-                <Route path="/app/usuarios" element={<ProtectedRoute><UsuariosPage /></ProtectedRoute>} />
-                <Route path="/app/sugestoes" element={<ProtectedRoute><SugestoesPage /></ProtectedRoute>} />
-                <Route path="/app/portal" element={<ProtectedRoute><PortalClientePage /></ProtectedRoute>} />
+                <Route path="/app" element={<ProtectedRoute scope="internal"><DashboardPage /></ProtectedRoute>} />
+                <Route path="/app/kanban" element={<ProtectedRoute scope="internal"><KanbanPage /></ProtectedRoute>} />
+                <Route path="/app/calendario" element={<ProtectedRoute scope="internal"><CalendarioPage /></ProtectedRoute>} />
+                <Route path="/app/clientes" element={<ProtectedRoute scope="internal"><ClientsPage /></ProtectedRoute>} />
+                <Route path="/app/clientes/:id" element={<ProtectedRoute scope="internal"><ClientDetailPage /></ProtectedRoute>} />
+                <Route path="/app/tarefas" element={<ProtectedRoute scope="internal"><TarefasPage /></ProtectedRoute>} />
+                <Route path="/app/formularios" element={<ProtectedRoute scope="internal"><FormulariosPage /></ProtectedRoute>} />
+                <Route path="/app/processos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
+                <Route path="/app/documentos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
+                <Route path="/app/crm" element={<ProtectedRoute scope="internal"><CRMPage /></ProtectedRoute>} />
+                <Route path="/app/chat-interno" element={<ProtectedRoute scope="internal"><ChatInternoPage /></ProtectedRoute>} />
+                <Route path="/app/newsletter" element={<ProtectedRoute scope="internal"><NewsletterAdminPage /></ProtectedRoute>} />
+                <Route path="/app/comercial" element={<ProtectedRoute scope="internal"><Navigate to="/app/crm" replace /></ProtectedRoute>} />
+                <Route path="/app/relatorios" element={<ProtectedRoute scope="internal"><RelatoriosPage /></ProtectedRoute>} />
+                <Route path="/app/notificacoes" element={<ProtectedRoute scope="internal"><NotificacoesPage /></ProtectedRoute>} />
+                <Route path="/app/configuracoes" element={<ProtectedRoute scope="internal"><ConfiguracoesPage /></ProtectedRoute>} />
+                <Route path="/app/solicitacoes" element={<ProtectedRoute scope="internal"><SolicitacoesPage /></ProtectedRoute>} />
+                <Route path="/app/manual" element={<ProtectedRoute scope="internal"><ManualPage /></ProtectedRoute>} />
+                <Route path="/app/usuarios" element={<ProtectedRoute scope="internal"><UsuariosPage /></ProtectedRoute>} />
+                <Route path="/app/sugestoes" element={<ProtectedRoute scope="internal"><SugestoesPage /></ProtectedRoute>} />
+                <Route path="/app/portal" element={<ProtectedRoute scope="portal"><PortalClientePage /></ProtectedRoute>} />
 
                 {/* Portal do Cliente - Protegido */}
                 <Route path="*" element={<NotFound />} />

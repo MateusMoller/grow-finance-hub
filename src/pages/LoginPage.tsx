@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { hasAnyInternalRole, hasPortalAccessRole, normalizeRoles } from "@/lib/accessControl";
 import growIcon from "@/assets/grow-icon.png";
 import financeHeroImage from "@/assets/login-finance-hero.svg";
 import portalHeroImage from "@/assets/login-portal-hero.svg";
@@ -50,7 +52,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [accessProfile, setAccessProfile] = useState<AccessProfile>("internal");
   const [direction, setDirection] = useState(1);
-  const { signIn } = useAuth();
+  const { signIn, signOut } = useAuth();
   const navigate = useNavigate();
 
   const selectedAccess = useMemo(
@@ -73,10 +75,51 @@ export default function LoginPage() {
     setLoading(true);
     const normalizedEmail = email.trim().toLowerCase();
     const { error } = await signIn(normalizedEmail, password);
-    setLoading(false);
 
     if (error) {
+      setLoading(false);
       toast.error("E-mail ou senha invalidos.");
+      return;
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      await signOut();
+      setLoading(false);
+      toast.error("Nao foi possivel validar o acesso apos o login.");
+      return;
+    }
+
+    const { data: roleRows, error: roleError } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userData.user.id);
+
+    setLoading(false);
+    if (roleError) {
+      await signOut();
+      toast.error("Nao foi possivel validar suas permissoes de acesso.");
+      return;
+    }
+
+    const normalizedRoles = normalizeRoles(
+      (roleRows || []).map((row) => String(row.role || "")),
+    );
+    const hasInternalAccess = hasAnyInternalRole(normalizedRoles);
+    const hasPortalAccess = hasPortalAccessRole(normalizedRoles);
+
+    if (selectedAccess.key === "internal" && !hasInternalAccess) {
+      if (!hasPortalAccess) {
+        await signOut();
+      }
+      toast.error("Este usuario nao tem permissao para acessar o App Interno.");
+      navigate(hasPortalAccess ? "/app/portal" : "/app/login", { replace: true });
+      return;
+    }
+
+    if (selectedAccess.key === "client" && !hasPortalAccess) {
+      await signOut();
+      toast.error("Este usuario nao possui permissao para acessar o Portal do Cliente.");
       return;
     }
 
@@ -184,11 +227,11 @@ export default function LoginPage() {
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 250, damping: 30, mass: 0.85 }}
-        className={`relative hidden min-h-screen overflow-hidden lg:block lg:w-[54%] xl:w-[56%] ${
+        className={`relative hidden min-h-screen overflow-hidden bg-slate-900 lg:block lg:w-[54%] xl:w-[56%] ${
           selectedAccess.key === "client" ? "lg:order-1" : "lg:order-2"
         }`}
       >
-        <AnimatePresence mode="wait" initial={false} custom={direction}>
+        <AnimatePresence mode="sync" initial={false} custom={direction}>
           <motion.img
             custom={direction}
             key={selectedAccess.key}
@@ -196,17 +239,11 @@ export default function LoginPage() {
             alt={selectedAccess.heroAlt}
             className="absolute inset-0 h-full w-full object-cover"
             initial={(dir: number) => ({
-              opacity: 0,
               x: dir > 0 ? -120 : 120,
-              scale: 1.04,
-              filter: "blur(8px)",
             })}
-            animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }}
+            animate={{ x: 0 }}
             exit={(dir: number) => ({
-              opacity: 0,
               x: dir > 0 ? 120 : -120,
-              scale: 0.97,
-              filter: "blur(8px)",
             })}
             transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
           />

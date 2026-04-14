@@ -435,6 +435,107 @@ const formatCepValue = (value: string) => {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 };
 
+type ViaCepResponse = {
+  erro?: boolean;
+  cep?: string;
+  logradouro?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+};
+
+type BrasilApiCepResponse = {
+  cep?: string;
+  street?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+};
+
+type CepLookupAddress = {
+  cep: string;
+  street: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+};
+
+const CEP_LOOKUP_TIMEOUT_MS = 8000;
+
+const fetchJsonWithTimeout = async <T,>(url: string, timeoutMs = CEP_LOOKUP_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      return { ok: false as const, status: response.status, data: null as T | null };
+    }
+
+    const data = await response.json() as T;
+    return { ok: true as const, status: response.status, data };
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
+const sanitizeAddressToken = (value: string | undefined) => (value || "").trim();
+
+const parseViaCepAddress = (data: ViaCepResponse, fallbackCep: string): CepLookupAddress | null => {
+  if (data.erro) return null;
+
+  return {
+    cep: (data.cep || fallbackCep).replace(/\D/g, "").slice(0, 8),
+    street: sanitizeAddressToken(data.logradouro),
+    neighborhood: sanitizeAddressToken(data.bairro),
+    city: sanitizeAddressToken(data.localidade),
+    state: sanitizeAddressToken(data.uf).toUpperCase().slice(0, 2),
+  };
+};
+
+const parseBrasilApiAddress = (data: BrasilApiCepResponse, fallbackCep: string): CepLookupAddress => ({
+  cep: (data.cep || fallbackCep).replace(/\D/g, "").slice(0, 8),
+  street: sanitizeAddressToken(data.street),
+  neighborhood: sanitizeAddressToken(data.neighborhood),
+  city: sanitizeAddressToken(data.city),
+  state: sanitizeAddressToken(data.state).toUpperCase().slice(0, 2),
+});
+
+const lookupCepAddress = async (cepDigits: string): Promise<CepLookupAddress> => {
+  const attempts: string[] = [];
+
+  try {
+    const viaCepResult = await fetchJsonWithTimeout<ViaCepResponse>(`https://viacep.com.br/ws/${cepDigits}/json/`);
+    if (viaCepResult.ok && viaCepResult.data) {
+      const parsed = parseViaCepAddress(viaCepResult.data, cepDigits);
+      if (parsed) return parsed;
+      throw new Error("CEP nao encontrado.");
+    }
+    attempts.push(`ViaCEP HTTP ${viaCepResult.status}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "erro desconhecido";
+    attempts.push(`ViaCEP ${message}`);
+  }
+
+  try {
+    const brasilApiResult = await fetchJsonWithTimeout<BrasilApiCepResponse>(`https://brasilapi.com.br/api/cep/v1/${cepDigits}`);
+    if (brasilApiResult.ok && brasilApiResult.data) {
+      return parseBrasilApiAddress(brasilApiResult.data, cepDigits);
+    }
+    if (brasilApiResult.status === 404) {
+      throw new Error("CEP nao encontrado.");
+    }
+    attempts.push(`BrasilAPI HTTP ${brasilApiResult.status}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "erro desconhecido";
+    attempts.push(`BrasilAPI ${message}`);
+  }
+
+  throw new Error(
+    `Nao foi possivel consultar o CEP agora. Falhas: ${attempts.join(" | ")}`,
+  );
+};
+
 const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value: string) => {
   const trimmed = value.trim();
   if (!rule) return trimmed;
@@ -935,35 +1036,18 @@ export default function ClientDetailPage() {
     setSearchingCep(true);
 
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
-      if (!response.ok) {
-        toast.error("Nao foi possivel consultar o CEP.");
-        return;
-      }
+      const address = await lookupCepAddress(cepDigits);
 
-      const data = await response.json() as {
-        erro?: boolean;
-        cep?: string;
-        logradouro?: string;
-        bairro?: string;
-        localidade?: string;
-        uf?: string;
-      };
-
-      if (data.erro) {
-        toast.error("CEP nao encontrado.");
-        return;
-      }
-
-      setGeneralInfoFieldValue("cep", formatCepValue(data.cep || cepDigits));
-      if (data.logradouro) setGeneralInfoFieldValue("endereco", data.logradouro);
-      if (data.bairro) setGeneralInfoFieldValue("bairro", data.bairro);
-      if (data.localidade) setGeneralInfoFieldValue("cidade", data.localidade);
-      if (data.uf) setGeneralInfoFieldValue("estado", data.uf);
+      setGeneralInfoFieldValue("cep", formatCepValue(address.cep || cepDigits));
+      setGeneralInfoFieldValue("endereco", address.street);
+      setGeneralInfoFieldValue("bairro", address.neighborhood);
+      setGeneralInfoFieldValue("cidade", address.city);
+      setGeneralInfoFieldValue("estado", address.state);
 
       toast.success("Endereco preenchido a partir do CEP.");
-    } catch {
-      toast.error("Nao foi possivel consultar o CEP no momento.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nao foi possivel consultar o CEP no momento.";
+      toast.error(message);
     } finally {
       setSearchingCep(false);
     }

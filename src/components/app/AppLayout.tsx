@@ -28,6 +28,7 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
 
 interface QuickLink {
   title: string;
@@ -58,7 +59,9 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickLink[] => {
+const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInternalAccess: boolean): QuickLink[] => {
+  if (!hasInternalAccess) return [];
+
   const base = [
     { title: "Dashboard", url: "/app" },
     { title: "Kanban", url: "/app/kanban" },
@@ -77,7 +80,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
     { title: "Manual de uso", url: "/app/manual" },
   ];
 
-  if (role !== "admin") {
+  if (!isAdmin) {
     const withoutUsers = base.filter((item) => item.url !== "/app/usuarios");
     if (!isDepartmentRole) return withoutUsers;
 
@@ -112,7 +115,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, role: string | null): QuickL
 };
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, role, signOut } = useAuth();
+  const { user, role, roles, signOut } = useAuth();
   const {
     selectedCompany,
     selectedCompetence,
@@ -133,8 +136,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   } = usePriorityNotifications();
 
   const navigate = useNavigate();
-  const isDepartmentRole = role === "departamento_pessoal" || role === "fiscal" || role === "contabil";
-  const quickLinks = useMemo(() => buildQuickLinks(isDepartmentRole, role), [isDepartmentRole, role]);
+  const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
+  const hasInternalAccess = hasAnyInternalRole(normalizedRoleList);
+  const isDepartmentRole = isDepartmentOnlyUser(normalizedRoleList);
+  const isAdmin = normalizedRoleList.includes("admin");
+  const quickLinks = useMemo(
+    () => buildQuickLinks(isDepartmentRole, isAdmin, hasInternalAccess),
+    [isDepartmentRole, isAdmin, hasInternalAccess],
+  );
 
   const [searchTerm, setSearchTerm] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);

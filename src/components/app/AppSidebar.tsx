@@ -30,6 +30,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
@@ -91,9 +92,20 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { role } = useAuth();
+  const { role, roles } = useAuth();
   const collapsed = state === "collapsed";
-  const isDepartmentRole = role === "departamento_pessoal" || role === "fiscal" || role === "contabil";
+  const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
+  const isDepartmentRole = isDepartmentOnlyUser(normalizedRoleList);
+  const hasInternalAccess = hasAnyInternalRole(normalizedRoleList);
+  const isAdmin = normalizedRoleList.includes("admin");
+
+  if (!hasInternalAccess) {
+    return (
+      <Sidebar collapsible="icon">
+        <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]" />
+      </Sidebar>
+    );
+  }
 
   const visibleMainItems = isDepartmentRole
     ? mainItems.filter((item) =>
@@ -112,13 +124,13 @@ export function AppSidebar() {
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios",
       )
-    : role === "admin"
+    : isAdmin
       ? operationalItems
       : operationalItems.filter((item) => item.url !== "/app/newsletter");
 
   const visibleSystemItems = isDepartmentRole
     ? systemItems.filter((item) => item.url === "/app/manual" || item.url === "/app/sugestoes")
-    : role === "admin"
+    : isAdmin
       ? systemItems
       : systemItems.filter((item) => item.url !== "/app/usuarios");
 
