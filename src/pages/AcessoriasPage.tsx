@@ -351,11 +351,19 @@ export default function AcessoriasPage() {
   const handleSyncCompanies = async () => {
     setSyncingCompanies(true);
     try {
-      const result = await invokeAcessorias<{ synced: number; auto_linked: number }>({
+      const result = await invokeAcessorias<{
+        synced: number;
+        auto_linked: number;
+        clients_created: number;
+        clients_updated: number;
+        clients_inactivated: number;
+      }>({
         action: "sync_companies",
+        sync_grow_clients: true,
+        restrict_to_acessorias: true,
       });
       toast.success(
-        `Empresas sincronizadas: ${result.synced || 0}. Vinculos automaticos: ${result.auto_linked || 0}.`,
+        `Empresas sincronizadas: ${result.synced || 0}. Clientes criados: ${result.clients_created || 0}. Atualizados: ${result.clients_updated || 0}. Vinculos automaticos: ${result.auto_linked || 0}. Inativados: ${result.clients_inactivated || 0}.`,
       );
       await Promise.all([loadOverview(), loadObligations()]);
     } catch (error) {

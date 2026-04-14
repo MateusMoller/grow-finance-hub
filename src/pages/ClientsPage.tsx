@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Filter, Building2, Loader2, FolderClosed, FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Filter, Building2, Loader2, FolderClosed, FolderOpen, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -39,6 +39,7 @@ export default function ClientsPage() {
   const { role } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingAcessorias, setSyncingAcessorias] = useState(false);
   const [creating, setCreating] = useState(false);
   const [inactiveFolderOpen, setInactiveFolderOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -136,44 +137,35 @@ export default function ClientsPage() {
   const activeClients = filtered.filter((client) => !isInactiveClient(client));
   const inactiveClients = filtered.filter(isInactiveClient);
 
-  const handleCreate = async () => {
+  const handleSyncFromAcessorias = async () => {
     if (!canCreateClients) {
-      toast.error("Seu perfil nao possui permissao para cadastrar clientes");
+      toast.error("Seu perfil nao possui permissao para sincronizar clientes.");
       return;
     }
 
-    if (!newClient.name.trim()) {
-      toast.error("Nome e obrigatorio");
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      toast.error("Sessao expirada. Entre novamente para sincronizar com o Acessorias.");
       return;
     }
 
-    if (!newClient.email.trim()) {
-      toast.error("Informe o e-mail para criar o acesso do portal");
-      return;
-    }
-
-    const password = newClient.password.trim();
-    const isValidPassword = password.length >= 6;
-    if (!isValidPassword) {
-      toast.error("A senha do portal precisa ter no minimo 6 caracteres");
-      return;
-    }
-
-    setCreating(true);
-    const normalizedEmail = normalizeEmail(newClient.email);
-    const { error } = await supabase.functions.invoke("create-client-with-portal", {
+    setSyncingAcessorias(true);
+    const { data, error } = await supabase.functions.invoke("acessorias-module", {
       body: {
-        name: newClient.name,
-        cnpj: newClient.cnpj || null,
-        regime: newClient.regime,
-        sector: newClient.sector,
-        contact: newClient.contact || null,
-        email: normalizedEmail,
-        phone: newClient.phone || null,
-        password,
+        action: "sync_companies",
+        sync_grow_clients: true,
+        restrict_to_acessorias: true,
+        access_token: session.access_token,
+      },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
       },
     });
-    setCreating(false);
+    setSyncingAcessorias(false);
 
     if (error) {
       if (error instanceof FunctionsHttpError) {
@@ -188,38 +180,25 @@ export default function ClientsPage() {
         }
       }
 
-      toast.error(error.message || "Erro ao cadastrar cliente");
+      toast.error(error.message || "Erro ao sincronizar empresas com o Acessorias");
       return;
     }
 
-    setCreateOpen(false);
-    setNewClient({
-      name: "",
-      cnpj: "",
-      regime: "Simples Nacional",
-      sector: clientSegmentOptions[0],
-      contact: "",
-      email: "",
-      phone: "",
-      password: "",
-    });
-    toast.success("Cliente cadastrado e acesso do portal criado com sucesso");
+    const payload = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+    const synced = Number(payload.synced || 0);
+    const created = Number(payload.clients_created || 0);
+    const updated = Number(payload.clients_updated || 0);
+    const linked = Number(payload.auto_linked || 0);
+    const inactivated = Number(payload.clients_inactivated || 0);
+
+    toast.success(
+      `Sincronizacao concluida: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${inactivated} inativadas.`,
+    );
     void loadClients();
+  };
 
-    if (canManagePortalPermissions) {
-      const { data: createdClient } = await supabase
-        .from("clients")
-        .select("portal_user_id")
-        .eq("email", normalizedEmail)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const portalUserId = createdClient?.portal_user_id || null;
-      if (portalUserId) {
-        await ensurePortalClientRole([portalUserId], false);
-      }
-    }
+  const handleCreate = async () => {
+    toast.error("Cadastro manual desativado. Use a sincronizacao com o Acessorias.");
   };
 
   return (
@@ -232,8 +211,9 @@ export default function ClientsPage() {
           </div>
           {canCreateClients && (
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" /> Novo Cliente
+              <Button size="sm" onClick={() => void handleSyncFromAcessorias()} disabled={syncingAcessorias}>
+                {syncingAcessorias ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                {syncingAcessorias ? "Sincronizando..." : "Sincronizar com Acessorias"}
               </Button>
             </div>
           )}

@@ -121,12 +121,56 @@ function normalizeToken(value: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function normalizeNameKey(value: unknown) {
+  const text = asTrimmedString(value);
+  if (!text) return "";
+  return normalizeToken(text);
+}
+
 function normalizeCnpj(value: unknown): string | null {
   const text = asTrimmedString(value);
   if (!text) return null;
   const digits = text.replace(/\D/g, "");
   if (digits.length !== 14) return null;
   return digits;
+}
+
+function mapCompanyStatusToClientStatus(status: string | null) {
+  const token = normalizeToken(status || "");
+  if (!token) return "Ativo";
+  if (
+    [
+      "inativo",
+      "inactive",
+      "cancelado",
+      "cancelada",
+      "cancelled",
+      "encerrado",
+      "encerrada",
+      "baixado",
+      "baixada",
+      "desativado",
+      "desativada",
+      "suspenso",
+      "suspensa",
+      "disabled",
+    ].includes(token)
+  ) {
+    return "Inativo";
+  }
+  if (["onboarding", "implantacao", "implementacao", "em_implantacao", "em_onboarding"].includes(token)) {
+    return "Onboarding";
+  }
+  return "Ativo";
+}
+
+function chunkArray<T>(items: T[], chunkSize: number) {
+  if (chunkSize <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
 }
 
 function normalizeDate(value: unknown): string | null {
@@ -751,7 +795,12 @@ async function handleSyncCompanies(
   acessoriasApiBaseUrl: string,
   acessoriasApiToken: string,
   callerUserId: string,
+  options: JsonRecord = {},
 ) {
+  const syncGrowClients = options.sync_grow_clients === undefined ? true : asBoolean(options.sync_grow_clients);
+  const restrictToAcessorias =
+    options.restrict_to_acessorias === undefined ? true : asBoolean(options.restrict_to_acessorias);
+
   const pathCandidates = getPathCandidates("ACESSORIAS_COMPANIES_PATHS", defaultCompaniesPathCandidates);
   const result = await requestFirstSuccessful(acessoriasApiBaseUrl, acessoriasApiToken, pathCandidates);
   const companies = parseCompanies(result.payload);
@@ -760,6 +809,13 @@ async function handleSyncCompanies(
     return {
       synced: 0,
       auto_linked: 0,
+      clients_created: 0,
+      clients_updated: 0,
+      clients_inactivated: 0,
+      stale_links_removed: 0,
+      mirrored_clients: 0,
+      sync_grow_clients: syncGrowClients,
+      restrict_to_acessorias: syncGrowClients ? restrictToAcessorias : false,
       message:
         "Nenhuma empresa retornada pela API. Verifique os endpoints em ACESSORIAS_COMPANIES_PATHS.",
       endpoint_used: result.path,
@@ -781,10 +837,22 @@ async function handleSyncCompanies(
     .upsert(upsertRows, { onConflict: "acessorias_company_id" });
   if (upsertError) throw upsertError;
 
+  type ClientSyncRow = {
+    id: string;
+    name: string;
+    cnpj: string | null;
+    status: string | null;
+  };
+
+  type ClientLinkRow = {
+    client_id: string;
+    acessorias_company_id: string;
+  };
+
   const [{ data: clients, error: clientsError }, { data: links, error: linksError }] = await Promise.all([
     supabaseAdmin
       .from("clients")
-      .select("id, cnpj")
+      .select("id, name, cnpj, status")
       .order("created_at"),
     supabaseAdmin
       .from("client_acessorias_links")
@@ -794,14 +862,24 @@ async function handleSyncCompanies(
   if (clientsError) throw clientsError;
   if (linksError) throw linksError;
 
+  const clientsRows = (clients || []) as ClientSyncRow[];
+  const linksRows = (links || []) as ClientLinkRow[];
+
   const companyByCnpj = new Map<string, ParsedCompany>();
   for (const company of companies) {
     if (!company.cnpj || companyByCnpj.has(company.cnpj)) continue;
     companyByCnpj.set(company.cnpj, company);
   }
 
-  const linkedClientIds = new Set((links || []).map((link) => link.client_id));
-  const linkedCompanyIds = new Set((links || []).map((link) => link.acessorias_company_id));
+  const linkedClientIds = new Set(linksRows.map((link) => link.client_id));
+  const linkedCompanyIds = new Set(linksRows.map((link) => link.acessorias_company_id));
+  const linkByCompanyId = new Map<string, string>();
+  const linkByClientId = new Map<string, string>();
+  for (const link of linksRows) {
+    linkByCompanyId.set(link.acessorias_company_id, link.client_id);
+    linkByClientId.set(link.client_id, link.acessorias_company_id);
+  }
+
   const autoLinks: Array<{
     client_id: string;
     acessorias_company_id: string;
@@ -810,24 +888,213 @@ async function handleSyncCompanies(
     created_by: string;
     last_synced_at: string;
   }> = [];
+  const mirroredClientIds = new Set<string>();
+  let clientsCreated = 0;
+  let clientsUpdated = 0;
+  let clientsInactivated = 0;
+  let staleLinksRemoved = 0;
 
-  for (const client of clients || []) {
-    if (linkedClientIds.has(client.id)) continue;
-    const normalizedCnpj = normalizeCnpj(client.cnpj);
-    if (!normalizedCnpj) continue;
-    const matched = companyByCnpj.get(normalizedCnpj);
-    if (!matched) continue;
-    if (linkedCompanyIds.has(matched.acessorias_company_id)) continue;
+  if (syncGrowClients) {
+    const clientsById = new Map<string, ClientSyncRow>();
+    for (const client of clientsRows) {
+      clientsById.set(client.id, client);
+    }
 
-    autoLinks.push({
-      client_id: client.id,
-      acessorias_company_id: matched.acessorias_company_id,
-      match_type: "auto",
-      match_score: 100,
-      created_by: callerUserId,
-      last_synced_at: nowIso,
-    });
-    linkedCompanyIds.add(matched.acessorias_company_id);
+    const availableClientByCnpj = new Map<string, string>();
+    const availableClientByName = new Map<string, string>();
+    for (const client of clientsRows) {
+      if (linkByClientId.has(client.id)) continue;
+
+      const normalizedCnpj = normalizeCnpj(client.cnpj);
+      if (normalizedCnpj && !availableClientByCnpj.has(normalizedCnpj)) {
+        availableClientByCnpj.set(normalizedCnpj, client.id);
+      }
+
+      const nameKey = normalizeNameKey(client.name);
+      if (nameKey && !availableClientByName.has(nameKey)) {
+        availableClientByName.set(nameKey, client.id);
+      }
+    }
+
+    for (const company of companies) {
+      let resolvedClient: ClientSyncRow | null = null;
+      const linkedClientId = linkByCompanyId.get(company.acessorias_company_id) || null;
+
+      if (linkedClientId) {
+        resolvedClient = clientsById.get(linkedClientId) || null;
+      }
+
+      if (!resolvedClient && company.cnpj) {
+        const candidateClientId = availableClientByCnpj.get(company.cnpj);
+        if (candidateClientId) {
+          resolvedClient = clientsById.get(candidateClientId) || null;
+          availableClientByCnpj.delete(company.cnpj);
+          if (resolvedClient) {
+            const candidateNameKey = normalizeNameKey(resolvedClient.name);
+            if (candidateNameKey) availableClientByName.delete(candidateNameKey);
+          }
+        }
+      }
+
+      if (!resolvedClient) {
+        const companyNameKey = normalizeNameKey(company.company_name);
+        const candidateClientId = companyNameKey ? availableClientByName.get(companyNameKey) : null;
+        if (candidateClientId) {
+          resolvedClient = clientsById.get(candidateClientId) || null;
+          availableClientByName.delete(companyNameKey);
+          if (resolvedClient?.cnpj) {
+            const candidateCnpj = normalizeCnpj(resolvedClient.cnpj);
+            if (candidateCnpj) availableClientByCnpj.delete(candidateCnpj);
+          }
+        }
+      }
+
+      const mappedStatus = mapCompanyStatusToClientStatus(company.status);
+
+      if (resolvedClient) {
+        const updates: {
+          name?: string;
+          cnpj?: string | null;
+          status?: string;
+        } = {};
+        const currentName = asTrimmedString(resolvedClient.name) || "";
+        const currentCnpj = normalizeCnpj(resolvedClient.cnpj);
+        const currentStatus = asTrimmedString(resolvedClient.status) || "";
+
+        if (company.company_name && currentName !== company.company_name) {
+          updates.name = company.company_name;
+        }
+        if (company.cnpj && currentCnpj !== company.cnpj) {
+          updates.cnpj = company.cnpj;
+        }
+        if (currentStatus !== mappedStatus) {
+          updates.status = mappedStatus;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const { error: updateClientError } = await supabaseAdmin
+            .from("clients")
+            .update(updates)
+            .eq("id", resolvedClient.id);
+          if (updateClientError) throw updateClientError;
+
+          clientsUpdated += 1;
+          resolvedClient = {
+            ...resolvedClient,
+            ...updates,
+            cnpj: updates.cnpj === undefined ? resolvedClient.cnpj : updates.cnpj,
+            status: updates.status === undefined ? resolvedClient.status : updates.status,
+          };
+          clientsById.set(resolvedClient.id, resolvedClient);
+        }
+      } else {
+        const { data: insertedClient, error: insertClientError } = await supabaseAdmin
+          .from("clients")
+          .insert({
+            name: company.company_name,
+            cnpj: company.cnpj,
+            status: mappedStatus,
+            created_by: callerUserId,
+          })
+          .select("id, name, cnpj, status")
+          .single();
+
+        if (insertClientError) throw insertClientError;
+
+        resolvedClient = insertedClient as ClientSyncRow;
+        clientsById.set(resolvedClient.id, resolvedClient);
+        clientsCreated += 1;
+      }
+
+      mirroredClientIds.add(resolvedClient.id);
+      const existingLinkedClientId = linkByCompanyId.get(company.acessorias_company_id) || null;
+
+      if (!existingLinkedClientId || existingLinkedClientId !== resolvedClient.id) {
+        autoLinks.push({
+          client_id: resolvedClient.id,
+          acessorias_company_id: company.acessorias_company_id,
+          match_type: existingLinkedClientId ? "relinked" : "auto",
+          match_score: 100,
+          created_by: callerUserId,
+          last_synced_at: nowIso,
+        });
+        linkByCompanyId.set(company.acessorias_company_id, resolvedClient.id);
+        linkByClientId.set(resolvedClient.id, company.acessorias_company_id);
+      }
+    }
+
+    const returnedCompanyIds = new Set(companies.map((item) => item.acessorias_company_id));
+    const staleCompanyIds = linksRows
+      .filter((linkRow) => !returnedCompanyIds.has(linkRow.acessorias_company_id))
+      .map((linkRow) => linkRow.acessorias_company_id);
+
+    if (staleCompanyIds.length > 0) {
+      for (const chunk of chunkArray([...new Set(staleCompanyIds)], 200)) {
+        const { data: staleRows, error: staleRowsError } = await supabaseAdmin
+          .from("client_acessorias_links")
+          .select("client_id")
+          .in("acessorias_company_id", chunk);
+        if (staleRowsError) throw staleRowsError;
+
+        staleLinksRemoved += (staleRows || []).length;
+
+        const { error: deleteStaleError } = await supabaseAdmin
+          .from("client_acessorias_links")
+          .delete()
+          .in("acessorias_company_id", chunk);
+        if (deleteStaleError) throw deleteStaleError;
+      }
+    }
+
+    if (restrictToAcessorias) {
+      const clientsToInactivate = new Set(
+        clientsRows
+        .filter((client) => !mirroredClientIds.has(client.id))
+        .map((client) => client.id),
+      );
+
+      const deactivatableIds = clientsRows
+        .filter((client) => {
+          if (!clientsToInactivate.has(client.id)) return false;
+          const statusToken = normalizeToken(client.status || "");
+          return statusToken !== "inativo";
+        })
+        .map((client) => client.id);
+
+      if (deactivatableIds.length > 0) {
+        for (const chunk of chunkArray(deactivatableIds, 200)) {
+          const { error: deactivateError } = await supabaseAdmin
+            .from("clients")
+            .update({
+              status: "Inativo",
+              portal_cashflow_enabled: false,
+            })
+            .in("id", chunk);
+          if (deactivateError) throw deactivateError;
+        }
+      }
+
+      clientsInactivated = deactivatableIds.length;
+    }
+  } else {
+    for (const client of clientsRows) {
+      if (linkedClientIds.has(client.id)) continue;
+      const normalizedCnpj = normalizeCnpj(client.cnpj);
+      if (!normalizedCnpj) continue;
+      const matched = companyByCnpj.get(normalizedCnpj);
+      if (!matched) continue;
+      if (linkedCompanyIds.has(matched.acessorias_company_id)) continue;
+
+      autoLinks.push({
+        client_id: client.id,
+        acessorias_company_id: matched.acessorias_company_id,
+        match_type: "auto",
+        match_score: 100,
+        created_by: callerUserId,
+        last_synced_at: nowIso,
+      });
+      linkedCompanyIds.add(matched.acessorias_company_id);
+    }
   }
 
   if (autoLinks.length > 0) {
@@ -840,6 +1107,13 @@ async function handleSyncCompanies(
   return {
     synced: companies.length,
     auto_linked: autoLinks.length,
+    clients_created: clientsCreated,
+    clients_updated: clientsUpdated,
+    clients_inactivated: syncGrowClients && restrictToAcessorias ? clientsInactivated : 0,
+    stale_links_removed: syncGrowClients ? staleLinksRemoved : 0,
+    mirrored_clients: syncGrowClients ? mirroredClientIds.size : 0,
+    sync_grow_clients: syncGrowClients,
+    restrict_to_acessorias: syncGrowClients ? restrictToAcessorias : false,
     endpoint_used: result.path,
   };
 }
@@ -1413,6 +1687,7 @@ Deno.serve(async (req) => {
         acessoriasApiBaseUrl,
         acessoriasApiToken as string,
         callerUser.id,
+        body,
       );
       return jsonResponse({ ok: true, ...data });
     }
