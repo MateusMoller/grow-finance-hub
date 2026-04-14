@@ -158,11 +158,14 @@ function parseBodyAsRecord(value: unknown): JsonRecord {
   return parsed || {};
 }
 
-function extractBearerToken(req: Request): string | null {
+function extractBearerToken(req: Request, fallbackToken?: string | null): string | null {
   const authorization = req.headers.get("authorization");
-  if (!authorization || !authorization.toLowerCase().startsWith("bearer ")) return null;
-  const token = authorization.slice(7).trim();
-  return token.length > 0 ? token : null;
+  if (authorization && authorization.toLowerCase().startsWith("bearer ")) {
+    const token = authorization.slice(7).trim();
+    if (token.length > 0) return token;
+  }
+  const fallback = asTrimmedString(fallbackToken);
+  return fallback || null;
 }
 
 function getPathCandidates(envName: string, defaults: string[]) {
@@ -509,7 +512,7 @@ function parseObligations(payload: unknown): ParsedObligation[] {
   return parsed;
 }
 
-async function buildAuthContext(req: Request) {
+async function buildAuthContext(req: Request, fallbackToken?: string | null) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -518,7 +521,7 @@ async function buildAuthContext(req: Request) {
     throw new Error("Missing Supabase environment configuration");
   }
 
-  const token = extractBearerToken(req);
+  const token = extractBearerToken(req, fallbackToken);
   if (!token) {
     return { error: jsonResponse({ error: "Authorization token is required" }, 401) };
   }
@@ -1359,12 +1362,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const context = await buildAuthContext(req);
+    let body: JsonRecord;
+    try {
+      body = parseBodyAsRecord(await req.clone().json());
+    } catch {
+      return jsonResponse({ error: "Invalid JSON payload" }, 400);
+    }
+
+    const context = await buildAuthContext(req, asTrimmedString(body.access_token));
     if ("error" in context) {
       return context.error;
     }
 
-    const body = parseBodyAsRecord(await req.json());
     const action = asTrimmedString(body.action);
     if (!action) {
       return jsonResponse({ error: "action is required" }, 400);

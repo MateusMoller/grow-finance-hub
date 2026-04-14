@@ -16,6 +16,7 @@ import {
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 import { AppLayout } from "@/components/app/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -229,13 +230,50 @@ export default function AcessoriasPage() {
       throw new Error("Sessao expirada. Entre novamente para acessar o modulo Acessorias.");
     }
 
-    const { data, error } = await supabase.functions.invoke("acessorias-module", {
-      body,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-    if (error) throw error;
+    const invokeOnce = async (token: string) =>
+      supabase.functions.invoke("acessorias-module", {
+        body: {
+          ...body,
+          access_token: token,
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+    let { data, error } = await invokeOnce(accessToken);
+
+    if (error instanceof FunctionsHttpError && error.context.status === 401) {
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      const refreshedToken = refreshed.session?.access_token;
+      if (!refreshError && refreshedToken) {
+        const retried = await invokeOnce(refreshedToken);
+        data = retried.data;
+        error = retried.error;
+      }
+    }
+
+    if (error) {
+      if (error instanceof FunctionsHttpError) {
+        let parsedMessage: string | null = null;
+        try {
+          const payload = await error.context.json();
+          parsedMessage =
+            payload &&
+            typeof payload === "object" &&
+            "error" in payload &&
+            typeof (payload as { error?: unknown }).error === "string"
+              ? (payload as { error: string }).error
+              : null;
+        } catch {
+          // ignore and fallback to generic error below
+        }
+        if (parsedMessage) {
+          throw new Error(parsedMessage);
+        }
+      }
+      throw error;
+    }
 
     const parsed = (data || {}) as Record<string, unknown>;
     if (typeof parsed.error === "string" && parsed.error.length > 0) {
