@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -12,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Building2, Save, Upload, FileText, Trash2, Download,
-  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList, type LucideIcon,
+  Loader2, Plus, Calculator, Receipt, Users, FolderOpen, CalendarDays, ClipboardList, Copy, type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -126,9 +127,12 @@ const cadastroClientesFields = [
   { name: "regime_tributario", label: "Regime Tributario" },
   { name: "cnae_principal", label: "CNAE Principal" },
   { name: "data_abertura", label: "Data de Abertura" },
+  { name: "cep", label: "CEP" },
+  { name: "endereco", label: "Rua / Logradouro" },
+  { name: "numero_estabelecimento", label: "Numero do Estabelecimento" },
+  { name: "bairro", label: "Bairro" },
   { name: "cidade", label: "Cidade" },
   { name: "estado", label: "Estado" },
-  { name: "endereco", label: "Endereco" },
   { name: "ddd", label: "DDD" },
   { name: "telefone", label: "Telefone" },
   { name: "whatsapp", label: "WhatsApp" },
@@ -288,7 +292,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
   },
 };
 
-type FieldValidationType = "yesNo" | "number" | "integer" | "percent" | "date" | "state" | "phone";
+type FieldValidationType = "yesNo" | "number" | "integer" | "percent" | "date" | "state" | "phone" | "cep";
 
 interface FieldValidationRule {
   type: FieldValidationType;
@@ -337,6 +341,7 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
   cadastro_clientes: {
     codigo: { type: "integer", min: 0 },
     data_abertura: { type: "date" },
+    cep: { type: "cep" },
     estado: { type: "state" },
     ddd: { type: "integer", min: 0, max: 999 },
     telefone: { type: "phone" },
@@ -424,12 +429,19 @@ const parseNumericValue = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const formatCepValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+};
+
 const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value: string) => {
   const trimmed = value.trim();
   if (!rule) return trimmed;
 
   if (rule.type === "yesNo") return normalizeYesNoValue(trimmed);
   if (rule.type === "state") return trimmed.toUpperCase();
+  if (rule.type === "cep") return formatCepValue(trimmed);
   return trimmed;
 };
 
@@ -465,6 +477,12 @@ const validateFieldValue = (rule: FieldValidationRule | undefined, value: string
     return null;
   }
 
+  if (rule.type === "cep") {
+    const digits = normalizedValue.replace(/\D/g, "");
+    if (digits.length !== 8) return "Informe um CEP valido com 8 digitos.";
+    return null;
+  }
+
   if (rule.type === "number" || rule.type === "integer" || rule.type === "percent") {
     const numeric = parseNumericValue(normalizedValue);
     if (numeric === null) return "Informe um numero valido.";
@@ -477,8 +495,90 @@ const validateFieldValue = (rule: FieldValidationRule | undefined, value: string
   return null;
 };
 
+const generalInfoCadastralFields = [
+  "cep",
+  "endereco",
+  "numero_estabelecimento",
+  "bairro",
+  "cidade",
+  "estado",
+  "inscricao_estadual",
+  "inscricao_municipal",
+  "perfil_atuacao",
+] as const;
+
+type GeneralInfoCadastralFieldName = (typeof generalInfoCadastralFields)[number];
+
+const getCategoryFieldEntryKey = (category: ClientCategoryKey, fieldName: string) => `${category}__${fieldName}`;
+
+const clientBusinessProfileOptions = [
+  { key: "comercio", label: "Comercio" },
+  { key: "industria", label: "Industria" },
+  { key: "prestador_servicos", label: "Prestador de Servicos" },
+] as const;
+
+type ClientBusinessProfileKey = (typeof clientBusinessProfileOptions)[number]["key"];
+
+const normalizeProfileToken = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+
+const clientBusinessProfileLabelByKey: Record<ClientBusinessProfileKey, string> = {
+  comercio: "Comercio",
+  industria: "Industria",
+  prestador_servicos: "Prestador de Servicos",
+};
+
+const clientBusinessProfileKeyByToken: Record<string, ClientBusinessProfileKey> = {
+  comercio: "comercio",
+  industria: "industria",
+  prestador_de_servicos: "prestador_servicos",
+  prestador_servicos: "prestador_servicos",
+  "prestador_de_servico": "prestador_servicos",
+  "prestador_servico": "prestador_servicos",
+  servicos: "prestador_servicos",
+};
+
+const parseBusinessProfilesValue = (rawValue: string | undefined) => {
+  if (!rawValue?.trim()) return [] as ClientBusinessProfileKey[];
+
+  const tokens = rawValue.split(/[;,|]/g).map((item) => normalizeProfileToken(item)).filter(Boolean);
+  const selected = new Set<ClientBusinessProfileKey>();
+
+  tokens.forEach((token) => {
+    const mapped = clientBusinessProfileKeyByToken[token];
+    if (mapped) selected.add(mapped);
+  });
+
+  return clientBusinessProfileOptions
+    .map((option) => option.key)
+    .filter((key) => selected.has(key));
+};
+
+const serializeBusinessProfilesValue = (profiles: ClientBusinessProfileKey[]) =>
+  profiles.map((profile) => clientBusinessProfileLabelByKey[profile]).join(", ");
+
+const buildAddressFromCadastralValues = (values: Record<GeneralInfoCadastralFieldName, string>) => {
+  const street = values.endereco.trim();
+  const number = values.numero_estabelecimento.trim();
+  const neighborhood = values.bairro.trim();
+  const city = values.cidade.trim();
+  const state = values.estado.trim().toUpperCase();
+  const cep = values.cep.trim();
+
+  const streetLine = [street, number ? `N ${number}` : ""].filter(Boolean).join(", ");
+  const cityState = [city, state].filter(Boolean).join("/");
+  const localityLine = [neighborhood, cityState, cep].filter(Boolean).join(" - ");
+
+  return [streetLine, localityLine].filter(Boolean).join(" | ");
+};
+
 const cadastroClientesPartnersFieldName = "socios";
-const cadastroClientesPartnersEntryKey = `cadastro_clientes__${cadastroClientesPartnersFieldName}`;
+const cadastroClientesPartnersEntryKey = getCategoryFieldEntryKey("cadastro_clientes", cadastroClientesPartnersFieldName);
 
 interface ClientPartnerForm {
   id: string;
@@ -674,6 +774,7 @@ export default function ClientDetailPage() {
   const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
   const [checkingPortalAccess, setCheckingPortalAccess] = useState(false);
   const [savingPortalAccess, setSavingPortalAccess] = useState(false);
+  const [searchingCep, setSearchingCep] = useState(false);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -792,7 +893,7 @@ export default function ClientDetailPage() {
     fieldValidationRules[category]?.[fieldName];
 
   const handleDataFieldChange = (category: ClientCategoryKey, fieldName: string, value: string) => {
-    const key = `${category}__${fieldName}`;
+    const key = getCategoryFieldEntryKey(category, fieldName);
     const rule = getFieldRule(category, fieldName);
     const normalizedValue = normalizeFieldValueForSave(rule, value);
 
@@ -805,6 +906,92 @@ export default function ClientDetailPage() {
       else delete next[key];
       return next;
     });
+  };
+
+  const getGeneralInfoFieldValue = (fieldName: GeneralInfoCadastralFieldName) =>
+    dataEntries[getCategoryFieldEntryKey("cadastro_clientes", fieldName)] || "";
+
+  const setGeneralInfoFieldValue = (fieldName: GeneralInfoCadastralFieldName, value: string) => {
+    handleDataFieldChange("cadastro_clientes", fieldName, value);
+  };
+
+  const getSelectedBusinessProfiles = () =>
+    parseBusinessProfilesValue(getGeneralInfoFieldValue("perfil_atuacao"));
+
+  const toggleBusinessProfile = (profile: ClientBusinessProfileKey) => {
+    const selected = getSelectedBusinessProfiles();
+    const isSelected = selected.includes(profile);
+    const next = isSelected ? selected.filter((item) => item !== profile) : [...selected, profile];
+    setGeneralInfoFieldValue("perfil_atuacao", serializeBusinessProfilesValue(next));
+  };
+
+  const handleCepLookup = async (rawCep: string) => {
+    const cepDigits = rawCep.replace(/\D/g, "");
+    if (cepDigits.length !== 8) {
+      toast.error("Informe um CEP valido com 8 digitos.");
+      return;
+    }
+
+    setSearchingCep(true);
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      if (!response.ok) {
+        toast.error("Nao foi possivel consultar o CEP.");
+        return;
+      }
+
+      const data = await response.json() as {
+        erro?: boolean;
+        cep?: string;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+      };
+
+      if (data.erro) {
+        toast.error("CEP nao encontrado.");
+        return;
+      }
+
+      setGeneralInfoFieldValue("cep", formatCepValue(data.cep || cepDigits));
+      if (data.logradouro) setGeneralInfoFieldValue("endereco", data.logradouro);
+      if (data.bairro) setGeneralInfoFieldValue("bairro", data.bairro);
+      if (data.localidade) setGeneralInfoFieldValue("cidade", data.localidade);
+      if (data.uf) setGeneralInfoFieldValue("estado", data.uf);
+
+      toast.success("Endereco preenchido a partir do CEP.");
+    } catch {
+      toast.error("Nao foi possivel consultar o CEP no momento.");
+    } finally {
+      setSearchingCep(false);
+    }
+  };
+
+  const handleCopyRawCnpj = async () => {
+    const rawCnpj = (clientForm.cnpj || "").replace(/\D/g, "");
+    if (!rawCnpj) {
+      toast.error("Informe um CNPJ para copiar.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(rawCnpj);
+      toast.success("CNPJ copiado sem pontuacao.");
+      return;
+    } catch {
+      const fallback = document.createElement("textarea");
+      fallback.value = rawCnpj;
+      fallback.setAttribute("readonly", "readonly");
+      fallback.style.position = "absolute";
+      fallback.style.left = "-9999px";
+      document.body.appendChild(fallback);
+      fallback.select();
+      document.execCommand("copy");
+      document.body.removeChild(fallback);
+      toast.success("CNPJ copiado sem pontuacao.");
+    }
   };
 
   const handleAddPartner = () => {
@@ -872,25 +1059,133 @@ export default function ClientDetailPage() {
   const saveClientInfo = async () => {
     if (!id) return;
     const normalizedEmail = normalizeEmail(clientForm.email);
+
+    const nextGeneralFieldErrors: Record<string, string> = {};
+    const normalizedGeneralFieldValues = generalInfoCadastralFields.map((fieldName) => {
+      const key = getCategoryFieldEntryKey("cadastro_clientes", fieldName);
+      const currentValue = dataEntries[key] || "";
+      const rule = getFieldRule("cadastro_clientes", fieldName);
+      const normalizedValue = normalizeFieldValueForSave(rule, currentValue);
+      const validationError = validateFieldValue(rule, normalizedValue);
+
+      if (validationError) {
+        nextGeneralFieldErrors[key] = validationError;
+      }
+
+      return { fieldName, value: normalizedValue };
+    });
+
+    if (Object.keys(nextGeneralFieldErrors).length > 0) {
+      setDataFieldErrors((prev) => ({ ...prev, ...nextGeneralFieldErrors }));
+      toast.error("Existem campos de endereco invalidos. Revise antes de salvar.");
+      return;
+    }
+
+    setDataFieldErrors((prev) => {
+      const next = { ...prev };
+      generalInfoCadastralFields.forEach((fieldName) => {
+        delete next[getCategoryFieldEntryKey("cadastro_clientes", fieldName)];
+      });
+      return next;
+    });
+
+    const generalValues = normalizedGeneralFieldValues.reduce<Record<GeneralInfoCadastralFieldName, string>>(
+      (acc, entry) => {
+        acc[entry.fieldName] = entry.value;
+        return acc;
+      },
+      {
+        cep: "",
+        endereco: "",
+        numero_estabelecimento: "",
+        bairro: "",
+        cidade: "",
+        estado: "",
+        inscricao_estadual: "",
+        inscricao_municipal: "",
+        perfil_atuacao: "",
+      },
+    );
+
+    const normalizedAddress = buildAddressFromCadastralValues(generalValues);
+
     setSaving(true);
-    const { error } = await supabase.from("clients").update({
-      name: clientForm.name,
-      cnpj: clientForm.cnpj,
-      regime: clientForm.regime,
-      sector: clientForm.sector,
-      status: clientForm.status,
-      contact: clientForm.contact,
-      email: normalizedEmail || null,
-      phone: clientForm.phone,
-      address: clientForm.address,
-      notes: clientForm.notes,
-      portal_cashflow_enabled: Boolean(clientForm.portal_cashflow_enabled),
-    }).eq("id", id);
-    setSaving(false);
-    if (error) return toast.error("Erro ao salvar dados do cliente");
-    toast.success("Dados do cliente salvos");
-    setClient({ ...client!, ...clientForm, email: normalizedEmail || null } as ClientRecord);
-    setClientForm((prev) => ({ ...prev, email: normalizedEmail || null }));
+
+    try {
+      const { error } = await supabase.from("clients").update({
+        name: clientForm.name,
+        cnpj: clientForm.cnpj,
+        regime: clientForm.regime,
+        sector: clientForm.sector,
+        status: clientForm.status,
+        contact: clientForm.contact,
+        email: normalizedEmail || null,
+        phone: clientForm.phone,
+        address: normalizedAddress || clientForm.address || null,
+        notes: clientForm.notes,
+        portal_cashflow_enabled: Boolean(clientForm.portal_cashflow_enabled),
+      }).eq("id", id);
+
+      if (error) {
+        toast.error("Erro ao salvar dados do cliente");
+        return;
+      }
+
+      const { error: deleteGeneralDataError } = await supabase
+        .from("client_data")
+        .delete()
+        .eq("client_id", id)
+        .eq("category", "cadastro_clientes")
+        .in("field_name", [...generalInfoCadastralFields])
+        .is("period", null);
+
+      if (deleteGeneralDataError) {
+        toast.error("Dados gerais salvos, mas houve erro ao atualizar os campos cadastrais.");
+        return;
+      }
+
+      const generalDataRows = normalizedGeneralFieldValues
+        .filter((entry) => Boolean(entry.value))
+        .map((entry) => ({
+          client_id: id,
+          category: "cadastro_clientes",
+          field_name: entry.fieldName,
+          field_value: entry.value,
+          period: null,
+          created_by: user?.id || null,
+        }));
+
+      if (generalDataRows.length > 0) {
+        const { error: insertGeneralDataError } = await supabase.from("client_data").insert(generalDataRows);
+        if (insertGeneralDataError) {
+          toast.error("Dados gerais salvos, mas houve erro ao persistir os campos de endereco.");
+          return;
+        }
+      }
+
+      toast.success("Dados do cliente salvos");
+
+      setClient({
+        ...client!,
+        ...clientForm,
+        email: normalizedEmail || null,
+        address: normalizedAddress || clientForm.address || null,
+      } as ClientRecord);
+      setClientForm((prev) => ({
+        ...prev,
+        email: normalizedEmail || null,
+        address: normalizedAddress || prev.address || null,
+      }));
+      setDataEntries((prev) => {
+        const next = { ...prev };
+        normalizedGeneralFieldValues.forEach((entry) => {
+          next[getCategoryFieldEntryKey("cadastro_clientes", entry.fieldName)] = entry.value;
+        });
+        return next;
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleValidateAndAllowPortalAccess = async () => {
@@ -1234,6 +1529,8 @@ export default function ClientDetailPage() {
 
   if (!client) return null;
 
+  const selectedBusinessProfiles = getSelectedBusinessProfiles();
+
   const renderDataFields = (category: ClientCategoryKey) => {
     const config = categoryConfig[category];
     const categoryFiles = files.filter((file) => file.category === category);
@@ -1255,6 +1552,8 @@ export default function ClientDetailPage() {
             const isYesNoField = rule?.type === "yesNo";
             const inputMode = rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
               ? "decimal"
+              : rule?.type === "cep"
+                ? "numeric"
               : rule?.type === "phone"
                 ? "tel"
                 : "text";
@@ -1506,7 +1805,13 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">CNPJ</Label>
-                  <Input value={clientForm.cnpj || ""} onChange={(e) => setClientForm((p) => ({ ...p, cnpj: e.target.value }))} />
+                  <div className="flex gap-2">
+                    <Input value={clientForm.cnpj || ""} onChange={(e) => setClientForm((p) => ({ ...p, cnpj: e.target.value }))} />
+                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => void handleCopyRawCnpj()}>
+                      <Copy className="h-3.5 w-3.5 mr-1" />
+                      Copiar
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Regime Tributário</Label>
@@ -1519,6 +1824,23 @@ export default function ClientDetailPage() {
                   <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.sector || ""} onChange={(e) => setClientForm((p) => ({ ...p, sector: e.target.value }))}>
                     {getClientSegmentOptions(clientForm.sector).map((segment) => <option key={segment}>{segment}</option>)}
                   </select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="text-xs">Classificacao de Atividade</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
+                    {clientBusinessProfileOptions.map((profile) => (
+                      <label key={profile.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={selectedBusinessProfiles.includes(profile.key)}
+                          onCheckedChange={() => toggleBusinessProfile(profile.key)}
+                        />
+                        <span>{profile.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Marque uma ou mais opcoes: comercio, industria e/ou prestador de servicos.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Status</Label>
@@ -1538,9 +1860,106 @@ export default function ClientDetailPage() {
                   <Label className="text-xs">Telefone</Label>
                   <Input value={clientForm.phone || ""} onChange={(e) => setClientForm((p) => ({ ...p, phone: e.target.value }))} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">CEP</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={getGeneralInfoFieldValue("cep")}
+                      onChange={(event) => setGeneralInfoFieldValue("cep", formatCepValue(event.target.value))}
+                      onBlur={() => {
+                        const digits = getGeneralInfoFieldValue("cep").replace(/\D/g, "");
+                        if (digits.length === 8) {
+                          void handleCepLookup(digits);
+                        }
+                      }}
+                      placeholder="00000-000"
+                      inputMode="numeric"
+                      className={dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")] ? "border-destructive focus-visible:ring-destructive/30" : ""}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => void handleCepLookup(getGeneralInfoFieldValue("cep"))}
+                      disabled={searchingCep}
+                    >
+                      {searchingCep ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Buscar"}
+                    </Button>
+                  </div>
+                  {dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")] && (
+                    <p className="text-[11px] text-destructive">{dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")]}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Inscricao Estadual</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("inscricao_estadual")}
+                    onChange={(event) => setGeneralInfoFieldValue("inscricao_estadual", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Inscricao Municipal</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("inscricao_municipal")}
+                    onChange={(event) => setGeneralInfoFieldValue("inscricao_municipal", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Rua / Logradouro</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("endereco")}
+                    onChange={(event) => setGeneralInfoFieldValue("endereco", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Numero do Estabelecimento</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("numero_estabelecimento")}
+                    onChange={(event) => setGeneralInfoFieldValue("numero_estabelecimento", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Bairro</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("bairro")}
+                    onChange={(event) => setGeneralInfoFieldValue("bairro", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Cidade</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("cidade")}
+                    onChange={(event) => setGeneralInfoFieldValue("cidade", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Estado (UF)</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("estado")}
+                    onChange={(event) => setGeneralInfoFieldValue("estado", event.target.value)}
+                    placeholder="UF"
+                  />
+                </div>
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Endereço</Label>
-                  <Input value={clientForm.address || ""} onChange={(e) => setClientForm((p) => ({ ...p, address: e.target.value }))} />
+                  <Label className="text-xs">Endereco Completo (automatico)</Label>
+                  <Input
+                    value={buildAddressFromCadastralValues({
+                      cep: getGeneralInfoFieldValue("cep"),
+                      endereco: getGeneralInfoFieldValue("endereco"),
+                      numero_estabelecimento: getGeneralInfoFieldValue("numero_estabelecimento"),
+                      bairro: getGeneralInfoFieldValue("bairro"),
+                      cidade: getGeneralInfoFieldValue("cidade"),
+                      estado: getGeneralInfoFieldValue("estado"),
+                      inscricao_estadual: getGeneralInfoFieldValue("inscricao_estadual"),
+                      inscricao_municipal: getGeneralInfoFieldValue("inscricao_municipal"),
+                      perfil_atuacao: getGeneralInfoFieldValue("perfil_atuacao"),
+                    }) || clientForm.address || ""}
+                    readOnly
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    O endereco completo sera salvo automaticamente a partir dos campos acima.
+                  </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs">Observações</Label>
@@ -1875,3 +2294,4 @@ export default function ClientDetailPage() {
     </AppLayout>
   );
 }
+

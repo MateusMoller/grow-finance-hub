@@ -49,6 +49,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accessProfile, setAccessProfile] = useState<AccessProfile>("internal");
+  const [direction, setDirection] = useState(1);
   const { signIn } = useAuth();
   const navigate = useNavigate();
 
@@ -56,6 +57,16 @@ export default function LoginPage() {
     () => accessOptions.find((option) => option.key === accessProfile) || accessOptions[0],
     [accessProfile]
   );
+
+  const handleAccessChange = (nextProfile: AccessProfile) => {
+    if (nextProfile === accessProfile) return;
+
+    const currentIndex = accessOptions.findIndex((option) => option.key === accessProfile);
+    const nextIndex = accessOptions.findIndex((option) => option.key === nextProfile);
+
+    setDirection(nextIndex > currentIndex ? 1 : -1);
+    setAccessProfile(nextProfile);
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,8 +85,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[minmax(420px,560px)_1fr]">
-      <div className="flex items-center justify-center px-6 py-10 sm:px-8 lg:px-12">
+    <motion.div layout className="min-h-screen bg-background lg:flex">
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 250, damping: 30, mass: 0.85 }}
+        className={`flex items-center justify-center px-6 py-10 sm:px-8 lg:min-h-screen lg:w-[46%] lg:px-12 xl:w-[44%] ${
+          selectedAccess.key === "client" ? "lg:order-2" : "lg:order-1"
+        }`}
+      >
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -104,7 +121,7 @@ export default function LoginPage() {
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() => setAccessProfile(option.key)}
+                    onClick={() => handleAccessChange(option.key)}
                     className={`relative overflow-hidden rounded-lg px-3 py-2.5 text-left transition-colors ${
                       isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                     }`}
@@ -162,18 +179,35 @@ export default function LoginPage() {
             </p>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
 
-      <div className="relative hidden min-h-screen overflow-hidden lg:block">
-        <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 250, damping: 30, mass: 0.85 }}
+        className={`relative hidden min-h-screen overflow-hidden lg:block lg:w-[54%] xl:w-[56%] ${
+          selectedAccess.key === "client" ? "lg:order-1" : "lg:order-2"
+        }`}
+      >
+        <AnimatePresence mode="wait" initial={false} custom={direction}>
           <motion.img
+            custom={direction}
             key={selectedAccess.key}
             src={selectedAccess.heroImage}
             alt={selectedAccess.heroAlt}
             className="absolute inset-0 h-full w-full object-cover"
-            initial={{ opacity: 0, scale: 1.04, filter: "blur(8px)" }}
-            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, scale: 0.97, filter: "blur(8px)" }}
+            initial={(dir: number) => ({
+              opacity: 0,
+              x: dir > 0 ? -120 : 120,
+              scale: 1.04,
+              filter: "blur(8px)",
+            })}
+            animate={{ opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }}
+            exit={(dir: number) => ({
+              opacity: 0,
+              x: dir > 0 ? 120 : -120,
+              scale: 0.97,
+              filter: "blur(8px)",
+            })}
             transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
           />
         </AnimatePresence>
@@ -206,7 +240,7 @@ export default function LoginPage() {
             </motion.div>
           </AnimatePresence>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
