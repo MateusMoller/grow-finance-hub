@@ -8,7 +8,10 @@ const FALLBACK_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_yTevo6bvvk8CaNWLHhNICA
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL ?? FALLBACK_SUPABASE_URL).trim();
 const SUPABASE_PUBLISHABLE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? FALLBACK_SUPABASE_PUBLISHABLE_KEY).trim();
 
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) {
+if (
+  (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) &&
+  import.meta.env.MODE !== "production"
+) {
   console.warn(
     "[supabase] VITE_SUPABASE_URL e/ou VITE_SUPABASE_PUBLISHABLE_KEY nao definidos no build. Aplicando fallback padrao.",
   );

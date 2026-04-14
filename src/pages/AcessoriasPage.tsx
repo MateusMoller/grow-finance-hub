@@ -215,7 +215,26 @@ export default function AcessoriasPage() {
   const invokeAcessorias = async <TData extends Record<string, unknown> = Record<string, unknown>>(
     body: Record<string, unknown>,
   ) => {
-    const { data, error } = await supabase.functions.invoke("acessorias-module", { body });
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error("Nao foi possivel validar a sessao atual.");
+    }
+
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error("Sessao expirada. Entre novamente para acessar o modulo Acessorias.");
+    }
+
+    const { data, error } = await supabase.functions.invoke("acessorias-module", {
+      body,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
     if (error) throw error;
 
     const parsed = (data || {}) as Record<string, unknown>;
