@@ -21,18 +21,23 @@ const internalRoles = new Set([
 ]);
 
 const defaultCompaniesPathCandidates = [
-  "/v1/companies",
-  "/v1/empresas",
-  "/companies",
-  "/empresas",
+  "/companies/ListAll?Pagina={page}",
+  "/companies/ListAll/?Pagina={page}",
+  "/companies/ListAll?Pagina={page}&registrationData",
+  "/companies/ListAll/?Pagina={page}&registrationData",
+  "/companies/ListAll?Pagina=1",
+  "/companies/ListAll/?Pagina=1",
+  "/companies/ListAll",
+  "/companies/ListAll/",
 ];
 
 const defaultDeliveriesPathCandidates = [
-  "/v1/companies/{companyId}/deliveries",
-  "/v1/deliveries?company_id={companyId}",
-  "/v1/deliveries?empresa_id={companyId}",
-  "/v1/obligations?company_id={companyId}",
-  "/v1/obrigacoes?empresa_id={companyId}",
+  "/deliveries/{companyId}?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
+  "/deliveries/{companyId}/?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
+  "/deliveries/{companyId}?DtInitial={dateFrom}&DtFinal={dateTo}&situation=pending,delivered&Pagina=1",
+  "/deliveries/{companyId}/?DtInitial={dateFrom}&DtFinal={dateTo}&situation=pending,delivered&Pagina=1",
+  "/deliveries/ListAll?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
+  "/deliveries/ListAll/?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
 ];
 
 const defaultEcontinuoPathCandidates = [
@@ -176,11 +181,13 @@ function chunkArray<T>(items: T[], chunkSize: number) {
 function normalizeDate(value: unknown): string | null {
   const text = asTrimmedString(value);
   if (!text) return null;
+  if (text === "0000-00-00") return null;
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
 
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
     const [day, month, year] = text.split("/");
+    if (day === "00" || month === "00" || year === "0000") return null;
     return `${year}-${month}-${day}`;
   }
 
@@ -222,21 +229,45 @@ function getPathCandidates(envName: string, defaults: string[]) {
   return values.length > 0 ? values : defaults;
 }
 
-function resolveTemplatePath(pathTemplate: string, companyId: string) {
-  return pathTemplate
-    .replaceAll("{companyId}", encodeURIComponent(companyId))
-    .replaceAll(":companyId", encodeURIComponent(companyId));
+function resolveTemplatePath(pathTemplate: string, values: Record<string, string>) {
+  let resolved = pathTemplate;
+  for (const [key, value] of Object.entries(values)) {
+    resolved = resolved
+      .replaceAll(`{${key}}`, encodeURIComponent(value))
+      .replaceAll(`:${key}`, encodeURIComponent(value));
+  }
+  return resolved;
 }
 
 function toIsoDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function asArray(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? value : null;
+}
+
+function getRecordValue(record: JsonRecord, key: string): unknown {
+  if (key in record) return record[key];
+
+  const normalizedKey = normalizeToken(key);
+  for (const [recordKey, recordValue] of Object.entries(record)) {
+    if (recordKey.toLowerCase() === key.toLowerCase()) {
+      return recordValue;
+    }
+    if (normalizedKey && normalizeToken(recordKey) === normalizedKey) {
+      return recordValue;
+    }
+  }
+
+  return undefined;
+}
+
 function pickFirstString(source: unknown, keys: string[]): string | null {
   const record = asRecord(source);
   if (!record) return null;
   for (const key of keys) {
-    const current = asTrimmedString(record[key]);
+    const current = asTrimmedString(getRecordValue(record, key));
     if (current) return current;
   }
   return null;
@@ -253,7 +284,7 @@ function pickFirstNestedString(source: unknown, paths: string[]): string | null 
         valid = false;
         break;
       }
-      current = record[segment];
+      current = getRecordValue(record, segment);
     }
     if (!valid) continue;
     const value = asTrimmedString(current);
@@ -269,25 +300,32 @@ function extractArrayCandidates(payload: unknown): unknown[] {
 
   const directKeys = [
     "data",
+    "Data",
     "items",
     "results",
     "rows",
     "companies",
+    "Companies",
     "empresas",
+    "Empresas",
+    "ListAll",
     "deliveries",
+    "Deliveries",
+    "Entregas",
     "obligations",
+    "Obrigacoes",
     "obrigacoes",
     "content",
     "list",
   ];
 
   for (const key of directKeys) {
-    const maybeArray = record[key];
+    const maybeArray = getRecordValue(record, key);
     if (Array.isArray(maybeArray)) return maybeArray;
     const nestedRecord = asRecord(maybeArray);
     if (!nestedRecord) continue;
-    for (const nestedKey of ["data", "items", "results", "rows", "content"]) {
-      const nestedArray = nestedRecord[nestedKey];
+    for (const nestedKey of ["data", "items", "results", "rows", "content", "Deliveries", "Entregas"]) {
+      const nestedArray = getRecordValue(nestedRecord, nestedKey);
       if (Array.isArray(nestedArray)) return nestedArray;
     }
   }
@@ -449,6 +487,17 @@ async function requestFirstSuccessful(
   );
 }
 
+function pickFirstArray(source: unknown, keys: string[]): unknown[] | null {
+  const record = asRecord(source);
+  if (!record) return null;
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    const arr = asArray(value);
+    if (arr) return arr;
+  }
+  return null;
+}
+
 function parseCompanies(payload: unknown): ParsedCompany[] {
   const rows = extractArrayCandidates(payload);
   const parsed: ParsedCompany[] = [];
@@ -459,7 +508,17 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
     if (!record) continue;
 
     const companyId =
-      pickFirstString(record, ["id", "company_id", "empresa_id", "codigo", "code", "uuid"]) ||
+      pickFirstString(record, [
+        "id",
+        "ID",
+        "company_id",
+        "empresa_id",
+        "codigo",
+        "code",
+        "uuid",
+        "Identificador",
+        "identificador",
+      ]) ||
       pickFirstNestedString(record, ["company.id", "empresa.id"]);
     if (!companyId) continue;
 
@@ -467,17 +526,34 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
     seenIds.add(companyId);
 
     const companyName =
-      pickFirstString(record, ["company_name", "name", "razao_social", "nome_fantasia", "nome"]) ||
+      pickFirstString(record, [
+        "company_name",
+        "name",
+        "razao_social",
+        "Razao",
+        "Fantasia",
+        "nome_fantasia",
+        "nome",
+      ]) ||
       `Empresa ${companyId}`;
 
     const cnpj =
       normalizeCnpj(
-        pickFirstString(record, ["cnpj", "document", "document_number", "cpf_cnpj", "numero_cnpj"]),
+        pickFirstString(record, [
+          "cnpj",
+          "CNPJ",
+          "Identificador",
+          "identificador",
+          "document",
+          "document_number",
+          "cpf_cnpj",
+          "numero_cnpj",
+        ]),
       ) ||
       normalizeCnpj(pickFirstNestedString(record, ["document.number", "empresa.cnpj"]));
 
     const status =
-      pickFirstString(record, ["status", "situacao", "company_status"]) ||
+      pickFirstString(record, ["status", "Status", "situacao", "company_status"]) ||
       pickFirstNestedString(record, ["situation.name", "situacao.nome"]);
 
     parsed.push({
@@ -493,54 +569,108 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
 }
 
 function parseObligations(payload: unknown): ParsedObligation[] {
-  const rows = extractArrayCandidates(payload);
   const parsed: ParsedObligation[] = [];
+  const seen = new Set<string>();
 
-  for (const row of rows) {
-    const record = asRecord(row);
-    if (!record) continue;
-
-    const obligationId =
-      pickFirstString(record, ["id", "obligation_id", "delivery_id", "codigo", "code", "uuid"]) ||
-      pickFirstNestedString(record, ["obligation.id", "delivery.id"]);
-    if (!obligationId) continue;
+  const buildAndPushObligation = (
+    deliverySource: unknown,
+    companyIdentifier: string | null,
+    companyName: string | null,
+  ) => {
+    const record = asRecord(deliverySource);
+    if (!record) return;
 
     const obligationName =
-      pickFirstString(record, ["name", "obligation_name", "descricao", "description", "title", "tipo"]) ||
+      pickFirstString(record, [
+        "Nome",
+        "name",
+        "obligation_name",
+        "descricao",
+        "description",
+        "title",
+        "tipo",
+      ]) ||
       pickFirstNestedString(record, ["obligation.name", "tipo.nome"]) ||
-      `Obrigacao ${obligationId}`;
+      "Obrigacao";
+
+    const obligationId =
+      pickFirstString(record, ["id", "ID", "obligation_id", "delivery_id", "codigo", "code", "uuid", "EntID"]) ||
+      pickFirstNestedString(record, ["obligation.id", "delivery.id", "Config.EntID", "config.entid", "Config.ID"]);
 
     const obligationPeriod =
-      pickFirstString(record, ["period", "competencia", "competence", "reference", "mes_referencia"]) ||
+      pickFirstString(record, [
+        "period",
+        "competencia",
+        "competence",
+        "reference",
+        "mes_referencia",
+        "EntCompetencia",
+      ]) ||
       pickFirstNestedString(record, ["obligation.period", "delivery.period"]);
 
     const dueDate =
       normalizeDate(
-        pickFirstString(record, ["due_date", "deadline", "data_vencimento", "vencimento", "expires_at"]),
+        pickFirstString(record, [
+          "due_date",
+          "deadline",
+          "data_vencimento",
+          "vencimento",
+          "expires_at",
+          "EntDtPrazo",
+          "EntDtAtraso",
+        ]),
       ) ||
       normalizeDate(pickFirstNestedString(record, ["deadlines.due_date", "prazo.vencimento"]));
 
     const deliveredAt =
       normalizeDateTime(
-        pickFirstString(record, ["delivered_at", "sent_at", "data_envio", "delivery_date", "concluded_at"]),
+        pickFirstString(record, [
+          "delivered_at",
+          "sent_at",
+          "data_envio",
+          "delivery_date",
+          "concluded_at",
+          "EntDtEntrega",
+          "EntLastDH",
+        ]),
       ) ||
       normalizeDateTime(pickFirstNestedString(record, ["delivery.sent_at", "envio.data"]));
 
     const statusRaw =
-      pickFirstString(record, ["status", "situacao", "state"]) ||
+      pickFirstString(record, ["status", "Status", "situacao", "state"]) ||
       pickFirstNestedString(record, ["status.name", "situacao.nome"]);
     const normalizedStatus = normalizeObligationStatus(statusRaw);
 
     const protocol =
-      pickFirstString(record, ["protocol", "protocolo", "receipt", "comprovante"]) ||
+      pickFirstString(record, ["protocol", "protocolo", "receipt", "comprovante", "EntGuiaLida"]) ||
       pickFirstNestedString(record, ["submission.protocol"]);
 
     const notes =
-      pickFirstString(record, ["notes", "observacoes", "observation", "message", "descricao_complementar"]) ||
+      pickFirstString(record, [
+        "notes",
+        "observacoes",
+        "observation",
+        "message",
+        "descricao_complementar",
+        "EntMulta",
+      ]) ||
       pickFirstNestedString(record, ["status.description"]);
 
+    const safeObligationId =
+      obligationId ||
+      `${normalizeToken(obligationName) || "obrigacao"}_${toPeriodKey(obligationPeriod) || "sem_periodo"}_${dueDate || "sem_prazo"}`;
+    const dedupeKey = `${companyIdentifier || "sem_empresa"}:${safeObligationId}:${toPeriodKey(obligationPeriod)}:${dueDate || ""}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+
+    const enrichedPayload: JsonRecord = {
+      ...record,
+      _company_identifier: companyIdentifier,
+      _company_name: companyName,
+    };
+
     parsed.push({
-      acessorias_obligation_id: obligationId,
+      acessorias_obligation_id: safeObligationId,
       obligation_name: obligationName,
       obligation_period: obligationPeriod,
       obligation_period_key: toPeriodKey(obligationPeriod),
@@ -549,8 +679,39 @@ function parseObligations(payload: unknown): ParsedObligation[] {
       status: normalizedStatus,
       protocol,
       notes,
-      source_payload: record,
+      source_payload: enrichedPayload,
     });
+  };
+
+  const parseCompanyDeliveries = (companySource: unknown) => {
+    const companyRecord = asRecord(companySource);
+    if (!companyRecord) return false;
+
+    const deliveries = pickFirstArray(companyRecord, ["Entregas", "deliveries", "Deliveries", "obrigacoes", "Obrigacoes"]);
+    if (!deliveries || deliveries.length === 0) return false;
+
+    const companyIdentifier =
+      normalizeCnpj(pickFirstString(companyRecord, ["Identificador", "identificador", "cnpj", "CNPJ"])) ||
+      pickFirstString(companyRecord, ["ID", "id", "company_id", "empresa_id"]);
+    const companyName =
+      pickFirstString(companyRecord, ["Razao", "Fantasia", "name", "company_name", "nome"]) || null;
+
+    for (const delivery of deliveries) {
+      buildAndPushObligation(delivery, companyIdentifier, companyName);
+    }
+    return true;
+  };
+
+  const payloadRecord = asRecord(payload);
+  if (payloadRecord) {
+    parseCompanyDeliveries(payloadRecord);
+  }
+
+  const rows = extractArrayCandidates(payload);
+  for (const row of rows) {
+    const usedNestedDeliveries = parseCompanyDeliveries(row);
+    if (usedNestedDeliveries) continue;
+    buildAndPushObligation(row, null, null);
   }
 
   return parsed;
@@ -802,8 +963,41 @@ async function handleSyncCompanies(
     options.restrict_to_acessorias === undefined ? true : asBoolean(options.restrict_to_acessorias);
 
   const pathCandidates = getPathCandidates("ACESSORIAS_COMPANIES_PATHS", defaultCompaniesPathCandidates);
-  const result = await requestFirstSuccessful(acessoriasApiBaseUrl, acessoriasApiToken, pathCandidates);
-  const companies = parseCompanies(result.payload);
+  const supportsPaging = pathCandidates.some((path) => path.includes("{page}") || path.includes(":page"));
+  const companies: ParsedCompany[] = [];
+  const seenCompanyIds = new Set<string>();
+  let endpointUsed = "";
+
+  if (supportsPaging) {
+    for (let page = 1; page <= 500; page += 1) {
+      const pathCandidatesForPage = pathCandidates.map((template) =>
+        resolveTemplatePath(template, { page: String(page) })
+      );
+      const result = await requestFirstSuccessful(
+        acessoriasApiBaseUrl,
+        acessoriasApiToken,
+        pathCandidatesForPage,
+      );
+      if (!endpointUsed) endpointUsed = result.path;
+
+      const pageCompanies = parseCompanies(result.payload);
+      if (pageCompanies.length === 0) break;
+
+      for (const company of pageCompanies) {
+        if (seenCompanyIds.has(company.acessorias_company_id)) continue;
+        seenCompanyIds.add(company.acessorias_company_id);
+        companies.push(company);
+      }
+    }
+  } else {
+    const result = await requestFirstSuccessful(acessoriasApiBaseUrl, acessoriasApiToken, pathCandidates);
+    endpointUsed = result.path;
+    for (const company of parseCompanies(result.payload)) {
+      if (seenCompanyIds.has(company.acessorias_company_id)) continue;
+      seenCompanyIds.add(company.acessorias_company_id);
+      companies.push(company);
+    }
+  }
 
   if (companies.length === 0) {
     return {
@@ -818,7 +1012,7 @@ async function handleSyncCompanies(
       restrict_to_acessorias: syncGrowClients ? restrictToAcessorias : false,
       message:
         "Nenhuma empresa retornada pela API. Verifique os endpoints em ACESSORIAS_COMPANIES_PATHS.",
-      endpoint_used: result.path,
+      endpoint_used: endpointUsed || null,
     };
   }
 
@@ -1114,7 +1308,7 @@ async function handleSyncCompanies(
     mirrored_clients: syncGrowClients ? mirroredClientIds.size : 0,
     sync_grow_clients: syncGrowClients,
     restrict_to_acessorias: syncGrowClients ? restrictToAcessorias : false,
-    endpoint_used: result.path,
+    endpoint_used: endpointUsed || null,
   };
 }
 
@@ -1234,7 +1428,34 @@ async function handleSyncObligations(
     .in("id", links.map((link) => link.client_id));
   if (clientsError) throw clientsError;
 
+  const uniqueCompanyIds = Array.from(new Set(links.map((link) => link.acessorias_company_id)));
+  const { data: companiesCache, error: companiesCacheError } = uniqueCompanyIds.length > 0
+    ? await supabaseAdmin
+      .from("acessorias_companies_cache")
+      .select("acessorias_company_id, cnpj")
+      .in("acessorias_company_id", uniqueCompanyIds)
+    : { data: [], error: null };
+  if (companiesCacheError) throw companiesCacheError;
+
   const clientsById = new Map((clients || []).map((client) => [client.id, client.name || "Cliente sem nome"]));
+  const companyIdentifierById = new Map<string, string>();
+  for (const companyRow of companiesCache || []) {
+    const identifier = normalizeCnpj(companyRow.cnpj) || companyRow.acessorias_company_id;
+    if (!identifier) continue;
+    companyIdentifierById.set(companyRow.acessorias_company_id, identifier);
+  }
+
+  const now = new Date();
+  const defaultDateFrom = `${now.getUTCFullYear() - 1}-01-01`;
+  const defaultDateTo = `${now.getUTCFullYear() + 1}-12-31`;
+  let dateFrom = normalizeDate(body.date_from) || defaultDateFrom;
+  let dateTo = normalizeDate(body.date_to) || defaultDateTo;
+  if (dateFrom > dateTo) {
+    const swap = dateFrom;
+    dateFrom = dateTo;
+    dateTo = swap;
+  }
+
   const deliveriesPathTemplates = getPathCandidates("ACESSORIAS_DELIVERIES_PATHS", defaultDeliveriesPathCandidates);
 
   const obligationRows: Array<Record<string, unknown>> = [];
@@ -1242,9 +1463,19 @@ async function handleSyncObligations(
   let createdTasks = 0;
 
   for (const link of links) {
-    const pathCandidates = deliveriesPathTemplates.map((template) =>
-      resolveTemplatePath(template, link.acessorias_company_id)
-    );
+    const companyIdentifier = companyIdentifierById.get(link.acessorias_company_id) || link.acessorias_company_id;
+    const pathCandidates = deliveriesPathTemplates.map((template) => {
+      const hasDateRange =
+        template.toLowerCase().includes("dtinitial=") && template.toLowerCase().includes("dtfinal=");
+      const templateWithDates = hasDateRange
+        ? template
+        : `${template}${template.includes("?") ? "&" : "?"}DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1`;
+      return resolveTemplatePath(templateWithDates, {
+        companyId: companyIdentifier,
+        dateFrom,
+        dateTo,
+      });
+    });
 
     let deliveriesResponse: AcessoriasRequestResult;
     try {
@@ -1257,6 +1488,7 @@ async function handleSyncObligations(
       details.push({
         client_id: link.client_id,
         acessorias_company_id: link.acessorias_company_id,
+        company_identifier: companyIdentifier,
         synced: 0,
         error:
           error instanceof Error
@@ -1308,6 +1540,7 @@ async function handleSyncObligations(
     details.push({
       client_id: link.client_id,
       acessorias_company_id: link.acessorias_company_id,
+      company_identifier: companyIdentifier,
       synced: parsedObligations.length,
       endpoint_used: deliveriesResponse.path,
     });
