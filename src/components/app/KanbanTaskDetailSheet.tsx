@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -73,6 +74,7 @@ interface KanbanTaskDetailSheetProps {
   canArchive?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (taskId: string, updates: SavePayload) => Promise<void>;
+  onSubtaskToggle?: (taskId: string, subtaskIndex: number) => void;
   historyEntries?: ChangeHistoryEntry[];
 }
 
@@ -95,6 +97,7 @@ export function KanbanTaskDetailSheet({
   canArchive = false,
   onOpenChange,
   onSave,
+  onSubtaskToggle,
   historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
   const [form, setForm] = useState({
@@ -170,6 +173,8 @@ export function KanbanTaskDetailSheet({
   }, [open, task?.request_id]);
 
   if (!task) return null;
+  const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
+  const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
 
   const toggleSector = (sector: string) => {
     setForm((prev) => {
@@ -335,6 +340,34 @@ export function KanbanTaskDetailSheet({
                   placeholder="Detalhes da tarefa..."
                 />
               </div>
+
+              {task.subtasks.length > 0 && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Empresas (subtarefas)</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {subtaskDone}/{task.subtasks.length} concluidas ({subtaskPct}%)
+                    </span>
+                  </div>
+                  <Progress value={subtaskPct} className="h-2" />
+                  <div className="space-y-2">
+                    {task.subtasks.map((subtask, index) => (
+                      <label
+                        key={`${subtask.title}-${index}`}
+                        className="flex items-center gap-2 text-sm cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={subtask.done}
+                          onCheckedChange={() => onSubtaskToggle?.(task.id, index)}
+                        />
+                        <span className={subtask.done ? "line-through text-muted-foreground" : ""}>
+                          {subtask.title}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="solicitacao" className="space-y-4">

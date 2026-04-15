@@ -65,6 +65,12 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
+const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
+  const normalized = normalizeText(errorMessage || "");
+  if (!normalized.includes("subtasks")) return false;
+  return normalized.includes("column") || normalized.includes("permission");
+};
+
 interface ClientOption {
   id: string;
   name: string;
@@ -287,6 +293,48 @@ export default function KanbanPage() {
     toast.success("Tarefa atualizada");
   };
 
+  const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
+    const taskToUpdate = tasks.find((task) => task.id === taskId);
+    if (!taskToUpdate || !taskToUpdate.subtasks[subtaskIndex]) return;
+    const toggledSubtask = taskToUpdate.subtasks[subtaskIndex];
+
+    const updatedSubtasks = taskToUpdate.subtasks.map((subtask, index) =>
+      index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask
+    );
+
+    setTasks((prev) =>
+      prev.map((task) => {
+        if (task.id !== taskId) return task;
+        return { ...task, subtasks: updatedSubtasks };
+      })
+    );
+
+    setSelectedTask((prev) => {
+      if (!prev || prev.id !== taskId) return prev;
+      return { ...prev, subtasks: updatedSubtasks };
+    });
+
+    registerTaskHistory(
+      taskId,
+      toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluida",
+      toggledSubtask.title,
+    );
+
+    void supabase
+      .from("kanban_tasks")
+      .update({ subtasks: updatedSubtasks })
+      .eq("id", taskId)
+      .then(({ error }) => {
+        if (error) {
+          if (isSubtasksColumnIssue(error.message)) {
+            toast.warning("Subtarefas nao estao disponiveis no banco atual.");
+            return;
+          }
+          toast.error(`Erro ao atualizar subtarefa: ${error.message}`);
+        }
+      });
+  };
+
   const handleCreate = async () => {
     if (!newTask.title.trim()) {
       toast.error("Titulo e obrigatorio");
@@ -477,6 +525,7 @@ export default function KanbanPage() {
         canArchive={isAdmin}
         onOpenChange={setDetailOpen}
         onSave={handleSaveTaskDetails}
+        onSubtaskToggle={handleSubtaskToggle}
         historyEntries={selectedTaskHistory}
       />
 

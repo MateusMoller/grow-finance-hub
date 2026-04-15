@@ -38,6 +38,9 @@ const defaultDeliveriesPathCandidates = [
   "/deliveries/{companyId}/?DtInitial={dateFrom}&DtFinal={dateTo}&situation=pending,delivered&Pagina=1",
 ];
 
+const defaultObligationsMinDate = "2026-04-01";
+const weeklyObligationKanbanIntegrationSource = "acessorias_obrigacao_semanal";
+
 const defaultEcontinuoPathCandidates = [
   "/v1/econtinuo/upload",
   "/v1/econtinuo/send",
@@ -249,6 +252,12 @@ function toIsoDateOnly(value: Date) {
 function subtractUtcDays(baseDate: Date, days: number) {
   const value = new Date(baseDate.getTime());
   value.setUTCDate(value.getUTCDate() - days);
+  return value;
+}
+
+function addUtcDays(baseDate: Date, days: number) {
+  const value = new Date(baseDate.getTime());
+  value.setUTCDate(value.getUTCDate() + days);
   return value;
 }
 
@@ -1090,6 +1099,294 @@ async function cleanupObligationKanbanTasks(
   if (error) throw error;
 }
 
+type ParsedKanbanSubtaskState = {
+  title: string;
+  done: boolean;
+  clientId: string | null;
+};
+
+function parseKanbanSubtasksForMerge(value: unknown): ParsedKanbanSubtaskState[] {
+  const rows = asArray(value);
+  if (!rows) return [];
+
+  return rows
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) return null;
+      const title = asTrimmedString(record.title);
+      if (!title) return null;
+      return {
+        title,
+        done: asBoolean(record.done),
+        clientId: asTrimmedString(record.client_id),
+      };
+    })
+    .filter((item): item is ParsedKanbanSubtaskState => item !== null);
+}
+
+async function syncWeeklyObligationKanbanTasks(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  callerUserId: string,
+) {
+  const rawDaysAhead = Number(asTrimmedString(Deno.env.get("ACESSORIAS_WEEKLY_TASK_DAYS")) || "7");
+  const daysAhead = Number.isFinite(rawDaysAhead) && rawDaysAhead > 0
+    ? Math.min(21, Math.max(1, Math.trunc(rawDaysAhead)))
+    : 7;
+
+  const weekStart = toIsoDateOnly(new Date());
+  const weekEnd = toIsoDateOnly(addUtcDays(new Date(), daysAhead));
+
+  const { data: obligations, error: obligationsError } = await supabaseAdmin
+    .from("client_acessorias_obligations")
+    .select("client_id, obligation_name, obligation_period, due_date, status")
+    .gte("due_date", weekStart)
+    .lte("due_date", weekEnd);
+  if (obligationsError) throw obligationsError;
+
+  const uniqueClientIds = Array.from(
+    new Set((obligations || []).map((row) => asTrimmedString(row.client_id)).filter((value): value is string => Boolean(value))),
+  );
+  const { data: clients, error: clientsError } = uniqueClientIds.length > 0
+    ? await supabaseAdmin
+      .from("clients")
+      .select("id, name, status")
+      .in("id", uniqueClientIds)
+    : { data: [], error: null };
+  if (clientsError) throw clientsError;
+
+  const clientsById = new Map<string, { name: string; status: string | null }>();
+  for (const client of clients || []) {
+    clientsById.set(client.id, {
+      name: asTrimmedString(client.name) || "Cliente sem nome",
+      status: asTrimmedString(client.status),
+    });
+  }
+
+  type GroupClientState = {
+    clientId: string;
+    clientName: string;
+    done: boolean;
+    earliestDueDate: string | null;
+    periods: Set<string>;
+  };
+
+  type GroupState = {
+    integrationKey: string;
+    obligationName: string;
+    minDueDate: string | null;
+    maxDueDate: string | null;
+    companies: Map<string, GroupClientState>;
+  };
+
+  const groups = new Map<string, GroupState>();
+
+  for (const row of obligations || []) {
+    const clientId = asTrimmedString(row.client_id);
+    const dueDate = normalizeDate(row.due_date);
+    if (!clientId || !dueDate) continue;
+
+    const client = clientsById.get(clientId);
+    if (!client) continue;
+    const clientStatus = normalizeToken(client.status || "");
+    if (clientStatus === "inativo" || clientStatus === "inactive" || clientStatus === "disabled") continue;
+
+    const obligationName = asTrimmedString(row.obligation_name) || "Obrigacao";
+    const obligationPeriod = asTrimmedString(row.obligation_period);
+    const obligationStatus = normalizeObligationStatus(asTrimmedString(row.status));
+    const obligationKey =
+      normalizeToken(obligationName) || obligationName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!obligationKey) continue;
+
+    let group = groups.get(obligationKey);
+    if (!group) {
+      group = {
+        integrationKey: obligationKey.slice(0, 120),
+        obligationName,
+        minDueDate: dueDate,
+        maxDueDate: dueDate,
+        companies: new Map<string, GroupClientState>(),
+      };
+      groups.set(obligationKey, group);
+    } else {
+      if (!group.minDueDate || dueDate < group.minDueDate) group.minDueDate = dueDate;
+      if (!group.maxDueDate || dueDate > group.maxDueDate) group.maxDueDate = dueDate;
+    }
+
+    const existingCompany = group.companies.get(clientId);
+    if (!existingCompany) {
+      const periods = new Set<string>();
+      if (obligationPeriod) periods.add(obligationPeriod);
+      group.companies.set(clientId, {
+        clientId,
+        clientName: client.name,
+        done: isCompletedStatus(obligationStatus),
+        earliestDueDate: dueDate,
+        periods,
+      });
+      continue;
+    }
+
+    existingCompany.done = existingCompany.done && isCompletedStatus(obligationStatus);
+    if (!existingCompany.earliestDueDate || dueDate < existingCompany.earliestDueDate) {
+      existingCompany.earliestDueDate = dueDate;
+    }
+    if (obligationPeriod) existingCompany.periods.add(obligationPeriod);
+  }
+
+  const { data: existingTasks, error: existingTasksError } = await supabaseAdmin
+    .from("kanban_tasks")
+    .select("id, integration_task_id, status, subtasks")
+    .eq("integration_source", weeklyObligationKanbanIntegrationSource);
+  if (existingTasksError) throw existingTasksError;
+
+  const existingByIntegrationId = new Map<string, { id: string; status: string | null; subtasks: unknown }>();
+  for (const task of existingTasks || []) {
+    const integrationTaskId = asTrimmedString(task.integration_task_id);
+    if (!integrationTaskId) continue;
+    existingByIntegrationId.set(integrationTaskId, {
+      id: task.id,
+      status: asTrimmedString(task.status),
+      subtasks: task.subtasks,
+    });
+  }
+
+  const desiredIntegrationIds = new Set<string>();
+  let createdTasks = 0;
+  let updatedTasks = 0;
+
+  for (const group of groups.values()) {
+    const integrationTaskId = `weekly:${group.integrationKey}`;
+    desiredIntegrationIds.add(integrationTaskId);
+
+    const companies = Array.from(group.companies.values()).sort((left, right) =>
+      left.clientName.localeCompare(right.clientName)
+    );
+    const baseSubtasks = companies.map((company) => ({
+      title: company.clientName,
+      done: company.done,
+      client_id: company.clientId,
+      due_date: company.earliestDueDate,
+      obligation_periods: Array.from(company.periods),
+    }));
+
+    const existingTask = existingByIntegrationId.get(integrationTaskId);
+    const existingSubtasks = parseKanbanSubtasksForMerge(existingTask?.subtasks);
+    const existingDoneByClientId = new Map<string, boolean>();
+    const existingDoneByTitle = new Map<string, boolean>();
+    for (const subtask of existingSubtasks) {
+      if (subtask.clientId) {
+        existingDoneByClientId.set(subtask.clientId, subtask.done);
+      }
+      existingDoneByTitle.set(normalizeToken(subtask.title), subtask.done);
+    }
+
+    const mergedSubtasks = baseSubtasks.map((subtask) => {
+      const byClientId = subtask.client_id ? existingDoneByClientId.get(subtask.client_id) : undefined;
+      const byTitle = existingDoneByTitle.get(normalizeToken(subtask.title));
+      const done = typeof byClientId === "boolean" ? byClientId : typeof byTitle === "boolean" ? byTitle : subtask.done;
+      return {
+        ...subtask,
+        done,
+      };
+    });
+
+    const subtasksDone = mergedSubtasks.filter((subtask) => subtask.done).length;
+    const subtasksTotal = mergedSubtasks.length;
+    const subtasksPending = Math.max(subtasksTotal - subtasksDone, 0);
+    const description = [
+      "Obrigacao monitorada automaticamente para vencimentos da semana.",
+      `Periodo monitorado: ${weekStart} ate ${weekEnd}.`,
+      `Empresas vinculadas: ${subtasksTotal}. Concluidas: ${subtasksDone}. Pendentes: ${subtasksPending}.`,
+      group.minDueDate ? `Primeiro vencimento: ${group.minDueDate}.` : null,
+      group.maxDueDate && group.maxDueDate !== group.minDueDate ? `Ultimo vencimento: ${group.maxDueDate}.` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const payload: JsonRecord = {
+      obligation_name: group.obligationName,
+      week_start: weekStart,
+      week_end: weekEnd,
+      companies_total: subtasksTotal,
+      companies_done: subtasksDone,
+      companies_pending: subtasksPending,
+      generated_at: new Date().toISOString(),
+    };
+
+    if (!existingTask) {
+      const { error: createTaskError } = await supabaseAdmin
+        .from("kanban_tasks")
+        .insert({
+          title: `[Obrigacao semanal] ${group.obligationName}`,
+          description,
+          client_name: null,
+          assignee: null,
+          priority: computePriorityByDueDate(group.minDueDate),
+          sector: normalizeSectorFromObligationName(group.obligationName),
+          status: "backlog",
+          due_date: group.minDueDate,
+          subtasks: mergedSubtasks,
+          tags: ["Acessorias", "Obrigacao", "Semanal"],
+          created_by: callerUserId,
+          integration_source: weeklyObligationKanbanIntegrationSource,
+          integration_task_id: integrationTaskId,
+          integration_payload: payload,
+        });
+      if (createTaskError) throw createTaskError;
+      createdTasks += 1;
+      continue;
+    }
+
+    let nextStatus = existingTask.status || "backlog";
+    if (nextStatus === "archived") nextStatus = "backlog";
+    if (nextStatus === "done" && subtasksPending > 0) nextStatus = "backlog";
+
+    const { error: updateTaskError } = await supabaseAdmin
+      .from("kanban_tasks")
+      .update({
+        title: `[Obrigacao semanal] ${group.obligationName}`,
+        description,
+        priority: computePriorityByDueDate(group.minDueDate),
+        sector: normalizeSectorFromObligationName(group.obligationName),
+        due_date: group.minDueDate,
+        status: nextStatus,
+        subtasks: mergedSubtasks,
+        tags: ["Acessorias", "Obrigacao", "Semanal"],
+        integration_payload: payload,
+      })
+      .eq("id", existingTask.id);
+    if (updateTaskError) throw updateTaskError;
+    updatedTasks += 1;
+  }
+
+  const staleTaskIds = (existingTasks || [])
+    .filter((task) => {
+      const integrationTaskId = asTrimmedString(task.integration_task_id);
+      if (!integrationTaskId) return false;
+      return !desiredIntegrationIds.has(integrationTaskId);
+    })
+    .map((task) => task.id);
+
+  if (staleTaskIds.length > 0) {
+    for (const chunk of chunkArray(staleTaskIds, 200)) {
+      const { error: deleteError } = await supabaseAdmin
+        .from("kanban_tasks")
+        .delete()
+        .in("id", chunk);
+      if (deleteError) throw deleteError;
+    }
+  }
+
+  return {
+    created: createdTasks,
+    updated: updatedTasks,
+    removed: staleTaskIds.length,
+    groups: groups.size,
+    window_start: weekStart,
+    window_end: weekEnd,
+  };
+}
+
 async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
   const [clientsResult, companiesResult, linksResult, obligationsResult, uploadsResult] = await Promise.all([
     supabaseAdmin
@@ -1892,6 +2189,8 @@ async function handleSyncObligations(
   const now = new Date();
   const defaultDateFrom = `${now.getUTCFullYear() - 1}-01-01`;
   const defaultDateTo = `${now.getUTCFullYear() + 1}-12-31`;
+  const envMinDateFrom = normalizeDate(asTrimmedString(Deno.env.get("ACESSORIAS_OBLIGATIONS_MIN_DATE")));
+  const minimumDateFrom = envMinDateFrom || defaultObligationsMinDate;
   const explicitDateFrom = normalizeDate(body.date_from);
   let dateFrom = explicitDateFrom || defaultDateFrom;
   let dateTo = normalizeDate(body.date_to) || defaultDateTo;
@@ -1899,6 +2198,12 @@ async function handleSyncObligations(
     const swap = dateFrom;
     dateFrom = dateTo;
     dateTo = swap;
+  }
+  if (dateFrom < minimumDateFrom) {
+    dateFrom = minimumDateFrom;
+  }
+  if (dateTo < minimumDateFrom) {
+    dateTo = minimumDateFrom;
   }
   const rawLookbackDays =
     typeof body.incremental_lookback_days === "number"
@@ -1932,6 +2237,9 @@ async function handleSyncObligations(
           effectiveDateFrom = incrementalDateFrom;
         }
       }
+    }
+    if (effectiveDateFrom < minimumDateFrom) {
+      effectiveDateFrom = minimumDateFrom;
     }
 
     const primaryCompanyId = link.acessorias_company_id;
@@ -2077,12 +2385,24 @@ async function handleSyncObligations(
   const processedInBatch = processedLinks;
   const nextCursor = clientIdFilter ? null : cursor + processedInBatch;
   const hasMore = !clientIdFilter && nextCursor < totalLinks;
+  let weeklyKanbanSummary: {
+    created: number;
+    updated: number;
+    removed: number;
+    groups: number;
+    window_start: string;
+    window_end: string;
+  } | null = null;
+  if (clientIdFilter || !hasMore) {
+    weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
+  }
 
   return {
     synced_obligations: dedupedObligationRows.length,
     clients_processed: processedInBatch,
-    created_tasks: 0,
+    created_tasks: weeklyKanbanSummary?.created || 0,
     details,
+    weekly_kanban: weeklyKanbanSummary,
     auto_linked_clients: autoLinkedClients,
     total_links: totalLinks,
     processed_in_batch: processedInBatch,
@@ -2286,11 +2606,13 @@ async function handleAssignObligation(
     .maybeSingle();
   if (upsertError) throw upsertError;
   await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: client.id });
+  const weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
 
   return jsonResponse({
     ok: true,
     obligation: upserted,
     kanban_task_id: null,
+    weekly_kanban: weeklyKanbanSummary,
     remote_sync: remoteSync,
   });
 }
@@ -2481,10 +2803,12 @@ async function handleUpdateObligation(
   if (updateError) throw updateError;
 
   await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: existing.client_id });
+  const weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
 
   return jsonResponse({
     ok: true,
     obligation: updated,
+    weekly_kanban: weeklyKanbanSummary,
     remote_sync: remoteSync,
   });
 }

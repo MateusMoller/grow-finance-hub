@@ -45,6 +45,18 @@ type PortalTaskStatus = "pending_client" | "in_analysis" | "completed" | "cancel
 type PortalTaskType = "document" | "request_return" | "analysis" | "deliverable" | "general";
 type DataMode = "monthly" | "cadastral";
 
+type ClientAcessoriasObligation = {
+  id: string;
+  obligation_name: string;
+  obligation_period: string | null;
+  due_date: string | null;
+  delivered_at: string | null;
+  status: string | null;
+  protocol: string | null;
+  notes: string | null;
+  last_synced_at: string | null;
+};
+
 interface ClientFile {
   id: string;
   file_name: string;
@@ -79,6 +91,14 @@ const cadastralCategoryKeys = [
   "cadastro_documentos",
 ] as const;
 type CadastralCategoryKey = (typeof cadastralCategoryKeys)[number];
+const cadastralCategoryTabKeys = [
+  "cadastro_clientes",
+  "cadastro_fiscal",
+  "cadastro_departamento_pessoal",
+  "cadastro_contabil",
+  "cadastro_honorarios",
+  "cadastro_documentos",
+] as const;
 type ClientCategoryKey = MonthlyCategoryKey | CadastralCategoryKey;
 const contabilidadeFields = [
   { name: "faturamento_mensal", label: "Faturamento Mensal (R$)" },
@@ -851,6 +871,41 @@ const portalTaskTypeLabel: Record<PortalTaskType, string> = {
   general: "Geral",
 };
 
+const normalizeObligationStatusToken = (status: string | null) => {
+  const token = String(status || "").trim().toLowerCase();
+  if (!token) return "pendente";
+  if (["concluido", "completed", "delivered", "sent", "entregue"].includes(token)) return "concluido";
+  if (["atrasado", "overdue", "late", "vencido"].includes(token)) return "atrasado";
+  if (["em_andamento", "processing", "in_progress", "resolvendo"].includes(token)) return "em_andamento";
+  return "pendente";
+};
+
+const obligationStatusLabel: Record<string, string> = {
+  pendente: "Pendente",
+  em_andamento: "Em andamento",
+  atrasado: "Atrasado",
+  concluido: "Concluido",
+  sem_registro: "Sem registro no mes",
+};
+
+const obligationStatusClass: Record<string, string> = {
+  pendente: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
+  em_andamento: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
+  atrasado: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300",
+  concluido: "bg-primary/10 text-primary",
+  sem_registro: "bg-muted text-muted-foreground",
+};
+
+const toMonthKey = (value: string | null | undefined) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed.slice(0, 7);
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
 const isInactiveClientStatus = (status: string | null | undefined) =>
   String(status || "").trim().toLowerCase() === "inativo";
@@ -881,6 +936,12 @@ export default function ClientDetailPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [obligationMonthFilter, setObligationMonthFilter] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [acessoriasObligations, setAcessoriasObligations] = useState<ClientAcessoriasObligation[]>([]);
+  const [loadingAcessoriasObligations, setLoadingAcessoriasObligations] = useState(false);
   const [portalTaskDraft, setPortalTaskDraft] = useState({
     title: "",
     description: "",
@@ -927,6 +988,30 @@ export default function ClientDetailPage() {
     setDataFieldErrors({});
     setPartnerFieldErrors({});
   }, [id, period]);
+
+  const loadClientObligations = useCallback(async () => {
+    if (!id) return;
+    setLoadingAcessoriasObligations(true);
+
+    const { data, error } = await supabase.functions.invoke<{
+      obligations?: ClientAcessoriasObligation[];
+    }>("acessorias-module", {
+      body: {
+        action: "list_obligations",
+        client_id: id,
+      },
+    });
+
+    setLoadingAcessoriasObligations(false);
+
+    if (error) {
+      toast.error("Nao foi possivel carregar as obrigacoes deste cliente.");
+      return;
+    }
+
+    const rows = Array.isArray(data?.obligations) ? data.obligations : [];
+    setAcessoriasObligations(rows);
+  }, [id]);
 
   const loadClient = useCallback(async () => {
     if (!id) return;
@@ -991,6 +1076,12 @@ export default function ClientDetailPage() {
       void loadClientData();
     }
   }, [id, loadClientData, period]);
+
+  useEffect(() => {
+    if (id) {
+      void loadClientObligations();
+    }
+  }, [id, loadClientObligations]);
 
   const getFieldRule = (category: ClientCategoryKey, fieldName: string) =>
     fieldValidationRules[category]?.[fieldName];
@@ -1580,6 +1671,51 @@ export default function ClientDetailPage() {
   if (!client) return null;
 
   const selectedBusinessProfiles = getSelectedBusinessProfiles();
+  const groupedClientObligations = Array.from(
+    acessoriasObligations.reduce((map, row) => {
+      const obligationName = (row.obligation_name || "Obrigacao sem nome").trim() || "Obrigacao sem nome";
+      const key = obligationName.toLowerCase();
+      const current = map.get(key);
+      if (current) {
+        current.rows.push(row);
+        return map;
+      }
+      map.set(key, { obligationName, rows: [row] as ClientAcessoriasObligation[] });
+      return map;
+    }, new Map<string, { obligationName: string; rows: ClientAcessoriasObligation[] }>()),
+  )
+    .map((group) => {
+      const rowsForMonth = group.rows
+        .filter((row) => {
+          const periodMonth = toMonthKey(row.obligation_period);
+          const dueMonth = toMonthKey(row.due_date);
+          return periodMonth === obligationMonthFilter || dueMonth === obligationMonthFilter;
+        })
+        .sort((left, right) => {
+          const leftDue = left.due_date || "";
+          const rightDue = right.due_date || "";
+          return leftDue.localeCompare(rightDue);
+        });
+
+      let monthStatus = "sem_registro";
+      if (rowsForMonth.length > 0) {
+        const normalizedStatuses = rowsForMonth.map((row) => normalizeObligationStatusToken(row.status));
+        if (normalizedStatuses.includes("atrasado")) monthStatus = "atrasado";
+        else if (normalizedStatuses.includes("pendente")) monthStatus = "pendente";
+        else if (normalizedStatuses.includes("em_andamento")) monthStatus = "em_andamento";
+        else monthStatus = "concluido";
+      }
+
+      return {
+        obligationName: group.obligationName,
+        allRowsCount: group.rows.length,
+        rowsForMonth,
+        monthStatus,
+      };
+    })
+    .sort((left, right) => left.obligationName.localeCompare(right.obligationName));
+
+  const obligationsWithMonthStatus = groupedClientObligations.filter((group) => group.monthStatus !== "sem_registro").length;
 
   const renderDataFields = (category: ClientCategoryKey) => {
     const config = categoryConfig[category];
@@ -1835,10 +1971,11 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
             <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
+            <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
             <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
           </TabsList>
 
@@ -2134,16 +2271,16 @@ export default function ClientDetailPage() {
                 </h3>
               </div>
 
-              <Tabs defaultValue={cadastralCategoryKeys[0]} className="space-y-4">
+              <Tabs defaultValue={cadastralCategoryTabKeys[0]} className="space-y-4">
                 <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-4">
-                  {cadastralCategoryKeys.map((category) => (
+                  {cadastralCategoryTabKeys.map((category) => (
                     <TabsTrigger key={category} value={category} className="h-9 px-2 text-xs sm:text-sm">
                       {categoryConfig[category].label}
                     </TabsTrigger>
                   ))}
                 </TabsList>
 
-                {cadastralCategoryKeys.map((category) => (
+                {cadastralCategoryTabKeys.map((category) => (
                   <TabsContent key={category} value={category}>
                     <div className="rounded-lg border p-4">
                       {renderDataFields(category)}
@@ -2151,6 +2288,116 @@ export default function ClientDetailPage() {
                   </TabsContent>
                 ))}
               </Tabs>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="obrigacoes" className="space-y-4">
+            <div className="rounded-xl border bg-card p-6 space-y-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="space-y-1">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4" /> Obrigacoes da empresa
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Exibe todas as obrigacoes cadastradas para este cliente e a situacao no mes selecionado.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Mes de referencia</Label>
+                  <Input
+                    type="month"
+                    value={obligationMonthFilter}
+                    onChange={(event) => setObligationMonthFilter(event.target.value)}
+                    className="h-9 w-48"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                  <p>Total de obrigacoes cadastradas: <span className="font-medium">{groupedClientObligations.length}</span></p>
+                  <p>Com situacao no mes: <span className="font-medium">{obligationsWithMonthStatus}</span></p>
+                  <p>Mes filtrado: <span className="font-medium">{obligationMonthFilter}</span></p>
+                </div>
+              </div>
+
+              {loadingAcessoriasObligations ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              ) : groupedClientObligations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma obrigacao encontrada para este cliente.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {groupedClientObligations.map((group) => (
+                    <div key={group.obligationName} className="rounded-lg border p-4 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">{group.obligationName}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="text-[11px]">
+                            Historico: {group.allRowsCount}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`border-0 text-[11px] ${obligationStatusClass[group.monthStatus] || obligationStatusClass.sem_registro}`}
+                          >
+                            {obligationStatusLabel[group.monthStatus] || obligationStatusLabel.sem_registro}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {group.rowsForMonth.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Sem registro desta obrigacao no mes selecionado.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {group.rowsForMonth.map((row) => {
+                            const rowStatus = normalizeObligationStatusToken(row.status);
+                            return (
+                              <div key={row.id} className="rounded-md border bg-muted/10 px-3 py-2 space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={`border-0 text-[11px] ${obligationStatusClass[rowStatus] || obligationStatusClass.pendente}`}
+                                  >
+                                    {obligationStatusLabel[rowStatus] || obligationStatusLabel.pendente}
+                                  </Badge>
+                                  {row.obligation_period && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      Competencia: {row.obligation_period}
+                                    </span>
+                                  )}
+                                  {row.due_date && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      Vencimento: {new Date(row.due_date).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  )}
+                                  {row.delivered_at && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      Entregue em: {new Date(row.delivered_at).toLocaleDateString("pt-BR")}
+                                    </span>
+                                  )}
+                                </div>
+                                {(row.protocol || row.notes) && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {row.protocol ? `Protocolo: ${row.protocol}` : ""}
+                                    {row.protocol && row.notes ? " • " : ""}
+                                    {row.notes ? `Obs.: ${row.notes}` : ""}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
 
