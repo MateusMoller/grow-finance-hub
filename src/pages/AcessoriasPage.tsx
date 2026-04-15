@@ -136,7 +136,11 @@ const readFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-export default function AcessoriasPage() {
+interface AcessoriasPageProps {
+  module?: "obrigacoes" | "econtinuo";
+}
+
+export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
   const [loading, setLoading] = useState(true);
   const [syncingCompanies, setSyncingCompanies] = useState(false);
   const [syncingObligations, setSyncingObligations] = useState(false);
@@ -177,6 +181,7 @@ export default function AcessoriasPage() {
     description: "",
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const isObrigacoesModule = module === "obrigacoes";
 
   const filteredClients = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -498,37 +503,54 @@ export default function AcessoriasPage() {
       <div className="space-y-5 max-w-7xl">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Modulo Acessorias</h1>
+            <h1 className="font-heading text-2xl font-bold">
+              {isObrigacoesModule ? "Modulo Obrigacoes" : "Modulo E-continuo"}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Integracao unica para cruzamento de clientes, obrigacoes acessorias e envio e-Continuo.
+              {isObrigacoesModule
+                ? "Controle das obrigacoes acessorias com sincronizacao e acompanhamento por cliente."
+                : "Envio de arquivos para o e-Continuo com historico operacional por cliente."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleSyncCompanies}
-              disabled={syncingCompanies}
-            >
-              {syncingCompanies ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Sincronizar Empresas
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSyncObligations}
-              disabled={syncingObligations}
-            >
-              {syncingObligations ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-              )}
-              Sincronizar Obrigacoes
-            </Button>
+            {isObrigacoesModule ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSyncCompanies}
+                  disabled={syncingCompanies}
+                >
+                  {syncingCompanies ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Sincronizar Empresas
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSyncObligations}
+                  disabled={syncingObligations}
+                >
+                  {syncingObligations ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  )}
+                  Sincronizar Obrigacoes
+                </Button>
+              </>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => void refreshAll()} disabled={loading}>
+                {loading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Atualizar Dados
+              </Button>
+            )}
           </div>
         </div>
 
@@ -559,14 +581,16 @@ export default function AcessoriasPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <Tabs defaultValue="clientes" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="clientes">Clientes</TabsTrigger>
-              <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
-              <TabsTrigger value="econtinuo">Envio e-Continuo</TabsTrigger>
-            </TabsList>
+          <Tabs defaultValue={isObrigacoesModule ? "clientes" : "econtinuo"} className="space-y-4">
+            {isObrigacoesModule && (
+              <TabsList>
+                <TabsTrigger value="clientes">Clientes</TabsTrigger>
+                <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
+              </TabsList>
+            )}
 
-            <TabsContent value="clientes" className="space-y-4">
+            {isObrigacoesModule && (
+              <TabsContent value="clientes" className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Cruzamento Grow x Acessorias (automatico por CNPJ)</CardTitle>
@@ -652,9 +676,11 @@ export default function AcessoriasPage() {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
+            )}
 
-            <TabsContent value="obrigacoes" className="space-y-4">
+            {isObrigacoesModule && (
+              <TabsContent value="obrigacoes" className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Cadastro de obrigacoes por cliente</CardTitle>
@@ -848,9 +874,11 @@ export default function AcessoriasPage() {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
+            )}
 
-            <TabsContent value="econtinuo" className="space-y-4">
+            {!isObrigacoesModule && (
+              <TabsContent value="econtinuo" className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Upload e envio para e-Continuo</CardTitle>
@@ -961,7 +989,8 @@ export default function AcessoriasPage() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
+            )}
           </Tabs>
         )}
 
@@ -985,3 +1014,5 @@ export default function AcessoriasPage() {
     </AppLayout>
   );
 }
+
+export default AcessoriasPage;

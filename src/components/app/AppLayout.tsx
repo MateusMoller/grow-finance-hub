@@ -73,7 +73,8 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatorios", url: "/app/relatorios" },
-    { title: "Acessorias", url: "/app/acessorias" },
+    { title: "Obrigacoes", url: "/app/obrigacoes" },
+    { title: "E-continuo", url: "/app/econtinuo" },
     { title: "Notificacoes", url: "/app/notificacoes" },
     { title: "Usuarios", url: "/app/usuarios" },
     { title: "Sugestoes", url: "/app/sugestoes" },
@@ -94,10 +95,11 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
       item.url === "/app/formularios" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
-      item.url === "/app/acessorias" ||
+      item.url === "/app/obrigacoes" ||
+      item.url === "/app/econtinuo" ||
       item.url === "/app/sugestoes" ||
       item.url === "/app/manual",
-    );
+  );
   }
 
   if (!isDepartmentRole) return base;
@@ -111,7 +113,8 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     item.url === "/app/formularios" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
-    item.url === "/app/acessorias" ||
+    item.url === "/app/obrigacoes" ||
+    item.url === "/app/econtinuo" ||
     item.url === "/app/sugestoes" ||
     item.url === "/app/manual",
   );

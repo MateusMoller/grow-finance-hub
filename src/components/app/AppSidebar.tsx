@@ -16,6 +16,7 @@ import {
   MessagesSquare,
   UserCog,
   Lightbulb,
+  Send,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -48,7 +49,8 @@ const operationalItems = [
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Acessorias", url: "/app/acessorias", icon: FileSpreadsheet },
+  { title: "Obrigacoes", url: "/app/obrigacoes", icon: FileSpreadsheet },
+  { title: "E-continuo", url: "/app/econtinuo", icon: Send },
 ];
 
 const systemItems = [
@@ -125,7 +127,8 @@ export function AppSidebar() {
           item.url === "/app/formularios" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
-          item.url === "/app/acessorias",
+          item.url === "/app/obrigacoes" ||
+          item.url === "/app/econtinuo",
       )
     : isAdmin
       ? operationalItems
