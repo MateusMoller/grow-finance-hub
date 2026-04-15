@@ -337,7 +337,26 @@ function normalizeObligationStatus(value: string | null) {
   if (!value) return null;
   const token = normalizeToken(value);
   if (!token) return value;
-  if (["done", "completed", "concluido", "concluida", "entregue", "delivered", "sent", "enviado"].includes(token)) {
+  if (
+    [
+      "done",
+      "completed",
+      "concluido",
+      "concluida",
+      "entregue",
+      "delivered",
+      "sent",
+      "enviado",
+      "ent_atrasada",
+      "ent_antecipada",
+      "ent_pztec",
+      "ent_pz_tec",
+      "ent_no_prazo",
+      "entregue_no_prazo",
+      "finalizado",
+      "finalizada",
+    ].includes(token)
+  ) {
     return "concluido";
   }
   if (["pending", "pendente", "open", "aberto", "to_send", "a_enviar"].includes(token)) {
@@ -622,7 +641,7 @@ function parseObligations(payload: unknown): ParsedObligation[] {
       ) ||
       normalizeDate(pickFirstNestedString(record, ["deadlines.due_date", "prazo.vencimento"]));
 
-    const deliveredAt =
+  const deliveredAt =
       normalizeDateTime(
         pickFirstString(record, [
           "delivered_at",
@@ -631,7 +650,6 @@ function parseObligations(payload: unknown): ParsedObligation[] {
           "delivery_date",
           "concluded_at",
           "EntDtEntrega",
-          "EntLastDH",
         ]),
       ) ||
       normalizeDateTime(pickFirstNestedString(record, ["delivery.sent_at", "envio.data"]));
@@ -780,9 +798,9 @@ async function buildAuthContext(req: Request, fallbackToken?: string | null) {
 async function ensureKanbanTaskForObligation(
   supabaseAdmin: ReturnType<typeof createClient>,
   input: CreateKanbanTaskInput,
+  options?: { allowCreate?: boolean },
 ) {
-  if (isCompletedStatus(input.status)) return null;
-
+  const allowCreate = options?.allowCreate ?? true;
   const integrationTaskId = `${input.clientId}:${input.obligationId}:${toPeriodKey(input.obligationPeriod)}`;
   const dueDateText = input.dueDate ? `Vencimento: ${input.dueDate}` : "Vencimento nao informado";
   const protocolText = input.protocol ? `Protocolo: ${input.protocol}` : null;
@@ -799,29 +817,75 @@ async function ensureKanbanTaskForObligation(
 
   const priority = computePriorityByDueDate(input.dueDate);
   const sector = normalizeSectorFromObligationName(input.obligationName);
+  const isCompleted = isCompletedStatus(input.status);
 
-  const { data, error } = await supabaseAdmin
+  const { data: existingTask, error: existingTaskError } = await supabaseAdmin
     .from("kanban_tasks")
-    .upsert(
-      {
+    .select("id, status")
+    .eq("integration_source", "acessorias_obrigacao")
+    .eq("integration_task_id", integrationTaskId)
+    .maybeSingle();
+  if (existingTaskError) {
+    throw existingTaskError;
+  }
+
+  if (!existingTask) {
+    if (!allowCreate) return null;
+
+    const { data: createdTask, error: createError } = await supabaseAdmin
+      .from("kanban_tasks")
+      .insert({
         title: `[Acessorias] ${input.obligationName}`,
         description,
         client_name: input.clientName,
         assignee: null,
         priority,
         sector,
-        status: "todo",
+        status: isCompleted ? "done" : "todo",
         due_date: input.dueDate,
         tags: ["Acessorias", "Obrigacao"],
         created_by: input.createdBy,
         integration_source: "acessorias_obrigacao",
         integration_task_id: integrationTaskId,
         integration_payload: input.payload,
-      },
-      {
-        onConflict: "integration_source,integration_task_id",
-      },
-    )
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (createError) {
+      throw createError;
+    }
+
+    return createdTask?.id || null;
+  }
+
+  let nextStatus = existingTask.status;
+  if (existingTask.status !== "archived") {
+    if (isCompleted) {
+      nextStatus = "done";
+    } else if (existingTask.status === "done") {
+      nextStatus = "todo";
+    }
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    title: `[Acessorias] ${input.obligationName}`,
+    description,
+    client_name: input.clientName,
+    priority,
+    sector,
+    due_date: input.dueDate,
+    tags: ["Acessorias", "Obrigacao"],
+    integration_payload: input.payload,
+  };
+  if (nextStatus !== existingTask.status) {
+    updatePayload.status = nextStatus;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_tasks")
+    .update(updatePayload)
+    .eq("id", existingTask.id)
     .select("id")
     .maybeSingle();
 
@@ -829,7 +893,7 @@ async function ensureKanbanTaskForObligation(
     throw error;
   }
 
-  return data?.id || null;
+  return data?.id || existingTask.id;
 }
 
 async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
@@ -1459,6 +1523,70 @@ async function ensureLinkForClientByCnpj(
   return createdLink || null;
 }
 
+async function ensureAutomaticLinksByCnpjFromCache(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  callerUserId: string,
+) {
+  const [{ data: clients, error: clientsError }, { data: links, error: linksError }, { data: companies, error: companiesError }] = await Promise.all([
+    supabaseAdmin.from("clients").select("id, cnpj").order("created_at"),
+    supabaseAdmin.from("client_acessorias_links").select("client_id, acessorias_company_id"),
+    supabaseAdmin.from("acessorias_companies_cache").select("acessorias_company_id, cnpj"),
+  ]);
+
+  if (clientsError) throw clientsError;
+  if (linksError) throw linksError;
+  if (companiesError) throw companiesError;
+
+  const companyByCnpj = new Map<string, { acessorias_company_id: string }>();
+  for (const company of companies || []) {
+    const cnpj = normalizeCnpj(company.cnpj);
+    if (!cnpj || companyByCnpj.has(cnpj)) continue;
+    companyByCnpj.set(cnpj, { acessorias_company_id: company.acessorias_company_id });
+  }
+
+  const linkedClientIds = new Set((links || []).map((item) => item.client_id));
+  const linkedCompanyIds = new Set((links || []).map((item) => item.acessorias_company_id));
+
+  const nowIso = new Date().toISOString();
+  const autoLinks: Array<{
+    client_id: string;
+    acessorias_company_id: string;
+    match_type: string;
+    match_score: number;
+    created_by: string;
+    last_synced_at: string;
+  }> = [];
+
+  for (const client of clients || []) {
+    if (linkedClientIds.has(client.id)) continue;
+    const cnpj = normalizeCnpj(client.cnpj);
+    if (!cnpj) continue;
+    const matched = companyByCnpj.get(cnpj);
+    if (!matched) continue;
+    if (linkedCompanyIds.has(matched.acessorias_company_id)) continue;
+
+    autoLinks.push({
+      client_id: client.id,
+      acessorias_company_id: matched.acessorias_company_id,
+      match_type: "auto",
+      match_score: 100,
+      created_by: callerUserId,
+      last_synced_at: nowIso,
+    });
+    linkedClientIds.add(client.id);
+    linkedCompanyIds.add(matched.acessorias_company_id);
+  }
+
+  if (autoLinks.length === 0) return 0;
+
+  const { error: autoLinkError } = await supabaseAdmin
+    .from("client_acessorias_links")
+    .upsert(autoLinks, { onConflict: "client_id" });
+  if (autoLinkError) throw autoLinkError;
+
+  return autoLinks.length;
+}
+
 async function handleSyncObligations(
   supabaseAdmin: ReturnType<typeof createClient>,
   body: JsonRecord,
@@ -1468,31 +1596,55 @@ async function handleSyncObligations(
 ) {
   const clientIdFilter = asTrimmedString(body.client_id);
   const shouldCreateTasks = asBoolean(body.create_tasks);
-
-  await handleSyncCompanies(
-    supabaseAdmin,
-    acessoriasApiBaseUrl,
-    acessoriasApiToken,
-    callerUserId,
-    {
-      sync_grow_clients: false,
-      restrict_to_acessorias: false,
-    },
-  );
+  const autoLinkedClients = await ensureAutomaticLinksByCnpjFromCache(supabaseAdmin, callerUserId);
+  const requestedBatchSize =
+    typeof body.batch_size === "number" ? body.batch_size : Number(asTrimmedString(body.batch_size) || "0");
+  const requestedCursor =
+    typeof body.cursor === "number" ? body.cursor : Number(asTrimmedString(body.cursor) || "0");
+  const batchSize = clientIdFilter
+    ? 1
+    : Number.isFinite(requestedBatchSize) && requestedBatchSize > 0
+      ? Math.min(50, Math.max(1, Math.trunc(requestedBatchSize)))
+      : 10;
+  const cursor = clientIdFilter
+    ? 0
+    : Number.isFinite(requestedCursor) && requestedCursor > 0
+      ? Math.trunc(requestedCursor)
+      : 0;
 
   let linksQuery = supabaseAdmin
     .from("client_acessorias_links")
-    .select("client_id, acessorias_company_id")
+    .select("client_id, acessorias_company_id", { count: "exact" })
     .order("created_at");
   if (clientIdFilter) {
-    linksQuery = linksQuery.eq("client_id", clientIdFilter);
+    linksQuery = linksQuery.eq("client_id", clientIdFilter).limit(1);
+  } else {
+    linksQuery = linksQuery.range(cursor, cursor + batchSize - 1);
   }
 
-  const { data: links, error: linksError } = await linksQuery;
+  const { data: links, error: linksError, count: totalLinksCount } = await linksQuery;
   if (linksError) throw linksError;
 
+  const totalLinks = clientIdFilter
+    ? (links || []).length
+    : typeof totalLinksCount === "number"
+      ? totalLinksCount
+      : cursor + (links || []).length;
+
   if (!links || links.length === 0) {
-    return { synced_obligations: 0, clients_processed: 0, created_tasks: 0, details: [] };
+    return {
+      synced_obligations: 0,
+      clients_processed: 0,
+      created_tasks: 0,
+      details: [],
+      auto_linked_clients: autoLinkedClients,
+      total_links: totalLinks,
+      processed_in_batch: 0,
+      batch_size: batchSize,
+      cursor,
+      has_more: false,
+      next_cursor: null,
+    };
   }
 
   const { data: clients, error: clientsError } = await supabaseAdmin
@@ -1593,20 +1745,42 @@ async function handleSyncObligations(
       obligationRows.push(row);
 
       if (shouldCreateTasks) {
-        const taskId = await ensureKanbanTaskForObligation(supabaseAdmin, {
-          clientId: link.client_id,
-          clientName: clientsById.get(link.client_id) || "Cliente",
-          obligationId: obligation.acessorias_obligation_id,
-          obligationName: obligation.obligation_name,
-          obligationPeriod: obligation.obligation_period,
-          dueDate: obligation.due_date,
-          status: obligation.status,
-          protocol: obligation.protocol,
-          notes: obligation.notes,
-          payload: obligation.source_payload,
-          createdBy: callerUserId,
-        });
+        const taskId = await ensureKanbanTaskForObligation(
+          supabaseAdmin,
+          {
+            clientId: link.client_id,
+            clientName: clientsById.get(link.client_id) || "Cliente",
+            obligationId: obligation.acessorias_obligation_id,
+            obligationName: obligation.obligation_name,
+            obligationPeriod: obligation.obligation_period,
+            dueDate: obligation.due_date,
+            status: obligation.status,
+            protocol: obligation.protocol,
+            notes: obligation.notes,
+            payload: obligation.source_payload,
+            createdBy: callerUserId,
+          },
+          { allowCreate: true },
+        );
         if (taskId) createdTasks += 1;
+      } else {
+        await ensureKanbanTaskForObligation(
+          supabaseAdmin,
+          {
+            clientId: link.client_id,
+            clientName: clientsById.get(link.client_id) || "Cliente",
+            obligationId: obligation.acessorias_obligation_id,
+            obligationName: obligation.obligation_name,
+            obligationPeriod: obligation.obligation_period,
+            dueDate: obligation.due_date,
+            status: obligation.status,
+            protocol: obligation.protocol,
+            notes: obligation.notes,
+            payload: obligation.source_payload,
+            createdBy: callerUserId,
+          },
+          { allowCreate: false },
+        );
       }
     }
 
@@ -1625,19 +1799,32 @@ async function handleSyncObligations(
   }
 
   if (obligationRows.length > 0) {
-    const { error: obligationsUpsertError } = await supabaseAdmin
-      .from("client_acessorias_obligations")
-      .upsert(obligationRows, {
-        onConflict: "client_id,acessorias_obligation_id,obligation_period_key",
-      });
-    if (obligationsUpsertError) throw obligationsUpsertError;
+    for (const rowsChunk of chunkArray(obligationRows, 400)) {
+      const { error: obligationsUpsertError } = await supabaseAdmin
+        .from("client_acessorias_obligations")
+        .upsert(rowsChunk, {
+          onConflict: "client_id,acessorias_obligation_id,obligation_period_key",
+        });
+      if (obligationsUpsertError) throw obligationsUpsertError;
+    }
   }
+
+  const processedInBatch = links.length;
+  const nextCursor = clientIdFilter ? null : cursor + processedInBatch;
+  const hasMore = !clientIdFilter && nextCursor < totalLinks;
 
   return {
     synced_obligations: obligationRows.length,
     clients_processed: links.length,
     created_tasks: createdTasks,
     details,
+    auto_linked_clients: autoLinkedClients,
+    total_links: totalLinks,
+    processed_in_batch: processedInBatch,
+    batch_size: batchSize,
+    cursor,
+    has_more: hasMore,
+    next_cursor: hasMore ? nextCursor : null,
   };
 }
 

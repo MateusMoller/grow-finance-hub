@@ -330,21 +330,60 @@ export default function AcessoriasPage() {
   const handleSyncObligations = async () => {
     setSyncingObligations(true);
     try {
-      const result = await invokeAcessorias<{
-        synced_obligations: number;
-        clients_processed: number;
-        created_tasks: number;
-      }>({
-        action: "sync_obligations",
-        create_tasks: syncCreateTasks,
-      });
+      const batchSize = 10;
+      let cursor = 0;
+      let hasMore = true;
+      let rounds = 0;
+      let totalSynced = 0;
+      let totalProcessedClients = 0;
+      let totalCreatedTasks = 0;
+      let totalAutoLinkedClients = 0;
+      let totalLinks = 0;
+
+      while (hasMore && rounds < 100) {
+        const result = await invokeAcessorias<{
+          synced_obligations: number;
+          clients_processed: number;
+          created_tasks: number;
+          auto_linked_clients: number;
+          total_links: number;
+          processed_in_batch: number;
+          has_more: boolean;
+          next_cursor: number | null;
+        }>({
+          action: "sync_obligations",
+          create_tasks: syncCreateTasks,
+          batch_size: batchSize,
+          cursor,
+        });
+
+        totalSynced += Number(result.synced_obligations || 0);
+        totalProcessedClients += Number(result.clients_processed || 0);
+        totalCreatedTasks += Number(result.created_tasks || 0);
+        totalAutoLinkedClients += Number(result.auto_linked_clients || 0);
+        totalLinks = Number(result.total_links || totalLinks);
+        rounds += 1;
+
+        const processedInBatch = Number(result.processed_in_batch || 0);
+        const nextCursor = typeof result.next_cursor === "number" ? result.next_cursor : null;
+        hasMore = Boolean(result.has_more) && nextCursor !== null;
+        if (!hasMore) break;
+        if (processedInBatch <= 0) {
+          break;
+        }
+        cursor = nextCursor as number;
+      }
 
       toast.success(
-        `Obrigacoes sincronizadas: ${result.synced_obligations || 0}. Clientes processados: ${result.clients_processed || 0}.`,
+        `Obrigacoes sincronizadas: ${totalSynced}. Clientes processados: ${totalProcessedClients}/${totalLinks || totalProcessedClients}.`,
       );
-      if ((result.created_tasks || 0) > 0) {
-        toast.success(`Tarefas de fluxo criadas no Kanban: ${result.created_tasks}.`);
+      if (totalAutoLinkedClients > 0) {
+        toast.success(`Clientes vinculados automaticamente por CNPJ: ${totalAutoLinkedClients}.`);
       }
+      if (totalCreatedTasks > 0) {
+        toast.success(`Tarefas de fluxo criadas no Kanban: ${totalCreatedTasks}.`);
+      }
+
       await Promise.all([loadOverview(), loadObligations()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao sincronizar obrigacoes");
@@ -413,10 +452,17 @@ export default function AcessoriasPage() {
           descricao: uploadForm.description || null,
         },
       });
-      toast.success("Arquivo enviado para o e-Continuo.");
+
+      await invokeAcessorias({
+        action: "sync_obligations",
+        client_id: uploadForm.client_id,
+        create_tasks: syncCreateTasks,
+      });
+
+      toast.success("Arquivo enviado para o e-Continuo e status das obrigacoes atualizado.");
       setSelectedFile(null);
       setUploadForm((current) => ({ ...current, competence: "", description: "" }));
-      await Promise.all([loadOverview(), loadUploads(uploadForm.client_id)]);
+      await Promise.all([loadOverview(), loadObligations(uploadForm.client_id), loadUploads(uploadForm.client_id)]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao enviar arquivo");
     } finally {
@@ -875,7 +921,7 @@ export default function AcessoriasPage() {
                       ) : (
                         <Send className="h-4 w-4 mr-2" />
                       )}
-                      Enviar para e-Continuo
+                      Enviar e Atualizar Status
                     </Button>
                   </div>
                 </CardContent>
