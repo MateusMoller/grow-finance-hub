@@ -585,7 +585,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
   const handleUpdateObligation = async () => {
     if (!editingObligation) return;
-    const targetClientId = editingObligation.client_id;
     const obligationName = editObligationForm.obligation_name.trim();
     if (!obligationName) {
       toast.error("Informe o nome da obrigacao.");
@@ -624,19 +623,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       }
 
       setEditingObligation(null);
-      try {
-        await invokeAcessorias({
-          action: "sync_obligations",
-          client_id: targetClientId,
-          create_tasks: syncCreateTasks,
-        });
-      } catch (syncError) {
-        toast.error(
-          syncError instanceof Error
-            ? syncError.message
-            : "Nao foi possivel atualizar os dados mais recentes do Acessorias para este cliente.",
-        );
-      }
       await Promise.all([loadOverview(), loadObligations()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao atualizar obrigacao");
@@ -670,13 +656,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         },
       });
 
-      await invokeAcessorias({
-        action: "sync_obligations",
-        client_id: uploadForm.client_id,
-        create_tasks: syncCreateTasks,
-      });
-
-      toast.success("Arquivo enviado para o e-Continuo e status das obrigacoes atualizado.");
+      toast.success("Arquivo enviado para o e-Continuo. Obrigacoes serao atualizadas na proxima sincronizacao manual.");
       setSelectedFile(null);
       setUploadForm((current) => ({ ...current, competence: "", description: "" }));
       await Promise.all([loadOverview(), loadObligations(uploadForm.client_id), loadUploads(uploadForm.client_id)]);
