@@ -11,6 +11,7 @@ import {
   Loader2,
   Send,
   Plus,
+  RefreshCcw,
   Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -154,22 +155,6 @@ const readFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-const AUTO_SYNC_LAST_RUN_STORAGE_KEY = "grow-acessorias-auto-sync-last-run-at";
-const AUTO_SYNC_COOLDOWN_MS = 30_000;
-
-const shouldRunAutoSync = () => {
-  if (typeof window === "undefined") return true;
-  const raw = window.localStorage.getItem(AUTO_SYNC_LAST_RUN_STORAGE_KEY);
-  const lastRunAt = Number(raw || 0);
-  if (!Number.isFinite(lastRunAt) || lastRunAt <= 0) return true;
-  return Date.now() - lastRunAt >= AUTO_SYNC_COOLDOWN_MS;
-};
-
-const markAutoSyncRun = () => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(AUTO_SYNC_LAST_RUN_STORAGE_KEY, String(Date.now()));
-};
-
 interface AcessoriasPageProps {
   module?: "obrigacoes" | "econtinuo";
 }
@@ -178,8 +163,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
   const [loading, setLoading] = useState(true);
   const [syncingCompanies, setSyncingCompanies] = useState(false);
   const [syncingObligations, setSyncingObligations] = useState(false);
-  const [autoSyncing, setAutoSyncing] = useState(false);
-  const [autoSyncMessage, setAutoSyncMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [assigningObligation, setAssigningObligation] = useState(false);
 
@@ -405,50 +388,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
   };
 
   useEffect(() => {
-    let active = true;
-
-    const initializeModule = async () => {
-      await refreshCurrentModuleData();
-
-      if (!isObrigacoesModule || !shouldRunAutoSync()) return;
-
-      markAutoSyncRun();
-      if (!active) return;
-
-      setAutoSyncing(true);
-      setAutoSyncMessage("Sincronizando empresas...");
-
-      try {
-        await handleSyncCompanies({ silent: true });
-        if (!active) return;
-
-        setAutoSyncMessage("Sincronizando obrigacoes...");
-        await handleSyncObligations({
-          silent: true,
-          initialBatchSize: 20,
-          fallbackBatchSize: 10,
-        });
-
-        await Promise.all([loadOverview(), loadObligations()]);
-        if (!active) return;
-        setAutoSyncMessage("Sincronizacao automatica concluida.");
-      } catch (error) {
-        if (!active) return;
-        setAutoSyncMessage("Falha na sincronizacao automatica.");
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Erro na sincronizacao automatica de empresas e obrigacoes",
-        );
-      } finally {
-        if (active) setAutoSyncing(false);
-      }
-    };
-
-    void initializeModule();
-    return () => {
-      active = false;
-    };
+    void refreshCurrentModuleData();
   }, [isObrigacoesModule]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSyncCompanies({ silent = false }: { silent?: boolean } = {}) {
@@ -576,6 +516,24 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       setSyncingObligations(false);
     }
   }
+
+  const handleManualSync = async () => {
+    if (!isObrigacoesModule) return;
+
+    try {
+      await handleSyncCompanies({ silent: true });
+      await handleSyncObligations({
+        silent: true,
+        initialBatchSize: 20,
+        fallbackBatchSize: 10,
+      });
+      toast.success("Sincronizacao concluida. Dados atualizados a partir do Acessorias.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao sincronizar dados com o Acessorias",
+      );
+    }
+  };
 
   const handleAssignObligation = async () => {
     if (!newObligation.client_id || !newObligation.obligation_name.trim()) {
@@ -766,19 +724,36 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                 : "Envio de arquivos para o e-Continuo com historico operacional por cliente."}
             </p>
           </div>
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground min-h-10 inline-flex items-center gap-2">
-            {autoSyncing || syncingCompanies || syncingObligations ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            ) : (
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+          <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center">
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground min-h-10 inline-flex items-center gap-2">
+              {syncingCompanies || syncingObligations ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              )}
+              <span>
+                {isObrigacoesModule
+                  ? syncingCompanies || syncingObligations
+                    ? "Sincronizacao manual em andamento..."
+                    : "Dados carregados do cache. Atualize somente no botao Sincronizar."
+                  : "Dados carregados automaticamente ao abrir o modulo."}
+              </span>
+            </div>
+            {isObrigacoesModule && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleManualSync()}
+                disabled={syncingCompanies || syncingObligations || !hasConfiguration}
+              >
+                {syncingCompanies || syncingObligations ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4 mr-2" />
+                )}
+                Sincronizar agora
+              </Button>
             )}
-            <span>
-              {isObrigacoesModule
-                ? autoSyncing || syncingCompanies || syncingObligations
-                  ? autoSyncMessage || "Sincronizacao automatica em andamento..."
-                  : "Sincronizacao automatica por F5 habilitada."
-                : "Dados carregados automaticamente ao abrir o modulo."}
-            </span>
           </div>
         </div>
 
@@ -1151,7 +1126,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             </span>
             <span className="inline-flex items-center gap-1">
               <CalendarClock className="h-3.5 w-3.5 text-amber-600" />
-              Obrigacoes sincronizam automaticamente ao atualizar a pagina.
+              Obrigacoes usam cache salvo e atualizam somente ao clicar em Sincronizar agora.
             </span>
             <span className="inline-flex items-center gap-1">
               <Send className="h-3.5 w-3.5 text-primary" />
