@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  RefreshCw,
   Link2,
   Upload,
   Building2,
@@ -12,6 +11,7 @@ import {
   Loader2,
   Send,
   Plus,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FunctionsHttpError } from "@supabase/supabase-js";
@@ -20,12 +20,22 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
 
 type AcessoriasCompany = {
@@ -120,6 +130,15 @@ const obligationStatusVariant = (status: string | null) => {
   return "outline";
 };
 
+const normalizeObligationStatusToken = (status: string | null) => {
+  const token = String(status || "").trim().toLowerCase();
+  if (!token) return "pendente";
+  if (["concluido", "completed", "delivered", "sent", "entregue"].includes(token)) return "concluido";
+  if (["atrasado", "overdue", "late", "vencido"].includes(token)) return "atrasado";
+  if (["em_andamento", "processing", "in_progress", "resolvendo"].includes(token)) return "em_andamento";
+  return "pendente";
+};
+
 const uploadStatusBadgeClass = (status: string) => {
   const token = String(status || "").trim().toLowerCase();
   if (token === "sent") return "bg-emerald-100 text-emerald-800 border-emerald-200";
@@ -178,9 +197,19 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     recent_uploads: 0,
   });
 
-  const [clientSearch, setClientSearch] = useState("");
-  const [syncCreateTasks, setSyncCreateTasks] = useState(true);
-  const [obligationClientFilter, setObligationClientFilter] = useState<string>("all");
+  const syncCreateTasks = true;
+  const [obligationSearch, setObligationSearch] = useState("");
+  const [obligationStatusFilter, setObligationStatusFilter] = useState<string>("all");
+  const [editingObligation, setEditingObligation] = useState<AcessoriasObligation | null>(null);
+  const [savingObligation, setSavingObligation] = useState(false);
+  const [editObligationForm, setEditObligationForm] = useState({
+    obligation_name: "",
+    obligation_period: "",
+    due_date: "",
+    status: "pendente",
+    protocol: "",
+    notes: "",
+  });
 
   const [newObligation, setNewObligation] = useState({
     client_id: "",
@@ -200,21 +229,72 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const isObrigacoesModule = module === "obrigacoes";
 
-  const filteredClients = useMemo(() => {
-    const term = clientSearch.trim().toLowerCase();
-    if (!term) return clients;
-    return clients.filter((client) => {
-      const name = String(client.name || "").toLowerCase();
-      const cnpj = String(client.cnpj || "");
-      const linkedCompany = String(client.acessorias_company_name || "").toLowerCase();
-      return name.includes(term) || cnpj.includes(term) || linkedCompany.includes(term);
-    });
-  }, [clients, clientSearch]);
+  const filteredObligations = useMemo(() => {
+    const searchToken = obligationSearch.trim().toLowerCase();
+    return obligations.filter((item) => {
+      const statusMatches =
+        obligationStatusFilter === "all" ||
+        normalizeObligationStatusToken(item.status) === obligationStatusFilter;
+      if (!statusMatches) return false;
+      if (!searchToken) return true;
 
-  const visibleObligations = useMemo(() => {
-    if (obligationClientFilter === "all") return obligations;
-    return obligations.filter((item) => item.client_id === obligationClientFilter);
-  }, [obligations, obligationClientFilter]);
+      const searchable = [
+        item.obligation_name,
+        item.client_name,
+        item.acessorias_company_name,
+        item.obligation_period,
+        item.status,
+        item.protocol,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(searchToken);
+    });
+  }, [obligations, obligationSearch, obligationStatusFilter]);
+
+  const groupedObligations = useMemo(() => {
+    const groups = new Map<string, { name: string; items: AcessoriasObligation[] }>();
+    filteredObligations.forEach((item) => {
+      const groupName = String(item.obligation_name || "Obrigacao sem nome").trim() || "Obrigacao sem nome";
+      const key = groupName.toLowerCase();
+      const current = groups.get(key);
+      if (current) {
+        current.items.push(item);
+        return;
+      }
+      groups.set(key, { name: groupName, items: [item] });
+    });
+
+    return Array.from(groups.values())
+      .map((group) => {
+        const pending = group.items.filter(
+          (item) => normalizeObligationStatusToken(item.status) === "pendente",
+        ).length;
+        const overdue = group.items.filter(
+          (item) => normalizeObligationStatusToken(item.status) === "atrasado",
+        ).length;
+        const inProgress = group.items.filter(
+          (item) => normalizeObligationStatusToken(item.status) === "em_andamento",
+        ).length;
+        const completed = group.items.filter(
+          (item) => normalizeObligationStatusToken(item.status) === "concluido",
+        ).length;
+
+        return {
+          ...group,
+          items: [...group.items].sort((a, b) =>
+            String(a.client_name || "").localeCompare(String(b.client_name || ""), "pt-BR"),
+          ),
+          pending,
+          overdue,
+          inProgress,
+          completed,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [filteredObligations]);
 
   const invokeAcessorias = async <TData extends Record<string, unknown> = Record<string, unknown>>(
     body: Record<string, unknown>,
@@ -533,6 +613,80 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     }
   };
 
+  const handleOpenEditObligation = (obligation: AcessoriasObligation) => {
+    setEditingObligation(obligation);
+    setEditObligationForm({
+      obligation_name: obligation.obligation_name || "",
+      obligation_period: obligation.obligation_period || "",
+      due_date: obligation.due_date || "",
+      status: normalizeObligationStatusToken(obligation.status),
+      protocol: obligation.protocol || "",
+      notes: obligation.notes || "",
+    });
+  };
+
+  const handleUpdateObligation = async () => {
+    if (!editingObligation) return;
+    const targetClientId = editingObligation.client_id;
+    const obligationName = editObligationForm.obligation_name.trim();
+    if (!obligationName) {
+      toast.error("Informe o nome da obrigacao.");
+      return;
+    }
+
+    setSavingObligation(true);
+    try {
+      const result = await invokeAcessorias<{
+        obligation?: AcessoriasObligation;
+        remote_sync?: {
+          attempted?: boolean;
+          ok?: boolean;
+          message?: string;
+        };
+      }>({
+        action: "update_obligation",
+        obligation_id: editingObligation.id,
+        obligation_name: obligationName,
+        obligation_period: editObligationForm.obligation_period.trim() || null,
+        due_date: editObligationForm.due_date || null,
+        status: editObligationForm.status || null,
+        protocol: editObligationForm.protocol.trim() || null,
+        notes: editObligationForm.notes.trim() || null,
+        sync_remote: true,
+      });
+
+      const remoteSync = result.remote_sync;
+      if (remoteSync?.attempted && remoteSync.ok) {
+        toast.success(remoteSync.message || "Obrigacao atualizada no Grow e no Acessorias.");
+      } else if (remoteSync?.attempted && !remoteSync.ok) {
+        toast.success("Obrigacao atualizada no Grow. Sincronizacao remota em processamento.");
+        toast.error(remoteSync.message || "Nao foi possivel confirmar atualizacao no Acessorias.");
+      } else {
+        toast.success("Obrigacao atualizada no Grow.");
+      }
+
+      setEditingObligation(null);
+      try {
+        await invokeAcessorias({
+          action: "sync_obligations",
+          client_id: targetClientId,
+          create_tasks: syncCreateTasks,
+        });
+      } catch (syncError) {
+        toast.error(
+          syncError instanceof Error
+            ? syncError.message
+            : "Nao foi possivel atualizar os dados mais recentes do Acessorias para este cliente.",
+        );
+      }
+      await Promise.all([loadOverview(), loadObligations()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar obrigacao");
+    } finally {
+      setSavingObligation(false);
+    }
+  };
+
   const handleSendUpload = async () => {
     if (!uploadForm.client_id) {
       toast.error("Selecione o cliente para envio.");
@@ -655,103 +809,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <Tabs defaultValue={isObrigacoesModule ? "clientes" : "econtinuo"} className="space-y-4">
-            {isObrigacoesModule && (
-              <TabsList>
-                <TabsTrigger value="clientes">Clientes</TabsTrigger>
-                <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
-              </TabsList>
-            )}
-
-            {isObrigacoesModule && (
-              <TabsContent value="clientes" className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Cruzamento Grow x Acessorias (automatico por CNPJ)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                    <Input
-                      placeholder="Buscar cliente, CNPJ ou empresa vinculada..."
-                      value={clientSearch}
-                      onChange={(event) => setClientSearch(event.target.value)}
-                    />
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="sync-create-tasks"
-                        checked={syncCreateTasks}
-                        onCheckedChange={(value) => setSyncCreateTasks(Boolean(value))}
-                      />
-                      <Label htmlFor="sync-create-tasks" className="text-sm">
-                        Gerar tarefas no Kanban ao sincronizar
-                      </Label>
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border overflow-x-auto">
-                    <table className="w-full min-w-[780px]">
-                      <thead>
-                        <tr className="bg-muted/40 border-b text-xs text-muted-foreground">
-                          <th className="text-left p-3">Cliente Grow</th>
-                          <th className="text-left p-3">Empresa Acessorias</th>
-                          <th className="text-left p-3">Obrigacoes</th>
-                          <th className="text-left p-3">Ultima sincronizacao</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {filteredClients.map((client) => {
-                          return (
-                            <tr key={client.id}>
-                              <td className="p-3 align-top">
-                                <div className="font-medium text-sm">{client.name}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  CNPJ: {client.cnpj || "Nao informado"} - Status: {client.status || "-"}
-                                </div>
-                              </td>
-                              <td className="p-3 align-top">
-                                {client.acessorias_company_name && (
-                                  <div className="text-sm">
-                                    {client.acessorias_company_name}
-                                    {client.link?.match_type ? (
-                                      <span className="text-xs text-muted-foreground"> ({client.link.match_type})</span>
-                                    ) : null}
-                                  </div>
-                                )}
-                                {!client.acessorias_company_name && (
-                                  <div className="text-xs text-muted-foreground">
-                                    Aguardando cruzamento automatico pelo CNPJ.
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3 align-top">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline">Total: {client.obligations.total}</Badge>
-                                  <Badge variant="secondary">Pendentes: {client.obligations.pending}</Badge>
-                                  {client.obligations.overdue > 0 && (
-                                    <Badge variant="destructive">Atrasadas: {client.obligations.overdue}</Badge>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="p-3 align-top text-sm text-muted-foreground">
-                                {formatDateTime(client.obligations.lastSyncedAt || client.link?.last_synced_at)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {filteredClients.length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="text-center p-8 text-sm text-muted-foreground">
-                              Nenhum cliente encontrado.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-              </TabsContent>
-            )}
+          <Tabs defaultValue={isObrigacoesModule ? "obrigacoes" : "econtinuo"} className="space-y-4">
 
             {isObrigacoesModule && (
               <TabsContent value="obrigacoes" className="space-y-4">
@@ -872,80 +930,97 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Obrigacoes sincronizadas</CardTitle>
+                  <CardTitle className="text-base">Obrigacoes organizadas por tipo</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-[260px_1fr]">
-                    <Select
-                      value={obligationClientFilter}
-                      onValueChange={(value) => setObligationClientFilter(value)}
-                    >
+                  <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
+                    <Input
+                      placeholder="Buscar por obrigacao, empresa, cliente ou protocolo..."
+                      value={obligationSearch}
+                      onChange={(event) => setObligationSearch(event.target.value)}
+                    />
+                    <Select value={obligationStatusFilter} onValueChange={setObligationStatusFilter}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos os clientes</SelectItem>
-                        {clients.map((client) => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="all">Todos os status</SelectItem>
+                        <SelectItem value="pendente">Pendentes</SelectItem>
+                        <SelectItem value="em_andamento">Em andamento</SelectItem>
+                        <SelectItem value="atrasado">Atrasados</SelectItem>
+                        <SelectItem value="concluido">Concluidos</SelectItem>
                       </SelectContent>
                     </Select>
-                    <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" onClick={() => void loadObligations()}>
-                        <RefreshCw className="h-4 w-4 mr-2" /> Atualizar lista
-                      </Button>
-                    </div>
                   </div>
 
-                  <div className="rounded-lg border overflow-x-auto">
-                    <table className="w-full min-w-[980px]">
-                      <thead>
-                        <tr className="bg-muted/40 border-b text-xs text-muted-foreground">
-                          <th className="text-left p-3">Cliente</th>
-                          <th className="text-left p-3">Obrigacao</th>
-                          <th className="text-left p-3">Competencia</th>
-                          <th className="text-left p-3">Vencimento</th>
-                          <th className="text-left p-3">Status</th>
-                          <th className="text-left p-3">Ult. sincronizacao</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {visibleObligations.map((item) => (
-                          <tr key={item.id}>
-                            <td className="p-3 align-top">
-                              <div className="text-sm font-medium">{item.client_name || "-"}</div>
-                              <div className="text-xs text-muted-foreground">{item.acessorias_company_name || "-"}</div>
-                            </td>
-                            <td className="p-3 align-top">
-                              <div className="text-sm">{item.obligation_name}</div>
-                              {item.protocol && (
-                                <div className="text-xs text-muted-foreground">Protocolo: {item.protocol}</div>
-                              )}
-                            </td>
-                            <td className="p-3 align-top text-sm">{item.obligation_period || "-"}</td>
-                            <td className="p-3 align-top text-sm">{formatDate(item.due_date)}</td>
-                            <td className="p-3 align-top">
-                              <Badge variant={obligationStatusVariant(item.status)}>
-                                {item.status || "pendente"}
-                              </Badge>
-                            </td>
-                            <td className="p-3 align-top text-sm text-muted-foreground">
-                              {formatDateTime(item.last_synced_at)}
-                            </td>
-                          </tr>
-                        ))}
-                        {visibleObligations.length === 0 && (
-                          <tr>
-                            <td colSpan={6} className="text-center p-8 text-sm text-muted-foreground">
-                              Nenhuma obrigacao encontrada.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  {groupedObligations.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
+                      Nenhuma obrigacao encontrada para o filtro aplicado.
+                    </div>
+                  ) : (
+                    <Accordion type="multiple" className="w-full rounded-lg border px-3">
+                      {groupedObligations.map((group) => (
+                        <AccordionItem key={group.name} value={group.name}>
+                          <AccordionTrigger className="py-3 hover:no-underline">
+                            <div className="flex flex-col items-start gap-2 text-left md:flex-row md:items-center md:gap-3">
+                              <span className="text-sm font-semibold">{group.name}</span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline">Empresas: {group.items.length}</Badge>
+                                <Badge variant="secondary">Pendentes: {group.pending}</Badge>
+                                {group.inProgress > 0 && <Badge variant="secondary">Andamento: {group.inProgress}</Badge>}
+                                {group.overdue > 0 && <Badge variant="destructive">Atrasadas: {group.overdue}</Badge>}
+                                {group.completed > 0 && <Badge variant="default">Concluidas: {group.completed}</Badge>}
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="rounded-lg border overflow-x-auto">
+                              <table className="w-full min-w-[960px]">
+                                <thead>
+                                  <tr className="bg-muted/40 border-b text-xs text-muted-foreground">
+                                    <th className="text-left p-3">Empresa</th>
+                                    <th className="text-left p-3">Cliente Grow</th>
+                                    <th className="text-left p-3">Competencia</th>
+                                    <th className="text-left p-3">Vencimento</th>
+                                    <th className="text-left p-3">Status</th>
+                                    <th className="text-left p-3">Ult. sincronizacao</th>
+                                    <th className="text-left p-3">Acao</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                  {group.items.map((item) => (
+                                    <tr key={item.id}>
+                                      <td className="p-3 align-top text-sm">{item.acessorias_company_name || "-"}</td>
+                                      <td className="p-3 align-top">
+                                        <div className="text-sm font-medium">{item.client_name || "-"}</div>
+                                        {item.protocol && (
+                                          <div className="text-xs text-muted-foreground">Protocolo: {item.protocol}</div>
+                                        )}
+                                      </td>
+                                      <td className="p-3 align-top text-sm">{item.obligation_period || "-"}</td>
+                                      <td className="p-3 align-top text-sm">{formatDate(item.due_date)}</td>
+                                      <td className="p-3 align-top">
+                                        <Badge variant={obligationStatusVariant(item.status)}>{item.status || "pendente"}</Badge>
+                                      </td>
+                                      <td className="p-3 align-top text-sm text-muted-foreground">
+                                        {formatDateTime(item.last_synced_at)}
+                                      </td>
+                                      <td className="p-3 align-top">
+                                        <Button variant="outline" size="sm" onClick={() => handleOpenEditObligation(item)}>
+                                          <Pencil className="h-3.5 w-3.5 mr-1" />
+                                          Editar
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
                 </CardContent>
               </Card>
               </TabsContent>
@@ -1082,8 +1157,108 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
               <Send className="h-3.5 w-3.5 text-primary" />
               Envio e-Continuo com log para rastreabilidade operacional.
             </span>
+            <span className="inline-flex items-center gap-1">
+              <Pencil className="h-3.5 w-3.5 text-primary" />
+              Alteracoes manuais criam solicitacao no Acessorias para manter o fluxo alinhado.
+            </span>
           </CardContent>
         </Card>
+
+        <Dialog open={Boolean(editingObligation)} onOpenChange={(open) => !open && setEditingObligation(null)}>
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Editar obrigacao</DialogTitle>
+              <DialogDescription>
+                Atualize os dados da obrigacao para esta empresa. A alteracao e salva no Grow e enviada ao Acessorias.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Obrigacao</Label>
+                <Input
+                  value={editObligationForm.obligation_name}
+                  onChange={(event) =>
+                    setEditObligationForm((current) => ({ ...current, obligation_name: event.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Competencia</Label>
+                  <Input
+                    placeholder="AAAA-MM"
+                    value={editObligationForm.obligation_period}
+                    onChange={(event) =>
+                      setEditObligationForm((current) => ({ ...current, obligation_period: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Vencimento</Label>
+                  <Input
+                    type="date"
+                    value={editObligationForm.due_date}
+                    onChange={(event) =>
+                      setEditObligationForm((current) => ({ ...current, due_date: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editObligationForm.status}
+                    onValueChange={(value) =>
+                      setEditObligationForm((current) => ({ ...current, status: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="em_andamento">Em andamento</SelectItem>
+                      <SelectItem value="atrasado">Atrasado</SelectItem>
+                      <SelectItem value="concluido">Concluido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Protocolo</Label>
+                <Input
+                  value={editObligationForm.protocol}
+                  onChange={(event) =>
+                    setEditObligationForm((current) => ({ ...current, protocol: event.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Observacoes</Label>
+                <Textarea
+                  rows={4}
+                  value={editObligationForm.notes}
+                  onChange={(event) =>
+                    setEditObligationForm((current) => ({ ...current, notes: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingObligation(null)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void handleUpdateObligation()} disabled={savingObligation}>
+                {savingObligation ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Salvar alteracoes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

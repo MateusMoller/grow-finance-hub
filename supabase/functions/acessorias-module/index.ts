@@ -48,6 +48,11 @@ const defaultEcontinuoPathCandidates = [
   "/econtinuo/send",
 ];
 
+const defaultRequestsPathCandidates = [
+  "/requests",
+  "/requests/",
+];
+
 type JsonRecord = Record<string, unknown>;
 
 type AcessoriasRequestResult = {
@@ -504,6 +509,125 @@ async function requestFirstSuccessful(
   throw new Error(
     `Acessorias request failed for all endpoints. Attempts: ${JSON.stringify(attempted)}`,
   );
+}
+
+function extractApiMessage(payload: unknown) {
+  const direct = asTrimmedString(payload);
+  if (direct) return direct;
+
+  const record = asRecord(payload);
+  if (!record) return null;
+
+  return (
+    pickFirstString(record, ["msg", "message", "Mensagem", "Erro", "error"]) ||
+    pickFirstNestedString(record, ["data.msg", "data.message", "payload.msg", "payload.message"])
+  );
+}
+
+function summarizeObligationChanges(
+  previous: {
+    obligation_name: string;
+    obligation_period: string | null;
+    due_date: string | null;
+    status: string | null;
+    protocol: string | null;
+    notes: string | null;
+  },
+  next: {
+    obligation_name: string;
+    obligation_period: string | null;
+    due_date: string | null;
+    status: string | null;
+    protocol: string | null;
+    notes: string | null;
+  },
+) {
+  const changes: string[] = [];
+  if (previous.obligation_name !== next.obligation_name) {
+    changes.push(`Obrigacao: ${previous.obligation_name} -> ${next.obligation_name}`);
+  }
+  if ((previous.obligation_period || "") !== (next.obligation_period || "")) {
+    changes.push(`Competencia: ${previous.obligation_period || "-"} -> ${next.obligation_period || "-"}`);
+  }
+  if ((previous.due_date || "") !== (next.due_date || "")) {
+    changes.push(`Vencimento: ${previous.due_date || "-"} -> ${next.due_date || "-"}`);
+  }
+  if ((normalizeObligationStatus(previous.status) || "") !== (normalizeObligationStatus(next.status) || "")) {
+    changes.push(`Status: ${previous.status || "-"} -> ${next.status || "-"}`);
+  }
+  if ((previous.protocol || "") !== (next.protocol || "")) {
+    changes.push(`Protocolo: ${previous.protocol || "-"} -> ${next.protocol || "-"}`);
+  }
+  if ((previous.notes || "") !== (next.notes || "")) {
+    changes.push(`Observacoes: ${previous.notes || "-"} -> ${next.notes || "-"}`);
+  }
+  return changes;
+}
+
+async function notifyAcessoriasObligationChange(
+  acessoriasApiBaseUrl: string,
+  acessoriasApiToken: string,
+  input: {
+    companyId: string;
+    departmentId: string | null;
+    clientName: string;
+    clientIdentifier: string | null;
+    obligationName: string;
+    obligationPeriod: string | null;
+    dueDate: string | null;
+    status: string | null;
+    protocol: string | null;
+    notes: string | null;
+    changeLines: string[];
+  },
+) {
+  const requestDescriptionLines = [
+    "Ajuste de obrigacao solicitado no Grow Finance Hub.",
+    `Empresa: ${input.clientName}${input.clientIdentifier ? ` (${input.clientIdentifier})` : ""}`,
+    `Obrigacao: ${input.obligationName}`,
+    `Competencia: ${input.obligationPeriod || "-"}`,
+    `Vencimento: ${input.dueDate || "-"}`,
+    `Status: ${input.status || "-"}`,
+    input.protocol ? `Protocolo: ${input.protocol}` : null,
+    input.notes ? `Observacoes: ${input.notes}` : null,
+    input.changeLines.length > 0 ? "Alteracoes aplicadas:" : null,
+    ...input.changeLines.map((line) => `- ${line}`),
+  ].filter(Boolean);
+
+  const description = requestDescriptionLines.join("\n");
+  const departmentId = asTrimmedString(input.departmentId) || "1";
+  const formData = new FormData();
+  formData.append("assunto", `Atualizacao de obrigacao - ${input.obligationName}`);
+  formData.append("tipo", "I");
+  formData.append("empresa", input.companyId);
+  formData.append("departamento", departmentId);
+  formData.append("prioridade", "2");
+  formData.append("descricao", description);
+  if (input.dueDate) {
+    formData.append("data_prazo", input.dueDate);
+  }
+
+  const pathCandidates = getPathCandidates("ACESSORIAS_REQUESTS_PATHS", defaultRequestsPathCandidates);
+  const response = await requestFirstSuccessful(
+    acessoriasApiBaseUrl,
+    acessoriasApiToken,
+    pathCandidates,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+
+  const payloadRecord = asRecord(response.payload);
+  return {
+    ok: true,
+    endpoint_used: response.path,
+    request_id:
+      (payloadRecord && pickFirstString(payloadRecord, ["id", "ID", "request_id", "SolID"])) ||
+      null,
+    message: extractApiMessage(response.payload) || "Solicitacao de atualizacao enviada ao Acessorias.",
+    payload: response.payload,
+  };
 }
 
 function pickFirstArray(source: unknown, keys: string[]): unknown[] | null {
@@ -1885,6 +2009,8 @@ async function handleAssignObligation(
   supabaseAdmin: ReturnType<typeof createClient>,
   body: JsonRecord,
   callerUserId: string,
+  acessoriasApiBaseUrl: string,
+  acessoriasApiToken: string | null,
 ) {
   const clientId = asTrimmedString(body.client_id);
   const obligationName = asTrimmedString(body.obligation_name);
@@ -1895,6 +2021,9 @@ async function handleAssignObligation(
   const protocol = asTrimmedString(body.protocol);
   const notes = asTrimmedString(body.notes);
   const createTask = asBoolean(body.create_task);
+  const syncRemote = Object.prototype.hasOwnProperty.call(body, "sync_remote")
+    ? asBoolean(body.sync_remote)
+    : true;
 
   if (!clientId || !obligationName) {
     return jsonResponse({ error: "client_id e obligation_name sao obrigatorios" }, 400);
@@ -1902,7 +2031,7 @@ async function handleAssignObligation(
 
   const { data: client, error: clientError } = await supabaseAdmin
     .from("clients")
-    .select("id, name")
+    .select("id, name, cnpj")
     .eq("id", clientId)
     .maybeSingle();
   if (clientError) throw clientError;
@@ -1927,6 +2056,61 @@ async function handleAssignObligation(
 
   const nowIso = new Date().toISOString();
   const safeObligationId = obligationId || `manual_${normalizeToken(obligationName) || "obrigacao"}`;
+  let remoteSync: Record<string, unknown> = {
+    attempted: false,
+    ok: false,
+    message: "Sincronizacao remota nao executada.",
+  };
+
+  if (syncRemote) {
+    if (!acessoriasApiToken) {
+      remoteSync = {
+        attempted: false,
+        ok: false,
+        message: "ACESSORIAS_API_TOKEN nao configurado para sincronizacao remota.",
+      };
+    } else if (!refreshedLink?.acessorias_company_id) {
+      remoteSync = {
+        attempted: false,
+        ok: false,
+        message: "Nao foi possivel identificar empresa no Acessorias para enviar a alteracao.",
+      };
+    } else {
+      try {
+        const requestResult = await notifyAcessoriasObligationChange(
+          acessoriasApiBaseUrl,
+          acessoriasApiToken,
+          {
+            companyId: refreshedLink.acessorias_company_id,
+            departmentId: asTrimmedString(body.department_id),
+            clientName: client.name || "Cliente",
+            clientIdentifier: normalizeCnpj(client.cnpj) || client.cnpj || null,
+            obligationName,
+            obligationPeriod,
+            dueDate,
+            status,
+            protocol,
+            notes,
+            changeLines: ["Obrigacao cadastrada no Grow Finance Hub."],
+          },
+        );
+        remoteSync = {
+          attempted: true,
+          ...requestResult,
+        };
+      } catch (error) {
+        remoteSync = {
+          attempted: true,
+          ok: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Falha ao enviar cadastro da obrigacao para o Acessorias.",
+        };
+      }
+    }
+  }
+
   const row = {
     client_id: clientId,
     acessorias_company_id: refreshedLink?.acessorias_company_id || null,
@@ -1942,6 +2126,15 @@ async function handleAssignObligation(
     source_payload: {
       source: "manual",
       created_by: callerUserId,
+      grow_sync: remoteSync,
+      grow_sync_history: [
+        {
+          at: nowIso,
+          changed_by: callerUserId,
+          changes: ["Obrigacao cadastrada manualmente no Grow."],
+          remote_sync: remoteSync,
+        },
+      ],
     },
     last_synced_at: nowIso,
   };
@@ -1976,6 +2169,219 @@ async function handleAssignObligation(
     ok: true,
     obligation: upserted,
     kanban_task_id: taskId,
+    remote_sync: remoteSync,
+  });
+}
+
+async function handleUpdateObligation(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  body: JsonRecord,
+  callerUserId: string,
+  acessoriasApiBaseUrl: string,
+  acessoriasApiToken: string | null,
+) {
+  const obligationRowId = asTrimmedString(body.obligation_id);
+  if (!obligationRowId) {
+    return jsonResponse({ error: "obligation_id e obrigatorio" }, 400);
+  }
+
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("client_acessorias_obligations")
+    .select(
+      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, source_payload",
+    )
+    .eq("id", obligationRowId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (!existing) {
+    return jsonResponse({ error: "Obrigacao nao encontrada" }, 404);
+  }
+
+  const hasName = Object.prototype.hasOwnProperty.call(body, "obligation_name");
+  const providedName = asTrimmedString(body.obligation_name);
+  if (hasName && !providedName) {
+    return jsonResponse({ error: "obligation_name nao pode ser vazio" }, 400);
+  }
+
+  const hasPeriod = Object.prototype.hasOwnProperty.call(body, "obligation_period");
+  const hasDueDate = Object.prototype.hasOwnProperty.call(body, "due_date");
+  const hasStatus = Object.prototype.hasOwnProperty.call(body, "status");
+  const hasProtocol = Object.prototype.hasOwnProperty.call(body, "protocol");
+  const hasNotes = Object.prototype.hasOwnProperty.call(body, "notes");
+
+  const nextValues = {
+    obligation_name: providedName || existing.obligation_name,
+    obligation_period: hasPeriod ? asTrimmedString(body.obligation_period) : existing.obligation_period,
+    due_date: hasDueDate ? normalizeDate(body.due_date) : existing.due_date,
+    status: hasStatus
+      ? normalizeObligationStatus(asTrimmedString(body.status)) || null
+      : normalizeObligationStatus(existing.status),
+    protocol: hasProtocol ? asTrimmedString(body.protocol) : existing.protocol,
+    notes: hasNotes ? asTrimmedString(body.notes) : existing.notes,
+  };
+
+  const syncRemote = Object.prototype.hasOwnProperty.call(body, "sync_remote")
+    ? asBoolean(body.sync_remote)
+    : true;
+
+  const { data: client, error: clientError } = await supabaseAdmin
+    .from("clients")
+    .select("id, name, cnpj")
+    .eq("id", existing.client_id)
+    .maybeSingle();
+  if (clientError) throw clientError;
+
+  const changeLines = summarizeObligationChanges(
+    {
+      obligation_name: existing.obligation_name,
+      obligation_period: existing.obligation_period,
+      due_date: existing.due_date,
+      status: existing.status,
+      protocol: existing.protocol,
+      notes: existing.notes,
+    },
+    nextValues,
+  );
+
+  let remoteSync: Record<string, unknown> = {
+    attempted: false,
+    ok: false,
+    message: "Sincronizacao remota nao executada.",
+  };
+
+  if (syncRemote) {
+    if (!acessoriasApiToken) {
+      remoteSync = {
+        attempted: false,
+        ok: false,
+        message: "ACESSORIAS_API_TOKEN nao configurado para sincronizacao remota.",
+      };
+    } else {
+      let acessoriasCompanyId = existing.acessorias_company_id;
+      if (!acessoriasCompanyId) {
+        await ensureLinkForClientByCnpj(supabaseAdmin, existing.client_id, callerUserId);
+        const { data: refreshedLink, error: refreshedLinkError } = await supabaseAdmin
+          .from("client_acessorias_links")
+          .select("acessorias_company_id")
+          .eq("client_id", existing.client_id)
+          .maybeSingle();
+        if (refreshedLinkError) throw refreshedLinkError;
+        acessoriasCompanyId = refreshedLink?.acessorias_company_id || null;
+      }
+
+      if (!acessoriasCompanyId) {
+        remoteSync = {
+          attempted: false,
+          ok: false,
+          message: "Nao foi possivel identificar empresa no Acessorias para enviar a alteracao.",
+        };
+      } else {
+        const sourcePayload = asRecord(existing.source_payload) || {};
+        const departmentIdFromPayload = pickFirstNestedString(sourcePayload, [
+          "Config.DptoID",
+          "config.dptoid",
+          "DptoID",
+          "dptoid",
+        ]);
+        const departmentIdFromBody = asTrimmedString(body.department_id);
+
+        try {
+          const requestResult = await notifyAcessoriasObligationChange(
+            acessoriasApiBaseUrl,
+            acessoriasApiToken,
+            {
+              companyId: acessoriasCompanyId,
+              departmentId: departmentIdFromBody || departmentIdFromPayload,
+              clientName: client?.name || "Cliente",
+              clientIdentifier: normalizeCnpj(client?.cnpj) || client?.cnpj || null,
+              obligationName: nextValues.obligation_name,
+              obligationPeriod: nextValues.obligation_period,
+              dueDate: nextValues.due_date,
+              status: nextValues.status,
+              protocol: nextValues.protocol,
+              notes: nextValues.notes,
+              changeLines,
+            },
+          );
+
+          remoteSync = {
+            attempted: true,
+            ...requestResult,
+          };
+        } catch (error) {
+          remoteSync = {
+            attempted: true,
+            ok: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Falha ao enviar atualizacao da obrigacao para o Acessorias.",
+          };
+        }
+      }
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const existingSourcePayload = asRecord(existing.source_payload) || {};
+  const previousHistory = asArray(existingSourcePayload.grow_sync_history) || [];
+  const syncHistoryEntry = {
+    at: nowIso,
+    changed_by: callerUserId,
+    changes: changeLines,
+    remote_sync: remoteSync,
+  };
+  const sourcePayload = {
+    ...existingSourcePayload,
+    source: "grow_manual_update",
+    grow_sync: remoteSync,
+    grow_sync_history: [syncHistoryEntry, ...previousHistory].slice(0, 25),
+  };
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from("client_acessorias_obligations")
+    .update({
+      obligation_name: nextValues.obligation_name,
+      obligation_period: nextValues.obligation_period,
+      obligation_period_key: toPeriodKey(nextValues.obligation_period),
+      due_date: nextValues.due_date,
+      status: nextValues.status,
+      protocol: nextValues.protocol,
+      notes: nextValues.notes,
+      source_payload: sourcePayload,
+      last_synced_at: nowIso,
+    })
+    .eq("id", obligationRowId)
+    .select(
+      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, last_synced_at",
+    )
+    .maybeSingle();
+  if (updateError) throw updateError;
+
+  if (updated) {
+    await ensureKanbanTaskForObligation(
+      supabaseAdmin,
+      {
+        clientId: existing.client_id,
+        clientName: client?.name || "Cliente",
+        obligationId: existing.acessorias_obligation_id,
+        obligationName: nextValues.obligation_name,
+        obligationPeriod: nextValues.obligation_period,
+        dueDate: nextValues.due_date,
+        status: nextValues.status,
+        protocol: nextValues.protocol,
+        notes: nextValues.notes,
+        payload: sourcePayload as JsonRecord,
+        createdBy: callerUserId,
+      },
+      { allowCreate: false },
+    );
+  }
+
+  return jsonResponse({
+    ok: true,
+    obligation: updated,
+    remote_sync: remoteSync,
   });
 }
 
@@ -2115,7 +2521,7 @@ async function handleSendEcontinuo(
     .from("client_acessorias_uploads")
     .insert({
       client_id: clientId,
-      acessorias_company_id: link.acessorias_company_id,
+      acessorias_company_id: ensuredLink.acessorias_company_id,
       file_name: fileName,
       file_size: fileBytes.byteLength,
       content_type: contentType,
@@ -2198,7 +2604,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!acessoriasApiToken && actionKey !== "assign_obligation" && actionKey !== "list_obligations" && actionKey !== "list_uploads") {
+    if (!acessoriasApiToken && actionKey !== "assign_obligation" && actionKey !== "update_obligation" && actionKey !== "list_obligations" && actionKey !== "list_uploads") {
       return jsonResponse(
         {
           error:
@@ -2243,7 +2649,23 @@ Deno.serve(async (req) => {
     }
 
     if (actionKey === "assign_obligation") {
-      return await handleAssignObligation(supabaseAdmin, body, callerUser.id);
+      return await handleAssignObligation(
+        supabaseAdmin,
+        body,
+        callerUser.id,
+        acessoriasApiBaseUrl,
+        acessoriasApiToken,
+      );
+    }
+
+    if (actionKey === "update_obligation") {
+      return await handleUpdateObligation(
+        supabaseAdmin,
+        body,
+        callerUser.id,
+        acessoriasApiBaseUrl,
+        acessoriasApiToken,
+      );
     }
 
     if (actionKey === "send_econtinuo") {
