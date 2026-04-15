@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import {
   RefreshCw,
   Link2,
-  Unlink,
   Upload,
   FileSpreadsheet,
   Building2,
@@ -114,12 +113,6 @@ const formatDateTime = (value: string | null | undefined) => {
   return parsed.toLocaleString("pt-BR");
 };
 
-const normalizeCnpj = (value: string | null | undefined) => {
-  if (!value) return null;
-  const digits = value.replace(/\D/g, "");
-  return digits.length === 14 ? digits : null;
-};
-
 const obligationStatusVariant = (status: string | null) => {
   const token = String(status || "").trim().toLowerCase();
   if (token === "concluido" || token === "completed" || token === "sent") return "default";
@@ -145,8 +138,6 @@ const readFileAsDataUrl = (file: File) =>
 
 export default function AcessoriasPage() {
   const [loading, setLoading] = useState(true);
-  const [savingClientId, setSavingClientId] = useState<string | null>(null);
-  const [removingClientId, setRemovingClientId] = useState<string | null>(null);
   const [syncingCompanies, setSyncingCompanies] = useState(false);
   const [syncingObligations, setSyncingObligations] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -154,7 +145,6 @@ export default function AcessoriasPage() {
 
   const [hasConfiguration, setHasConfiguration] = useState(false);
   const [clients, setClients] = useState<AcessoriasClientOverview[]>([]);
-  const [companies, setCompanies] = useState<AcessoriasCompany[]>([]);
   const [obligations, setObligations] = useState<AcessoriasObligation[]>([]);
   const [uploads, setUploads] = useState<AcessoriasUpload[]>([]);
   const [summary, setSummary] = useState<OverviewPayload["summary"]>({
@@ -168,7 +158,6 @@ export default function AcessoriasPage() {
   });
 
   const [clientSearch, setClientSearch] = useState("");
-  const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({});
   const [syncCreateTasks, setSyncCreateTasks] = useState(true);
   const [obligationClientFilter, setObligationClientFilter] = useState<string>("all");
 
@@ -188,14 +177,6 @@ export default function AcessoriasPage() {
     description: "",
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const companyOptions = useMemo(
-    () =>
-      [...companies].sort((a, b) =>
-        a.company_name.localeCompare(b.company_name, "pt-BR", { sensitivity: "base" }),
-      ),
-    [companies],
-  );
 
   const filteredClients = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -286,7 +267,6 @@ export default function AcessoriasPage() {
     const data = await invokeAcessorias<OverviewPayload>({ action: "overview" });
     setHasConfiguration(Boolean(data.has_acessorias_configuration));
     setClients(Array.isArray(data.clients) ? data.clients : []);
-    setCompanies(Array.isArray(data.companies) ? data.companies : []);
     setUploads(Array.isArray(data.uploads) ? data.uploads : []);
     if (data.summary) setSummary(data.summary);
   };
@@ -322,32 +302,6 @@ export default function AcessoriasPage() {
     void refreshAll();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (clients.length === 0 || companies.length === 0) return;
-
-    const companyByCnpj = new Map<string, AcessoriasCompany>();
-    for (const company of companies) {
-      const cnpj = normalizeCnpj(company.cnpj);
-      if (!cnpj || companyByCnpj.has(cnpj)) continue;
-      companyByCnpj.set(cnpj, company);
-    }
-
-    const nextDrafts: Record<string, string> = {};
-    for (const client of clients) {
-      if (client.link?.acessorias_company_id) {
-        nextDrafts[client.id] = client.link.acessorias_company_id;
-        continue;
-      }
-      const cnpj = normalizeCnpj(client.cnpj);
-      const suggested = cnpj ? companyByCnpj.get(cnpj) : null;
-      if (suggested) {
-        nextDrafts[client.id] = suggested.acessorias_company_id;
-      }
-    }
-
-    setLinkDrafts((current) => ({ ...nextDrafts, ...current }));
-  }, [clients, companies]);
-
   const handleSyncCompanies = async () => {
     setSyncingCompanies(true);
     try {
@@ -370,46 +324,6 @@ export default function AcessoriasPage() {
       toast.error(error instanceof Error ? error.message : "Erro ao sincronizar empresas");
     } finally {
       setSyncingCompanies(false);
-    }
-  };
-
-  const handleSaveLink = async (clientId: string) => {
-    const selectedCompanyId = linkDrafts[clientId];
-    if (!selectedCompanyId) {
-      toast.error("Selecione uma empresa do Acessorias para vincular.");
-      return;
-    }
-
-    setSavingClientId(clientId);
-    try {
-      await invokeAcessorias({
-        action: "set_link",
-        client_id: clientId,
-        acessorias_company_id: selectedCompanyId,
-        match_type: "manual",
-      });
-      toast.success("Vinculo salvo com sucesso.");
-      await Promise.all([loadOverview(), loadObligations()]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar vinculo");
-    } finally {
-      setSavingClientId(null);
-    }
-  };
-
-  const handleRemoveLink = async (clientId: string) => {
-    setRemovingClientId(clientId);
-    try {
-      await invokeAcessorias({
-        action: "remove_link",
-        client_id: clientId,
-      });
-      toast.success("Vinculo removido.");
-      await Promise.all([loadOverview(), loadObligations()]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao remover vinculo");
-    } finally {
-      setRemovingClientId(null);
     }
   };
 
@@ -601,7 +515,7 @@ export default function AcessoriasPage() {
         ) : (
           <Tabs defaultValue="clientes" className="space-y-4">
             <TabsList>
-              <TabsTrigger value="clientes">Clientes e Vinculos</TabsTrigger>
+              <TabsTrigger value="clientes">Clientes</TabsTrigger>
               <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
               <TabsTrigger value="econtinuo">Envio e-Continuo</TabsTrigger>
             </TabsList>
@@ -609,7 +523,7 @@ export default function AcessoriasPage() {
             <TabsContent value="clientes" className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Cruzamento Grow x Acessorias</CardTitle>
+                  <CardTitle className="text-base">Cruzamento Grow x Acessorias (automatico por CNPJ)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-[1fr_auto]">
@@ -631,21 +545,17 @@ export default function AcessoriasPage() {
                   </div>
 
                   <div className="rounded-lg border overflow-x-auto">
-                    <table className="w-full min-w-[860px]">
+                    <table className="w-full min-w-[780px]">
                       <thead>
                         <tr className="bg-muted/40 border-b text-xs text-muted-foreground">
                           <th className="text-left p-3">Cliente Grow</th>
                           <th className="text-left p-3">Empresa Acessorias</th>
                           <th className="text-left p-3">Obrigacoes</th>
                           <th className="text-left p-3">Ultima sincronizacao</th>
-                          <th className="text-right p-3">Acoes</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {filteredClients.map((client) => {
-                          const selectedCompanyId = linkDrafts[client.id] || "";
-                          const isSaving = savingClientId === client.id;
-                          const isRemoving = removingClientId === client.id;
                           return (
                             <tr key={client.id}>
                               <td className="p-3 align-top">
@@ -655,29 +565,17 @@ export default function AcessoriasPage() {
                                 </div>
                               </td>
                               <td className="p-3 align-top">
-                                <Select
-                                  value={selectedCompanyId || undefined}
-                                  onValueChange={(value) =>
-                                    setLinkDrafts((current) => ({ ...current, [client.id]: value }))
-                                  }
-                                >
-                                  <SelectTrigger className="w-[320px] max-w-full">
-                                    <SelectValue placeholder="Selecione empresa do Acessorias" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {companyOptions.map((company) => (
-                                      <SelectItem
-                                        key={company.acessorias_company_id}
-                                        value={company.acessorias_company_id}
-                                      >
-                                        {company.company_name} {company.cnpj ? `(${company.cnpj})` : ""}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
                                 {client.acessorias_company_name && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    Vinculado: {client.acessorias_company_name} ({client.link?.match_type || "manual"})
+                                  <div className="text-sm">
+                                    {client.acessorias_company_name}
+                                    {client.link?.match_type ? (
+                                      <span className="text-xs text-muted-foreground"> ({client.link.match_type})</span>
+                                    ) : null}
+                                  </div>
+                                )}
+                                {!client.acessorias_company_name && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Aguardando cruzamento automatico pelo CNPJ.
                                   </div>
                                 )}
                               </td>
@@ -693,41 +591,12 @@ export default function AcessoriasPage() {
                               <td className="p-3 align-top text-sm text-muted-foreground">
                                 {formatDateTime(client.obligations.lastSyncedAt || client.link?.last_synced_at)}
                               </td>
-                              <td className="p-3 align-top">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => void handleSaveLink(client.id)}
-                                    disabled={!selectedCompanyId || isSaving}
-                                  >
-                                    {isSaving ? (
-                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    ) : (
-                                      <Link2 className="h-4 w-4 mr-1" />
-                                    )}
-                                    Salvar
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => void handleRemoveLink(client.id)}
-                                    disabled={!client.link || isRemoving}
-                                  >
-                                    {isRemoving ? (
-                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    ) : (
-                                      <Unlink className="h-4 w-4 mr-1" />
-                                    )}
-                                    Remover
-                                  </Button>
-                                </div>
-                              </td>
                             </tr>
                           );
                         })}
                         {filteredClients.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="text-center p-8 text-sm text-muted-foreground">
+                            <td colSpan={4} className="text-center p-8 text-sm text-muted-foreground">
                               Nenhum cliente encontrado.
                             </td>
                           </tr>
@@ -1054,7 +923,7 @@ export default function AcessoriasPage() {
           <CardContent className="p-4 text-xs text-muted-foreground flex flex-wrap items-center gap-4">
             <span className="inline-flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              Vinculos por CNPJ e associacao manual no mesmo modulo.
+              Vinculos realizados automaticamente por CNPJ.
             </span>
             <span className="inline-flex items-center gap-1">
               <CalendarClock className="h-3.5 w-3.5 text-amber-600" />

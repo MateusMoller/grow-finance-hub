@@ -1397,6 +1397,68 @@ async function handleRemoveLink(
   return jsonResponse({ ok: true });
 }
 
+async function ensureLinkForClientByCnpj(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  clientId: string,
+  callerUserId: string,
+) {
+  const { data: existingLink, error: existingLinkError } = await supabaseAdmin
+    .from("client_acessorias_links")
+    .select("acessorias_company_id")
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (existingLinkError) throw existingLinkError;
+  if (existingLink?.acessorias_company_id) return existingLink;
+
+  const { data: client, error: clientError } = await supabaseAdmin
+    .from("clients")
+    .select("id, cnpj")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (clientError) throw clientError;
+  if (!client) return null;
+
+  const normalizedClientCnpj = normalizeCnpj(client.cnpj);
+  if (!normalizedClientCnpj) return null;
+
+  const { data: company, error: companyError } = await supabaseAdmin
+    .from("acessorias_companies_cache")
+    .select("acessorias_company_id")
+    .eq("cnpj", normalizedClientCnpj)
+    .limit(1)
+    .maybeSingle();
+  if (companyError) throw companyError;
+  if (!company?.acessorias_company_id) return null;
+
+  const { data: conflictingLink, error: conflictingLinkError } = await supabaseAdmin
+    .from("client_acessorias_links")
+    .select("client_id")
+    .eq("acessorias_company_id", company.acessorias_company_id)
+    .neq("client_id", clientId)
+    .maybeSingle();
+  if (conflictingLinkError) throw conflictingLinkError;
+  if (conflictingLink) return null;
+
+  const { data: createdLink, error: createdLinkError } = await supabaseAdmin
+    .from("client_acessorias_links")
+    .upsert(
+      {
+        client_id: clientId,
+        acessorias_company_id: company.acessorias_company_id,
+        match_type: "auto",
+        match_score: 100,
+        created_by: callerUserId,
+        last_synced_at: new Date().toISOString(),
+      },
+      { onConflict: "client_id" },
+    )
+    .select("acessorias_company_id")
+    .maybeSingle();
+  if (createdLinkError) throw createdLinkError;
+
+  return createdLink || null;
+}
+
 async function handleSyncObligations(
   supabaseAdmin: ReturnType<typeof createClient>,
   body: JsonRecord,
@@ -1406,6 +1468,17 @@ async function handleSyncObligations(
 ) {
   const clientIdFilter = asTrimmedString(body.client_id);
   const shouldCreateTasks = asBoolean(body.create_tasks);
+
+  await handleSyncCompanies(
+    supabaseAdmin,
+    acessoriasApiBaseUrl,
+    acessoriasApiToken,
+    callerUserId,
+    {
+      sync_grow_clients: false,
+      restrict_to_acessorias: false,
+    },
+  );
 
   let linksQuery = supabaseAdmin
     .from("client_acessorias_links")
@@ -1654,12 +1727,22 @@ async function handleAssignObligation(
     .eq("client_id", clientId)
     .maybeSingle();
   if (linkError) throw linkError;
+  if (!link?.acessorias_company_id) {
+    await ensureLinkForClientByCnpj(supabaseAdmin, clientId, callerUserId);
+  }
+
+  const { data: refreshedLink, error: refreshedLinkError } = await supabaseAdmin
+    .from("client_acessorias_links")
+    .select("acessorias_company_id")
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (refreshedLinkError) throw refreshedLinkError;
 
   const nowIso = new Date().toISOString();
   const safeObligationId = obligationId || `manual_${normalizeToken(obligationName) || "obrigacao"}`;
   const row = {
     client_id: clientId,
-    acessorias_company_id: link?.acessorias_company_id || null,
+    acessorias_company_id: refreshedLink?.acessorias_company_id || null,
     acessorias_obligation_id: safeObligationId,
     obligation_name: obligationName,
     obligation_period: obligationPeriod,
@@ -1754,9 +1837,33 @@ async function handleSendEcontinuo(
     .eq("client_id", clientId)
     .maybeSingle();
   if (linkError) throw linkError;
-  if (!link?.acessorias_company_id) {
+
+  let ensuredLink = link;
+  if (!ensuredLink?.acessorias_company_id) {
+    await handleSyncCompanies(
+      supabaseAdmin,
+      acessoriasApiBaseUrl,
+      acessoriasApiToken,
+      callerUserId,
+      {
+        sync_grow_clients: false,
+        restrict_to_acessorias: false,
+      },
+    );
+
+    await ensureLinkForClientByCnpj(supabaseAdmin, clientId, callerUserId);
+    const { data: refreshedLink, error: refreshedLinkError } = await supabaseAdmin
+      .from("client_acessorias_links")
+      .select("acessorias_company_id")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (refreshedLinkError) throw refreshedLinkError;
+    ensuredLink = refreshedLink;
+  }
+
+  if (!ensuredLink?.acessorias_company_id) {
     return jsonResponse(
-      { error: "Cliente sem vinculo com empresa do Acessorias. Vincule antes de enviar." },
+      { error: "Nao foi possivel identificar empresa no Acessorias por CNPJ para este cliente." },
       409,
     );
   }
@@ -1781,8 +1888,8 @@ async function handleSendEcontinuo(
     new Blob([fileBytes], { type: contentType }),
     fileName,
   );
-  formData.append("company_id", link.acessorias_company_id);
-  formData.append("empresa_id", link.acessorias_company_id);
+  formData.append("company_id", ensuredLink.acessorias_company_id);
+  formData.append("empresa_id", ensuredLink.acessorias_company_id);
 
   for (const [key, value] of Object.entries(metadata)) {
     if (value === null || value === undefined) continue;
@@ -1904,7 +2011,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!acessoriasApiToken && actionKey !== "set_link" && actionKey !== "remove_link" && actionKey !== "assign_obligation" && actionKey !== "list_obligations" && actionKey !== "list_uploads") {
+    if (!acessoriasApiToken && actionKey !== "assign_obligation" && actionKey !== "list_obligations" && actionKey !== "list_uploads") {
       return jsonResponse(
         {
           error:
@@ -1925,12 +2032,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: true, ...data });
     }
 
-    if (actionKey === "set_link") {
-      return await handleSetLink(supabaseAdmin, body, callerUser.id);
-    }
-
-    if (actionKey === "remove_link") {
-      return await handleRemoveLink(supabaseAdmin, body);
+    if (actionKey === "set_link" || actionKey === "remove_link") {
+      return jsonResponse(
+        { error: "Vinculo manual desativado. O cruzamento e automatico por CNPJ." },
+        403,
+      );
     }
 
     if (actionKey === "sync_obligations") {
