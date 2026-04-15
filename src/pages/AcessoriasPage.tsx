@@ -24,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -180,7 +179,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     recent_uploads: 0,
   });
 
-  const syncCreateTasks = true;
   const [obligationSearch, setObligationSearch] = useState("");
   const [obligationStatusFilter, setObligationStatusFilter] = useState<string>("all");
   const [editingObligation, setEditingObligation] = useState<AcessoriasObligation | null>(null);
@@ -201,7 +199,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     due_date: "",
     status: "pendente",
     notes: "",
-    create_task: true,
   });
 
   const [uploadForm, setUploadForm] = useState({
@@ -387,8 +384,21 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     }
   };
 
+  const cleanupKanbanObligations = async () => {
+    try {
+      await invokeAcessorias({
+        action: "cleanup_kanban_obligations",
+      });
+    } catch {
+      // noop: limpeza de Kanban e processo auxiliar e nao deve bloquear a tela
+    }
+  };
+
   useEffect(() => {
     void refreshCurrentModuleData();
+    if (isObrigacoesModule) {
+      void cleanupKanbanObligations();
+    }
   }, [isObrigacoesModule]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSyncCompanies({
@@ -449,7 +459,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       let rounds = 0;
       let totalSynced = 0;
       let totalProcessedClients = 0;
-      let totalCreatedTasks = 0;
       let totalAutoLinkedClients = 0;
       let totalLinks = 0;
 
@@ -459,7 +468,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
           result = await invokeAcessorias<{
             synced_obligations: number;
             clients_processed: number;
-            created_tasks: number;
             auto_linked_clients: number;
             total_links: number;
             processed_in_batch: number;
@@ -467,7 +475,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             next_cursor: number | null;
           }>({
             action: "sync_obligations",
-            create_tasks: syncCreateTasks,
             batch_size: batchSize,
             max_companies_per_run: batchSize,
             max_execution_ms: 22000,
@@ -485,7 +492,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
         totalSynced += Number(result.synced_obligations || 0);
         totalProcessedClients += Number(result.clients_processed || 0);
-        totalCreatedTasks += Number(result.created_tasks || 0);
         totalAutoLinkedClients += Number(result.auto_linked_clients || 0);
         totalLinks = Number(result.total_links || totalLinks);
         rounds += 1;
@@ -507,9 +513,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         if (totalAutoLinkedClients > 0) {
           toast.success(`Clientes vinculados automaticamente por CNPJ: ${totalAutoLinkedClients}.`);
         }
-        if (totalCreatedTasks > 0) {
-          toast.success(`Tarefas de fluxo criadas no Kanban: ${totalCreatedTasks}.`);
-        }
       }
 
       if (refreshAfter) {
@@ -518,7 +521,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       return {
         totalSynced,
         totalProcessedClients,
-        totalCreatedTasks,
         totalAutoLinkedClients,
         totalLinks,
       };
@@ -536,14 +538,17 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     if (!isObrigacoesModule) return;
 
     try {
-      try {
-        await handleSyncCompanies({ silent: true, refreshAfter: false });
-      } catch (companiesError) {
-        toast.error(
-          companiesError instanceof Error
-            ? `Sincronizacao de empresas parcial: ${companiesError.message}`
-            : "Sincronizacao de empresas parcial. Prosseguindo com obrigacoes.",
-        );
+      const shouldSyncCompaniesFirst = summary.clients_linked <= 0 || summary.companies_cached <= 0;
+      if (shouldSyncCompaniesFirst) {
+        try {
+          await handleSyncCompanies({ silent: true, refreshAfter: false });
+        } catch (companiesError) {
+          toast.error(
+            companiesError instanceof Error
+              ? `Sincronizacao de empresas parcial: ${companiesError.message}`
+              : "Sincronizacao de empresas parcial. Prosseguindo com obrigacoes.",
+          );
+        }
       }
       await handleSyncObligations({
         silent: true,
@@ -576,7 +581,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         due_date: newObligation.due_date || null,
         status: newObligation.status,
         notes: newObligation.notes || null,
-        create_task: newObligation.create_task,
       });
       toast.success("Obrigacao cadastrada para o cliente.");
       setNewObligation({
@@ -586,7 +590,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         due_date: "",
         status: "pendente",
         notes: "",
-        create_task: true,
       });
       await Promise.all([loadOverview(), loadObligations()]);
     } catch (error) {
@@ -829,7 +832,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 lg:grid-cols-4">
+                  <div className="grid gap-3 lg:grid-cols-3">
                     <div className="space-y-2">
                       <Label>Competencia</Label>
                       <Input
@@ -866,21 +869,6 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                           <SelectItem value="concluido">Concluido</SelectItem>
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Fluxo</Label>
-                      <div className="h-10 px-3 border rounded-md flex items-center gap-2">
-                        <Checkbox
-                          id="create-task-obligation"
-                          checked={newObligation.create_task}
-                          onCheckedChange={(value) =>
-                            setNewObligation((current) => ({ ...current, create_task: Boolean(value) }))
-                          }
-                        />
-                        <Label htmlFor="create-task-obligation" className="text-sm">
-                          Criar tarefa no Kanban
-                        </Label>
-                      </div>
                     </div>
                   </div>
 
@@ -1127,7 +1115,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
           <CardContent className="p-4 text-xs text-muted-foreground flex flex-wrap items-center gap-4">
             <span className="inline-flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              Vinculos realizados automaticamente por CNPJ.
+              Vinculos automaticos por CNPJ ativos.
             </span>
             <span className="inline-flex items-center gap-1">
               <CalendarClock className="h-3.5 w-3.5 text-amber-600" />
@@ -1139,7 +1127,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             </span>
             <span className="inline-flex items-center gap-1">
               <Pencil className="h-3.5 w-3.5 text-primary" />
-              Alteracoes manuais criam solicitacao no Acessorias para manter o fluxo alinhado.
+              Integracao de obrigacoes com Kanban desativada temporariamente.
             </span>
           </CardContent>
         </Card>

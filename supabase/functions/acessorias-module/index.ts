@@ -36,8 +36,6 @@ const defaultDeliveriesPathCandidates = [
   "/deliveries/{companyId}/?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
   "/deliveries/{companyId}?DtInitial={dateFrom}&DtFinal={dateTo}&situation=pending,delivered&Pagina=1",
   "/deliveries/{companyId}/?DtInitial={dateFrom}&DtFinal={dateTo}&situation=pending,delivered&Pagina=1",
-  "/deliveries/ListAll?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
-  "/deliveries/ListAll/?DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1",
 ];
 
 const defaultEcontinuoPathCandidates = [
@@ -449,6 +447,28 @@ function computePriorityByDueDate(dueDate: string | null) {
 function toPeriodKey(period: string | null) {
   const value = asTrimmedString(period);
   return value || "";
+}
+
+function pickPreferredObligationRow(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+) {
+  const currentDeliveredAt = normalizeDateTime(asTrimmedString(current.delivered_at));
+  const incomingDeliveredAt = normalizeDateTime(asTrimmedString(incoming.delivered_at));
+  if (!currentDeliveredAt && incomingDeliveredAt) return incoming;
+  if (currentDeliveredAt && !incomingDeliveredAt) return current;
+  if (currentDeliveredAt && incomingDeliveredAt && incomingDeliveredAt > currentDeliveredAt) return incoming;
+
+  const currentDueDate = normalizeDate(asTrimmedString(current.due_date));
+  const incomingDueDate = normalizeDate(asTrimmedString(incoming.due_date));
+  if (!currentDueDate && incomingDueDate) return incoming;
+  if (currentDueDate && incomingDueDate && incomingDueDate > currentDueDate) return incoming;
+
+  const currentStatus = normalizeObligationStatus(asTrimmedString(current.status));
+  const incomingStatus = normalizeObligationStatus(asTrimmedString(incoming.status));
+  if (isPendingLikeStatus(currentStatus) && !isPendingLikeStatus(incomingStatus)) return incoming;
+
+  return current;
 }
 
 async function requestAcessorias(
@@ -1050,6 +1070,24 @@ async function ensureKanbanTaskForObligation(
   }
 
   return data?.id || existingTask.id;
+}
+
+async function cleanupObligationKanbanTasks(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  options?: { clientId?: string | null },
+) {
+  const clientId = asTrimmedString(options?.clientId || null);
+  let query = supabaseAdmin
+    .from("kanban_tasks")
+    .delete()
+    .eq("integration_source", "acessorias_obrigacao");
+
+  if (clientId) {
+    query = query.like("integration_task_id", `${clientId}:%`);
+  }
+
+  const { error } = await query;
+  if (error) throw error;
 }
 
 async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
@@ -1751,7 +1789,6 @@ async function handleSyncObligations(
   callerUserId: string,
 ) {
   const clientIdFilter = asTrimmedString(body.client_id);
-  const shouldCreateTasks = asBoolean(body.create_tasks);
   const autoLinkedClients = await ensureAutomaticLinksByCnpjFromCache(supabaseAdmin, callerUserId);
   const requestedBatchSize =
     typeof body.batch_size === "number" ? body.batch_size : Number(asTrimmedString(body.batch_size) || "0");
@@ -1786,6 +1823,12 @@ async function handleSyncObligations(
     : Number.isFinite(requestedCursor) && requestedCursor > 0
       ? Math.trunc(requestedCursor)
       : 0;
+
+  if (clientIdFilter) {
+    await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: clientIdFilter });
+  } else if (cursor === 0) {
+    await cleanupObligationKanbanTasks(supabaseAdmin);
+  }
 
   let linksQuery = supabaseAdmin
     .from("client_acessorias_links")
@@ -1838,11 +1881,12 @@ async function handleSyncObligations(
   if (companiesCacheError) throw companiesCacheError;
 
   const clientsById = new Map((clients || []).map((client) => [client.id, client.name || "Cliente sem nome"]));
-  const companyIdentifierById = new Map<string, string>();
+  const companyCnpjById = new Map<string, string>();
   for (const companyRow of companiesCache || []) {
-    const identifier = normalizeCnpj(companyRow.cnpj) || companyRow.acessorias_company_id;
-    if (!identifier) continue;
-    companyIdentifierById.set(companyRow.acessorias_company_id, identifier);
+    const cnpj = normalizeCnpj(companyRow.cnpj);
+    if (cnpj) {
+      companyCnpjById.set(companyRow.acessorias_company_id, cnpj);
+    }
   }
 
   const now = new Date();
@@ -1871,7 +1915,6 @@ async function handleSyncObligations(
 
   const obligationRows: Array<Record<string, unknown>> = [];
   const details: Array<Record<string, unknown>> = [];
-  let createdTasks = 0;
   const runStartedAt = Date.now();
   let processedLinks = 0;
 
@@ -1891,19 +1934,36 @@ async function handleSyncObligations(
       }
     }
 
-    const companyIdentifier = companyIdentifierById.get(link.acessorias_company_id) || link.acessorias_company_id;
-    const pathCandidates = deliveriesPathTemplates.map((template) => {
-      const hasDateRange =
-        template.toLowerCase().includes("dtinitial=") && template.toLowerCase().includes("dtfinal=");
-      const templateWithDates = hasDateRange
-        ? template
-        : `${template}${template.includes("?") ? "&" : "?"}DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1`;
-      return resolveTemplatePath(templateWithDates, {
-        companyId: companyIdentifier,
-        dateFrom: effectiveDateFrom,
-        dateTo,
-      });
-    });
+    const primaryCompanyId = link.acessorias_company_id;
+    const companyCnpj = companyCnpjById.get(link.acessorias_company_id) || null;
+    const identifiers = [companyCnpj, primaryCompanyId].filter(
+      (value, index, array): value is string => Boolean(value) && array.indexOf(value) === index,
+    );
+    const buildPathCandidates = (fromDate: string, toDate: string) => {
+      const set = new Set<string>();
+      for (const identifier of identifiers) {
+        for (const template of deliveriesPathTemplates) {
+          if (!template.includes("{companyId}") && !template.includes(":companyId")) {
+            // Neste fluxo a sincronizacao e por empresa vinculada; ignoramos endpoints globais.
+            continue;
+          }
+          const hasDateRange =
+            template.toLowerCase().includes("dtinitial=") && template.toLowerCase().includes("dtfinal=");
+          const templateWithDates = hasDateRange
+            ? template
+            : `${template}${template.includes("?") ? "&" : "?"}DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1`;
+          set.add(
+            resolveTemplatePath(templateWithDates, {
+              companyId: identifier,
+              dateFrom: fromDate,
+              dateTo: toDate,
+            }),
+          );
+        }
+      }
+      return Array.from(set);
+    };
+    const pathCandidates = buildPathCandidates(effectiveDateFrom, dateTo);
 
     let deliveriesResponse: AcessoriasRequestResult;
     try {
@@ -1916,7 +1976,8 @@ async function handleSyncObligations(
       details.push({
         client_id: link.client_id,
         acessorias_company_id: link.acessorias_company_id,
-        company_identifier: companyIdentifier,
+        company_identifier: primaryCompanyId,
+        company_cnpj: companyCnpj,
         synced: 0,
         error:
           error instanceof Error
@@ -1927,7 +1988,26 @@ async function handleSyncObligations(
       continue;
     }
 
-    const parsedObligations = parseObligations(deliveriesResponse.payload);
+    let parsedObligations = parseObligations(deliveriesResponse.payload);
+    let usedFallbackFullRange = false;
+    if (parsedObligations.length === 0 && !explicitDateFrom && effectiveDateFrom !== dateFrom) {
+      const fallbackPathCandidates = buildPathCandidates(dateFrom, dateTo);
+      try {
+        const fallbackResponse = await requestFirstSuccessful(
+          acessoriasApiBaseUrl,
+          acessoriasApiToken,
+          fallbackPathCandidates,
+        );
+        const fallbackParsedObligations = parseObligations(fallbackResponse.payload);
+        if (fallbackParsedObligations.length > 0) {
+          deliveriesResponse = fallbackResponse;
+          parsedObligations = fallbackParsedObligations;
+          usedFallbackFullRange = true;
+        }
+      } catch {
+        // keep initial empty result and proceed
+      }
+    }
     const nowIso = new Date().toISOString();
 
     for (const obligation of parsedObligations) {
@@ -1947,53 +2027,16 @@ async function handleSyncObligations(
         last_synced_at: nowIso,
       };
       obligationRows.push(row);
-
-      if (shouldCreateTasks) {
-        const taskId = await ensureKanbanTaskForObligation(
-          supabaseAdmin,
-          {
-            clientId: link.client_id,
-            clientName: clientsById.get(link.client_id) || "Cliente",
-            obligationId: obligation.acessorias_obligation_id,
-            obligationName: obligation.obligation_name,
-            obligationPeriod: obligation.obligation_period,
-            dueDate: obligation.due_date,
-            status: obligation.status,
-            protocol: obligation.protocol,
-            notes: obligation.notes,
-            payload: obligation.source_payload,
-            createdBy: callerUserId,
-          },
-          { allowCreate: true },
-        );
-        if (taskId) createdTasks += 1;
-      } else {
-        await ensureKanbanTaskForObligation(
-          supabaseAdmin,
-          {
-            clientId: link.client_id,
-            clientName: clientsById.get(link.client_id) || "Cliente",
-            obligationId: obligation.acessorias_obligation_id,
-            obligationName: obligation.obligation_name,
-            obligationPeriod: obligation.obligation_period,
-            dueDate: obligation.due_date,
-            status: obligation.status,
-            protocol: obligation.protocol,
-            notes: obligation.notes,
-            payload: obligation.source_payload,
-            createdBy: callerUserId,
-          },
-          { allowCreate: false },
-        );
-      }
     }
 
     details.push({
       client_id: link.client_id,
       acessorias_company_id: link.acessorias_company_id,
-      company_identifier: companyIdentifier,
+      company_identifier: primaryCompanyId,
+      company_cnpj: companyCnpj,
       date_from_used: effectiveDateFrom,
       date_to_used: dateTo,
+      fallback_full_range_used: usedFallbackFullRange,
       synced: parsedObligations.length,
       endpoint_used: deliveriesResponse.path,
     });
@@ -2005,8 +2048,23 @@ async function handleSyncObligations(
     processedLinks += 1;
   }
 
-  if (obligationRows.length > 0) {
-    for (const rowsChunk of chunkArray(obligationRows, 400)) {
+  const dedupedObligationRowsMap = new Map<string, Record<string, unknown>>();
+  for (const row of obligationRows) {
+    const clientId = asTrimmedString(row.client_id) || "";
+    const obligationId = asTrimmedString(row.acessorias_obligation_id) || "";
+    const periodKey = asTrimmedString(row.obligation_period_key) || "";
+    const dedupeKey = `${clientId}:${obligationId}:${periodKey}`;
+    const existingRow = dedupedObligationRowsMap.get(dedupeKey);
+    if (!existingRow) {
+      dedupedObligationRowsMap.set(dedupeKey, row);
+      continue;
+    }
+    dedupedObligationRowsMap.set(dedupeKey, pickPreferredObligationRow(existingRow, row));
+  }
+  const dedupedObligationRows = Array.from(dedupedObligationRowsMap.values());
+
+  if (dedupedObligationRows.length > 0) {
+    for (const rowsChunk of chunkArray(dedupedObligationRows, 400)) {
       const { error: obligationsUpsertError } = await supabaseAdmin
         .from("client_acessorias_obligations")
         .upsert(rowsChunk, {
@@ -2021,9 +2079,9 @@ async function handleSyncObligations(
   const hasMore = !clientIdFilter && nextCursor < totalLinks;
 
   return {
-    synced_obligations: obligationRows.length,
+    synced_obligations: dedupedObligationRows.length,
     clients_processed: processedInBatch,
-    created_tasks: createdTasks,
+    created_tasks: 0,
     details,
     auto_linked_clients: autoLinkedClients,
     total_links: totalLinks,
@@ -2103,7 +2161,6 @@ async function handleAssignObligation(
   const status = normalizeObligationStatus(asTrimmedString(body.status)) || "pendente";
   const protocol = asTrimmedString(body.protocol);
   const notes = asTrimmedString(body.notes);
-  const createTask = asBoolean(body.create_task);
   const syncRemote = Object.prototype.hasOwnProperty.call(body, "sync_remote")
     ? asBoolean(body.sync_remote)
     : true;
@@ -2228,30 +2285,12 @@ async function handleAssignObligation(
     .select("id, client_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, status")
     .maybeSingle();
   if (upsertError) throw upsertError;
-
-  let taskId: string | null = null;
-  if (createTask) {
-    taskId = await ensureKanbanTaskForObligation(supabaseAdmin, {
-      clientId: client.id,
-      clientName: client.name || "Cliente",
-      obligationId: safeObligationId,
-      obligationName,
-      obligationPeriod,
-      dueDate,
-      status,
-      protocol,
-      notes,
-      payload: {
-        source: "manual",
-      },
-      createdBy: callerUserId,
-    });
-  }
+  await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: client.id });
 
   return jsonResponse({
     ok: true,
     obligation: upserted,
-    kanban_task_id: taskId,
+    kanban_task_id: null,
     remote_sync: remoteSync,
   });
 }
@@ -2441,31 +2480,27 @@ async function handleUpdateObligation(
     .maybeSingle();
   if (updateError) throw updateError;
 
-  if (updated) {
-    await ensureKanbanTaskForObligation(
-      supabaseAdmin,
-      {
-        clientId: existing.client_id,
-        clientName: client?.name || "Cliente",
-        obligationId: existing.acessorias_obligation_id,
-        obligationName: nextValues.obligation_name,
-        obligationPeriod: nextValues.obligation_period,
-        dueDate: nextValues.due_date,
-        status: nextValues.status,
-        protocol: nextValues.protocol,
-        notes: nextValues.notes,
-        payload: sourcePayload as JsonRecord,
-        createdBy: callerUserId,
-      },
-      { allowCreate: false },
-    );
-  }
+  await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: existing.client_id });
 
   return jsonResponse({
     ok: true,
     obligation: updated,
     remote_sync: remoteSync,
   });
+}
+
+async function handleCleanupKanbanObligations(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  body: JsonRecord,
+) {
+  const clientId = asTrimmedString(body.client_id);
+  await cleanupObligationKanbanTasks(supabaseAdmin, { clientId });
+  return {
+    ok: true,
+    removed: true,
+    scope: clientId ? "client" : "all",
+    client_id: clientId || null,
+  };
 }
 
 async function handleListUploads(
@@ -2687,7 +2722,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!acessoriasApiToken && actionKey !== "assign_obligation" && actionKey !== "update_obligation" && actionKey !== "list_obligations" && actionKey !== "list_uploads") {
+    if (
+      !acessoriasApiToken &&
+      actionKey !== "assign_obligation" &&
+      actionKey !== "update_obligation" &&
+      actionKey !== "list_obligations" &&
+      actionKey !== "list_uploads" &&
+      actionKey !== "cleanup_kanban_obligations"
+    ) {
       return jsonResponse(
         {
           error:
@@ -2749,6 +2791,11 @@ Deno.serve(async (req) => {
         acessoriasApiBaseUrl,
         acessoriasApiToken,
       );
+    }
+
+    if (actionKey === "cleanup_kanban_obligations") {
+      const data = await handleCleanupKanbanObligations(supabaseAdmin, body);
+      return jsonResponse(data);
     }
 
     if (actionKey === "send_econtinuo") {
