@@ -1682,7 +1682,8 @@ export default function ClientDetailPage() {
       }
       map.set(key, { obligationName, rows: [row] as ClientAcessoriasObligation[] });
       return map;
-    }, new Map<string, { obligationName: string; rows: ClientAcessoriasObligation[] }>()),
+    }, new Map<string, { obligationName: string; rows: ClientAcessoriasObligation[] }>())
+      .values(),
   )
     .map((group) => {
       const rowsForMonth = group.rows
