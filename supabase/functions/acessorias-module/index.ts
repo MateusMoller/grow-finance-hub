@@ -248,6 +248,12 @@ function toIsoDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function subtractUtcDays(baseDate: Date, days: number) {
+  const value = new Date(baseDate.getTime());
+  value.setUTCDate(value.getUTCDate() - days);
+  return value;
+}
+
 function asArray(value: unknown): unknown[] | null {
   return Array.isArray(value) ? value : null;
 }
@@ -463,10 +469,26 @@ async function requestAcessorias(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(url, {
-    ...init,
-    headers,
-  });
+  const rawTimeoutMs = Number(asTrimmedString(Deno.env.get("ACESSORIAS_HTTP_TIMEOUT_MS")) || "12000");
+  const timeoutMs = Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+    ? Math.min(60000, Math.max(3000, Math.trunc(rawTimeoutMs)))
+    : 12000;
+  const signal = init?.signal || (typeof AbortSignal !== "undefined" &&
+      typeof (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout === "function"
+    ? (AbortSignal as unknown as { timeout: (ms: number) => AbortSignal }).timeout(timeoutMs)
+    : undefined);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+      signal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown fetch error";
+    throw new Error(`Acessorias request error at ${path}: ${message}`);
+  }
 
   const text = await response.text();
   let payload: unknown = text;
@@ -495,7 +517,17 @@ async function requestFirstSuccessful(
   const attempted: Array<{ path: string; status: number; payload: unknown }> = [];
 
   for (const path of pathCandidates) {
-    const result = await requestAcessorias(baseUrl, apiToken, path, init);
+    let result: AcessoriasRequestResult;
+    try {
+      result = await requestAcessorias(baseUrl, apiToken, path, init);
+    } catch (error) {
+      attempted.push({
+        path,
+        status: 0,
+        payload: error instanceof Error ? error.message : "Request execution failed",
+      });
+      continue;
+    }
     if (result.ok) {
       return result;
     }
@@ -1725,11 +1757,30 @@ async function handleSyncObligations(
     typeof body.batch_size === "number" ? body.batch_size : Number(asTrimmedString(body.batch_size) || "0");
   const requestedCursor =
     typeof body.cursor === "number" ? body.cursor : Number(asTrimmedString(body.cursor) || "0");
+  const requestedMaxExecutionMs =
+    typeof body.max_execution_ms === "number"
+      ? body.max_execution_ms
+      : Number(asTrimmedString(body.max_execution_ms) || "");
+  const envMaxExecutionMs = Number(asTrimmedString(Deno.env.get("ACESSORIAS_SYNC_MAX_EXECUTION_MS")) || "22000");
+  const maxExecutionMs = Number.isFinite(requestedMaxExecutionMs) && requestedMaxExecutionMs > 0
+    ? Math.min(55000, Math.max(5000, Math.trunc(requestedMaxExecutionMs)))
+    : Number.isFinite(envMaxExecutionMs) && envMaxExecutionMs > 0
+      ? Math.min(55000, Math.max(5000, Math.trunc(envMaxExecutionMs)))
+      : 22000;
+  const requestedMaxCompaniesPerRun =
+    typeof body.max_companies_per_run === "number"
+      ? body.max_companies_per_run
+      : Number(asTrimmedString(body.max_companies_per_run) || "");
   const batchSize = clientIdFilter
     ? 1
     : Number.isFinite(requestedBatchSize) && requestedBatchSize > 0
-      ? Math.min(50, Math.max(1, Math.trunc(requestedBatchSize)))
+      ? Math.min(100, Math.max(1, Math.trunc(requestedBatchSize)))
       : 10;
+  const maxCompaniesPerRun = clientIdFilter
+    ? 1
+    : Number.isFinite(requestedMaxCompaniesPerRun) && requestedMaxCompaniesPerRun > 0
+      ? Math.min(batchSize, Math.max(1, Math.trunc(requestedMaxCompaniesPerRun)))
+      : batchSize;
   const cursor = clientIdFilter
     ? 0
     : Number.isFinite(requestedCursor) && requestedCursor > 0
@@ -1738,7 +1789,7 @@ async function handleSyncObligations(
 
   let linksQuery = supabaseAdmin
     .from("client_acessorias_links")
-    .select("client_id, acessorias_company_id", { count: "exact" })
+    .select("client_id, acessorias_company_id, last_synced_at", { count: "exact" })
     .order("created_at");
   if (clientIdFilter) {
     linksQuery = linksQuery.eq("client_id", clientIdFilter).limit(1);
@@ -1797,21 +1848,49 @@ async function handleSyncObligations(
   const now = new Date();
   const defaultDateFrom = `${now.getUTCFullYear() - 1}-01-01`;
   const defaultDateTo = `${now.getUTCFullYear() + 1}-12-31`;
-  let dateFrom = normalizeDate(body.date_from) || defaultDateFrom;
+  const explicitDateFrom = normalizeDate(body.date_from);
+  let dateFrom = explicitDateFrom || defaultDateFrom;
   let dateTo = normalizeDate(body.date_to) || defaultDateTo;
   if (dateFrom > dateTo) {
     const swap = dateFrom;
     dateFrom = dateTo;
     dateTo = swap;
   }
+  const rawLookbackDays =
+    typeof body.incremental_lookback_days === "number"
+      ? body.incremental_lookback_days
+      : Number(asTrimmedString(body.incremental_lookback_days) || "");
+  const envLookbackDays = Number(asTrimmedString(Deno.env.get("ACESSORIAS_INCREMENTAL_LOOKBACK_DAYS")) || "45");
+  const incrementalLookbackDays = Number.isFinite(rawLookbackDays) && rawLookbackDays > 0
+    ? Math.min(120, Math.max(1, Math.trunc(rawLookbackDays)))
+    : Number.isFinite(envLookbackDays) && envLookbackDays > 0
+      ? Math.min(120, Math.max(1, Math.trunc(envLookbackDays)))
+      : 45;
 
   const deliveriesPathTemplates = getPathCandidates("ACESSORIAS_DELIVERIES_PATHS", defaultDeliveriesPathCandidates);
 
   const obligationRows: Array<Record<string, unknown>> = [];
   const details: Array<Record<string, unknown>> = [];
   let createdTasks = 0;
+  const runStartedAt = Date.now();
+  let processedLinks = 0;
 
   for (const link of links) {
+    if (!clientIdFilter && processedLinks >= maxCompaniesPerRun) break;
+    if (!clientIdFilter && processedLinks > 0 && Date.now() - runStartedAt >= maxExecutionMs) break;
+
+    let effectiveDateFrom = dateFrom;
+    const linkLastSyncedAt = normalizeDateTime((link as Record<string, unknown>).last_synced_at);
+    if (!explicitDateFrom && linkLastSyncedAt) {
+      const parsedLastSync = new Date(linkLastSyncedAt);
+      if (!Number.isNaN(parsedLastSync.getTime())) {
+        const incrementalDateFrom = toIsoDateOnly(subtractUtcDays(parsedLastSync, incrementalLookbackDays));
+        if (incrementalDateFrom > effectiveDateFrom) {
+          effectiveDateFrom = incrementalDateFrom;
+        }
+      }
+    }
+
     const companyIdentifier = companyIdentifierById.get(link.acessorias_company_id) || link.acessorias_company_id;
     const pathCandidates = deliveriesPathTemplates.map((template) => {
       const hasDateRange =
@@ -1821,7 +1900,7 @@ async function handleSyncObligations(
         : `${template}${template.includes("?") ? "&" : "?"}DtInitial={dateFrom}&DtFinal={dateTo}&Pagina=1`;
       return resolveTemplatePath(templateWithDates, {
         companyId: companyIdentifier,
-        dateFrom,
+        dateFrom: effectiveDateFrom,
         dateTo,
       });
     });
@@ -1844,6 +1923,7 @@ async function handleSyncObligations(
             ? error.message
             : "Falha ao sincronizar obrigacoes para esta empresa",
       });
+      processedLinks += 1;
       continue;
     }
 
@@ -1912,6 +1992,8 @@ async function handleSyncObligations(
       client_id: link.client_id,
       acessorias_company_id: link.acessorias_company_id,
       company_identifier: companyIdentifier,
+      date_from_used: effectiveDateFrom,
+      date_to_used: dateTo,
       synced: parsedObligations.length,
       endpoint_used: deliveriesResponse.path,
     });
@@ -1920,6 +2002,7 @@ async function handleSyncObligations(
       .from("client_acessorias_links")
       .update({ last_synced_at: nowIso })
       .eq("client_id", link.client_id);
+    processedLinks += 1;
   }
 
   if (obligationRows.length > 0) {
@@ -1933,13 +2016,13 @@ async function handleSyncObligations(
     }
   }
 
-  const processedInBatch = links.length;
+  const processedInBatch = processedLinks;
   const nextCursor = clientIdFilter ? null : cursor + processedInBatch;
   const hasMore = !clientIdFilter && nextCursor < totalLinks;
 
   return {
     synced_obligations: obligationRows.length,
-    clients_processed: links.length,
+    clients_processed: processedInBatch,
     created_tasks: createdTasks,
     details,
     auto_linked_clients: autoLinkedClients,

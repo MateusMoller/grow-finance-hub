@@ -391,7 +391,13 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     void refreshCurrentModuleData();
   }, [isObrigacoesModule]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleSyncCompanies({ silent = false }: { silent?: boolean } = {}) {
+  async function handleSyncCompanies({
+    silent = false,
+    refreshAfter = true,
+  }: {
+    silent?: boolean;
+    refreshAfter?: boolean;
+  } = {}) {
     setSyncingCompanies(true);
     try {
       const result = await invokeAcessorias<{
@@ -410,7 +416,9 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
           `Empresas sincronizadas: ${result.synced || 0}. Clientes criados: ${result.clients_created || 0}. Atualizados: ${result.clients_updated || 0}. Vinculos automaticos: ${result.auto_linked || 0}. Inativados: ${result.clients_inactivated || 0}.`,
         );
       }
-      await Promise.all([loadOverview(), loadObligations()]);
+      if (refreshAfter) {
+        await Promise.all([loadOverview(), loadObligations()]);
+      }
       return result;
     } catch (error) {
       if (!silent) {
@@ -424,12 +432,14 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
   async function handleSyncObligations({
     silent = false,
-    initialBatchSize = 10,
+    initialBatchSize = 20,
     fallbackBatchSize = 10,
+    refreshAfter = true,
   }: {
     silent?: boolean;
     initialBatchSize?: number;
     fallbackBatchSize?: number;
+    refreshAfter?: boolean;
   } = {}) {
     setSyncingObligations(true);
     try {
@@ -459,12 +469,15 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             action: "sync_obligations",
             create_tasks: syncCreateTasks,
             batch_size: batchSize,
+            max_companies_per_run: batchSize,
+            max_execution_ms: 22000,
             cursor,
           });
         } catch (error) {
-          const fallbackAllowed = batchSize > fallbackBatchSize;
+          const lowerBatchSize = Math.max(fallbackBatchSize, Math.floor(batchSize / 2));
+          const fallbackAllowed = batchSize > fallbackBatchSize && lowerBatchSize < batchSize;
           if (fallbackAllowed) {
-            batchSize = fallbackBatchSize;
+            batchSize = lowerBatchSize;
             continue;
           }
           throw error;
@@ -499,7 +512,9 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         }
       }
 
-      await Promise.all([loadOverview(), loadObligations()]);
+      if (refreshAfter) {
+        await Promise.all([loadOverview(), loadObligations()]);
+      }
       return {
         totalSynced,
         totalProcessedClients,
@@ -521,12 +536,22 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     if (!isObrigacoesModule) return;
 
     try {
-      await handleSyncCompanies({ silent: true });
+      try {
+        await handleSyncCompanies({ silent: true, refreshAfter: false });
+      } catch (companiesError) {
+        toast.error(
+          companiesError instanceof Error
+            ? `Sincronizacao de empresas parcial: ${companiesError.message}`
+            : "Sincronizacao de empresas parcial. Prosseguindo com obrigacoes.",
+        );
+      }
       await handleSyncObligations({
         silent: true,
-        initialBatchSize: 20,
-        fallbackBatchSize: 10,
+        initialBatchSize: 25,
+        fallbackBatchSize: 8,
+        refreshAfter: false,
       });
+      await Promise.all([loadOverview(), loadObligations()]);
       toast.success("Sincronizacao concluida. Dados atualizados a partir do Acessorias.");
     } catch (error) {
       toast.error(
