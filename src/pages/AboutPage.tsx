@@ -134,29 +134,29 @@ export default function AboutPage() {
   return (
     <SiteLayout>
       <div className="bg-background text-foreground transition-colors">
-        <section id="institucional" className="relative overflow-hidden border-b border-border/40 bg-hero py-10 sm:py-12 md:py-16">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,hsl(218_92%_66%_/_0.18),transparent_32%),radial-gradient(circle_at_bottom_right,hsl(44_96%_64%_/_0.16),transparent_34%)]" />
+        <section id="institucional" className="relative overflow-hidden border-b border-border/60 py-10 sm:py-12 md:py-16">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,hsl(214_88%_52%_/_0.09),transparent_34%),radial-gradient(circle_at_bottom_right,hsl(44_95%_58%_/_0.08),transparent_32%)]" />
           <div className="container grid gap-8 sm:gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
             <motion.div {...fadeIn} className="relative z-[1] space-y-6">
-              <span className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90">
+              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 Grow Contabilidade - Institucional
               </span>
-              <h1 className="font-heading text-3xl font-bold leading-tight text-white sm:text-4xl md:text-5xl">
+              <h1 className="font-heading text-3xl font-bold leading-tight text-foreground sm:text-4xl md:text-5xl">
                 Mais do que contabilidade, construímos estratégia para o crescimento do seu negócio
               </h1>
-              <p className="max-w-2xl text-base leading-relaxed text-white/78">
+              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
                 A Grow une consultoria, tecnologia e atendimento proximo para organizar sua operação contabil e financeira.
                 Nosso foco e transformar complexidade em clareza, conformidade e crescimento sustentável.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   asChild
-                  variant="gold"
+                  variant="hero"
                   className="w-full rounded-full px-5 font-semibold sm:w-auto"
                 >
                   <Link to="/#contato">Solicitar avaliação gratuita</Link>
                 </Button>
-                <Button asChild variant="hero-outline" className="w-full rounded-full border-white/30 bg-white/10 px-5 text-white hover:border-white/40 hover:bg-white hover:text-primary sm:w-auto">
+                <Button asChild variant="outline" className="w-full rounded-full px-5 sm:w-auto">
                   <Link to="/contato">Falar com especialista</Link>
                 </Button>
               </div>
@@ -165,19 +165,19 @@ export default function AboutPage() {
             <motion.aside
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="relative z-[1] rounded-2xl border border-white/20 bg-white/10 p-5 shadow-lg backdrop-blur-sm"
+              className="relative z-[1] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-md"
             >
-              <h2 className="font-heading text-lg font-semibold text-white">Painel institucional</h2>
-              <p className="mt-1 text-sm text-white/70">Panorama da proposta de valor da Grow para empresas em crescimento.</p>
+              <h2 className="font-heading text-lg font-semibold text-foreground">Painel institucional</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Panorama da proposta de valor da Grow para empresas em crescimento.</p>
               <div className="mt-5 space-y-3">
                 {[
                   "Consultoria contábil, fiscal e financeira integrada",
                   "Acompanhamento mensal com relatórios gerenciais",
                   "Suporte estratégico para tomada de decisão",
                 ].map((item) => (
-                  <div key={item} className="flex items-start gap-2 rounded-lg border border-white/20 bg-white/10 p-3">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-amber-300" />
-                    <span className="text-sm text-white/90">{item}</span>
+                  <div key={item} className="flex items-start gap-2 rounded-lg border border-border/70 bg-background/80 p-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                    <span className="text-sm text-foreground">{item}</span>
                   </div>
                 ))}
               </div>
@@ -192,11 +192,11 @@ export default function AboutPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.2 }}
                 transition={{ duration: 0.35, delay: index * 0.05 }}
-                className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur-sm"
+                className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs"
               >
-                <p className="text-2xl font-bold text-white">{metric.value}</p>
-                <p className="mt-1 text-sm font-semibold text-white/90">{metric.label}</p>
-                <p className="mt-1 text-xs text-white/65">{metric.detail}</p>
+                <p className="text-2xl font-bold text-foreground">{metric.value}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{metric.label}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
               </motion.div>
             ))}
           </div>

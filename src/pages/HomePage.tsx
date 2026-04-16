@@ -113,35 +113,35 @@ export default function HomePage() {
   return (
     <SiteLayout>
       <div className="bg-background text-foreground transition-colors">
-        <section className="relative overflow-hidden border-b border-border/50 bg-hero pb-10 pt-8 sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(44_96%_64%_/_0.18),transparent_36%),radial-gradient(circle_at_bottom_left,hsl(214_85%_66%_/_0.18),transparent_34%)]" />
+        <section className="relative overflow-hidden border-b border-border/60 pb-10 pt-8 sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(214_88%_52%_/_0.09),transparent_35%),radial-gradient(circle_at_bottom_left,hsl(44_95%_58%_/_0.08),transparent_30%)]" />
           <div className="container grid gap-10 lg:grid-cols-2 lg:items-start">
             <motion.div {...fadeIn} className="relative z-[1] space-y-8">
               <div className="space-y-5">
-                <h1 className="font-heading text-3xl font-bold leading-tight text-white sm:text-4xl md:text-5xl">
+                <h1 className="font-heading text-3xl font-bold leading-tight text-foreground sm:text-4xl md:text-5xl">
                   Mais do que contabilidade, impulsionamos o crescimento do seu negócio
                 </h1>
-                <p className="max-w-xl text-sm leading-relaxed text-white/78 sm:text-base">
+                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
                   A Grow oferece contabilidade consultiva e assessoria estratégica para empresas que buscam organização,
                   segurança fiscal e decisoes embasadas para crescer com confiança.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button asChild variant="gold" className="w-full rounded-full px-6 sm:w-auto" size="lg">
+                <Button asChild variant="hero" className="w-full rounded-full px-6 sm:w-auto" size="lg">
                   <Link to="/#contato">Quero Crescer</Link>
                 </Button>
-                <Button asChild variant="hero-outline" className="w-full rounded-full px-6 sm:w-auto border-white/30 bg-white/10 text-white hover:border-white/40 hover:bg-white hover:text-primary" size="lg">
+                <Button asChild variant="outline" className="w-full rounded-full px-6 sm:w-auto" size="lg">
                   <Link to="/contato">Falar com um Especialista</Link>
                 </Button>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
                 {heroStats.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur-sm">
-                    <div className="text-lg font-bold text-white">{item.value}</div>
-                    <p className="text-xs font-medium text-white/90">{item.label}</p>
-                    <p className="mt-1 text-xs text-white/65">{item.detail}</p>
+                  <div key={item.label} className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs">
+                    <div className="text-lg font-bold text-foreground">{item.value}</div>
+                    <p className="text-xs font-medium text-foreground/90">{item.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
                   </div>
                 ))}
               </div>
@@ -150,25 +150,25 @@ export default function HomePage() {
             <motion.div
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="relative z-[1] rounded-2xl border border-white/20 bg-white/10 p-5 shadow-lg backdrop-blur-sm"
+              className="relative z-[1] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-md"
             >
               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="font-heading text-lg font-semibold text-white">Dashboard de Resultados</h3>
-                  <p className="text-xs text-white/65">Relatórios gerenciais para decisoes estratégicas.</p>
+                  <h3 className="font-heading text-lg font-semibold text-foreground">Dashboard de Resultados</h3>
+                  <p className="text-xs text-muted-foreground">Relatórios gerenciais para decisoes estratégicas.</p>
                 </div>
-                <span className="text-xs text-white/60">Atualizado hoje</span>
+                <span className="text-xs text-muted-foreground">Atualizado hoje</span>
               </div>
 
-              <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+              <div className="rounded-xl border border-border/70 bg-background/80 p-4">
                 <div className="flex h-40 items-end gap-3">
                   {[35, 58, 72, 82, 60, 88].map((height, index) => (
-                    <div key={index} className="flex-1 rounded-t-md bg-gradient-to-t from-amber-300/95 to-white" style={{ height: `${height}%` }} />
+                    <div key={index} className="flex-1 rounded-t-md bg-gradient-to-t from-primary/85 to-primary/25" style={{ height: `${height}%` }} />
                   ))}
                 </div>
-                <div className="mt-3 flex flex-col items-start gap-2 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-3 flex flex-col items-start gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                   <span>Consultoria contínua + relatórios mensais</span>
-                  <Button asChild variant="gold" size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
+                  <Button asChild variant="hero" size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
                     <Link to="/solucoes">Ver Demonstracao</Link>
                   </Button>
                 </div>
