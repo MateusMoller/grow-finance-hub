@@ -36,6 +36,8 @@ export interface KanbanTaskItem {
   subtasks: TaskSubtask[];
   request_id: string | null;
   created_at: string;
+  integration_source?: string | null;
+  integration_task_id?: string | null;
 }
 
 type SavePayload = {
