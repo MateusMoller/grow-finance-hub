@@ -353,23 +353,20 @@ export default function AboutPage() {
 
         <section id="contato" className="py-12 md:py-16">
           <div className="container">
-            <div className="rounded-2xl bg-primary p-5 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] sm:p-6 md:p-10">
+            <div className="rounded-3xl border border-border bg-card p-5 sm:p-6 md:p-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
                 <motion.div {...fadeIn}>
-                  <h2 className="font-heading text-2xl font-semibold leading-tight sm:text-3xl">
+                  <h2 className="font-heading text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
                     Pronto para tornar sua gestão mais clara e estratégica?
                   </h2>
-                  <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
+                  <p className="mt-3 max-w-xl text-sm text-muted-foreground">
                     Fale com a Grow e receba um plano inicial para organizar processos, reduzir riscos e evoluir com previsibilidade.
                   </p>
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <Button
-                      asChild
-                      className="w-full rounded-full border border-white/35 px-5 text-sm font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
-                    >
+                    <Button asChild variant="hero" className="w-full rounded-full px-5 text-sm font-semibold sm:w-auto">
                       <Link to="/contato">Solicitar avaliação gratuita</Link>
                     </Button>
-                    <Button asChild variant="outline" className="w-full rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] sm:w-auto dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
+                    <Button asChild variant="outline" className="w-full rounded-full px-5 text-sm sm:w-auto">
                       <Link to="/contato">Falar com consultor</Link>
                     </Button>
                   </div>
@@ -379,7 +376,7 @@ export default function AboutPage() {
                   {...fadeIn}
                   transition={{ duration: 0.45, delay: 0.1 }}
                   onSubmit={handleSubmit}
-                  className="rounded-2xl bg-white p-5 text-foreground dark:border dark:border-[#2b3861] dark:bg-[#08142f] dark:text-[#e9eeff]"
+                  className="rounded-2xl border border-border bg-background p-5 text-foreground"
                 >
                   <div className="space-y-3">
                     <Input
@@ -387,13 +384,13 @@ export default function AboutPage() {
                       required
                       value={leadForm.fullName}
                       onChange={(event) => setLeadForm((prev) => ({ ...prev, fullName: event.target.value }))}
-                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                      className="rounded-full bg-background"
                     />
                     <Input
                       placeholder="Empresa"
                       value={leadForm.companyName}
                       onChange={(event) => setLeadForm((prev) => ({ ...prev, companyName: event.target.value }))}
-                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                      className="rounded-full bg-background"
                     />
                     <Input
                       type="email"
@@ -401,11 +398,11 @@ export default function AboutPage() {
                       required
                       value={leadForm.email}
                       onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
-                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                      className="rounded-full bg-background"
                     />
                   </div>
-                  <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e segurança dos seus dados.</p>
-                  <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>
+                  <p className="mt-3 text-xs text-muted-foreground">Garantimos confidencialidade e segurança dos seus dados.</p>
+                  <Button type="submit" variant="hero" className="mt-4 w-full rounded-full" disabled={sending}>
                     {sending ? "Enviando..." : "Enviar solicitação"}
                     {!sending && <ArrowRight className="h-4 w-4" />}
                   </Button>

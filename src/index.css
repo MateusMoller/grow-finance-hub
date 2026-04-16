@@ -9,44 +9,44 @@
     --font-heading: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
-    --background: 220 28% 97%;
-    --foreground: 224 32% 16%;
+    --background: 220 32% 98%;
+    --foreground: 222 32% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 224 32% 16%;
+    --card-foreground: 222 32% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 224 32% 16%;
+    --popover-foreground: 222 32% 12%;
 
-    --primary: 225 48% 27%;
+    --primary: 222 34% 12%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 218 28% 93%;
-    --secondary-foreground: 224 26% 24%;
+    --secondary: 220 25% 95%;
+    --secondary-foreground: 222 22% 20%;
 
-    --muted: 220 24% 94%;
-    --muted-foreground: 222 15% 44%;
+    --muted: 220 24% 95%;
+    --muted-foreground: 222 12% 40%;
 
-    --accent: 219 30% 92%;
-    --accent-foreground: 224 28% 24%;
+    --accent: 220 26% 94%;
+    --accent-foreground: 222 22% 18%;
 
     --destructive: 0 74% 52%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 220 20% 88%;
     --input: 220 20% 88%;
-    --ring: 225 48% 32%;
+    --ring: 222 26% 22%;
 
-    --radius: 0.9rem;
+    --radius: 1rem;
 
-    --sidebar-background: 226 34% 14%;
-    --sidebar-foreground: 222 22% 82%;
-    --sidebar-primary: 223 50% 71%;
-    --sidebar-primary-foreground: 225 34% 12%;
-    --sidebar-accent: 225 30% 21%;
-    --sidebar-accent-foreground: 222 20% 92%;
-    --sidebar-border: 225 26% 22%;
-    --sidebar-ring: 222 62% 74%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 22% 20%;
+    --sidebar-primary: 222 34% 14%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 26% 95%;
+    --sidebar-accent-foreground: 222 24% 16%;
+    --sidebar-border: 220 20% 88%;
+    --sidebar-ring: 222 26% 22%;
 
     --grow-slate: 225 48% 27%;
     --grow-slate-light: 224 26% 42%;
@@ -56,23 +56,23 @@
     --grow-gold: 44 89% 58%;
     --grow-gold-foreground: 42 30% 15%;
 
-    --gradient-hero: linear-gradient(132deg, hsl(226 34% 16%) 0%, hsl(223 36% 24%) 48%, hsl(226 34% 17%) 100%);
+    --gradient-hero: linear-gradient(160deg, hsl(220 42% 99%) 0%, hsl(220 35% 96%) 55%, hsl(220 42% 99%) 100%);
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 28% 96%) 100%);
-    --gradient-primary: linear-gradient(135deg, hsl(225 50% 30%) 0%, hsl(222 54% 40%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(222 36% 14%) 0%, hsl(222 28% 20%) 100%);
     --gradient-gold: linear-gradient(135deg, hsl(44 92% 60%) 0%, hsl(38 86% 52%) 100%);
 
-    --shadow-xs: 0 1px 2px hsl(224 30% 12% / 0.05);
-    --shadow-sm: 0 2px 8px -2px hsl(224 30% 12% / 0.08);
-    --shadow-md: 0 10px 26px -8px hsl(224 30% 12% / 0.14);
-    --shadow-lg: 0 24px 54px -20px hsl(224 30% 12% / 0.2);
-    --shadow-glow: 0 0 44px -12px hsl(222 64% 52% / 0.28);
+    --shadow-xs: 0 1px 2px hsl(224 22% 10% / 0.04);
+    --shadow-sm: 0 3px 12px -5px hsl(224 22% 10% / 0.08);
+    --shadow-md: 0 12px 28px -14px hsl(224 22% 10% / 0.14);
+    --shadow-lg: 0 20px 52px -26px hsl(224 22% 10% / 0.2);
+    --shadow-glow: 0 0 40px -16px hsl(219 84% 58% / 0.24);
 
-    --surface-subtle: hsl(220 30% 95% / 0.7);
-    --surface-strong: hsl(0 0% 100% / 0.95);
+    --surface-subtle: hsl(220 24% 96% / 0.8);
+    --surface-strong: hsl(0 0% 100% / 0.98);
   }
 
   .dark {
-    --background: 224 50% 8%;
+    --background: 224 40% 8%;
     --foreground: 220 24% 92%;
 
     --card: 224 42% 11%;
@@ -81,16 +81,16 @@
     --popover: 224 42% 11%;
     --popover-foreground: 220 24% 92%;
 
-    --primary: 221 78% 73%;
-    --primary-foreground: 226 48% 12%;
+    --primary: 220 24% 92%;
+    --primary-foreground: 224 42% 12%;
 
-    --secondary: 224 30% 16%;
+    --secondary: 224 28% 14%;
     --secondary-foreground: 220 26% 90%;
 
     --muted: 224 28% 14%;
     --muted-foreground: 223 16% 67%;
 
-    --accent: 223 30% 18%;
+    --accent: 224 28% 16%;
     --accent-foreground: 220 24% 94%;
 
     --destructive: 0 74% 58%;
@@ -98,20 +98,20 @@
 
     --border: 224 24% 23%;
     --input: 224 24% 23%;
-    --ring: 221 78% 73%;
+    --ring: 220 22% 90%;
 
-    --sidebar-background: 224 56% 10%;
-    --sidebar-foreground: 220 18% 84%;
-    --sidebar-primary: 221 78% 73%;
-    --sidebar-primary-foreground: 225 34% 12%;
-    --sidebar-accent: 224 34% 18%;
+    --sidebar-background: 224 42% 11%;
+    --sidebar-foreground: 220 20% 90%;
+    --sidebar-primary: 220 24% 92%;
+    --sidebar-primary-foreground: 224 42% 10%;
+    --sidebar-accent: 224 30% 16%;
     --sidebar-accent-foreground: 221 20% 92%;
-    --sidebar-border: 224 26% 22%;
-    --sidebar-ring: 221 78% 73%;
+    --sidebar-border: 224 24% 22%;
+    --sidebar-ring: 220 24% 92%;
 
-    --gradient-hero: linear-gradient(132deg, hsl(224 56% 10%) 0%, hsl(221 45% 18%) 52%, hsl(224 56% 11%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(224 42% 12%) 0%, hsl(224 38% 10%) 100%);
-    --gradient-primary: linear-gradient(135deg, hsl(221 72% 68%) 0%, hsl(215 70% 62%) 100%);
+    --gradient-hero: linear-gradient(140deg, hsl(224 40% 10%) 0%, hsl(224 32% 13%) 58%, hsl(224 40% 10%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(224 40% 12%) 0%, hsl(224 34% 10%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(220 24% 92%) 0%, hsl(220 22% 84%) 100%);
 
     --shadow-xs: 0 1px 2px hsl(224 66% 4% / 0.38);
     --shadow-sm: 0 6px 16px -6px hsl(224 66% 4% / 0.45);
@@ -139,14 +139,11 @@
     @apply bg-background text-foreground overflow-x-hidden;
     font-family: var(--font-body);
     background-image:
-      radial-gradient(1100px 480px at 82% -8%, hsl(221 88% 60% / 0.09), transparent 62%),
-      radial-gradient(960px 420px at -14% -2%, hsl(224 36% 42% / 0.08), transparent 58%);
+      radial-gradient(840px 360px at 92% -8%, hsl(220 68% 50% / 0.06), transparent 62%);
   }
 
   .dark body {
-    background-image:
-      radial-gradient(880px 460px at 86% -8%, hsl(220 72% 56% / 0.18), transparent 68%),
-      radial-gradient(840px 360px at -8% -8%, hsl(224 46% 42% / 0.16), transparent 62%);
+    background-image: radial-gradient(860px 380px at 92% -8%, hsl(220 72% 54% / 0.14), transparent 66%);
   }
 
   h1,
@@ -156,7 +153,7 @@
   h5,
   h6 {
     font-family: var(--font-heading);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
   }
 
   h1 {

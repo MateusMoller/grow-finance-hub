@@ -48,7 +48,7 @@ export function SiteHeader() {
   const currentSectionHash = useMemo(() => location.hash || "", [location.hash]);
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/70 bg-background/86 backdrop-blur-xl">
+    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/70 bg-background/92 backdrop-blur-xl">
       <div className="container flex h-[68px] items-center justify-between gap-4 sm:h-20">
         <Link to="/" className="flex min-w-0 items-center gap-2.5 sm:gap-3">
           <span className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs sm:h-10 sm:w-10">
@@ -59,16 +59,16 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden items-center rounded-full border border-border/70 bg-card/70 px-1 py-1 shadow-xs lg:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
               className={cn(
-                "rounded-full px-4 py-2 text-sm font-medium transition-all duration-200",
+                "rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                 isNavActive(location.pathname, currentSectionHash, link.to)
-                  ? "bg-primary/10 text-primary shadow-xs"
-                  : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
               )}
             >
               {link.label}
@@ -95,7 +95,7 @@ export function SiteHeader() {
           <Button asChild variant="ghost" size="sm" className="rounded-full px-5">
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button asChild variant="hero" size="sm" className="rounded-full px-5">
+          <Button asChild variant="default" size="sm" className="rounded-full px-5">
             <Link to="/#contato">Agendar avaliacao</Link>
           </Button>
         </div>
@@ -175,7 +175,7 @@ export function SiteHeader() {
                   Entrar
                 </Link>
               </Button>
-              <Button asChild variant="hero" className="w-full">
+              <Button asChild variant="default" className="w-full">
                 <Link to="/#contato" onClick={() => setOpen(false)}>
                   Agendar avaliacao
                 </Link>
