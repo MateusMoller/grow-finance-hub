@@ -184,7 +184,7 @@ export function LeadDetailSheet({
 
           <div>
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <CalendarDays className="h-4 w-4" /> Historico
+              <CalendarDays className="h-4 w-4" /> Histórico
             </h3>
             {historyEntries.length === 0 ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
@@ -212,7 +212,7 @@ export function LeadDetailSheet({
               <MessageSquare className="h-4 w-4" /> Observacoes
             </h3>
             <Textarea
-              placeholder="Adicionar observacao..."
+              placeholder="Adicionar observação..."
               value={note}
               onChange={(event) => setNote(event.target.value)}
               className="text-sm min-h-[60px]"

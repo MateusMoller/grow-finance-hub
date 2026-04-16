@@ -225,13 +225,13 @@ export function ClientPortalCashflow({
 
   const handleCreateEntry = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
 
     const normalizedDescription = entryDescription.trim();
     if (normalizedDescription.length < 3) {
-      toast.error("Descreva o lancamento com pelo menos 3 caracteres.");
+      toast.error("Descreva o lançamento com pelo menos 3 caracteres.");
       return;
     }
 
@@ -299,7 +299,7 @@ export function ClientPortalCashflow({
 
   const handleParseImportFiles = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
 
@@ -323,17 +323,17 @@ export function ClientPortalCashflow({
 
     const drafts = result.entries.map((entry, index) => suggestionToDraftRow(entry, index));
     setImportDrafts(drafts);
-    toast.success(`${drafts.length} sugestao(oes) de lancamento gerada(s) para revisao.`);
+    toast.success(`${drafts.length} sugestão(oes) de lancamento gerada(s) para revisão.`);
   };
 
   const handleImportSelectedDrafts = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
 
     if (selectedDrafts.length === 0) {
-      toast.error("Selecione ao menos um lancamento sugerido para importar.");
+      toast.error("Selecione ao menos um lançamento sugerido para importar.");
       return;
     }
 
@@ -343,17 +343,17 @@ export function ClientPortalCashflow({
       const amount = Number(draft.amountText.replace(",", "."));
 
       if (!draft.entryDate) {
-        toast.error(`Data obrigatoria na sugestao "${description || draft.sourceFile}".`);
+        toast.error(`Data obrigatoria na sugestão "${description || draft.sourceFile}".`);
         return;
       }
 
       if (description.length < 3) {
-        toast.error(`Descricao invalida na sugestao de ${draft.sourceFile}.`);
+        toast.error(`Descrição invalida na sugestão de ${draft.sourceFile}.`);
         return;
       }
 
       if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error(`Valor invalido na sugestao de ${draft.sourceFile}.`);
+        toast.error(`Valor invalido na sugestão de ${draft.sourceFile}.`);
         return;
       }
 
@@ -401,7 +401,7 @@ export function ClientPortalCashflow({
             Controle de caixa bloqueado
           </CardTitle>
           <CardDescription>
-            O acesso a este modulo depende de liberacao do admin. Ao ser liberado, voce podera acompanhar saldo, entradas, saidas e previsoes.
+            O acesso a este modulo depende de liberacao do admin. Ao ser liberado, voce podera acompanhar saldo, entradas, saidas e previsões.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
@@ -422,7 +422,7 @@ export function ClientPortalCashflow({
             Dashboard de caixa
           </CardTitle>
           <CardDescription>
-            Visao mensal com saldo realizado, saldo projetado e principais saidas para apoiar decisao rapida.
+            Visao mensal com saldo realizado, saldo projetado e principais saidas para apoiar decisao rápida.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -603,7 +603,7 @@ export function ClientPortalCashflow({
               disabled={parsingImport || importFiles.length === 0}
             >
               {parsingImport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {parsingImport ? "Lendo arquivos..." : "Gerar sugestoes"}
+              {parsingImport ? "Lendo arquivos..." : "Gerar sugestões"}
             </Button>
             <Button
               type="button"
@@ -639,7 +639,7 @@ export function ClientPortalCashflow({
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 justify-between">
                 <p className="text-xs text-muted-foreground">
-                  {selectedDrafts.length} de {importDrafts.length} sugestao(oes) selecionada(s)
+                  {selectedDrafts.length} de {importDrafts.length} sugestão(oes) selecionada(s)
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -664,7 +664,7 @@ export function ClientPortalCashflow({
                       )
                     }
                   >
-                    Limpar selecao
+                    Limpar seleção
                   </Button>
                 </div>
               </div>
@@ -677,7 +677,7 @@ export function ClientPortalCashflow({
                       <TableHead className="w-[130px]">Data</TableHead>
                       <TableHead className="w-[120px]">Tipo</TableHead>
                       <TableHead className="w-[170px]">Categoria</TableHead>
-                      <TableHead>Descricao</TableHead>
+                      <TableHead>Descrição</TableHead>
                       <TableHead className="w-[120px]">Valor</TableHead>
                       <TableHead className="w-[140px]">Status</TableHead>
                       <TableHead className="w-[150px]">Origem</TableHead>
@@ -883,7 +883,7 @@ export function ClientPortalCashflow({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Descricao</Label>
+              <Label className="text-xs">Descrição</Label>
               <Input
                 value={entryDescription}
                 onChange={(event) => setEntryDescription(event.target.value)}
@@ -919,7 +919,7 @@ export function ClientPortalCashflow({
 
             <Button type="button" onClick={() => void handleCreateEntry()} disabled={creating} className="w-full">
               {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-              {creating ? "Registrando..." : "Registrar lancamento"}
+              {creating ? "Registrando..." : "Registrar lançamento"}
             </Button>
           </CardContent>
         </Card>
@@ -928,7 +928,7 @@ export function ClientPortalCashflow({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Lancamentos recentes</CardTitle>
             <CardDescription>
-              Ultimos registros do mes selecionado para revisao rapida do fluxo.
+              Ultimos registros do mes selecionado para revisão rápida do fluxo.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
@@ -942,7 +942,7 @@ export function ClientPortalCashflow({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
-                      <TableHead>Descricao</TableHead>
+                      <TableHead>Descrição</TableHead>
                       <TableHead>Categoria</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Valor</TableHead>

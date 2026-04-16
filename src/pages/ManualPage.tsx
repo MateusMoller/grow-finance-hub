@@ -43,7 +43,7 @@ interface ModuleGuide {
 }
 
 const platformGoals = [
-  "Centralizar a rotina de operacao, comercial e atendimento em um unico lugar.",
+  "Centralizar a rotina de operação, comercial e atendimento em um unico lugar.",
   "Dar visibilidade real de prazo, responsavel e prioridade para evitar retrabalho.",
   "Padronizar a forma de trabalhar, para qualquer pessoa da equipe continuar o processo sem perda de contexto.",
 ];
@@ -55,8 +55,8 @@ const glossaryItems: GlossaryItem[] = [
     example: "Quando voce escolhe uma empresa no topo, as telas mostram apenas esse recorte.",
   },
   {
-    term: "Competencia",
-    meaning: "Periodo de referencia (AAAA-MM) para analise e operacao.",
+    term: "Competência",
+    meaning: "Período de referência (AAAA-MM) para análise e operação.",
     example: "2026-03 representa marco de 2026.",
   },
   {
@@ -66,13 +66,13 @@ const glossaryItems: GlossaryItem[] = [
   },
   {
     term: "Pipeline",
-    meaning: "Funil do CRM com as etapas da negociacao ate o fechamento.",
-    example: "Oportunidade Nova -> Diagnostico -> Proposta -> Negociacao -> Fechado.",
+    meaning: "Funil do CRM com as etapas da negociação ate o fechamento.",
+    example: "Oportunidade Nova -> Diagnóstico -> Proposta -> Negociação -> Fechado.",
   },
   {
     term: "Status da tarefa",
-    meaning: "Etapa de execucao de uma tarefa dentro da operacao.",
-    example: "Backlog, A Fazer, Em Andamento, Revisao, Concluido.",
+    meaning: "Etapa de execucao de uma tarefa dentro da operação.",
+    example: "Backlog, A Fazer, Em Andamento, Revisão, Concluído.",
   },
   {
     term: "Prioridade",
@@ -87,26 +87,26 @@ const moduleGuides: ModuleGuide[] = [
     title: "Dashboard",
     access: "Todos os perfis",
     icon: LayoutDashboard,
-    objective: "Ler rapidamente a saude da operacao e decidir o que atacar primeiro no dia.",
+    objective: "Ler rapidamente a saúde da operação e decidir o que atacar primeiro no dia.",
     practicalGoal: "Sair da tela com prioridades claras em menos de 3 minutos.",
     nomenclatures: [
-      { term: "Widget", meaning: "Card visual com um indicador especifico." },
-      { term: "Consolidado", meaning: "Visao somada da equipe (mais relevante para admin)." },
-      { term: "Indicador", meaning: "Numero que mede desempenho, prazo ou carga de trabalho." },
+      { term: "Widget", meaning: "Card visual com um indicador específico." },
+      { term: "Consólidado", meaning: "Visão somada da equipe (mais relevante para admin)." },
+      { term: "Indicador", meaning: "Número que mede desempenho, prazo ou carga de trabalho." },
     ],
     possibilities: [
-      "Ver produtividade por recorte de empresa/competencia.",
+      "Ver produtividade por recorte de empresa/competência.",
       "Identificar tarefas atrasadas e concentracoes de risco.",
-      "Comparar tendencia de performance ao longo do periodo.",
+      "Comparar tendencia de performance ao longo do período.",
     ],
     stepByStep: [
-      "Aplicar Empresa e Competencia no topo da tela.",
+      "Aplicar Empresa e Competência no topo da tela.",
       "Ler primeiro os cards de alerta e volume.",
       "Entrar nas paginas de origem para agir nos itens criticos.",
     ],
     carePoints: [
-      "Nao tomar decisao sem conferir se os filtros globais estao corretos.",
-      "Se o numero parecer estranho, revisar origem dos dados (tarefas/CRM/formularios).",
+      "Não tomar decisão sem conferir se os filtros globais estão corretos.",
+      "Se o número parecer estranho, revisar origem dos dados (tarefas/CRM/formulários).",
     ],
   },
   {
@@ -114,24 +114,24 @@ const moduleGuides: ModuleGuide[] = [
     title: "Tarefas e Kanban",
     access: "Todos os perfis",
     icon: ClipboardList,
-    objective: "Controlar execucao com clareza de dono, prazo e proximo passo.",
+    objective: "Controlar execucao com clareza de dono, prazo e próximo passo.",
     practicalGoal: "Toda tarefa deve ter responsavel, data e status atual.",
     nomenclatures: [
-      { term: "Backlog", meaning: "Fila de itens ainda nao iniciados." },
+      { term: "Backlog", meaning: "Fila de itens ainda não iniciados." },
       { term: "Subtarefa", meaning: "Quebra de uma entrega grande em etapas menores." },
-      { term: "Revisao", meaning: "Fase de conferencia antes de concluir." },
+      { term: "Revisão", meaning: "Fase de conferência antes de concluir." },
     ],
     possibilities: [
       "Criar tarefas detalhadas por cliente e prioridade.",
       "Mover cards no Kanban para atualizar o fluxo rapidamente.",
-      "Registrar historico de alteracoes para rastreabilidade.",
-      "Usar desfazer em acoes sensiveis para reduzir erro operacional.",
+      "Registrar histórico de alterações para rastreabilidade.",
+      "Usar desfazer em ações sensiveis para reduzir erro operacional.",
     ],
     stepByStep: [
       "Criar tarefa com titulo objetivo (cliente + entrega).",
       "Definir responsavel, prazo e prioridade.",
       "Adicionar subtarefas quando a entrega tiver varias etapas.",
-      "Mover status diariamente conforme evolucao real.",
+      "Mover status diariamente conforme evolução real.",
     ],
     carePoints: [
       "Evitar tarefa sem responsavel: vira gargalo invisivel.",
@@ -147,22 +147,22 @@ const moduleGuides: ModuleGuide[] = [
     practicalGoal: "Enxergar semanas criticas antes do vencimento.",
     nomenclatures: [
       { term: "Compromisso", meaning: "Evento agendado com horario/data." },
-      { term: "Janela de entrega", meaning: "Periodo disponivel para executar sem conflito." },
+      { term: "Janela de entrega", meaning: "Período disponível para executar sem conflito." },
       { term: "Conflito de agenda", meaning: "Sobreposicao de demandas no mesmo horario." },
     ],
     possibilities: [
-      "Visualizar compromissos por periodo.",
+      "Visualizar compromissos por período.",
       "Planejar semana com antecedencia.",
       "Ajustar distribuicao de carga da equipe.",
     ],
     stepByStep: [
       "Abrir semana atual e identificar picos de volume.",
       "Priorizar itens com prazo mais curto.",
-      "Reorganizar o que nao cabe no dia, sem perder prazo final.",
+      "Reorganizar o que não cabe no dia, sem perder prazo final.",
     ],
     carePoints: [
-      "Evitar deixar tudo para o ultimo dia de competencia.",
-      "Revisar agenda no inicio e no fim do expediente.",
+      "Evitar deixar tudo para o ultimo dia de competência.",
+      "Revisar agenda no início e no fim do expediente.",
     ],
   },
   {
@@ -170,17 +170,17 @@ const moduleGuides: ModuleGuide[] = [
     title: "Clientes",
     access: "Todos os perfis",
     icon: Users,
-    objective: "Concentrar informacoes cadastrais e operacionais de cada cliente.",
+    objective: "Concentrar informações cadastrais e operacionais de cada cliente.",
     practicalGoal: "Ter contexto completo do cliente antes de qualquer atendimento.",
     nomenclatures: [
-      { term: "Cliente ativo", meaning: "Cliente em operacao no periodo." },
+      { term: "Cliente ativo", meaning: "Cliente em operação no período." },
       { term: "Responsavel interno", meaning: "Pessoa da equipe que conduz a conta." },
-      { term: "Historico", meaning: "Registro cronologico de mudancas e interacoes." },
+      { term: "Histórico", meaning: "Registro cronológico de mudanças e interacoes." },
     ],
     possibilities: [
       "Consultar base de clientes por filtro.",
       "Abrir detalhes para entender andamento e pendencias.",
-      "Manter informacoes atualizadas para evitar retrabalho no atendimento.",
+      "Manter informações atualizadas para evitar retrabalho no atendimento.",
     ],
     stepByStep: [
       "Buscar cliente pelo nome ou filtro global.",
@@ -188,35 +188,35 @@ const moduleGuides: ModuleGuide[] = [
       "Registrar atualizacoes sempre que houver mudanca relevante.",
     ],
     carePoints: [
-      "Nao operar cliente com dados desatualizados.",
-      "Sempre registrar mudancas que impactam equipe e prazo.",
+      "Não operar cliente com dados desatualizados.",
+      "Sempre registrar mudanças que impactam equipe e prazo.",
     ],
   },
   {
-    id: "mod-formularios",
+    id: "mod-formulários",
     title: "Formularios",
     access: "Todos os perfis",
     icon: FileText,
-    objective: "Controlar entradas vindas do site e transformar solicitacoes em acao.",
+    objective: "Controlar entradas vindas do site e transformar solicitações em ação.",
     practicalGoal: "Nenhum envio deve ficar sem tratamento.",
     nomenclatures: [
       { term: "Envio", meaning: "Formulario recebido pelo sistema." },
       { term: "Origem", meaning: "Pagina ou canal de onde veio o preenchimento." },
-      { term: "Tag de captacao", meaning: "Marcador usado para identificar lead vindo do site." },
+      { term: "Tag de captação", meaning: "Marcador usado para identificar lead vindo do site." },
     ],
     possibilities: [
       "Listar envios recentes por tipo de formulario.",
-      "Priorizar contatos com maior potencial de conversao.",
+      "Priorizar contatos com maior potencial de conversão.",
       "Alimentar o CRM com dados captados via site.",
     ],
     stepByStep: [
-      "Revisar envios novos no inicio do dia.",
+      "Revisar envios novos no início do dia.",
       "Validar nome, empresa, e-mail e mensagem.",
       "Encaminhar para CRM/atendimento conforme objetivo do contato.",
     ],
     carePoints: [
-      "Nao deixar contato sem retorno inicial.",
-      "Padronizar classificacao de origem para manter relatorios confiaveis.",
+      "Não deixar contato sem retorno inicial.",
+      "Padronizar classificação de origem para manter relatórios confiáveis.",
     ],
   },
   {
@@ -224,29 +224,29 @@ const moduleGuides: ModuleGuide[] = [
     title: "CRM",
     access: "Todos os perfis",
     icon: TrendingUp,
-    objective: "Acompanhar negociacoes por etapa e aumentar conversao com previsibilidade.",
-    practicalGoal: "Saber quantas oportunidades existem, em que etapa estao e quanto podem gerar.",
+    objective: "Acompanhar negociacoes por etapa e aumentar conversão com previsibilidade.",
+    practicalGoal: "Saber quantas oportunidades existem, em que etapa estão e quanto podem gerar.",
     nomenclatures: [
-      { term: "Etapa", meaning: "Posicao atual da negociacao no funil." },
-      { term: "Fechado ganho", meaning: "Negociacao convertida em cliente." },
-      { term: "Fechado perdido", meaning: "Negociacao encerrada sem conversao." },
-      { term: "Meta", meaning: "Alvo de receita, ganhos ou conversao no periodo." },
+      { term: "Etapa", meaning: "Posicao atual da negociação no funil." },
+      { term: "Fechado ganho", meaning: "Negociação convertida em cliente." },
+      { term: "Fechado perdido", meaning: "Negociação encerrada sem conversão." },
+      { term: "Meta", meaning: "Alvo de receita, ganhos ou conversão no período." },
     ],
     possibilities: [
       "Cadastrar novas negociacoes manualmente.",
       "Acompanhar leads captados via site com tag dedicada.",
-      "Mover etapa com historico e possibilidade de desfazer.",
-      "Cadastrar metas de receita, ganhos e conversao.",
+      "Mover etapa com histórico e possibilidade de desfazer.",
+      "Cadastrar metas de receita, ganhos e conversão.",
     ],
     stepByStep: [
-      "Criar negociacao com empresa, contato e valor estimado.",
-      "Atualizar etapa sempre que houver interacao comercial.",
+      "Criar negociação com empresa, contato e valor estimado.",
+      "Atualizar etapa sempre que houver interação comercial.",
       "Revisar bloco de metas e ajustar quando necessario.",
       "Analisar top negociacoes por valor para priorizar follow-up.",
     ],
     carePoints: [
-      "Nao pular etapas sem registrar contexto.",
-      "Evitar manter negociacoes antigas sem proximo passo definido.",
+      "Não pular etapas sem registrar contexto.",
+      "Evitar manter negociacoes antigas sem próximo passo definido.",
     ],
   },
   {
@@ -257,8 +257,8 @@ const moduleGuides: ModuleGuide[] = [
     objective: "Organizar demandas de clientes em fila rastreavel.",
     practicalGoal: "Responder com qualidade e sem perder prazos de atendimento.",
     nomenclatures: [
-      { term: "Solicitacao", meaning: "Pedido aberto pelo cliente no portal." },
-      { term: "Fila", meaning: "Lista de atendimentos aguardando acao da equipe." },
+      { term: "Solicitação", meaning: "Pedido aberto pelo cliente no portal." },
+      { term: "Fila", meaning: "Lista de atendimentos aguardando ação da equipe." },
       { term: "Encaminhamento", meaning: "Transferencia para o setor correto." },
     ],
     possibilities: [
@@ -267,12 +267,12 @@ const moduleGuides: ModuleGuide[] = [
       "Direcionar para responsavel correto rapidamente.",
     ],
     stepByStep: [
-      "Abrir solicitacoes novas e classificar por urgencia.",
+      "Abrir solicitações novas e classificar por urgencia.",
       "Definir responsavel e prazo de retorno.",
       "Atualizar status ate a conclusao.",
     ],
     carePoints: [
-      "Nao deixar solicitacao sem dono.",
+      "Não deixar solicitação sem dono.",
       "Registrar retorno ao cliente antes de encerrar o atendimento.",
     ],
   },
@@ -284,25 +284,25 @@ const moduleGuides: ModuleGuide[] = [
     objective: "Acelerar alinhamentos entre colaboradores sem perder contexto do trabalho.",
     practicalGoal: "Usar grupo geral para comunicados e conversas pessoais para tratativas 1:1.",
     nomenclatures: [
-      { term: "Conversa interna", meaning: "Troca entre funcionarios dentro do sistema." },
-      { term: "Mensagem contextual", meaning: "Mensagem com objetivo claro e acao esperada." },
-      { term: "Registro", meaning: "Historico que pode ser consultado depois." },
+      { term: "Conversa interna", meaning: "Troca entre funcionários dentro do sistema." },
+      { term: "Mensagem contextual", meaning: "Mensagem com objetivo claro e ação esperada." },
+      { term: "Registro", meaning: "Histórico que pode ser consultado depois." },
     ],
     possibilities: [
       "Usar o Grupo Geral para avisos e alinhamentos da equipe inteira.",
-      "Abrir conversa pessoal (1:1) com qualquer usuario interno.",
+      "Abrir conversa pessoal (1:1) com qualquer usuário interno.",
       "Alinhar duvidas operacionais em tempo real.",
-      "Compartilhar contexto rapido para continuidade de tarefas.",
+      "Compartilhar contexto rápido para continuidade de tarefas.",
       "Reduzir dependencia de canais externos para assuntos internos.",
     ],
     stepByStep: [
-      "Enviar mensagem objetiva com contexto minimo necessario.",
+      "Enviar mensagem objetiva com contexto mínimo necessario.",
       "Indicar prazo ou urgencia quando houver impacto em entrega.",
       "Confirmar conclusao para fechar o assunto.",
     ],
     carePoints: [
-      "Evitar mensagens vagas sem acao esperada.",
-      "Usar o chat para alinhamento, nao para substituir registro formal de tarefa.",
+      "Evitar mensagens vagas sem ação esperada.",
+      "Usar o chat para alinhamento, não para substituir registro formal de tarefa.",
     ],
   },
   {
@@ -311,7 +311,7 @@ const moduleGuides: ModuleGuide[] = [
     access: "Admin",
     icon: Newspaper,
     objective: "Publicar comunicados e conteudos para base de assinantes.",
-    practicalGoal: "Transformar conteudo em relacionamento recorrente com leads e clientes.",
+    practicalGoal: "Transformar conteúdo em relacionamento recorrente com leads e clientes.",
     nomenclatures: [
       { term: "Assinante", meaning: "Pessoa que se cadastrou para receber newsletters." },
       { term: "Edicao", meaning: "Newsletter publicada em uma data especifica." },
@@ -320,43 +320,43 @@ const moduleGuides: ModuleGuide[] = [
     possibilities: [
       "Cadastrar e editar newsletters.",
       "Controlar base de assinantes ativa.",
-      "Disparar comunicacao quando houver nova publicacao.",
+      "Disparar comunicação quando houver nova publicação.",
     ],
     stepByStep: [
-      "Criar a nova edicao com titulo e conteudo claro.",
+      "Criar a nova edicao com titulo e conteúdo claro.",
       "Revisar texto e links antes de publicar.",
       "Publicar e acompanhar retorno da base.",
     ],
     carePoints: [
-      "Evitar publicacao sem revisao final.",
-      "Manter periodicidade para nao esfriar a base de assinantes.",
+      "Evitar publicação sem revisão final.",
+      "Manter periodicidade para não esfriar a base de assinantes.",
     ],
   },
   {
     id: "mod-relatorios",
-    title: "Relatorios",
+    title: "Relatórios",
     access: "Admin e liderancas",
     icon: BarChart3,
-    objective: "Converter dados da operacao em analise gerencial para decisao.",
-    practicalGoal: "Ter visao de resultado por cliente, equipe e processo.",
+    objective: "Converter dados da operação em análise gerencial para decisão.",
+    practicalGoal: "Ter visão de resultado por cliente, equipe e processo.",
     nomenclatures: [
-      { term: "Categoria", meaning: "Grupo de relatorios (clientes, CRM, tarefas, etc.)." },
-      { term: "Periodo", meaning: "Intervalo de dados analisado." },
+      { term: "Categoria", meaning: "Grupo de relatórios (clientes, CRM, tarefas, etc.)." },
+      { term: "Período", meaning: "Intervalo de dados analisado." },
       { term: "Exportacao", meaning: "Saida em formato como PDF ou XLSX." },
     ],
     possibilities: [
-      "Gerar relatorios por area.",
+      "Gerar relatórios por area.",
       "Exportar para compartilhamento em reunioes.",
       "Acompanhar tendencias de desempenho.",
     ],
     stepByStep: [
-      "Escolher categoria e periodo.",
-      "Gerar relatorio e validar dados principais.",
+      "Escolher categoria e período.",
+      "Gerar relatório e validar dados principais.",
       "Exportar no formato adequado para apresentacao.",
     ],
     carePoints: [
       "Sempre conferir filtros antes de gerar.",
-      "Nao comparar periodos diferentes sem ajuste de contexto.",
+      "Não comparar periodos diferentes sem ajuste de contexto.",
     ],
   },
   {
@@ -364,11 +364,11 @@ const moduleGuides: ModuleGuide[] = [
     title: "Notificacoes",
     access: "Todos os perfis",
     icon: Bell,
-    objective: "Avisar riscos operacionais para acao rapida.",
+    objective: "Avisar riscos operacionais para ação rápida.",
     practicalGoal: "Tratar pendencias no momento certo e evitar atraso acumulado.",
     nomenclatures: [
-      { term: "Alta prioridade", meaning: "Risco imediato de prazo ou operacao." },
-      { term: "Media prioridade", meaning: "Atencao necessaria no curto prazo." },
+      { term: "Alta prioridade", meaning: "Risco imediato de prazo ou operação." },
+      { term: "Media prioridade", meaning: "Atenção necessaria no curto prazo." },
       { term: "Marcar como lida", meaning: "Sinaliza que o alerta ja foi avaliado." },
     ],
     possibilities: [
@@ -378,11 +378,11 @@ const moduleGuides: ModuleGuide[] = [
     ],
     stepByStep: [
       "Comecar por alertas de alta prioridade.",
-      "Abrir item de origem e executar acao corretiva.",
+      "Abrir item de origem e executar ação corretiva.",
       "Marcar como lida apos tratar o problema.",
     ],
     carePoints: [
-      "Nao usar marcar como lida sem acao real.",
+      "Não usar marcar como lida sem ação real.",
       "Reservar 2 momentos do dia para revisar alertas.",
     ],
   },
@@ -391,25 +391,25 @@ const moduleGuides: ModuleGuide[] = [
     title: "Configuracoes",
     access: "Todos os perfis",
     icon: Settings,
-    objective: "Ajustar perfil e preferencias para trabalhar com mais eficiencia.",
+    objective: "Ajustar perfil e preferências para trabalhar com mais eficiência.",
     practicalGoal: "Manter conta organizada e preparada para o uso diario.",
     nomenclatures: [
-      { term: "Perfil", meaning: "Dados basicos do usuario logado." },
-      { term: "Preferencia", meaning: "Ajuste individual de uso e exibicao." },
-      { term: "Permissao", meaning: "Nivel de acesso conforme papel no sistema." },
+      { term: "Perfil", meaning: "Dados basicos do usuário logado." },
+      { term: "Preferência", meaning: "Ajuste individual de uso e exibicao." },
+      { term: "Permissão", meaning: "Nivel de acesso conforme papel no sistema." },
     ],
     possibilities: [
       "Revisar dados da conta.",
-      "Ajustar preferencias de uso interno.",
-      "Garantir que o acesso esteja correto para a funcao.",
+      "Ajustar preferências de uso interno.",
+      "Garantir que o acesso esteja correto para a função.",
     ],
     stepByStep: [
-      "Abrir configuracoes e conferir informacoes pessoais.",
-      "Atualizar preferencias que impactam rotina.",
+      "Abrir configuracoes e conferir informações pessoais.",
+      "Atualizar preferências que impactam rotina.",
       "Validar com admin se houver limitacao inesperada de acesso.",
     ],
     carePoints: [
-      "Nao compartilhar credenciais.",
+      "Não compartilhar credenciais.",
       "Reportar qualquer acesso indevido imediatamente.",
     ],
   },
@@ -420,24 +420,24 @@ const practicalFlows = [
     title: "Fluxo comercial completo (site -> CRM -> fechamento)",
     steps: [
       "Cliente preenche formulario no site.",
-      "Lead entra na base com origem de captacao via site.",
+      "Lead entra na base com origem de captação via site.",
       "Equipe qualifica e acompanha no CRM por etapa.",
-      "Negociacao evolui para fechado ganho ou perdido com historico.",
+      "Negociação evolui para fechado ganho ou perdido com histórico.",
     ],
   },
   {
-    title: "Fluxo operacional diario (tarefas -> calendario -> notificacoes)",
+    title: "Fluxo operacional diario (tarefas -> calendário -> notificações)",
     steps: [
       "Planejar o dia por tarefas prioritarias.",
-      "Distribuir agenda no calendario para evitar conflitos.",
+      "Distribuir agenda no calendário para evitar conflitos.",
       "Executar e atualizar status no Kanban/Tarefas.",
-      "Tratar alertas de notificacao para nao acumular atraso.",
+      "Tratar alertas de notificação para não acumular atraso.",
     ],
   },
   {
     title: "Fluxo de atendimento (portal -> responsavel -> retorno)",
     steps: [
-      "Nova solicitacao chega no Atendimento Portal.",
+      "Nova solicitação chega no Atendimento Portal.",
       "Responsavel e prazo sao definidos.",
       "Atendimento e atualizado ate conclusao.",
       "Retorno final ao cliente e registro interno do encerramento.",
@@ -446,10 +446,10 @@ const practicalFlows = [
 ];
 
 const dailyChecklist = [
-  "5 min - Revisar notificacoes de alta prioridade.",
+  "5 min - Revisar notificações de alta prioridade.",
   "5 min - Atualizar status de tarefas e Kanban com o que foi executado.",
   "3 min - Revisar CRM e registrar avancos comerciais do dia.",
-  "2 min - Garantir que proximas acoes de amanha estao claras.",
+  "2 min - Garantir que próximas ações de amanha estão claras.",
 ];
 
 export default function ManualPage() {
@@ -497,7 +497,7 @@ export default function ManualPage() {
             <Target className="h-5 w-5 text-primary" /> 1) Objetivos da plataforma
           </h2>
           <p className="text-sm text-muted-foreground">
-            Objetivo central: transformar trabalho disperso em processo previsivel, com dono, prazo e historico.
+            Objetivo central: transformar trabalho disperso em processo previsivel, com dono, prazo e histórico.
           </p>
           <div className="grid md:grid-cols-3 gap-3">
             {platformGoals.map((goal) => (
@@ -521,7 +521,7 @@ export default function ManualPage() {
                 <p className="text-sm font-semibold">{item.term}</p>
                 <p className="text-sm text-muted-foreground">{item.meaning}</p>
                 <p className="text-xs text-muted-foreground">
-                  Exemplo pratico: {item.example}
+                  Exemplo prático: {item.example}
                 </p>
               </div>
             ))}
@@ -617,7 +617,7 @@ export default function ManualPage() {
             <TrendingUp className="h-5 w-5 text-primary" /> 4) Fluxos prontos (de ponta a ponta)
           </h2>
           <p className="text-sm text-muted-foreground">
-            Use estes roteiros como padrao inicial para manter consistencia entre pessoas e setores.
+            Use estes roteiros como padrão inicial para manter consistencia entre pessoas e setores.
           </p>
           <div className="grid lg:grid-cols-3 gap-3">
             {practicalFlows.map((flow) => (
@@ -649,7 +649,7 @@ export default function ManualPage() {
 
         <section className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary" /> Guia rapido para novos usuarios
+            <Users className="h-5 w-5 text-primary" /> Guia rapido para novos usuários
           </h2>
           <p className="text-sm text-muted-foreground">
             Se a pessoa entrou hoje na equipe, este e o caminho mais simples para onboarding:
@@ -657,7 +657,7 @@ export default function ManualPage() {
           <ol className="list-decimal pl-5 space-y-2 text-sm">
             <li>Ler Objetivos e Nomenclaturas do manual.</li>
             <li>Treinar Tarefas/Kanban e Notificacoes no primeiro dia.</li>
-            <li>Treinar modulo principal da funcao no segundo dia (CRM, Atendimento ou Clientes).</li>
+            <li>Treinar modulo principal da função no segundo dia (CRM, Atendimento ou Clientes).</li>
             <li>Validar entendimento com um fluxo real supervisionado.</li>
           </ol>
           <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground flex items-start gap-2">

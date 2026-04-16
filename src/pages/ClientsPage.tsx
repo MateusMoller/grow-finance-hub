@@ -95,7 +95,7 @@ export default function ClientsPage() {
       .eq("role", "client");
 
     if (rolesError) {
-      toast.error("Nao foi possivel validar permissoes atuais do portal.");
+      toast.error("Não foi possível validar permissoes atuais do portal.");
       return;
     }
 
@@ -103,7 +103,7 @@ export default function ClientsPage() {
     const missingRoleIds = deduplicatedIds.filter((userId) => !alreadyAllowed.has(userId));
 
     if (missingRoleIds.length === 0) {
-      if (notifySuccess) toast.success("Todos os clientes ja possuem permissao do portal.");
+      if (notifySuccess) toast.success("Todos os clientes ja possuem permissão do portal.");
       return;
     }
 
@@ -118,12 +118,12 @@ export default function ClientsPage() {
       );
 
     if (upsertError) {
-      toast.error("Nao foi possivel aplicar permissao do portal para todos os clientes.");
+      toast.error("Não foi possível aplicar permissão do portal para todos os clientes.");
       return;
     }
 
     if (notifySuccess) {
-      toast.success(`${missingRoleIds.length} cliente(s) receberam permissao de portal.`);
+      toast.success(`${missingRoleIds.length} cliente(s) receberam permissão de portal.`);
     }
   };
 
@@ -139,7 +139,7 @@ export default function ClientsPage() {
 
   const handleSyncFromAcessorias = async () => {
     if (!canCreateClients) {
-      toast.error("Seu perfil nao possui permissao para sincronizar clientes.");
+      toast.error("Seu perfil não possui permissão para sincronizar clientes.");
       return;
     }
 
@@ -192,13 +192,13 @@ export default function ClientsPage() {
     const inactivated = Number(payload.clients_inactivated || 0);
 
     toast.success(
-      `Sincronizacao concluida: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${inactivated} inativadas.`,
+      `Sincronização concluída: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${inactivated} inativadas.`,
     );
     void loadClients();
   };
 
   const handleCreate = async () => {
-    toast.error("Cadastro manual desativado. Use a sincronizacao com o Acessorias.");
+    toast.error("Cadastro manual desativado. Use a sincronização com o Acessorias.");
   };
 
   return (
@@ -274,7 +274,7 @@ export default function ClientsPage() {
                       </td>
                       <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">{client.cnpj}</td>
                       <td className="p-4 text-sm hidden lg:table-cell">{client.regime}</td>
-                      <td className="p-4 text-sm hidden lg:table-cell">{client.sector || "Nao informado"}</td>
+                      <td className="p-4 text-sm hidden lg:table-cell">{client.sector || "Não informado"}</td>
                       <td className="p-4">
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[client.status || ""] || "bg-muted"}`}>
                           {client.status}
@@ -330,7 +330,7 @@ export default function ClientsPage() {
                             </td>
                             <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">{client.cnpj}</td>
                             <td className="p-4 text-sm hidden lg:table-cell">{client.regime}</td>
-                            <td className="p-4 text-sm hidden lg:table-cell">{client.sector || "Nao informado"}</td>
+                            <td className="p-4 text-sm hidden lg:table-cell">{client.sector || "Não informado"}</td>
                             <td className="p-4">
                               <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[client.status || ""] || "bg-muted"}`}>
                                 {client.status}
@@ -400,7 +400,7 @@ export default function ClientsPage() {
             </div>
             <div className="space-y-2">
               <Label>Senha do Portal *</Label>
-              <Input type="password" placeholder="Minimo 6 caracteres" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
+              <Input type="password" placeholder="Mínimo 6 caracteres" value={newClient.password} onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))} />
             </div>
           </div>
           <DialogFooter>

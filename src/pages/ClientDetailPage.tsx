@@ -113,7 +113,7 @@ const contabilidadeFields = [
   { name: "estoque", label: "Estoque (R$)" },
 ];
 const fiscalFields = [
-  { name: "regime_tributario", label: "Regime Tributario" },
+  { name: "regime_tributário", label: "Regime Tributario" },
   { name: "aliquota_irpj", label: "Aliquota IRPJ (%)" },
   { name: "aliquota_csll", label: "Aliquota CSLL (%)" },
   { name: "aliquota_pis", label: "Aliquota PIS (%)" },
@@ -123,20 +123,20 @@ const fiscalFields = [
   { name: "inscricao_estadual", label: "Inscricao Estadual" },
   { name: "inscricao_municipal", label: "Inscricao Municipal" },
   { name: "cnae_principal", label: "CNAE Principal" },
-  { name: "nfe_emitidas", label: "NF-e Emitidas no Periodo" },
+  { name: "nfe_emitidas", label: "NF-e Emitidas no Período" },
   { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
 ];
 const dpFields = [
-  { name: "total_funcionarios", label: "Total de Funcionarios" },
+  { name: "total_funcionarios", label: "Total de Funcionários" },
   { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
   { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
   { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
   { name: "inss_patronal", label: "INSS Patronal (R$)" },
   { name: "vale_transporte", label: "Vale Transporte (R$)" },
   { name: "vale_alimentacao", label: "Vale Alimentacao (R$)" },
-  { name: "admissoes_periodo", label: "Admissoes no Periodo" },
-  { name: "demissoes_periodo", label: "Demissoes no Periodo" },
-  { name: "ferias_programadas", label: "Ferias Programadas" },
+  { name: "admissões_periodo", label: "Admissoes no Período" },
+  { name: "demissoes_periodo", label: "Demissões no Período" },
+  { name: "ferias_programadas", label: "Férias Programadas" },
   { name: "sindical_contribuicao", label: "Contribuicao Sindical (R$)" },
 ];
 const cadastroClientesFields = [
@@ -144,12 +144,12 @@ const cadastroClientesFields = [
   { name: "nome_fantasia", label: "Nome Fantasia" },
   { name: "inscricao_estadual", label: "Inscricao Estadual" },
   { name: "inscricao_municipal", label: "Inscricao Municipal" },
-  { name: "regime_tributario", label: "Regime Tributario" },
+  { name: "regime_tributário", label: "Regime Tributario" },
   { name: "cnae_principal", label: "CNAE Principal" },
   { name: "data_abertura", label: "Data de Abertura" },
   { name: "cep", label: "CEP" },
-  { name: "endereco", label: "Rua / Logradouro" },
-  { name: "numero_estabelecimento", label: "Numero do Estabelecimento" },
+  { name: "endereço", label: "Rua / Logradouro" },
+  { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
   { name: "bairro", label: "Bairro" },
   { name: "cidade", label: "Cidade" },
   { name: "estado", label: "Estado" },
@@ -161,7 +161,7 @@ const cadastroFiscalFields = [
   { name: "regime_icms", label: "Regime ICMS" },
   { name: "contribuinte_icms", label: "Contribuinte ICMS" },
   { name: "contribuinte_ipi", label: "Contribuinte IPI" },
-  { name: "tipo_operacao", label: "Tipo de Operacao" },
+  { name: "tipo_operacao", label: "Tipo de Operação" },
   { name: "emite_nfe", label: "Emite NF-e" },
   { name: "emite_nfse", label: "Emite NFS-e" },
   { name: "portal_nf_utilizado", label: "Portal NF utilizado" },
@@ -169,14 +169,14 @@ const cadastroFiscalFields = [
   { name: "estados_que_opera", label: "Estados que Opera" },
   { name: "controle_estoque", label: "Controle de Estoque" },
   { name: "sistema_vendas", label: "Sistema de Vendas" },
-  { name: "integracao_contabil", label: "Integracao Contabil" },
+  { name: "integracao_contabil", label: "Integração Contábil" },
   { name: "entrega_gia", label: "Entrega GIA" },
   { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
 ];
 const cadastroDpFields = [
   { name: "convencao_coletiva", label: "Convencao Coletiva" },
   { name: "possui_pro_labore", label: "Possui Pro-labore" },
-  { name: "possui_funcionarios", label: "Possui Funcionarios" },
+  { name: "possui_funcionarios", label: "Possui Funcionários" },
   { name: "possui_variaveis", label: "Possui Variaveis" },
   { name: "possui_inss", label: "Possui INSS" },
   { name: "possui_fgts", label: "Possui FGTS" },
@@ -184,20 +184,20 @@ const cadastroDpFields = [
   { name: "envia_folha_ponto", label: "Envia Folha Ponto?" },
   { name: "beneficios", label: "Beneficios" },
   { name: "hora_extra_banco_horas", label: "Hora extra / Banco de horas" },
-  { name: "envia_relatorio_ferias", label: "Envia relatorio de ferias?" },
+  { name: "envia_relatorio_ferias", label: "Envia relatório de férias?" },
   { name: "clinica_parceira", label: "Clinica parceira" },
   { name: "possui_decimo_terceiro", label: "Possui 13o?" },
 ];
 const cadastroContabilFields = [
-  { name: "obrigacao_contabil", label: "Obrigacao Contabil" },
+  { name: "obrigacao_contabil", label: "Obrigação Contábil" },
   { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
   { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
   { name: "controle_financeiro", label: "Controle Financeiro" },
   { name: "sistema_financeiro", label: "Sistema Financeiro" },
-  { name: "integracao_contabil", label: "Integracao Contabil" },
+  { name: "integracao_contabil", label: "Integração Contábil" },
   { name: "balanco_anual", label: "Balanco Anual" },
-  { name: "responsavel_contabil_grow", label: "Responsavel Contabil Grow" },
-  { name: "periodicidade_relatorios", label: "Periodicidade Relatorios" },
+  { name: "responsavel_contabil_grow", label: "Responsavel Contábil Grow" },
+  { name: "periodicidade_relatorios", label: "Periodicidade Relatórios" },
   { name: "observacoes_contabeis", label: "Observacoes Contabeis" },
 ];
 const cadastroObrigacoesFields = [
@@ -222,7 +222,7 @@ const cadastroDocumentosFields = [
   { name: "procuracao", label: "Procuracao" },
   { name: "certificado_digital", label: "Certificado Digital" },
   { name: "contrato_social", label: "Contrato Social" },
-  { name: "alteracoes_contratuais", label: "Alteracoes Contratuais" },
+  { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
   { name: "outros_documentos", label: "Outros Documentos" },
 ];
 const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
@@ -232,7 +232,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     label: "Contabilidade",
     color: "text-primary",
     mode: "monthly",
-    description: "Indicadores mensais para relatorio gerencial financeiro e contabil.",
+    description: "Indicadores mensais para relatório gerencial financeiro e contábil.",
     allowFiles: true,
   },
   fiscal: {
@@ -241,7 +241,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     label: "Fiscal",
     color: "text-amber-600",
     mode: "monthly",
-    description: "Indicadores mensais da area fiscal para analise gerencial.",
+    description: "Indicadores mensais da area fiscal para análise gerencial.",
     allowFiles: true,
   },
   dp: {
@@ -267,7 +267,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     label: "Setor Fiscal",
     color: "text-amber-600",
     mode: "cadastral",
-    description: "Informacoes cadastrais do setor Fiscal conforme planilha.",
+    description: "Informações cadastrais do setor Fiscal conforme planilha.",
   },
   cadastro_departamento_pessoal: {
     fields: cadastroDpFields,
@@ -275,23 +275,23 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     label: "Setor DP",
     color: "text-emerald-600",
     mode: "cadastral",
-    description: "Informacoes cadastrais do setor Departamento Pessoal conforme planilha.",
+    description: "Informações cadastrais do setor Departamento Pessoal conforme planilha.",
   },
   cadastro_contabil: {
     fields: cadastroContabilFields,
     icon: Calculator,
-    label: "Setor Contabil",
+    label: "Setor Contábil",
     color: "text-primary",
     mode: "cadastral",
-    description: "Informacoes cadastrais do setor Contabil conforme planilha.",
+    description: "Informações cadastrais do setor Contábil conforme planilha.",
   },
   cadastro_obrigacoes: {
     fields: cadastroObrigacoesFields,
     icon: ClipboardList,
-    label: "Obrigacoes",
+    label: "Obrigações",
     color: "text-violet-600",
     mode: "cadastral",
-    description: "Obrigacoes acessorias cadastradas por cliente conforme planilha.",
+    description: "Obrigações acessorias cadastradas por cliente conforme planilha.",
   },
   cadastro_honorarios: {
     fields: cadastroHonorariosFields,
@@ -354,7 +354,7 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
     inss_patronal: currencyRule,
     vale_transporte: currencyRule,
     vale_alimentacao: currencyRule,
-    admissoes_periodo: { type: "integer", min: 0 },
+    admissões_periodo: { type: "integer", min: 0 },
     demissoes_periodo: { type: "integer", min: 0 },
     sindical_contribuicao: currencyRule,
   },
@@ -529,7 +529,7 @@ const lookupCepAddress = async (cepDigits: string): Promise<CepLookupAddress> =>
     if (viaCepResult.ok && viaCepResult.data) {
       const parsed = parseViaCepAddress(viaCepResult.data, cepDigits);
       if (parsed) return parsed;
-      throw new Error("CEP nao encontrado.");
+      throw new Error("CEP não encontrado.");
     }
     attempts.push(`ViaCEP HTTP ${viaCepResult.status}`);
   } catch (error) {
@@ -543,7 +543,7 @@ const lookupCepAddress = async (cepDigits: string): Promise<CepLookupAddress> =>
       return parseBrasilApiAddress(brasilApiResult.data, cepDigits);
     }
     if (brasilApiResult.status === 404) {
-      throw new Error("CEP nao encontrado.");
+      throw new Error("CEP não encontrado.");
     }
     attempts.push(`BrasilAPI HTTP ${brasilApiResult.status}`);
   } catch (error) {
@@ -552,7 +552,7 @@ const lookupCepAddress = async (cepDigits: string): Promise<CepLookupAddress> =>
   }
 
   throw new Error(
-    `Nao foi possivel consultar o CEP agora. Falhas: ${attempts.join(" | ")}`,
+    `Não foi possível consultar o CEP agora. Falhas: ${attempts.join(" | ")}`,
   );
 };
 
@@ -573,7 +573,7 @@ const validateFieldValue = (rule: FieldValidationRule | undefined, value: string
   if (rule.type === "yesNo") {
     const normalized = normalizeYesNoValue(normalizedValue);
     if (normalized !== "sim" && normalized !== "nao") {
-      return "Use apenas Sim ou Nao.";
+      return "Use apenas Sim ou Não.";
     }
     return null;
   }
@@ -606,10 +606,10 @@ const validateFieldValue = (rule: FieldValidationRule | undefined, value: string
 
   if (rule.type === "number" || rule.type === "integer" || rule.type === "percent") {
     const numeric = parseNumericValue(normalizedValue);
-    if (numeric === null) return "Informe um numero valido.";
-    if (rule.type === "integer" && !Number.isInteger(numeric)) return "Informe um numero inteiro.";
-    if (typeof rule.min === "number" && numeric < rule.min) return `Valor minimo: ${rule.min}.`;
-    if (typeof rule.max === "number" && numeric > rule.max) return `Valor maximo: ${rule.max}.`;
+    if (numeric === null) return "Informe um número valido.";
+    if (rule.type === "integer" && !Number.isInteger(numeric)) return "Informe um número inteiro.";
+    if (typeof rule.min === "number" && numeric < rule.min) return `Valor mínimo: ${rule.min}.`;
+    if (typeof rule.max === "number" && numeric > rule.max) return `Valor máximo: ${rule.max}.`;
     return null;
   }
 
@@ -618,7 +618,7 @@ const validateFieldValue = (rule: FieldValidationRule | undefined, value: string
 
 const generalInfoCadastralFields = [
   "cep",
-  "endereco",
+  "endereço",
   "numero_estabelecimento",
   "bairro",
   "cidade",
@@ -633,9 +633,9 @@ type GeneralInfoCadastralFieldName = (typeof generalInfoCadastralFields)[number]
 const getCategoryFieldEntryKey = (category: ClientCategoryKey, fieldName: string) => `${category}__${fieldName}`;
 
 const clientBusinessProfileOptions = [
-  { key: "comercio", label: "Comercio" },
+  { key: "comércio", label: "Comércio" },
   { key: "industria", label: "Industria" },
-  { key: "prestador_servicos", label: "Prestador de Servicos" },
+  { key: "prestador_servicos", label: "Prestador de Serviços" },
 ] as const;
 
 type ClientBusinessProfileKey = (typeof clientBusinessProfileOptions)[number]["key"];
@@ -649,19 +649,19 @@ const normalizeProfileToken = (value: string) =>
     .replace(/\s+/g, "_");
 
 const clientBusinessProfileLabelByKey: Record<ClientBusinessProfileKey, string> = {
-  comercio: "Comercio",
+  comércio: "Comércio",
   industria: "Industria",
-  prestador_servicos: "Prestador de Servicos",
+  prestador_servicos: "Prestador de Serviços",
 };
 
 const clientBusinessProfileKeyByToken: Record<string, ClientBusinessProfileKey> = {
-  comercio: "comercio",
+  comércio: "comércio",
   industria: "industria",
   prestador_de_servicos: "prestador_servicos",
   prestador_servicos: "prestador_servicos",
   "prestador_de_servico": "prestador_servicos",
   "prestador_servico": "prestador_servicos",
-  servicos: "prestador_servicos",
+  serviços: "prestador_servicos",
 };
 
 const parseBusinessProfilesValue = (rawValue: string | undefined) => {
@@ -684,7 +684,7 @@ const serializeBusinessProfilesValue = (profiles: ClientBusinessProfileKey[]) =>
   profiles.map((profile) => clientBusinessProfileLabelByKey[profile]).join(", ");
 
 const buildAddressFromCadastralValues = (values: Record<GeneralInfoCadastralFieldName, string>) => {
-  const street = values.endereco.trim();
+  const street = values.endereço.trim();
   const number = values.numero_estabelecimento.trim();
   const neighborhood = values.bairro.trim();
   const city = values.cidade.trim();
@@ -794,7 +794,7 @@ const validatePartnerFieldValue = (field: ClientPartnerField, value: string) => 
   if (field === "proLabore") {
     const numeric = parseNumericValue(trimmed);
     if (numeric === null) return "Informe um valor valido.";
-    if (numeric < 0) return "Valor minimo: 0.";
+    if (numeric < 0) return "Valor mínimo: 0.";
     return null;
   }
 
@@ -819,7 +819,7 @@ const validatePartners = (partners: ClientPartnerForm[]) => {
   }, 0);
 
   if (partners.length > 0 && totalOwnership > 100) {
-    errors.__total = "A soma das participacoes dos socios nao pode passar de 100%.";
+    errors.__total = "A soma das participacoes dos sócios não pode passar de 100%.";
   }
 
   return errors;
@@ -843,8 +843,8 @@ const portalTaskStatusOptions: PortalTaskStatus[] = [
 
 const portalTaskStatusLabel: Record<PortalTaskStatus, string> = {
   pending_client: "Aguardando cliente",
-  in_analysis: "Em analise",
-  completed: "Concluida",
+  in_analysis: "Em análise",
+  completed: "Concluída",
   cancelled: "Cancelada",
 };
 
@@ -874,7 +874,7 @@ const portalTaskTypeLabel: Record<PortalTaskType, string> = {
 const normalizeObligationStatusToken = (status: string | null) => {
   const token = String(status || "").trim().toLowerCase();
   if (!token) return "pendente";
-  if (["concluido", "completed", "delivered", "sent", "entregue"].includes(token)) return "concluido";
+  if (["concluído", "completed", "delivered", "sent", "entregue"].includes(token)) return "concluído";
   if (["atrasado", "overdue", "late", "vencido"].includes(token)) return "atrasado";
   if (["em_andamento", "processing", "in_progress", "resolvendo"].includes(token)) return "em_andamento";
   return "pendente";
@@ -884,7 +884,7 @@ const obligationStatusLabel: Record<string, string> = {
   pendente: "Pendente",
   em_andamento: "Em andamento",
   atrasado: "Atrasado",
-  concluido: "Concluido",
+  concluído: "Concluído",
   sem_registro: "Sem registro no mes",
 };
 
@@ -892,7 +892,7 @@ const obligationStatusClass: Record<string, string> = {
   pendente: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
   em_andamento: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
   atrasado: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300",
-  concluido: "bg-primary/10 text-primary",
+  concluído: "bg-primary/10 text-primary",
   sem_registro: "bg-muted text-muted-foreground",
 };
 
@@ -974,7 +974,7 @@ export default function ClientDetailPage() {
     ]);
 
     if (monthlyRes.error || cadastralRes.error) {
-      toast.error("Nao foi possivel carregar os dados mensais e cadastrais.");
+      toast.error("Não foi possível carregar os dados mensais e cadastrais.");
       return;
     }
 
@@ -1005,7 +1005,7 @@ export default function ClientDetailPage() {
     setLoadingAcessoriasObligations(false);
 
     if (error) {
-      toast.error("Nao foi possivel carregar as obrigacoes deste cliente.");
+      toast.error("Não foi possível carregar as obrigações deste cliente.");
       return;
     }
 
@@ -1041,7 +1041,7 @@ export default function ClientDetailPage() {
     setPortalTasks((tasksRes.data || []) as ClientPortalTaskRow[]);
 
     if (tasksRes.error) {
-      toast.error("Nao foi possivel carregar as pendencias do cliente.");
+      toast.error("Não foi possível carregar as pendencias do cliente.");
     }
 
     if (normalizedClient.portal_user_id) {
@@ -1053,7 +1053,7 @@ export default function ClientDetailPage() {
         .maybeSingle();
 
       if (roleError) {
-        toast.error("Nao foi possivel validar a permissao atual do portal.");
+        toast.error("Não foi possível validar a permissão atual do portal.");
         setPortalAccessEnabled(false);
       } else {
         setPortalAccessEnabled(Boolean(roleData));
@@ -1132,14 +1132,14 @@ export default function ClientDetailPage() {
       const address = await lookupCepAddress(cepDigits);
 
       setGeneralInfoFieldValue("cep", formatCepValue(address.cep || cepDigits));
-      setGeneralInfoFieldValue("endereco", address.street);
+      setGeneralInfoFieldValue("endereço", address.street);
       setGeneralInfoFieldValue("bairro", address.neighborhood);
       setGeneralInfoFieldValue("cidade", address.city);
       setGeneralInfoFieldValue("estado", address.state);
 
       toast.success("Endereco preenchido a partir do CEP.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Nao foi possivel consultar o CEP no momento.";
+      const message = error instanceof Error ? error.message : "Não foi possível consultar o CEP no momento.";
       toast.error(message);
     } finally {
       setSearchingCep(false);
@@ -1155,7 +1155,7 @@ export default function ClientDetailPage() {
 
     try {
       await navigator.clipboard.writeText(rawCnpj);
-      toast.success("CNPJ copiado sem pontuacao.");
+      toast.success("CNPJ copiado sem pontuação.");
       return;
     } catch {
       const fallback = document.createElement("textarea");
@@ -1167,7 +1167,7 @@ export default function ClientDetailPage() {
       fallback.select();
       document.execCommand("copy");
       document.body.removeChild(fallback);
-      toast.success("CNPJ copiado sem pontuacao.");
+      toast.success("CNPJ copiado sem pontuação.");
     }
   };
 
@@ -1192,7 +1192,7 @@ export default function ClientDetailPage() {
         else delete nextErrors[key];
 
         if (next.length > 0 && totalOwnership > 100) {
-          nextErrors.__total = "A soma das participacoes dos socios nao pode passar de 100%.";
+          nextErrors.__total = "A soma das participacoes dos sócios não pode passar de 100%.";
         } else {
           delete nextErrors.__total;
         }
@@ -1221,7 +1221,7 @@ export default function ClientDetailPage() {
         });
 
         if (next.length > 0 && totalOwnership > 100) {
-          nextErrors.__total = "A soma das participacoes dos socios nao pode passar de 100%.";
+          nextErrors.__total = "A soma das participacoes dos sócios não pode passar de 100%.";
         } else {
           delete nextErrors.__total;
         }
@@ -1254,7 +1254,7 @@ export default function ClientDetailPage() {
 
     if (Object.keys(nextGeneralFieldErrors).length > 0) {
       setDataFieldErrors((prev) => ({ ...prev, ...nextGeneralFieldErrors }));
-      toast.error("Existem campos de endereco invalidos. Revise antes de salvar.");
+      toast.error("Existem campos de endereço invalidos. Revise antes de salvar.");
       return;
     }
 
@@ -1273,7 +1273,7 @@ export default function ClientDetailPage() {
       },
       {
         cep: "",
-        endereco: "",
+        endereço: "",
         numero_estabelecimento: "",
         bairro: "",
         cidade: "",
@@ -1338,7 +1338,7 @@ export default function ClientDetailPage() {
       if (generalDataRows.length > 0) {
         const { error: insertGeneralDataError } = await supabase.from("client_data").insert(generalDataRows);
         if (insertGeneralDataError) {
-          toast.error("Dados gerais salvos, mas houve erro ao persistir os campos de endereco.");
+          toast.error("Dados gerais salvos, mas houve erro ao persistir os campos de endereço.");
           return;
         }
       }
@@ -1377,17 +1377,17 @@ export default function ClientDetailPage() {
 
   const handlePortalAccessChange = async (checked: boolean) => {
     if (!canManageCashflowAccess) {
-      toast.error("Apenas usuario admin pode alterar este acesso.");
+      toast.error("Apenas usuário admin pode alterar este acesso.");
       return;
     }
 
     if (checked && clientIsInactive) {
-      toast.error("Clientes inativos nao podem ter acesso ao portal.");
+      toast.error("Clientes inativos não podem ter acesso ao portal.");
       return;
     }
 
     if (!client?.portal_user_id) {
-      toast.error("Cliente sem usuario do portal vinculado. Cadastre pelo fluxo de cliente com acesso ao portal.");
+      toast.error("Cliente sem usuário do portal vinculado. Cadastre pelo fluxo de cliente com acesso ao portal.");
       return;
     }
 
@@ -1405,7 +1405,7 @@ export default function ClientDetailPage() {
       setSavingPortalAccess(false);
 
       if (upsertError) {
-        toast.error("Nao foi possivel liberar acesso ao portal.");
+        toast.error("Não foi possível liberar acesso ao portal.");
         return;
       }
 
@@ -1423,7 +1423,7 @@ export default function ClientDetailPage() {
     setSavingPortalAccess(false);
 
     if (deleteError) {
-      toast.error("Nao foi possivel bloquear acesso ao portal.");
+      toast.error("Não foi possível bloquear acesso ao portal.");
       return;
     }
 
@@ -1472,7 +1472,7 @@ export default function ClientDetailPage() {
     setCreatingPortalTask(false);
 
     if (error) {
-      toast.error("Nao foi possivel criar a pendencia.");
+      toast.error("Não foi possível criar a pendencia.");
       return;
     }
 
@@ -1487,7 +1487,7 @@ export default function ClientDetailPage() {
     setUpdatingPortalTaskId(null);
 
     if (error) {
-      toast.error("Nao foi possivel atualizar o status da pendencia.");
+      toast.error("Não foi possível atualizar o status da pendencia.");
       return;
     }
 
@@ -1504,7 +1504,7 @@ export default function ClientDetailPage() {
     setDeletingPortalTaskId(null);
 
     if (error) {
-      toast.error("Nao foi possivel excluir a pendencia.");
+      toast.error("Não foi possível excluir a pendencia.");
       return;
     }
 
@@ -1673,7 +1673,7 @@ export default function ClientDetailPage() {
   const selectedBusinessProfiles = getSelectedBusinessProfiles();
   const groupedClientObligations = Array.from(
     acessoriasObligations.reduce((map, row) => {
-      const obligationName = (row.obligation_name || "Obrigacao sem nome").trim() || "Obrigacao sem nome";
+      const obligationName = (row.obligation_name || "Obrigação sem nome").trim() || "Obrigação sem nome";
       const key = obligationName.toLowerCase();
       const current = map.get(key);
       if (current) {
@@ -1704,7 +1704,7 @@ export default function ClientDetailPage() {
         if (normalizedStatuses.includes("atrasado")) monthStatus = "atrasado";
         else if (normalizedStatuses.includes("pendente")) monthStatus = "pendente";
         else if (normalizedStatuses.includes("em_andamento")) monthStatus = "em_andamento";
-        else monthStatus = "concluido";
+        else monthStatus = "concluído";
       }
 
       return {
@@ -1781,7 +1781,7 @@ export default function ClientDetailPage() {
               <div className="space-y-1">
                 <h4 className="text-sm font-medium">Socios</h4>
                 <p className="text-xs text-muted-foreground">
-                  Cadastre os socios com participacao, pro-labore e senha GOV para relatorios.
+                  Cadastre os socios com participacao, pro-labore e senha GOV para relatórios.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={handleAddPartner}>
@@ -1976,7 +1976,7 @@ export default function ClientDetailPage() {
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
             <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
-            <TabsTrigger value="obrigacoes">Obrigacoes</TabsTrigger>
+            <TabsTrigger value="obrigações">Obrigações</TabsTrigger>
             <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
           </TabsList>
 
@@ -2027,7 +2027,7 @@ export default function ClientDetailPage() {
                     ))}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Marque uma ou mais opcoes: comercio, industria e/ou prestador de servicos.
+                    Marque uma ou mais opções: comércio, industria e/ou prestador de serviços.
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -2096,12 +2096,12 @@ export default function ClientDetailPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs">Rua / Logradouro</Label>
                   <Input
-                    value={getGeneralInfoFieldValue("endereco")}
-                    onChange={(event) => setGeneralInfoFieldValue("endereco", event.target.value)}
+                    value={getGeneralInfoFieldValue("endereço")}
+                    onChange={(event) => setGeneralInfoFieldValue("endereço", event.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Numero do Estabelecimento</Label>
+                  <Label className="text-xs">Número do Estabelecimento</Label>
                   <Input
                     value={getGeneralInfoFieldValue("numero_estabelecimento")}
                     onChange={(event) => setGeneralInfoFieldValue("numero_estabelecimento", event.target.value)}
@@ -2130,11 +2130,11 @@ export default function ClientDetailPage() {
                   />
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Endereco Completo (automatico)</Label>
+                  <Label className="text-xs">Endereco Completo (automático)</Label>
                   <Input
                     value={buildAddressFromCadastralValues({
                       cep: getGeneralInfoFieldValue("cep"),
-                      endereco: getGeneralInfoFieldValue("endereco"),
+                      endereço: getGeneralInfoFieldValue("endereço"),
                       numero_estabelecimento: getGeneralInfoFieldValue("numero_estabelecimento"),
                       bairro: getGeneralInfoFieldValue("bairro"),
                       cidade: getGeneralInfoFieldValue("cidade"),
@@ -2146,7 +2146,7 @@ export default function ClientDetailPage() {
                     readOnly
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    O endereco completo sera salvo automaticamente a partir dos campos acima.
+                    O endereço completo sera salvo automaticamente a partir dos campos acima.
                   </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -2177,11 +2177,11 @@ export default function ClientDetailPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     {client?.portal_user_id ? (
                       <p className="text-xs text-muted-foreground">
-                        Usuario do portal vinculado: {client.portal_user_id.slice(0, 8)}...
+                        Usuário do portal vinculado: {client.portal_user_id.slice(0, 8)}...
                       </p>
                     ) : (
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        Cliente sem usuario de portal vinculado.
+                        Cliente sem usuário de portal vinculado.
                       </p>
                     )}
                   </div>
@@ -2208,7 +2208,7 @@ export default function ClientDetailPage() {
                   )}
                   {!canManageCashflowAccess && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Apenas usuario admin pode alterar esta liberacao.
+                      Apenas usuário admin pode alterar esta liberacao.
                     </p>
                   )}
                 </div>
@@ -2230,11 +2230,11 @@ export default function ClientDetailPage() {
                     <CalendarDays className="h-4 w-4" /> Dados mensais
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Informacoes necessarias para o relatorio gerencial mensal.
+                    Informações necessarias para o relatório gerencial mensal.
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Periodo de referencia</Label>
+                  <Label className="text-xs">Período de referência</Label>
                   <Input
                     type="month"
                     value={period}
@@ -2292,20 +2292,20 @@ export default function ClientDetailPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="obrigacoes" className="space-y-4">
+          <TabsContent value="obrigações" className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="space-y-1">
                   <h3 className="font-semibold flex items-center gap-2">
-                    <ClipboardList className="h-4 w-4" /> Obrigacoes da empresa
+                    <ClipboardList className="h-4 w-4" /> Obrigações da empresa
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Exibe todas as obrigacoes cadastradas para este cliente e a situacao no mes selecionado.
+                    Exibe todas as obrigações cadastradas para este cliente e a situacao no mes selecionado.
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Mes de referencia</Label>
+                  <Label className="text-xs">Mes de referência</Label>
                   <Input
                     type="month"
                     value={obligationMonthFilter}
@@ -2317,7 +2317,7 @@ export default function ClientDetailPage() {
 
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-                  <p>Total de obrigacoes cadastradas: <span className="font-medium">{groupedClientObligations.length}</span></p>
+                  <p>Total de obrigações cadastradas: <span className="font-medium">{groupedClientObligations.length}</span></p>
                   <p>Com situacao no mes: <span className="font-medium">{obligationsWithMonthStatus}</span></p>
                   <p>Mes filtrado: <span className="font-medium">{obligationMonthFilter}</span></p>
                 </div>
@@ -2329,7 +2329,7 @@ export default function ClientDetailPage() {
                 </div>
               ) : groupedClientObligations.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Nenhuma obrigacao encontrada para este cliente.
+                  Nenhuma obrigação encontrada para este cliente.
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -2339,7 +2339,7 @@ export default function ClientDetailPage() {
                         <p className="text-sm font-medium">{group.obligationName}</p>
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="secondary" className="text-[11px]">
-                            Historico: {group.allRowsCount}
+                            Histórico: {group.allRowsCount}
                           </Badge>
                           <Badge
                             variant="outline"
@@ -2352,7 +2352,7 @@ export default function ClientDetailPage() {
 
                       {group.rowsForMonth.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Sem registro desta obrigacao no mes selecionado.
+                          Sem registro desta obrigação no mes selecionado.
                         </p>
                       ) : (
                         <div className="space-y-2">
@@ -2369,7 +2369,7 @@ export default function ClientDetailPage() {
                                   </Badge>
                                   {row.obligation_period && (
                                     <span className="text-[11px] text-muted-foreground">
-                                      Competencia: {row.obligation_period}
+                                      Competência: {row.obligation_period}
                                     </span>
                                   )}
                                   {row.due_date && (
@@ -2410,7 +2410,7 @@ export default function ClientDetailPage() {
 
               {(!client?.portal_user_id || !portalAccessEnabled) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
-                  Este cliente ainda nao tem acesso ativo ao portal. Libere o acesso para que as pendencias sejam exibidas para ele.
+                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendencias sejam exibidas para ele.
                 </div>
               )}
 
@@ -2425,12 +2425,12 @@ export default function ClientDetailPage() {
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Descricao</Label>
+                  <Label className="text-xs">Descrição</Label>
                   <Textarea
                     rows={3}
                     value={portalTaskDraft.description}
                     onChange={(event) => setPortalTaskDraft((prev) => ({ ...prev, description: event.target.value }))}
-                    placeholder="Descreva as informacoes ou documentos que o cliente precisa enviar."
+                    placeholder="Descreva as informações ou documentos que o cliente precisa enviar."
                   />
                 </div>
 
@@ -2517,7 +2517,7 @@ export default function ClientDetailPage() {
                           <div className="space-y-1">
                             <p className="text-sm font-medium">{task.title}</p>
                             <p className="text-xs text-muted-foreground">
-                              {task.description || "Sem descricao"} {task.due_date ? `• prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}` : ""}
+                              {task.description || "Sem descrição"} {task.due_date ? `• prazo: ${new Date(task.due_date).toLocaleDateString("pt-BR")}` : ""}
                             </p>
                           </div>
                           <Badge variant="outline" className={`border-0 ${portalTaskStatusClass[status]}`}>
@@ -2559,7 +2559,7 @@ export default function ClientDetailPage() {
                             onClick={() => void handlePortalTaskStatusChange(task.id, "completed")}
                           >
                             {updatingPortalTaskId === task.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                            Marcar concluida
+                            Marcar concluída
                           </Button>
 
                           <Button

@@ -124,17 +124,17 @@ const inferCategory = (
   const fallbackCategory = categories[categories.length - 1];
 
   if (entryType === "income") {
-    if (/(aporte|capital social|socio|sócio)/.test(normalized)) return "Aporte dos socios";
-    if (/(emprestimo|empréstimo|financiamento|credito bancario|crédito bancário)/.test(normalized)) return "Credito bancario";
+    if (/(aporte|capital social|socio|sócio)/.test(normalized)) return "Aporte dos sócios";
+    if (/(emprestimo|empréstimo|financiamento|credito bancario|crédito bancário)/.test(normalized)) return "Crédito bancario";
     if (/(pix|transferencia recebida|transferência recebida|ted|doc|deposito|depósito|receb)/.test(normalized)) {
       return "Recebimento de clientes";
     }
     return fallbackCategory;
   }
 
-  if (/(pro-?labore)/.test(normalized)) return "Pro-labore";
+  if (/(pró-labore)/.test(normalized)) return "Pro-labore";
   if (/(imposto|das|tribut|irpj|csll|pis|cofins|icms|iss)/.test(normalized)) return "Impostos";
-  if (/(salario|salário|folha|inss|fgts|ferias|férias|decimo|13o|13º|vale)/.test(normalized)) return "Folha de pagamento";
+  if (/(salario|salário|folha|inss|fgts|férias|férias|decimo|13o|13º|vale)/.test(normalized)) return "Folha de pagamento";
   if (/(fornecedor|boleto|nota fiscal|nf-e|nfe|material|insumo|compra)/.test(normalized)) return "Fornecedores";
   if (/(aluguel|energia|agua|água|internet|telefone|software|assinatura|honorario|honorário|despesa)/.test(normalized)) {
     return "Despesas operacionais";
@@ -365,7 +365,7 @@ const parseImageFile = async (file: File): Promise<ParsedCashflowSuggestion[]> =
     (tesseractModule as { default?: { recognize?: (...args: unknown[]) => Promise<unknown> } }).default?.recognize;
 
   if (!recognize) {
-    throw new Error("OCR indisponivel para este navegador.");
+    throw new Error("OCR indisponível para este navegador.");
   }
 
   const result = (await recognize(file, "por+eng")) as { data?: { text?: string } };
@@ -494,7 +494,7 @@ export async function parseCashflowFiles(files: File[]): Promise<ParseCashflowFi
     const extension = getFileExtension(file.name);
 
     if (!acceptedExtensions.has(extension)) {
-      warnings.push(`Arquivo ignorado (${file.name}): formato nao suportado.`);
+      warnings.push(`Arquivo ignorado (${file.name}): formato não suportado.`);
       continue;
     }
 
@@ -519,7 +519,7 @@ export async function parseCashflowFiles(files: File[]): Promise<ParseCashflowFi
       allSuggestions.push(...suggestions);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Erro desconhecido";
-      warnings.push(`Nao foi possivel ler ${file.name}: ${message}`);
+      warnings.push(`Não foi possível ler ${file.name}: ${message}`);
     }
   }
 

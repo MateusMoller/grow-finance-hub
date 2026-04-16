@@ -84,8 +84,8 @@ const statusLabels: Record<KanbanStatus, string> = {
   backlog: "Backlog",
   todo: "A Fazer",
   doing: "Em Andamento",
-  review: "Em Revisao",
-  done: "Concluido",
+  review: "Em Revisão",
+  done: "Concluído",
   archived: "Arquivado",
 };
 
@@ -156,10 +156,10 @@ export function KanbanTaskDetailSheet({
       if (cancelled) return;
 
       if (requestRes.error) {
-        toast.error("Nao foi possivel carregar os dados da solicitacao.");
+        toast.error("Não foi possível carregar os dados da solicitação.");
       }
       if (docsRes.error) {
-        toast.error("Nao foi possivel carregar os anexos da solicitacao.");
+        toast.error("Não foi possível carregar os anexos da solicitação.");
       }
 
       setRequestInfo((requestRes.data as LinkedRequestInfo | null) || null);
@@ -208,7 +208,7 @@ export function KanbanTaskDetailSheet({
   const handleDownloadAttachment = async (filePath: string) => {
     const { data, error } = await supabase.storage.from("client-documents").createSignedUrl(filePath, 60);
     if (error || !data?.signedUrl) {
-      toast.error("Nao foi possivel gerar o link do anexo.");
+      toast.error("Não foi possível gerar o link do anexo.");
       return;
     }
     window.open(data.signedUrl, "_blank");
@@ -235,20 +235,20 @@ export function KanbanTaskDetailSheet({
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Building2 className="h-3 w-3" /> Cliente
               </span>
-              <span className="text-sm font-medium">{form.client_name || "Nao informado"}</span>
+              <span className="text-sm font-medium">{form.client_name || "Não informado"}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <User className="h-3 w-3" /> Responsavel
               </span>
-              <span className="text-sm font-medium">{form.assignee || "Nao informado"}</span>
+              <span className="text-sm font-medium">{form.assignee || "Não informado"}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <FolderOpen className="h-3 w-3" /> Setores
               </span>
               <span className="text-sm font-medium">
-                {form.sectors.length > 0 ? form.sectors.join(", ") : "Nao informado"}
+                {form.sectors.length > 0 ? form.sectors.join(", ") : "Não informado"}
               </span>
             </div>
             <div className="space-y-1">
@@ -263,14 +263,14 @@ export function KanbanTaskDetailSheet({
 
           <Separator />
 
-          <Tabs defaultValue="informacoes" className="space-y-4">
+          <Tabs defaultValue="informações" className="space-y-4">
             <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
-              <TabsTrigger value="informacoes">Informacoes</TabsTrigger>
-              <TabsTrigger value="solicitacao">Solicitacao</TabsTrigger>
-              <TabsTrigger value="historico">Historico</TabsTrigger>
+              <TabsTrigger value="informações">Informações</TabsTrigger>
+              <TabsTrigger value="solicitação">Solicitação</TabsTrigger>
+              <TabsTrigger value="histórico">Histórico</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="informacoes" className="space-y-4">
+            <TabsContent value="informações" className="space-y-4">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as KanbanStatus }))}>
@@ -281,8 +281,8 @@ export function KanbanTaskDetailSheet({
                     <SelectItem value="backlog">Backlog</SelectItem>
                     <SelectItem value="todo">A Fazer</SelectItem>
                     <SelectItem value="doing">Em Andamento</SelectItem>
-                    <SelectItem value="review">Em Revisao</SelectItem>
-                    <SelectItem value="done">Concluido</SelectItem>
+                    <SelectItem value="review">Em Revisão</SelectItem>
+                    <SelectItem value="done">Concluído</SelectItem>
                     {canArchive && <SelectItem value="archived">Arquivado</SelectItem>}
                   </SelectContent>
                 </Select>
@@ -322,7 +322,7 @@ export function KanbanTaskDetailSheet({
               </div>
 
               <div className="space-y-2">
-                <Label>Setores (selecao multipla)</Label>
+                <Label>Setores (seleção multipla)</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
                   {sectorOptions.map((sector) => (
                     <label key={sector} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -334,7 +334,7 @@ export function KanbanTaskDetailSheet({
               </div>
 
               <div className="space-y-2">
-                <Label>Descricao</Label>
+                <Label>Descrição</Label>
                 <Textarea
                   rows={4}
                   value={form.description}
@@ -348,7 +348,7 @@ export function KanbanTaskDetailSheet({
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Empresas (subtarefas)</Label>
                     <span className="text-xs text-muted-foreground">
-                      {subtaskDone}/{task.subtasks.length} concluidas ({subtaskPct}%)
+                      {subtaskDone}/{task.subtasks.length} concluídas ({subtaskPct}%)
                     </span>
                   </div>
                   <Progress value={subtaskPct} className="h-2" />
@@ -372,10 +372,10 @@ export function KanbanTaskDetailSheet({
               )}
             </TabsContent>
 
-            <TabsContent value="solicitacao" className="space-y-4">
+            <TabsContent value="solicitação" className="space-y-4">
               {!task.request_id ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Esta tarefa nao veio de uma solicitacao de cliente.
+                  Esta tarefa não veio de uma solicitação de cliente.
                 </div>
               ) : loadingRequest ? (
                 <div className="flex justify-center py-6">
@@ -392,10 +392,10 @@ export function KanbanTaskDetailSheet({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Informacoes</Label>
+                    <Label>Informações</Label>
                     <Textarea
                       rows={5}
-                      value={requestInfo?.description || "Sem informacoes adicionais da solicitacao."}
+                      value={requestInfo?.description || "Sem informações adicionais da solicitação."}
                       readOnly
                     />
                   </div>
@@ -404,7 +404,7 @@ export function KanbanTaskDetailSheet({
                     <Label>Anexos ({requestAttachments.length})</Label>
                     {requestAttachments.length === 0 ? (
                       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                        Nenhum anexo enviado nesta solicitacao.
+                        Nenhum anexo enviado nesta solicitação.
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -413,7 +413,7 @@ export function KanbanTaskDetailSheet({
                             <div className="min-w-0">
                               <div className="text-sm font-medium truncate">{attachment.file_name}</div>
                               <div className="text-xs text-muted-foreground">
-                                {attachment.file_size ? `${Math.round(attachment.file_size / 1024)} KB` : "Tamanho nao informado"}
+                                {attachment.file_size ? `${Math.round(attachment.file_size / 1024)} KB` : "Tamanho não informado"}
                               </div>
                             </div>
                             <Button
@@ -444,7 +444,7 @@ export function KanbanTaskDetailSheet({
               )}
             </TabsContent>
 
-            <TabsContent value="historico" className="space-y-3">
+            <TabsContent value="histórico" className="space-y-3">
               {historyEntries.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                   Nenhuma alteracao registrada para esta tarefa.
@@ -467,7 +467,7 @@ export function KanbanTaskDetailSheet({
 
           <div className="flex gap-2">
             <Button className="flex-1" onClick={handleSave} disabled={saving}>
-              {saving ? "Salvando..." : "Salvar alteracoes"}
+              {saving ? "Salvando..." : "Salvar alterações"}
             </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Fechar

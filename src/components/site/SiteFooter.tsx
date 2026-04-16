@@ -28,12 +28,12 @@ export function SiteFooter() {
     setSubscribing(false);
 
     if (error) {
-      toast.error(`Nao foi possivel assinar a newsletter: ${error.message}`);
+      toast.error(`Não foi possível assinar a newsletter: ${error.message}`);
       return;
     }
 
     setEmail("");
-    toast.success("Pronto! Voce agora recebe as proximas newsletters da Grow.");
+    toast.success("Pronto! Voce agora recebe as próximas newsletters da Grow.");
   };
 
   return (
@@ -46,12 +46,12 @@ export function SiteFooter() {
               <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
             </Link>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Parceiro estrategico de empresas que buscam crescimento com organizacao, compliance e inteligencia.
+              Parceiro estratégico de empresas que buscam crescimento com organização, compliance e inteligencia.
             </p>
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Servicos</h4>
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Serviços</h4>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li><Link to="/solucoes" className="hover:text-foreground">Contabilidade Consultiva</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Assessoria Fiscal</Link></li>

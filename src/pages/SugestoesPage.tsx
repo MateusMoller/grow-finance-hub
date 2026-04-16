@@ -28,7 +28,7 @@ const areaOptions = [
   "Kanban",
   "Atendimento",
   "Financeiro",
-  "Relatorios",
+  "Relatórios",
   "Automacoes",
   "Outros",
 ];
@@ -39,8 +39,8 @@ const statusMeta: Record<string, { label: string; className: string }> = {
   backlog: { label: "Pendente", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300" },
   todo: { label: "A fazer", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300" },
   doing: { label: "Em andamento", className: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300" },
-  review: { label: "Em revisao", className: "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300" },
-  done: { label: "Concluida", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" },
+  review: { label: "Em revisão", className: "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300" },
+  done: { label: "Concluída", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" },
   archived: { label: "Arquivada", className: "bg-muted text-muted-foreground" },
 };
 
@@ -121,7 +121,7 @@ export default function SugestoesPage() {
       .maybeSingle();
 
     const name = String(data?.display_name || "").trim();
-    setProfileName(name || user.email || "Usuario interno");
+    setProfileName(name || user.email || "Usuário interno");
   }, [user?.email, user?.id]);
 
   const loadRecords = useCallback(async () => {
@@ -131,12 +131,12 @@ export default function SugestoesPage() {
     const { data, error } = await supabase
       .from("kanban_tasks")
       .select("id, title, description, status, priority, created_at, created_by")
-      .contains("tags", ["sugestao_sistema"])
+      .contains("tags", ["sugestão_sistema"])
       .order("created_at", { ascending: false })
       .limit(200);
 
     if (error) {
-      toast.error("Nao foi possivel carregar o registro de sugestoes.");
+      toast.error("Não foi possível carregar o registro de sugestões.");
       setAttachments([]);
       setLoading(false);
       return;
@@ -159,7 +159,7 @@ export default function SugestoesPage() {
       .order("updated_at", { ascending: false });
 
     if (attachmentsError) {
-      toast.error("Nao foi possivel carregar os anexos das sugestoes.");
+      toast.error("Não foi possível carregar os anexos das sugestões.");
       setAttachments([]);
       setLoading(false);
       return;
@@ -208,7 +208,7 @@ export default function SugestoesPage() {
     setDownloadingAttachmentId(null);
 
     if (error || !data) {
-      toast.error(error?.message || "Nao foi possivel baixar o anexo.");
+      toast.error(error?.message || "Não foi possível baixar o anexo.");
       return;
     }
 
@@ -218,7 +218,7 @@ export default function SugestoesPage() {
   const handleSendSuggestion = async () => {
     if (!user?.id) return;
     if (!title.trim()) {
-      toast.error("Informe o titulo da sugestao.");
+      toast.error("Informe o titulo da sugestão.");
       return;
     }
     if (!details.trim()) {
@@ -231,15 +231,15 @@ export default function SugestoesPage() {
     dueDate.setDate(dueDate.getDate() + 7);
 
     const description = [
-      "Solicitacao de melhoria enviada por usuario interno.",
+      "Solicitação de melhoria enviada por usuário interno.",
       `Area sugerida: ${area}`,
-      `Resultado esperado: ${expectedResult.trim() || "Nao informado"}`,
+      `Resultado esperado: ${expectedResult.trim() || "Não informado"}`,
       "",
       "Detalhes:",
       details.trim(),
       "",
-      `Solicitante: ${profileName || user.email || "Usuario interno"}`,
-      `Email: ${user.email || "Nao informado"}`,
+      `Solicitante: ${profileName || user.email || "Usuário interno"}`,
+      `Email: ${user.email || "Não informado"}`,
       `Enviado em: ${now.toLocaleString("pt-BR")}`,
     ].join("\n");
 
@@ -249,15 +249,15 @@ export default function SugestoesPage() {
     const { data: createdTask, error } = await supabase
       .from("kanban_tasks")
       .insert({
-        title: `[Sugestao] ${normalizedTitle}`,
+        title: `[Sugestão] ${normalizedTitle}`,
         description,
-        client_name: "Sugestoes internas",
+        client_name: "Sugestões internas",
         assignee: "Admin",
         priority,
         sector: "Geral",
         status: "backlog",
         due_date: dueDate.toISOString().slice(0, 10),
-        tags: ["sugestao_sistema", "sugestao", "admin"],
+        tags: ["sugestão_sistema", "sugestão", "admin"],
         created_by: user.id,
       })
       .select("id, title")
@@ -265,7 +265,7 @@ export default function SugestoesPage() {
 
     if (error || !createdTask) {
       setSending(false);
-      toast.error(`Nao foi possivel registrar a sugestao: ${error?.message || "Erro desconhecido"}`);
+      toast.error(`Não foi possível registrar a sugestão: ${error?.message || "Erro desconhecido"}`);
       return;
     }
 
@@ -289,7 +289,7 @@ export default function SugestoesPage() {
       const { error: metadataError } = await supabase.from("process_documents").insert({
         process_id: createdTask.id,
         process_name: createdTask.title,
-        process_description: `Sugestao enviada por ${profileName || user.email || "Usuario interno"}`,
+        process_description: `Sugestão enviada por ${profileName || user.email || "Usuário interno"}`,
         department: "geral",
         status: "aberto",
         file_name: file.name,
@@ -321,12 +321,12 @@ export default function SugestoesPage() {
     if (attachmentInputRef.current) attachmentInputRef.current.value = "";
 
     if (uploadFail > 0) {
-      const baseMessage = `Sugestao criada. ${uploadSuccess} anexo(s) enviado(s) e ${uploadFail} com falha.`;
+      const baseMessage = `Sugestão criada. ${uploadSuccess} anexo(s) enviado(s) e ${uploadFail} com falha.`;
       toast.warning(firstUploadError ? `${baseMessage} ${firstUploadError}` : baseMessage);
     } else if (uploadSuccess > 0) {
-      toast.success(`Sugestao enviada ao admin com ${uploadSuccess} anexo(s).`);
+      toast.success(`Sugestão enviada ao admin com ${uploadSuccess} anexo(s).`);
     } else {
-      toast.success("Sugestao enviada ao admin e pendencia criada no Kanban.");
+      toast.success("Sugestão enviada ao admin e pendencia criada no Kanban.");
     }
 
     await loadRecords();
@@ -339,7 +339,7 @@ export default function SugestoesPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Sugestoes de melhoria</h1>
             <p className="text-sm text-muted-foreground">
-              Envie melhorias para o admin. Cada envio gera uma pendencia e um registro desta solicitacao.
+              Envie melhorias para o admin. Cada envio gera uma pendencia e um registro desta solicitação.
             </p>
           </div>
           <Button variant="outline" className="gap-1.5" onClick={() => void loadRecords()} disabled={loading}>
@@ -353,14 +353,14 @@ export default function SugestoesPage() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Lightbulb className="h-4 w-4 text-amber-500" />
-                Nova sugestao
+                Nova sugestão
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Titulo</Label>
                 <Input
-                  placeholder="Ex: Adicionar filtro por periodo no relatorio"
+                  placeholder="Ex: Adicionar filtro por período no relatório"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                 />
@@ -468,7 +468,7 @@ export default function SugestoesPage() {
               <div className="flex justify-end">
                 <Button className="gap-1.5" onClick={() => void handleSendSuggestion()} disabled={sending}>
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Enviar sugestao
+                  Enviar sugestão
                 </Button>
               </div>
             </CardContent>
@@ -480,7 +480,7 @@ export default function SugestoesPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="rounded-lg border bg-background p-3">
-                <p className="text-muted-foreground">Total de solicitacoes registradas</p>
+                <p className="text-muted-foreground">Total de solicitações registradas</p>
                 <p className="text-2xl font-semibold">{records.length}</p>
               </div>
               <div className="rounded-lg border bg-background p-3">
@@ -490,7 +490,7 @@ export default function SugestoesPage() {
               <div className="rounded-lg border bg-background p-3">
                 <p className="text-muted-foreground">Fluxo</p>
                 <p>
-                  Cada sugestao vira tarefa no Kanban com responsavel <strong>Admin</strong>.
+                  Cada sugestão vira tarefa no Kanban com responsavel <strong>Admin</strong>.
                 </p>
               </div>
             </CardContent>
@@ -501,7 +501,7 @@ export default function SugestoesPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <ClipboardList className="h-4 w-4" />
-              Registro das solicitacoes
+              Registro das solicitações
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -511,9 +511,9 @@ export default function SugestoesPage() {
               </div>
             ) : records.length === 0 ? (
               <div className="rounded-lg border bg-muted/20 p-8 text-center">
-                <p className="font-medium">Nenhuma sugestao registrada ainda.</p>
+                <p className="font-medium">Nenhuma sugestão registrada ainda.</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Envie a primeira melhoria para gerar a pendencia e criar o historico.
+                  Envie a primeira melhoria para gerar a pendencia e criar o histórico.
                 </p>
               </div>
             ) : (
@@ -554,7 +554,7 @@ export default function SugestoesPage() {
                       )}
                       {recordAttachments.length > 0 && (
                         <div className="mt-3 space-y-2">
-                          <p className="text-xs text-muted-foreground">Anexos da solicitacao</p>
+                          <p className="text-xs text-muted-foreground">Anexos da solicitação</p>
                           <div className="flex flex-wrap gap-2">
                             {recordAttachments.map((attachment) => (
                               <Button

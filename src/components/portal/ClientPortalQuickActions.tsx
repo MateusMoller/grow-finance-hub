@@ -17,7 +17,7 @@ export function ClientPortalQuickActions({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
       <Button className="justify-start gap-2" onClick={onNewRequest}>
-        <Plus className="h-4 w-4" /> Nova solicitacao
+        <Plus className="h-4 w-4" /> Nova solicitação
       </Button>
       <Button variant="outline" className="justify-start gap-2 bg-card" onClick={onUploadDocument}>
         <Upload className="h-4 w-4" /> Enviar documentos

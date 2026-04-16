@@ -27,22 +27,22 @@ const accessOptions: Array<{
   {
     key: "internal",
     title: "App Interno",
-    subtitle: "Operacao, tarefas, clientes e gestao da equipe.",
+    subtitle: "Operação, tarefas, clientes e gestão da equipe.",
     icon: BriefcaseBusiness,
     target: "/app",
     heroImage: financeHeroImage,
     heroAlt: "Painel do app interno com indicadores financeiros e operacionais",
-    visualTag: "Operacao interna",
+    visualTag: "Operação interna",
   },
   {
     key: "client",
     title: "Portal do Cliente",
-    subtitle: "Solicitacoes, documentos, formularios e atendimento.",
+    subtitle: "Solicitações, documentos, formulários e atendimento.",
     icon: Building2,
     target: "/app/portal",
     heroImage: portalHeroImage,
     heroAlt: "Painel do portal do cliente com documentos, checklist e atendimento",
-    visualTag: "Experiencia do cliente",
+    visualTag: "Experiência do cliente",
   },
 ];
 
@@ -86,7 +86,7 @@ export default function LoginPage() {
     if (userError || !userData.user) {
       await signOut();
       setLoading(false);
-      toast.error("Nao foi possivel validar o acesso apos o login.");
+      toast.error("Não foi possível validar o acesso apos o login.");
       return;
     }
 
@@ -98,7 +98,7 @@ export default function LoginPage() {
     setLoading(false);
     if (roleError) {
       await signOut();
-      toast.error("Nao foi possivel validar suas permissoes de acesso.");
+      toast.error("Não foi possível validar suas permissoes de acesso.");
       return;
     }
 
@@ -112,14 +112,14 @@ export default function LoginPage() {
       if (!hasPortalAccess) {
         await signOut();
       }
-      toast.error("Este usuario nao tem permissao para acessar o App Interno.");
+      toast.error("Este usuário não tem permissão para acessar o App Interno.");
       navigate(hasPortalAccess ? "/app/portal" : "/app/login", { replace: true });
       return;
     }
 
     if (selectedAccess.key === "client" && !hasPortalAccess) {
       await signOut();
-      toast.error("Este usuario nao possui permissao para acessar o Portal do Cliente.");
+      toast.error("Este usuário não possui permissão para acessar o Portal do Cliente.");
       return;
     }
 

@@ -122,7 +122,7 @@ const roleOrder = [
 ] as const;
 
 const rolePriority = new Map(roleOrder.map((role, index) => [role, index]));
-const doneTaskStatuses = new Set(["done", "archived", "concluido", "concluida", "completed", "fechado"]);
+const doneTaskStatuses = new Set(["done", "archived", "concluído", "concluída", "completed", "fechado"]);
 
 const normalizeText = (value: string) =>
   value
@@ -210,8 +210,8 @@ const taskStatusLabel = (status: string) => {
   const normalized = normalizeText(status || "");
   if (normalized === "todo") return "A fazer";
   if (normalized === "doing") return "Em andamento";
-  if (normalized === "review") return "Em revisao";
-  if (normalized === "done") return "Concluido";
+  if (normalized === "review") return "Em revisão";
+  if (normalized === "done") return "Concluído";
   if (normalized === "archived") return "Arquivado";
   return status || "Sem status";
 };
@@ -287,8 +287,8 @@ const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, stri
   cadastro_clientes: "Cadastro Clientes",
   cadastro_fiscal: "Setor Fiscal",
   cadastro_departamento_pessoal: "Setor DP",
-  cadastro_contabil: "Setor Contabil",
-  cadastro_obrigacoes: "Obrigacoes",
+  cadastro_contabil: "Setor Contábil",
+  cadastro_obrigacoes: "Obrigações",
   cadastro_honorarios: "Honorarios",
   cadastro_documentos: "Documentos",
 };
@@ -307,7 +307,7 @@ const monthlyClientDataFieldsByCategory: Record<MonthlyClientDataCategory, Clien
     { name: "estoque", label: "Estoque (R$)" },
   ],
   fiscal: [
-    { name: "regime_tributario", label: "Regime Tributario" },
+    { name: "regime_tributário", label: "Regime Tributario" },
     { name: "aliquota_irpj", label: "Aliquota IRPJ (%)" },
     { name: "aliquota_csll", label: "Aliquota CSLL (%)" },
     { name: "aliquota_pis", label: "Aliquota PIS (%)" },
@@ -317,20 +317,20 @@ const monthlyClientDataFieldsByCategory: Record<MonthlyClientDataCategory, Clien
     { name: "inscricao_estadual", label: "Inscricao Estadual" },
     { name: "inscricao_municipal", label: "Inscricao Municipal" },
     { name: "cnae_principal", label: "CNAE Principal" },
-    { name: "nfe_emitidas", label: "NF-e Emitidas no Periodo" },
+    { name: "nfe_emitidas", label: "NF-e Emitidas no Período" },
     { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
   ],
   dp: [
-    { name: "total_funcionarios", label: "Total de Funcionarios" },
+    { name: "total_funcionarios", label: "Total de Funcionários" },
     { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
     { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
     { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
     { name: "inss_patronal", label: "INSS Patronal (R$)" },
     { name: "vale_transporte", label: "Vale Transporte (R$)" },
     { name: "vale_alimentacao", label: "Vale Alimentacao (R$)" },
-    { name: "admissoes_periodo", label: "Admissoes no Periodo" },
-    { name: "demissoes_periodo", label: "Demissoes no Periodo" },
-    { name: "ferias_programadas", label: "Ferias Programadas" },
+    { name: "admissões_periodo", label: "Admissoes no Período" },
+    { name: "demissoes_periodo", label: "Demissões no Período" },
+    { name: "ferias_programadas", label: "Férias Programadas" },
     { name: "sindical_contribuicao", label: "Contribuicao Sindical (R$)" },
   ],
 };
@@ -341,14 +341,14 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "nome_fantasia", label: "Nome Fantasia" },
     { name: "inscricao_estadual", label: "Inscricao Estadual" },
     { name: "inscricao_municipal", label: "Inscricao Municipal" },
-    { name: "regime_tributario", label: "Regime Tributario" },
+    { name: "regime_tributário", label: "Regime Tributario" },
     { name: "cnae_principal", label: "CNAE Principal" },
     { name: "data_abertura", label: "Data de Abertura" },
     { name: "cep", label: "CEP" },
-    { name: "endereco", label: "Rua / Logradouro" },
-    { name: "numero_estabelecimento", label: "Numero do Estabelecimento" },
+    { name: "endereço", label: "Rua / Logradouro" },
+    { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
     { name: "bairro", label: "Bairro" },
-    { name: "perfil_atuacao", label: "Classificacao de Atividade" },
+    { name: "perfil_atuacao", label: "Classificação de Atividade" },
     { name: "cidade", label: "Cidade" },
     { name: "estado", label: "Estado" },
     { name: "ddd", label: "DDD" },
@@ -359,7 +359,7 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "regime_icms", label: "Regime ICMS" },
     { name: "contribuinte_icms", label: "Contribuinte ICMS" },
     { name: "contribuinte_ipi", label: "Contribuinte IPI" },
-    { name: "tipo_operacao", label: "Tipo de Operacao" },
+    { name: "tipo_operacao", label: "Tipo de Operação" },
     { name: "emite_nfe", label: "Emite NF-e" },
     { name: "emite_nfse", label: "Emite NFS-e" },
     { name: "portal_nf_utilizado", label: "Portal NF utilizado" },
@@ -367,14 +367,14 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "estados_que_opera", label: "Estados que Opera" },
     { name: "controle_estoque", label: "Controle de Estoque" },
     { name: "sistema_vendas", label: "Sistema de Vendas" },
-    { name: "integracao_contabil", label: "Integracao Contabil" },
+    { name: "integracao_contabil", label: "Integração Contábil" },
     { name: "entrega_gia", label: "Entrega GIA" },
     { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
   ],
   cadastro_departamento_pessoal: [
     { name: "convencao_coletiva", label: "Convencao Coletiva" },
     { name: "possui_pro_labore", label: "Possui Pro-labore" },
-    { name: "possui_funcionarios", label: "Possui Funcionarios" },
+    { name: "possui_funcionarios", label: "Possui Funcionários" },
     { name: "possui_variaveis", label: "Possui Variaveis" },
     { name: "possui_inss", label: "Possui INSS" },
     { name: "possui_fgts", label: "Possui FGTS" },
@@ -382,20 +382,20 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "envia_folha_ponto", label: "Envia Folha Ponto?" },
     { name: "beneficios", label: "Beneficios" },
     { name: "hora_extra_banco_horas", label: "Hora extra / Banco de horas" },
-    { name: "envia_relatorio_ferias", label: "Envia relatorio de ferias?" },
+    { name: "envia_relatorio_ferias", label: "Envia relatório de férias?" },
     { name: "clinica_parceira", label: "Clinica parceira" },
     { name: "possui_decimo_terceiro", label: "Possui 13o?" },
   ],
   cadastro_contabil: [
-    { name: "obrigacao_contabil", label: "Obrigacao Contabil" },
+    { name: "obrigacao_contabil", label: "Obrigação Contábil" },
     { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
     { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
     { name: "controle_financeiro", label: "Controle Financeiro" },
     { name: "sistema_financeiro", label: "Sistema Financeiro" },
-    { name: "integracao_contabil", label: "Integracao Contabil" },
+    { name: "integracao_contabil", label: "Integração Contábil" },
     { name: "balanco_anual", label: "Balanco Anual" },
-    { name: "responsavel_contabil_grow", label: "Responsavel Contabil Grow" },
-    { name: "periodicidade_relatorios", label: "Periodicidade Relatorios" },
+    { name: "responsavel_contabil_grow", label: "Responsavel Contábil Grow" },
+    { name: "periodicidade_relatorios", label: "Periodicidade Relatórios" },
     { name: "observacoes_contabeis", label: "Observacoes Contabeis" },
   ],
   cadastro_obrigacoes: [
@@ -420,7 +420,7 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "procuracao", label: "Procuracao" },
     { name: "certificado_digital", label: "Certificado Digital" },
     { name: "contrato_social", label: "Contrato Social" },
-    { name: "alteracoes_contratuais", label: "Alteracoes Contratuais" },
+    { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
     { name: "outros_documentos", label: "Outros Documentos" },
   ],
 };
@@ -470,10 +470,10 @@ const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
   const totalProLabore = partners.reduce((sum, partner) => sum + partner.pro_labore, 0);
   const withGovPassword = partners.filter((partner) => Boolean(partner.senha_gov)).length;
   const govPasswordStatus =
-    total === 0 ? "Nao informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Nao";
+    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Nao";
   const ownershipByPartner = partners
     .map((partner) => {
-      const partnerName = partner.nome || "Socio sem nome";
+      const partnerName = partner.nome || "Sócio sem nome";
       return `${partnerName}: ${formatPercent(partner.percentual_participacao)}`;
     })
     .join(" | ");
@@ -498,7 +498,7 @@ const monthlyClientDataCategorySet = new Set<string>(monthlyClientDataCategories
 const cadastralClientDataCategorySet = new Set<string>(cadastralClientDataCategories);
 
 const clientDataReportColumns: ReportColumnDefinition[] = [
-  { key: "dados_mensais_periodo", label: "Dados Mensais: Periodo" },
+  { key: "dados_mensais_periodo", label: "Dados Mensais: Período" },
   ...monthlyClientDataCategories.flatMap((category) =>
     monthlyClientDataFieldsByCategory[category].map((field) => ({
       key: toMonthlyClientDataColumnKey(category, field.name),
@@ -513,33 +513,33 @@ const clientDataReportColumns: ReportColumnDefinition[] = [
   ),
   {
     key: "cadastral_cadastro_clientes_socios_quantidade",
-    label: "Cadastral Cadastro Clientes: Socios - Quantidade",
+    label: "Cadastral Cadastro Clientes: Sócios - Quantidade",
   },
   {
     key: "cadastral_cadastro_clientes_socios_nomes",
-    label: "Cadastral Cadastro Clientes: Socios - Nomes",
+    label: "Cadastral Cadastro Clientes: Sócios - Nomes",
   },
   {
     key: "cadastral_cadastro_clientes_socios_participacao_total",
-    label: "Cadastral Cadastro Clientes: Socios - Participacao Total (%)",
+    label: "Cadastral Cadastro Clientes: Sócios - Participação Total (%)",
     formatter: formatPercent,
   },
   {
     key: "cadastral_cadastro_clientes_socios_participacao_por_socio",
-    label: "Cadastral Cadastro Clientes: Socios - Participacao por Socio",
+    label: "Cadastral Cadastro Clientes: Sócios - Participação por Sócio",
   },
   {
     key: "cadastral_cadastro_clientes_socios_pro_labore_total",
-    label: "Cadastral Cadastro Clientes: Socios - Pro-labore Total (R$)",
+    label: "Cadastral Cadastro Clientes: Sócios - Pro-labore Total (R$)",
     formatter: formatCurrency,
   },
   {
     key: "cadastral_cadastro_clientes_socios_com_senha_gov",
-    label: "Cadastral Cadastro Clientes: Socios com Senha GOV",
+    label: "Cadastral Cadastro Clientes: Sócios com Senha GOV",
   },
   {
     key: "cadastral_cadastro_clientes_socios_status_senha_gov",
-    label: "Cadastral Cadastro Clientes: Socios - Status Senha GOV",
+    label: "Cadastral Cadastro Clientes: Sócios - Status Senha GOV",
   },
 ];
 
@@ -573,10 +573,10 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
       "dados_mensais_periodo",
       "mensal_contabilidade_faturamento_mensal",
       "mensal_contabilidade_lucro_liquido",
-      "mensal_fiscal_regime_tributario",
+      "mensal_fiscal_regime_tributário",
       "mensal_dp_total_funcionarios",
       "cadastral_cadastro_clientes_nome_fantasia",
-      "cadastral_cadastro_clientes_regime_tributario",
+      "cadastral_cadastro_clientes_regime_tributário",
       "cadastral_cadastro_clientes_socios_quantidade",
       "cadastral_cadastro_clientes_socios_pro_labore_total",
     ],
@@ -601,7 +601,7 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
   tarefas: {
     id: "tarefas",
     name: "Tarefas",
-    description: "Produtividade da operacao com status, prioridade e prazos.",
+    description: "Produtividade da operação com status, prioridade e prazos.",
     icon: ClipboardList,
     colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
     columns: [
@@ -620,13 +620,13 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
   equipe: {
     id: "equipe",
     name: "Equipe",
-    description: "Visao da equipe interna com papeis e datas de cadastro.",
+    description: "Visão da equipe interna com papeis e datas de cadastro.",
     icon: Briefcase,
     colorClass: "bg-orange-100 text-orange-700 dark:bg-orange-900/20",
     columns: [
       { key: "colaborador", label: "Colaborador" },
       { key: "papel", label: "Papel" },
-      { key: "usuario_id", label: "Usuario ID" },
+      { key: "usuario_id", label: "Usuário ID" },
       { key: "criado_em", label: "Criado em", formatter: formatDateTime },
       { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
       { key: "papel_definido_em", label: "Papel definido em", formatter: formatDateTime },
@@ -664,7 +664,7 @@ const resolveCadastralCategoryFromColumnKey = (columnKey: string): CadastralClie
 
 const getColumnModulePath = (datasetId: ReportDatasetId, columnKey: string): [string, string] => {
   if (datasetId === "clientes") {
-    if (columnKey === "dados_mensais_periodo") return ["Clientes", "Dados Mensais > Periodo"];
+    if (columnKey === "dados_mensais_periodo") return ["Clientes", "Dados Mensais > Período"];
 
     const monthlyCategory = resolveMonthlyCategoryFromColumnKey(columnKey);
     if (monthlyCategory) {
@@ -682,8 +682,8 @@ const getColumnModulePath = (datasetId: ReportDatasetId, columnKey: string): [st
   }
 
   if (datasetId === "leads_crm") {
-    if (leadsSourceColumnKeys.has(columnKey)) return ["Leads e CRM", "Origem e Captacao"];
-    if (leadsContactColumnKeys.has(columnKey)) return ["Leads e CRM", "Identificacao e Contato"];
+    if (leadsSourceColumnKeys.has(columnKey)) return ["Leads e CRM", "Origem e Captação"];
+    if (leadsContactColumnKeys.has(columnKey)) return ["Leads e CRM", "Identificação e Contato"];
     return ["Leads e CRM", "Datas e Controle"];
   }
 
@@ -693,7 +693,7 @@ const getColumnModulePath = (datasetId: ReportDatasetId, columnKey: string): [st
     return ["Tarefas", "Outros"];
   }
 
-  if (teamIdentityColumnKeys.has(columnKey)) return ["Equipe", "Identificacao e Papel"];
+  if (teamIdentityColumnKeys.has(columnKey)) return ["Equipe", "Identificação e Papel"];
   if (teamTimelineColumnKeys.has(columnKey)) return ["Equipe", "Datas de Controle"];
   return ["Equipe", "Outros"];
 };
@@ -810,7 +810,7 @@ export default function RelatoriosPage() {
       rolesRes.error;
 
     if (firstError) {
-      toast.error(`Falha ao carregar relatorios: ${firstError.message}`);
+      toast.error(`Falha ao carregar relatórios: ${firstError.message}`);
     }
 
     const nextClients = (clientsRes.data || []) as ClientRow[];
@@ -844,7 +844,7 @@ export default function RelatoriosPage() {
 
         return {
           user_id: userId,
-          display_name: profile?.display_name || `Usuario ${userId.slice(0, 6)}`,
+          display_name: profile?.display_name || `Usuário ${userId.slice(0, 6)}`,
           role: mainRole ? formatRole(mainRole) : "Sem papel",
           created_at: profile?.created_at || firstRoleCreatedAt || "",
           updated_at: profile?.updated_at || profile?.created_at || firstRoleCreatedAt || "",
@@ -876,7 +876,7 @@ export default function RelatoriosPage() {
       .order("updated_at", { ascending: false });
 
     if (error) {
-      toast.error(`Falha ao carregar relatorios salvos: ${error.message}`);
+      toast.error(`Falha ao carregar relatórios salvos: ${error.message}`);
       setSavedReports([]);
       setLoadingSavedReports(false);
       return;
@@ -1076,7 +1076,7 @@ export default function RelatoriosPage() {
         datasetId: "tarefas",
         count: rowsByDataset.tarefas.length,
         stats: [
-          { label: "Concluidas", value: String(doneTasks) },
+          { label: "Concluídas", value: String(doneTasks) },
           { label: "Em aberto", value: String(openTasks) },
         ],
       },
@@ -1094,8 +1094,8 @@ export default function RelatoriosPage() {
   const activeFilterBadges = useMemo(() => {
     const items: string[] = [];
     if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
-    if (selectedCompetence) items.push(`Competencia: ${selectedCompetence}`);
-    items.push(`Dados mensais (relatorio): ${clientDataReportPeriod}`);
+    if (selectedCompetence) items.push(`Competência: ${selectedCompetence}`);
+    items.push(`Dados mensais (relatório): ${clientDataReportPeriod}`);
     return items;
   }, [clientDataReportPeriod, selectedCompany, selectedCompetence]);
 
@@ -1232,7 +1232,7 @@ export default function RelatoriosPage() {
       const totalRows = rowsByDataset[datasetId].length;
 
       if (totalRows === 0) {
-        toast.warning("Nao ha dados para exportar neste relatorio.");
+        toast.warning("Não há dados para exportar neste relatório.");
         return;
       }
       if (columnKeys.length === 0) {
@@ -1256,20 +1256,20 @@ export default function RelatoriosPage() {
         triggerBlobDownload(blob, `${baseName}.csv`);
       }
 
-      toast.success(`Relatorio ${definition.name} exportado com sucesso.`);
+      toast.success(`Relatório ${definition.name} exportado com sucesso.`);
     },
     [buildExportRows, rowsByDataset],
   );
 
   const handleSaveCurrentReport = useCallback(async () => {
     if (!user?.id) {
-      toast.error("Voce precisa estar autenticado para salvar relatorios.");
+      toast.error("Voce precisa estar autenticado para salvar relatórios.");
       return;
     }
 
     const name = savedReportName.trim();
     if (!name) {
-      toast.error("Informe um nome para salvar o relatorio.");
+      toast.error("Informe um nome para salvar o relatório.");
       return;
     }
 
@@ -1307,17 +1307,17 @@ export default function RelatoriosPage() {
 
     if (error) {
       if (error.code === "23505") {
-        toast.error("Ja existe um relatorio salvo com este nome nesta categoria.");
+        toast.error("Ja existe um relatório salvo com este nome nesta categoria.");
         return;
       }
-      toast.error(`Falha ao salvar relatorio: ${error.message}`);
+      toast.error(`Falha ao salvar relatório: ${error.message}`);
       return;
     }
 
     const mapped = mapSavedReportRow(data as SavedReportRow);
     if (!mapped) {
       await loadSavedReports();
-      toast.success(isEditing ? "Relatorio atualizado com sucesso." : existing ? "Relatorio salvo atualizado." : "Relatorio salvo com sucesso.");
+      toast.success(isEditing ? "Relatório atualizado com sucesso." : existing ? "Relatório salvo atualizado." : "Relatório salvo com sucesso.");
       return;
     }
 
@@ -1336,7 +1336,7 @@ export default function RelatoriosPage() {
     if (isEditing && editingTarget?.id && editingTarget.id !== mapped.id) {
       autoGeneratedReportIdsRef.current.delete(editingTarget.id);
     }
-    toast.success(isEditing ? "Relatorio atualizado com sucesso." : existing ? "Relatorio salvo atualizado." : "Relatorio salvo com sucesso.");
+    toast.success(isEditing ? "Relatório atualizado com sucesso." : existing ? "Relatório salvo atualizado." : "Relatório salvo com sucesso.");
   }, [
     customDatasetId,
     editingSavedReportId,
@@ -1359,7 +1359,7 @@ export default function RelatoriosPage() {
     setSavedReportAutoGenerate(report.autoGenerate);
     setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
-    toast.success("Configuracao do relatorio carregada.");
+    toast.success("Configuração do relatório carregada.");
   };
 
   const handleStartEditingSavedReport = (report: SavedReportConfig) => {
@@ -1372,7 +1372,7 @@ export default function RelatoriosPage() {
     setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
     setEditingSavedReportId(report.id);
-    toast.success("Relatorio carregado em modo de edicao.");
+    toast.success("Relatório carregado em modo de edicao.");
   };
 
   const handleCancelEditingSavedReport = () => {
@@ -1380,16 +1380,16 @@ export default function RelatoriosPage() {
     setSavedReportName("");
     setSavedReportFormat("xlsx");
     setSavedReportAutoGenerate(false);
-    toast.success("Edicao de relatorio cancelada.");
+    toast.success("Edicao de relatório cancelada.");
   };
 
   const handleDeleteSavedReport = useCallback(async (reportId: string, reportName: string) => {
     if (!user?.id) {
-      toast.error("Voce precisa estar autenticado para excluir relatorios salvos.");
+      toast.error("Voce precisa estar autenticado para excluir relatórios salvos.");
       return;
     }
 
-    const shouldDelete = window.confirm(`Excluir o relatorio salvo "${reportName}"?`);
+    const shouldDelete = window.confirm(`Excluir o relatório salvo "${reportName}"?`);
     if (!shouldDelete) return;
 
     const { error } = await supabase
@@ -1399,7 +1399,7 @@ export default function RelatoriosPage() {
       .eq("user_id", user.id);
 
     if (error) {
-      toast.error(`Falha ao remover relatorio salvo: ${error.message}`);
+      toast.error(`Falha ao remover relatório salvo: ${error.message}`);
       return;
     }
 
@@ -1411,11 +1411,11 @@ export default function RelatoriosPage() {
       setSavedReportFormat("xlsx");
       setSavedReportAutoGenerate(false);
     }
-    toast.success("Relatorio salvo removido.");
+    toast.success("Relatório salvo removido.");
   }, [editingSavedReportId, user?.id]);
 
   const handleRunSavedReport = useCallback(
-    async (report: SavedReportConfig, scope: "manual" | "automatico" = "manual") => {
+    async (report: SavedReportConfig, scope: "manual" | "automático" = "manual") => {
       await handleExport(
         report.datasetId,
         report.columnKeys,
@@ -1438,7 +1438,7 @@ export default function RelatoriosPage() {
       for (const report of pendingAutoReports) {
         if (cancelled) return;
         autoGeneratedReportIdsRef.current.add(report.id);
-        await handleRunSavedReport(report, "automatico");
+        await handleRunSavedReport(report, "automático");
       }
     };
 
@@ -1456,9 +1456,9 @@ export default function RelatoriosPage() {
       <div className="space-y-6 max-w-7xl">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Relatorios</h1>
+            <h1 className="font-heading text-2xl font-bold">Relatórios</h1>
             <p className="text-sm text-muted-foreground">
-              Relatorios automaticos com dados do banco e construtor personalizado.
+              Relatórios automaticos com dados do banco e construtor personalizado.
             </p>
             {lastUpdatedAt && (
               <p className="text-xs text-muted-foreground mt-1">Atualizado em {formatDateTime(lastUpdatedAt)}</p>
@@ -1482,8 +1482,8 @@ export default function RelatoriosPage() {
 
         <Tabs defaultValue="automaticos" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="automaticos">Relatorios automaticos</TabsTrigger>
-            <TabsTrigger value="personalizado">Gerar relatorio personalizado</TabsTrigger>
+            <TabsTrigger value="automaticos">Relatórios automaticos</TabsTrigger>
+            <TabsTrigger value="personalizado">Gerar relatório personalizado</TabsTrigger>
           </TabsList>
 
           <TabsContent value="automaticos" className="space-y-4">
@@ -1531,7 +1531,7 @@ export default function RelatoriosPage() {
                             card.datasetId,
                             reportDefinitions[card.datasetId].defaultColumns,
                             "csv",
-                            "automatico",
+                            "automático",
                           )
                         }
                       >
@@ -1546,7 +1546,7 @@ export default function RelatoriosPage() {
                             card.datasetId,
                             reportDefinitions[card.datasetId].defaultColumns,
                             "xlsx",
-                            "automatico",
+                            "automático",
                           )
                         }
                       >
@@ -1585,7 +1585,7 @@ export default function RelatoriosPage() {
             <div className="rounded-xl border bg-card p-4 space-y-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="font-heading font-semibold">Gerar relatorio</h2>
+                  <h2 className="font-heading font-semibold">Gerar relatório</h2>
                   <p className="text-xs text-muted-foreground">
                     Escolha o modulo, selecione as colunas e exporte seu modelo customizado.
                   </p>
@@ -1607,10 +1607,10 @@ export default function RelatoriosPage() {
               </div>
 
               <div className="rounded-lg border p-3 space-y-3">
-                <p className="text-sm font-medium">Salvar relatorio para gerar depois</p>
+                <p className="text-sm font-medium">Salvar relatório para gerar depois</p>
                 {editingSavedReportId && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs">
-                    <span className="text-primary font-medium">Modo edicao ativo para relatorio salvo.</span>
+                    <span className="text-primary font-medium">Modo edicao ativo para relatório salvo.</span>
                     <Button type="button" size="sm" variant="ghost" className="h-7" onClick={handleCancelEditingSavedReport}>
                       Cancelar edicao
                     </Button>
@@ -1618,7 +1618,7 @@ export default function RelatoriosPage() {
                 )}
                 <div className="grid gap-3 lg:grid-cols-[1fr_200px_auto]">
                   <Input
-                    placeholder="Nome do relatorio salvo"
+                    placeholder="Nome do relatório salvo"
                     value={savedReportName}
                     onChange={(event) => setSavedReportName(event.target.value)}
                   />
@@ -1633,7 +1633,7 @@ export default function RelatoriosPage() {
                   </Select>
                   <Button type="button" className="gap-2" onClick={() => void handleSaveCurrentReport()}>
                     <Save className="h-4 w-4" />
-                    {editingSavedReportId ? "Atualizar relatorio" : "Salvar relatorio"}
+                    {editingSavedReportId ? "Atualizar relatório" : "Salvar relatório"}
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1646,9 +1646,9 @@ export default function RelatoriosPage() {
 
               <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr]">
                 <div className="rounded-lg border p-3">
-                  <p className="text-sm font-medium">Colunas disponiveis</p>
+                  <p className="text-sm font-medium">Colunas disponíveis</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {availableColumns.length} campo(s) disponivel(is)
+                    {availableColumns.length} campo(s) disponível(is)
                   </p>
                   <div className="mt-3 max-h-72 overflow-auto space-y-2 pr-1">
                     {availableColumns.length === 0 && (
@@ -1719,7 +1719,7 @@ export default function RelatoriosPage() {
                     <div>
                       <p className="text-sm font-medium">Colunas selecionadas</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {selectedColumnDefinitions.length} campo(s) no relatorio
+                        {selectedColumnDefinitions.length} campo(s) no relatório
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
@@ -1749,7 +1749,7 @@ export default function RelatoriosPage() {
                   </div>
                   <div className="mt-3 max-h-72 overflow-auto space-y-1">
                     {selectedColumnDefinitions.length === 0 && (
-                      <p className="text-sm text-muted-foreground py-6 text-center">Adicione colunas para montar o relatorio.</p>
+                      <p className="text-sm text-muted-foreground py-6 text-center">Adicione colunas para montar o relatório.</p>
                     )}
                     {selectedColumnDefinitions.map((column) => {
                       const selected = rightSelectedKeys.includes(column.key);
@@ -1776,10 +1776,10 @@ export default function RelatoriosPage() {
                   variant="outline"
                   onClick={() => setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns)}
                 >
-                  Usar colunas padrao
+                  Usar colunas padrão
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setSelectedColumns([])}>
-                  Limpar selecao
+                  Limpar seleção
                 </Button>
                 <Button
                   type="button"
@@ -1802,14 +1802,14 @@ export default function RelatoriosPage() {
 
               <div className="rounded-lg border p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Relatorios salvos</p>
+                  <p className="text-sm font-medium">Relatórios salvos</p>
                   <Badge variant="outline">{savedReports.length}</Badge>
                 </div>
                 {loadingSavedReports ? (
-                  <p className="text-sm text-muted-foreground">Carregando relatorios salvos...</p>
+                  <p className="text-sm text-muted-foreground">Carregando relatórios salvos...</p>
                 ) : savedReports.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Nenhum relatorio salvo ainda. Monte o relatorio e clique em salvar.
+                    Nenhum relatório salvo ainda. Monte o relatório e clique em salvar.
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-72 overflow-auto pr-1">
@@ -1875,7 +1875,7 @@ export default function RelatoriosPage() {
             <div className="rounded-xl border bg-card">
               <div className="p-4 border-b flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-heading font-semibold">Preview do relatorio</h3>
+                  <h3 className="font-heading font-semibold">Preview do relatório</h3>
                   <p className="text-xs text-muted-foreground">
                     Mostrando ate 10 linhas de {customRows.length} registro(s) da base.
                   </p>
@@ -1885,7 +1885,7 @@ export default function RelatoriosPage() {
 
               {selectedColumnDefinitions.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
-                  Selecione colunas para exibir o preview do relatorio.
+                  Selecione colunas para exibir o preview do relatório.
                 </div>
               ) : customRows.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">

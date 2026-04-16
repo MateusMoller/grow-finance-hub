@@ -308,7 +308,7 @@ export default function CRMPage() {
   const [historyVersion, setHistoryVersion] = useState(0);
   const [selectedLeadHistory, setSelectedLeadHistory] = useState<ChangeHistoryEntry[]>([]);
 
-  const actorLabel = user?.email || "Usuario";
+  const actorLabel = user?.email || "Usuário";
   const isEditing = Boolean(editingLeadId);
 
   const registerLeadHistory = (leadId: string, action: string, details?: string) => {
@@ -356,7 +356,7 @@ export default function CRMPage() {
       setLeads(storedLeads);
       if (showLoader) {
         setLoadingLeads(false);
-        toast.error(`Nao foi possivel carregar leads do site: ${error.message}`);
+        toast.error(`Não foi possível carregar leads do site: ${error.message}`);
       }
       return;
     }
@@ -494,7 +494,7 @@ export default function CRMPage() {
             : 0,
       },
       {
-        label: "Meta de conversao",
+        label: "Meta de conversão",
         targetLabel: `${crmGoals.conversionRate}%`,
         currentLabel: `${conversionRate}%`,
         pct:
@@ -593,7 +593,7 @@ export default function CRMPage() {
     }
 
     if (!Number.isFinite(conversionRate) || conversionRate <= 0 || conversionRate > 100) {
-      toast.error("A meta de conversao deve ficar entre 1% e 100%.");
+      toast.error("A meta de conversão deve ficar entre 1% e 100%.");
       return;
     }
 
@@ -669,7 +669,7 @@ export default function CRMPage() {
                 : item,
             ),
           );
-          registerLeadHistory(leadId, "Alteracao de etapa desfeita", `${stage} -> ${previousStage}`);
+          registerLeadHistory(leadId, "Alteração de etapa desfeita", `${stage} -> ${previousStage}`);
         },
       },
     });
@@ -712,15 +712,15 @@ export default function CRMPage() {
     if (editingLeadId) {
       const previousLead = leads.find((lead) => lead.id === editingLeadId);
       if (!previousLead) {
-        toast.error("Negociacao nao encontrada");
+        toast.error("Negociação não encontrada");
         return;
       }
 
       setLeads((prev) =>
         prev.map((lead) => (lead.id === editingLeadId ? { ...lead, ...payload } : lead)),
       );
-      registerLeadHistory(editingLeadId, "Negociacao atualizada", previousLead.name);
-      toast.success("Negociacao atualizada com sucesso");
+      registerLeadHistory(editingLeadId, "Negociação atualizada", previousLead.name);
+      toast.success("Negociação atualizada com sucesso");
     } else {
       const createdLead: Lead = {
         id: createLeadId(),
@@ -730,8 +730,8 @@ export default function CRMPage() {
       };
 
       setLeads((prev) => [createdLead, ...prev]);
-      registerLeadHistory(createdLead.id, "Negociacao criada", createdLead.name);
-      toast.success("Negociacao cadastrada com sucesso");
+      registerLeadHistory(createdLead.id, "Negociação criada", createdLead.name);
+      toast.success("Negociação cadastrada com sucesso");
     }
 
     setFormOpen(false);
@@ -769,7 +769,7 @@ export default function CRMPage() {
     if (siteLeadId) {
       const { error } = await supabase.from("site_leads").delete().eq("id", siteLeadId);
       if (error) {
-        toast.error(`Nao foi possivel excluir lead captado via site: ${error.message}`);
+        toast.error(`Não foi possível excluir lead captado via site: ${error.message}`);
         return;
       }
 
@@ -784,15 +784,15 @@ export default function CRMPage() {
     setLeads((prev) => prev.filter((item) => item.id !== leadId));
     setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
     setSheetOpen(false);
-    registerLeadHistory(leadId, "Negociacao excluida", lead.name);
+    registerLeadHistory(leadId, "Negociação excluida", lead.name);
 
-    toast.success("Negociacao excluida", {
+    toast.success("Negociação excluida", {
       action: {
         label: "Desfazer",
         onClick: () => {
           setLeads((prev) => [lead, ...prev]);
           registerLeadHistory(leadId, "Exclusao desfeita", lead.name);
-          toast.success("Negociacao restaurada");
+          toast.success("Negociação restaurada");
         },
       },
     });
@@ -1090,7 +1090,7 @@ export default function CRMPage() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isEditing ? "Editar Negociacao" : "Nova Negociacao"}</DialogTitle>
+            <DialogTitle>{isEditing ? "Editar Negociação" : "Nova Negociação"}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1164,13 +1164,13 @@ export default function CRMPage() {
               <div className="space-y-2 col-span-2 sm:col-span-1">
                 <Label>Origem</Label>
                 <Input
-                  placeholder="Site, Indicacao, Outbound..."
+                  placeholder="Site, Indicação, Outbound..."
                   value={leadForm.source}
                   onChange={(event) => setLeadForm((prev) => ({ ...prev, source: event.target.value }))}
                 />
               </div>
               <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Competencia</Label>
+                <Label>Competência</Label>
                 <Input
                   placeholder="AAAA-MM"
                   value={leadForm.competence}
@@ -1182,7 +1182,7 @@ export default function CRMPage() {
             <div className="space-y-2">
               <Label>Observacoes</Label>
               <Textarea
-                placeholder="Contexto da negociacao, proximos passos, pontos de atencao..."
+                placeholder="Contexto da negociação, próximos passos, pontos de atenção..."
                 value={leadForm.notes}
                 onChange={(event) => setLeadForm((prev) => ({ ...prev, notes: event.target.value }))}
                 rows={3}
@@ -1195,7 +1195,7 @@ export default function CRMPage() {
               Cancelar
             </Button>
             <Button onClick={handleSaveLead}>
-              {isEditing ? "Salvar alteracoes" : "Cadastrar Negociacao"}
+              {isEditing ? "Salvar alterações" : "Cadastrar Negociação"}
             </Button>
           </DialogFooter>
         </DialogContent>

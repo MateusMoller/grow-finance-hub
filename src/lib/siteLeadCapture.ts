@@ -11,7 +11,7 @@ const normalizeText = (value: string) =>
 
 export const isSiteLeadSource = (value: string | null | undefined) => {
   const normalized = normalizeText(value || "");
-  return normalized.includes("captacao via site");
+  return normalized.includes("captação via site");
 };
 
 interface CaptureSiteLeadInput {

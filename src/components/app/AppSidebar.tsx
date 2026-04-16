@@ -44,18 +44,18 @@ const mainItems = [
 
 const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
-  { title: "Formularios", url: "/app/formularios", icon: FileText },
+  { title: "Formularios", url: "/app/formulários", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
-  { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Obrigacoes", url: "/app/obrigacoes", icon: FileSpreadsheet },
+  { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
   { title: "E-continuo", url: "/app/econtinuo", icon: Send },
 ];
 
 const systemItems = [
   { title: "Notificacoes", url: "/app/notificacoes", icon: Bell },
-  { title: "Usuarios", url: "/app/usuarios", icon: UserCog },
+  { title: "Usuários", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestoes", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
   { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
@@ -124,7 +124,7 @@ export function AppSidebar() {
     ? operationalItems.filter(
         (item) =>
           item.url === "/app/solicitacoes" ||
-          item.url === "/app/formularios" ||
+          item.url === "/app/formulários" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
           item.url === "/app/obrigacoes" ||

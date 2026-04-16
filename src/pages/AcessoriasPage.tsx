@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
 import { motion } from "framer-motion";
 import {
   Link2,
@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCcw,
   Pencil,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FunctionsHttpError } from "@supabase/supabase-js";
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -37,6 +38,13 @@ import {
 } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getPreflightBlockingErrors,
+  normalizePreflightCompetence,
+  parseEcontinuoFiles,
+  type EcontinuoPreflightRow,
+  type ExtractionEvidence,
+} from "@/lib/econtinuoPreflightParser";
 
 type AcessoriasCompany = {
   acessorias_company_id: string;
@@ -108,6 +116,11 @@ type OverviewPayload = {
   };
 };
 
+type EcontinuoPreflightRowState = EcontinuoPreflightRow & {
+  sendStatus: "idle" | "sending" | "sent" | "error";
+  sendMessage: string | null;
+};
+
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -124,7 +137,7 @@ const formatDateTime = (value: string | null | undefined) => {
 
 const obligationStatusVariant = (status: string | null) => {
   const token = String(status || "").trim().toLowerCase();
-  if (token === "concluido" || token === "completed" || token === "sent") return "default";
+  if (token === "concluído" || token === "completed" || token === "sent") return "default";
   if (token === "atrasado" || token === "overdue") return "destructive";
   if (token === "em_andamento" || token === "processing") return "secondary";
   return "outline";
@@ -133,7 +146,7 @@ const obligationStatusVariant = (status: string | null) => {
 const normalizeObligationStatusToken = (status: string | null) => {
   const token = String(status || "").trim().toLowerCase();
   if (!token) return "pendente";
-  if (["concluido", "completed", "delivered", "sent", "entregue"].includes(token)) return "concluido";
+  if (["concluído", "completed", "delivered", "sent", "entregue"].includes(token)) return "concluído";
   if (["atrasado", "overdue", "late", "vencido"].includes(token)) return "atrasado";
   if (["em_andamento", "processing", "in_progress", "resolvendo"].includes(token)) return "em_andamento";
   return "pendente";
@@ -150,19 +163,18 @@ const readFileAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo"));
+    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo"));
     reader.readAsDataURL(file);
   });
 
 interface AcessoriasPageProps {
-  module?: "obrigacoes" | "econtinuo";
+  module?: "obrigações" | "econtinuo";
 }
 
-export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
+export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps) {
   const [loading, setLoading] = useState(true);
   const [syncingCompanies, setSyncingCompanies] = useState(false);
   const [syncingObligations, setSyncingObligations] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [assigningObligation, setAssigningObligation] = useState(false);
 
   const [hasConfiguration, setHasConfiguration] = useState(false);
@@ -201,13 +213,14 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     notes: "",
   });
 
-  const [uploadForm, setUploadForm] = useState({
-    client_id: "",
-    competence: "",
-    description: "",
-  });
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const isObrigacoesModule = module === "obrigacoes";
+  const [preflightRows, setPreflightRows] = useState<EcontinuoPreflightRowState[]>([]);
+  const [preflightWarnings, setPreflightWarnings] = useState<string[]>([]);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [preflightParsing, setPreflightParsing] = useState(false);
+  const [sendingPreflight, setSendingPreflight] = useState(false);
+  const [dropzoneActive, setDropzoneActive] = useState(false);
+  const econtinuoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const isObrigacoesModule = module === "obrigações";
 
   const filteredObligations = useMemo(() => {
     const searchToken = obligationSearch.trim().toLowerCase();
@@ -237,7 +250,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
   const groupedObligations = useMemo(() => {
     const groups = new Map<string, { name: string; items: AcessoriasObligation[] }>();
     filteredObligations.forEach((item) => {
-      const groupName = String(item.obligation_name || "Obrigacao sem nome").trim() || "Obrigacao sem nome";
+      const groupName = String(item.obligation_name || "Obrigação sem nome").trim() || "Obrigação sem nome";
       const key = groupName.toLowerCase();
       const current = groups.get(key);
       if (current) {
@@ -259,7 +272,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
           (item) => normalizeObligationStatusToken(item.status) === "em_andamento",
         ).length;
         const completed = group.items.filter(
-          (item) => normalizeObligationStatusToken(item.status) === "concluido",
+          (item) => normalizeObligationStatusToken(item.status) === "concluído",
         ).length;
 
         return {
@@ -276,6 +289,36 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [filteredObligations]);
 
+  const obligationNamesByClient = useMemo(() => {
+    const map = new Map<string, string[]>();
+    obligations.forEach((row) => {
+      const clientId = row.client_id;
+      const obligationName = String(row.obligation_name || "").trim();
+      if (!clientId || !obligationName) return;
+      const current = map.get(clientId) || [];
+      if (!current.some((item) => item.toLowerCase() === obligationName.toLowerCase())) {
+        current.push(obligationName);
+      }
+      map.set(clientId, current);
+    });
+    map.forEach((values, key) => {
+      map.set(key, [...values].sort((left, right) => left.localeCompare(right, "pt-BR")));
+    });
+    return map;
+  }, [obligations]);
+
+  const preflightSummary = useMemo(() => {
+    const selected = preflightRows.filter((row) => row.selectedForSend);
+    const blocked = selected.filter((row) => row.blockingErrors.length > 0).length;
+    const ready = selected.length - blocked;
+    return {
+      total: preflightRows.length,
+      selected: selected.length,
+      blocked,
+      ready,
+    };
+  }, [preflightRows]);
+
   const invokeAcessorias = async <TData extends Record<string, unknown> = Record<string, unknown>>(
     body: Record<string, unknown>,
   ) => {
@@ -285,12 +328,12 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     } = await supabase.auth.getSession();
 
     if (sessionError) {
-      throw new Error("Nao foi possivel validar a sessao atual.");
+      throw new Error("Não foi possível validar a sessao atual.");
     }
 
     const accessToken = session?.access_token;
     if (!accessToken) {
-      throw new Error("Sessao expirada. Entre novamente para acessar o modulo Acessorias.");
+      throw new Error("Sessao expirada. Entre novamente para acessar o módulo Acessorias.");
     }
 
     const invokeOnce = async (token: string) =>
@@ -375,10 +418,10 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       if (isObrigacoesModule) {
         await Promise.all([loadOverview(), loadObligations()]);
       } else {
-        await Promise.all([loadOverview(), loadUploads()]);
+        await Promise.all([loadOverview(), loadObligations(), loadUploads()]);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao carregar modulo Acessorias");
+      toast.error(error instanceof Error ? error.message : "Erro ao carregar módulo Acessorias");
     } finally {
       setLoading(false);
     }
@@ -390,7 +433,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         action: "cleanup_kanban_obligations",
       });
     } catch {
-      // noop: limpeza de Kanban e processo auxiliar e nao deve bloquear a tela
+      // noop: limpeza de Kanban e processo auxiliar e não deve bloquear a tela
     }
   };
 
@@ -508,7 +551,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
       if (!silent) {
         toast.success(
-          `Obrigacoes sincronizadas: ${totalSynced}. Clientes processados: ${totalProcessedClients}/${totalLinks || totalProcessedClients}.`,
+          `Obrigações sincronizadas: ${totalSynced}. Clientes processados: ${totalProcessedClients}/${totalLinks || totalProcessedClients}.`,
         );
         if (totalAutoLinkedClients > 0) {
           toast.success(`Clientes vinculados automaticamente por CNPJ: ${totalAutoLinkedClients}.`);
@@ -526,7 +569,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       };
     } catch (error) {
       if (!silent) {
-        toast.error(error instanceof Error ? error.message : "Erro ao sincronizar obrigacoes");
+        toast.error(error instanceof Error ? error.message : "Erro ao sincronizar obrigações");
       }
       throw error;
     } finally {
@@ -545,8 +588,8 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         } catch (companiesError) {
           toast.error(
             companiesError instanceof Error
-              ? `Sincronizacao de empresas parcial: ${companiesError.message}`
-              : "Sincronizacao de empresas parcial. Prosseguindo com obrigacoes.",
+              ? `Sincronização de empresas parcial: ${companiesError.message}`
+              : "Sincronização de empresas parcial. Prosseguindo com obrigações.",
           );
         }
       }
@@ -557,7 +600,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         refreshAfter: false,
       });
       await Promise.all([loadOverview(), loadObligations()]);
-      toast.success("Sincronizacao concluida. Dados atualizados a partir do Acessorias.");
+      toast.success("Sincronização concluída. Dados atualizados a partir do Acessorias.");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Erro ao sincronizar dados com o Acessorias",
@@ -567,7 +610,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
   const handleAssignObligation = async () => {
     if (!newObligation.client_id || !newObligation.obligation_name.trim()) {
-      toast.error("Selecione o cliente e informe o nome da obrigacao.");
+      toast.error("Selecione o cliente e informe o nome da obrigação.");
       return;
     }
 
@@ -582,7 +625,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         status: newObligation.status,
         notes: newObligation.notes || null,
       });
-      toast.success("Obrigacao cadastrada para o cliente.");
+      toast.success("Obrigação cadastrada para o cliente.");
       setNewObligation({
         client_id: newObligation.client_id,
         obligation_name: "",
@@ -593,7 +636,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       });
       await Promise.all([loadOverview(), loadObligations()]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao cadastrar obrigacao");
+      toast.error(error instanceof Error ? error.message : "Erro ao cadastrar obrigação");
     } finally {
       setAssigningObligation(false);
     }
@@ -615,7 +658,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
     if (!editingObligation) return;
     const obligationName = editObligationForm.obligation_name.trim();
     if (!obligationName) {
-      toast.error("Informe o nome da obrigacao.");
+      toast.error("Informe o nome da obrigação.");
       return;
     }
 
@@ -642,57 +685,225 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
       const remoteSync = result.remote_sync;
       if (remoteSync?.attempted && remoteSync.ok) {
-        toast.success(remoteSync.message || "Obrigacao atualizada no Grow e no Acessorias.");
+        toast.success(remoteSync.message || "Obrigação atualizada no Grow e no Acessorias.");
       } else if (remoteSync?.attempted && !remoteSync.ok) {
-        toast.success("Obrigacao atualizada no Grow. Sincronizacao remota em processamento.");
-        toast.error(remoteSync.message || "Nao foi possivel confirmar atualizacao no Acessorias.");
+        toast.success("Obrigação atualizada no Grow. Sincronização remota em processamento.");
+        toast.error(remoteSync.message || "Não foi possível confirmar atualizacao no Acessorias.");
       } else {
-        toast.success("Obrigacao atualizada no Grow.");
+        toast.success("Obrigação atualizada no Grow.");
       }
 
       setEditingObligation(null);
       await Promise.all([loadOverview(), loadObligations()]);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao atualizar obrigacao");
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar obrigação");
     } finally {
       setSavingObligation(false);
     }
   };
 
-  const handleSendUpload = async () => {
-    if (!uploadForm.client_id) {
-      toast.error("Selecione o cliente para envio.");
-      return;
-    }
-    if (!selectedFile) {
-      toast.error("Selecione o arquivo para envio.");
-      return;
-    }
+  const normalizePreflightRow = (row: EcontinuoPreflightRowState): EcontinuoPreflightRowState => {
+    const normalizedCompetence = normalizePreflightCompetence(row.competence || "");
+    const blockingErrors = getPreflightBlockingErrors({
+      clientId: row.clientId,
+      competence: normalizedCompetence || row.competence || "",
+      obligationName: row.obligationName,
+    });
 
-    setUploading(true);
+    return {
+      ...row,
+      competence: normalizedCompetence || row.competence || "",
+      blockingErrors,
+      selectedForSend: blockingErrors.length > 0 ? false : row.selectedForSend,
+    };
+  };
+
+  const updatePreflightRow = (
+    rowId: string,
+    updater: (row: EcontinuoPreflightRowState) => EcontinuoPreflightRowState,
+  ) => {
+    setPreflightRows((current) =>
+      current.map((row) => {
+        if (row.id !== rowId) return row;
+        const nextRow = updater(row);
+        return normalizePreflightRow(nextRow);
+      }),
+    );
+  };
+
+  const handleOpenPreflight = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    setPreflightParsing(true);
     try {
-      const base64 = await readFileAsDataUrl(selectedFile);
-      await invokeAcessorias({
-        action: "send_econtinuo",
-        client_id: uploadForm.client_id,
-        file_name: selectedFile.name,
-        content_type: selectedFile.type || "application/octet-stream",
-        file_content_base64: base64,
-        metadata: {
-          competencia: uploadForm.competence || null,
-          descricao: uploadForm.description || null,
-        },
+      const result = await parseEcontinuoFiles({
+        files,
+        clients: clients.map((client) => ({
+          id: client.id,
+          name: client.name,
+          cnpj: client.cnpj,
+        })),
+        obligations: obligations.map((row) => ({
+          client_id: row.client_id,
+          obligation_name: row.obligation_name,
+          obligation_period: row.obligation_period,
+        })),
       });
 
-      toast.success("Arquivo enviado para o e-Continuo. Obrigacoes serao atualizadas na proxima sincronizacao manual.");
-      setSelectedFile(null);
-      setUploadForm((current) => ({ ...current, competence: "", description: "" }));
-      await Promise.all([loadOverview(), loadObligations(uploadForm.client_id), loadUploads(uploadForm.client_id)]);
+      setPreflightWarnings(result.warnings);
+      if (result.warnings.length > 0) {
+        result.warnings.slice(0, 3).forEach((warning) => toast.warning(warning));
+      }
+
+      setPreflightRows(
+        result.rows.map((row) => ({
+          ...row,
+          sendStatus: "idle",
+          sendMessage: null,
+        })),
+      );
+      setPreflightOpen(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao enviar arquivo");
+      toast.error(error instanceof Error ? error.message : "Não foi possível analisar os arquivos.");
     } finally {
-      setUploading(false);
+      setPreflightParsing(false);
+      if (econtinuoFileInputRef.current) {
+        econtinuoFileInputRef.current.value = "";
+      }
     }
+  };
+
+  const handlePreflightFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    void handleOpenPreflight(files);
+  };
+
+  const handleDropzoneDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!dropzoneActive) setDropzoneActive(true);
+  };
+
+  const handleDropzoneDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropzoneActive(false);
+  };
+
+  const handleDropzoneDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropzoneActive(false);
+    const files = Array.from(event.dataTransfer.files || []);
+    if (files.length === 0) return;
+    void handleOpenPreflight(files);
+  };
+
+  const handleToggleAllPreflightRows = (checked: boolean) => {
+    setPreflightRows((current) =>
+      current.map((row) => {
+        const next = normalizePreflightRow(row);
+        if (next.blockingErrors.length > 0) return next;
+        return { ...next, selectedForSend: checked };
+      }),
+    );
+  };
+
+  const handleSendSelectedPreflightRows = async () => {
+    const selectedRows = preflightRows.filter((row) => row.selectedForSend);
+    if (selectedRows.length === 0) {
+      toast.error("Selecione ao menos um arquivo pronto para envio.");
+      return;
+    }
+
+    setSendingPreflight(true);
+    let sentCount = 0;
+    let failedCount = 0;
+    let blockedCount = 0;
+
+    for (const row of selectedRows) {
+      const blockingErrors = getPreflightBlockingErrors({
+        clientId: row.clientId,
+        competence: row.competence,
+        obligationName: row.obligationName,
+      });
+
+      if (blockingErrors.length > 0) {
+        blockedCount += 1;
+        updatePreflightRow(row.id, (current) => ({
+          ...current,
+          blockingErrors,
+          sendStatus: "error",
+          sendMessage: blockingErrors.join(" "),
+        }));
+        continue;
+      }
+
+      updatePreflightRow(row.id, (current) => ({
+        ...current,
+        sendStatus: "sending",
+        sendMessage: "Enviando para o e-Continuo...",
+      }));
+
+      try {
+        const base64 = await readFileAsDataUrl(row.file);
+        await invokeAcessorias({
+          action: "send_econtinuo",
+          client_id: row.clientId,
+          file_name: row.fileName,
+          content_type: row.file.type || "application/octet-stream",
+          file_content_base64: base64,
+          metadata: {
+            competência: row.competence || null,
+            obrigação: row.obligationName || null,
+            descrição: row.description || null,
+            pre_conferencia: {
+              confidence: row.confidence,
+              warnings: row.warnings,
+              evidence: row.evidence as ExtractionEvidence[],
+              reviewed_at: new Date().toISOString(),
+            },
+          },
+        });
+
+        sentCount += 1;
+        updatePreflightRow(row.id, (current) => ({
+          ...current,
+          sendStatus: "sent",
+          sendMessage: "Arquivo enviado com sucesso.",
+        }));
+      } catch (error) {
+        failedCount += 1;
+        updatePreflightRow(row.id, (current) => ({
+          ...current,
+          sendStatus: "error",
+          sendMessage: error instanceof Error ? error.message : "Falha no envio deste arquivo.",
+        }));
+      }
+    }
+
+    setSendingPreflight(false);
+    await Promise.all([loadOverview(), loadUploads()]);
+
+    if (sentCount > 0) {
+      setPreflightRows((current) =>
+        current
+          .filter((row) => row.sendStatus !== "sent")
+          .map((row) => normalizePreflightRow(row)),
+      );
+    }
+
+    if (sentCount > 0 && failedCount === 0 && blockedCount === 0) {
+      toast.success(`Envio concluído: ${sentCount} arquivo(s) enviado(s).`);
+      setPreflightOpen(false);
+      setPreflightWarnings([]);
+      return;
+    }
+
+    toast.info(
+      `Resultado do envio: ${sentCount} enviado(s), ${failedCount} falha(s), ${blockedCount} bloqueado(s).`,
+    );
   };
 
   const metrics = [
@@ -707,12 +918,12 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
       icon: Building2,
     },
     {
-      label: "Obrigacoes pendentes",
+      label: "Obrigações pendentes",
       value: String(summary.obligations_pending),
       icon: CalendarClock,
     },
     {
-      label: "Obrigacoes atrasadas",
+      label: "Obrigações atrasadas",
       value: String(summary.obligations_overdue),
       icon: AlertTriangle,
     },
@@ -724,12 +935,12 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">
-              {isObrigacoesModule ? "Modulo Obrigacoes" : "Modulo E-continuo"}
+              {isObrigacoesModule ? "Módulo Obrigações" : "Módulo E-continuo"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {isObrigacoesModule
-                ? "Controle das obrigacoes acessorias com sincronizacao e acompanhamento por cliente."
-                : "Envio de arquivos para o e-Continuo com historico operacional por cliente."}
+                ? "Controle das obrigações acessorias com sincronização e acompanhamento por cliente."
+                : "Envio de arquivos para o e-Continuo com histórico operacional por cliente."}
             </p>
           </div>
           <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center">
@@ -742,9 +953,9 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
               <span>
                 {isObrigacoesModule
                   ? syncingCompanies || syncingObligations
-                    ? "Sincronizacao manual em andamento..."
+                    ? "Sincronização manual em andamento..."
                     : "Dados carregados do cache. Atualize somente no botao Sincronizar."
-                  : "Dados carregados automaticamente ao abrir o modulo."}
+                  : "Dados carregados automaticamente ao abrir o módulo."}
               </span>
             </div>
             {isObrigacoesModule && (
@@ -767,7 +978,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
         {!hasConfiguration && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Defina o secret <code>ACESSORIAS_API_TOKEN</code> no Supabase para habilitar sincronizacao e envio.
+            Defina o secret <code>ACESSORIAS_API_TOKEN</code> no Supabase para habilitar sincronização e envio.
           </div>
         )}
 
@@ -792,13 +1003,13 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <Tabs defaultValue={isObrigacoesModule ? "obrigacoes" : "econtinuo"} className="space-y-4">
+          <Tabs defaultValue={isObrigacoesModule ? "obrigações" : "econtinuo"} className="space-y-4">
 
             {isObrigacoesModule && (
-              <TabsContent value="obrigacoes" className="space-y-4">
+              <TabsContent value="obrigações" className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Cadastro de obrigacoes por cliente</CardTitle>
+                  <CardTitle className="text-base">Cadastro de obrigações por cliente</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 lg:grid-cols-2">
@@ -821,7 +1032,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Nome da obrigacao</Label>
+                      <Label>Nome da obrigação</Label>
                       <Input
                         placeholder="Ex.: DCTFWeb Mensal"
                         value={newObligation.obligation_name}
@@ -834,7 +1045,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
                   <div className="grid gap-3 lg:grid-cols-3">
                     <div className="space-y-2">
-                      <Label>Competencia</Label>
+                      <Label>Competência</Label>
                       <Input
                         placeholder="AAAA-MM"
                         value={newObligation.obligation_period}
@@ -866,7 +1077,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                           <SelectItem value="pendente">Pendente</SelectItem>
                           <SelectItem value="em_andamento">Em andamento</SelectItem>
                           <SelectItem value="atrasado">Atrasado</SelectItem>
-                          <SelectItem value="concluido">Concluido</SelectItem>
+                          <SelectItem value="concluído">Concluído</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -875,7 +1086,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                   <div className="space-y-2">
                     <Label>Observacoes</Label>
                     <Input
-                      placeholder="Detalhes adicionais da obrigacao"
+                      placeholder="Detalhes adicionais da obrigação"
                       value={newObligation.notes}
                       onChange={(event) =>
                         setNewObligation((current) => ({ ...current, notes: event.target.value }))
@@ -890,7 +1101,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                       ) : (
                         <Plus className="h-4 w-4 mr-2" />
                       )}
-                      Cadastrar obrigacao
+                      Cadastrar obrigação
                     </Button>
                   </div>
                 </CardContent>
@@ -898,12 +1109,12 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Obrigacoes organizadas por tipo</CardTitle>
+                  <CardTitle className="text-base">Obrigações organizadas por tipo</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
                     <Input
-                      placeholder="Buscar por obrigacao, empresa, cliente ou protocolo..."
+                      placeholder="Buscar por obrigação, empresa, cliente ou protocolo..."
                       value={obligationSearch}
                       onChange={(event) => setObligationSearch(event.target.value)}
                     />
@@ -916,14 +1127,14 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                         <SelectItem value="pendente">Pendentes</SelectItem>
                         <SelectItem value="em_andamento">Em andamento</SelectItem>
                         <SelectItem value="atrasado">Atrasados</SelectItem>
-                        <SelectItem value="concluido">Concluidos</SelectItem>
+                        <SelectItem value="concluído">Concluidos</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   {groupedObligations.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-                      Nenhuma obrigacao encontrada para o filtro aplicado.
+                      Nenhuma obrigação encontrada para o filtro aplicado.
                     </div>
                   ) : (
                     <Accordion type="multiple" className="w-full rounded-lg border px-3">
@@ -937,7 +1148,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                                 <Badge variant="secondary">Pendentes: {group.pending}</Badge>
                                 {group.inProgress > 0 && <Badge variant="secondary">Andamento: {group.inProgress}</Badge>}
                                 {group.overdue > 0 && <Badge variant="destructive">Atrasadas: {group.overdue}</Badge>}
-                                {group.completed > 0 && <Badge variant="default">Concluidas: {group.completed}</Badge>}
+                                {group.completed > 0 && <Badge variant="default">Concluídas: {group.completed}</Badge>}
                               </div>
                             </div>
                           </AccordionTrigger>
@@ -948,10 +1159,10 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                                   <tr className="bg-muted/40 border-b text-xs text-muted-foreground">
                                     <th className="text-left p-3">Empresa</th>
                                     <th className="text-left p-3">Cliente Grow</th>
-                                    <th className="text-left p-3">Competencia</th>
+                                    <th className="text-left p-3">Competência</th>
                                     <th className="text-left p-3">Vencimento</th>
                                     <th className="text-left p-3">Status</th>
-                                    <th className="text-left p-3">Ult. sincronizacao</th>
+                                    <th className="text-left p-3">Ult. sincronização</th>
                                     <th className="text-left p-3">Acao</th>
                                   </tr>
                                 </thead>
@@ -996,85 +1207,275 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
             {!isObrigacoesModule && (
               <TabsContent value="econtinuo" className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Upload e envio para e-Continuo</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Cliente vinculado</Label>
-                      <Select
-                        value={uploadForm.client_id || undefined}
-                        onValueChange={(value) => setUploadForm((current) => ({ ...current, client_id: value }))}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Envio rapido com pré-conferência</CardTitle>
+                    <CardDescription>
+                      Arraste e solte um ou mais arquivos para leitura automatica. Antes do envio, revise cliente, competência e obrigação.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <input
+                      ref={econtinuoFileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      accept=".pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                      onChange={handlePreflightFileSelection}
+                    />
+
+                    <div
+                      onDragOver={handleDropzoneDragOver}
+                      onDragLeave={handleDropzoneDragLeave}
+                      onDrop={handleDropzoneDrop}
+                      className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                        dropzoneActive ? "border-primary bg-primary/5" : "border-border"
+                      }`}
+                    >
+                      <Upload className="h-6 w-6 mx-auto mb-2 text-primary" />
+                      <p className="text-sm font-medium">Arraste arquivos aqui para enviar ao e-Continuo</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Formatos priorizados: PDF, imagens e planilhas (XLS/XLSX/CSV).
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => econtinuoFileInputRef.current?.click()}
+                          disabled={preflightParsing}
+                        >
+                          {preflightParsing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                          {preflightParsing ? "Lendo arquivos..." : "Selecionar arquivos"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="default"
+                          disabled={preflightRows.length === 0}
+                          onClick={() => setPreflightOpen(true)}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Abrir pré-conferência
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                      <p>Arquivos na fila: <strong>{preflightSummary.total}</strong></p>
+                      <p>Selecionados para envio: <strong>{preflightSummary.selected}</strong></p>
+                      <p>Prontos para envio: <strong>{preflightSummary.ready}</strong></p>
+                      <p>Bloqueados por falta de dados: <strong>{preflightSummary.blocked}</strong></p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Dialog open={preflightOpen} onOpenChange={setPreflightOpen}>
+                  <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Pré-conferência de arquivos para e-Continuo</DialogTitle>
+                      <DialogDescription>
+                        Revise rapidamente os dados antes de enviar. Linhas incompletas ficam bloqueadas ate ajuste manual.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {preflightWarnings.length > 0 && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        {preflightWarnings.slice(0, 5).map((warning, index) => (
+                          <p key={`${warning}-${index}`}>{warning}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {preflightRows.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                        Nenhum arquivo na pré-conferência. Use a area de envio para adicionar arquivos.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs text-muted-foreground">
+                            {preflightSummary.selected} selecionado(s) | {preflightSummary.ready} pronto(s) | {preflightSummary.blocked} bloqueado(s)
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleAllPreflightRows(true)}
+                            >
+                              Selecionar prontos
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleAllPreflightRows(false)}
+                            >
+                              Limpar seleção
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {preflightRows.map((row) => {
+                            const obligationOptions = row.clientId ? obligationNamesByClient.get(row.clientId) || [] : [];
+                            return (
+                              <div key={row.id} className="rounded-lg border p-3 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <label className="inline-flex items-center gap-2 text-sm font-medium">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.selectedForSend}
+                                      disabled={row.blockingErrors.length > 0}
+                                      onChange={(event) =>
+                                        updatePreflightRow(row.id, (current) => ({
+                                          ...current,
+                                          selectedForSend: event.target.checked,
+                                        }))
+                                      }
+                                    />
+                                    {row.fileName}
+                                  </label>
+                                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <Badge variant="outline">Confianca: {row.confidence}%</Badge>
+                                    {row.sendStatus === "sending" && <Badge variant="secondary">Enviando...</Badge>}
+                                    {row.sendStatus === "sent" && <Badge variant="default">Enviado</Badge>}
+                                    {row.sendStatus === "error" && <Badge variant="destructive">Erro</Badge>}
+                                  </div>
+                                </div>
+
+                                <div className="grid gap-3 lg:grid-cols-4">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Cliente</Label>
+                                    <Select
+                                      value={row.clientId || "__none__"}
+                                      onValueChange={(value) =>
+                                        updatePreflightRow(row.id, (current) => ({
+                                          ...current,
+                                          clientId: value === "__none__" ? "" : value,
+                                          obligationName:
+                                            value === "__none__" ? "" : current.obligationName,
+                                        }))
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Selecione" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__">Não identificado</SelectItem>
+                                        {clients.map((client) => (
+                                          <SelectItem key={client.id} value={client.id}>
+                                            {client.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Competência</Label>
+                                    <Input
+                                      placeholder="AAAA-MM"
+                                      value={row.competence}
+                                      onChange={(event) =>
+                                        updatePreflightRow(row.id, (current) => ({
+                                          ...current,
+                                          competence: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Obrigação</Label>
+                                    <Input
+                                      placeholder="Obrigação do cliente"
+                                      value={row.obligationName}
+                                      onChange={(event) =>
+                                        updatePreflightRow(row.id, (current) => ({
+                                          ...current,
+                                          obligationName: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Descrição</Label>
+                                    <Input
+                                      placeholder="Descrição do envio"
+                                      value={row.description}
+                                      onChange={(event) =>
+                                        updatePreflightRow(row.id, (current) => ({
+                                          ...current,
+                                          description: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                </div>
+
+                                {obligationOptions.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {obligationOptions.slice(0, 8).map((option) => (
+                                      <button
+                                        key={`${row.id}-${option}`}
+                                        type="button"
+                                        className="rounded-full border px-2 py-0.5 text-[11px] hover:bg-muted"
+                                        onClick={() =>
+                                          updatePreflightRow(row.id, (current) => ({
+                                            ...current,
+                                            obligationName: option,
+                                          }))
+                                        }
+                                      >
+                                        {option}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {row.blockingErrors.length > 0 && (
+                                  <div className="rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-700">
+                                    {row.blockingErrors.join(" ")}
+                                  </div>
+                                )}
+
+                                {row.warnings.length > 0 && (
+                                  <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                                    {row.warnings.join(" ")}
+                                  </div>
+                                )}
+
+                                {row.sendMessage && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {row.sendMessage}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setPreflightOpen(false)}>
+                        Fechar
+                      </Button>
+                      <Button
+                        onClick={() => void handleSendSelectedPreflightRows()}
+                        disabled={sendingPreflight || preflightSummary.selected === 0}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cliente" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {clients
-                            .filter((client) => client.linked)
-                            .map((client) => (
-                              <SelectItem key={client.id} value={client.id}>
-                                {client.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Arquivo</Label>
-                      <Input
-                        type="file"
-                        onChange={(event) =>
-                          setSelectedFile(event.target.files && event.target.files.length > 0 ? event.target.files[0] : null)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Competencia</Label>
-                      <Input
-                        placeholder="AAAA-MM"
-                        value={uploadForm.competence}
-                        onChange={(event) =>
-                          setUploadForm((current) => ({ ...current, competence: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Descricao</Label>
-                      <Input
-                        placeholder="Ex.: Envio folha mensal"
-                        value={uploadForm.description}
-                        onChange={(event) =>
-                          setUploadForm((current) => ({ ...current, description: event.target.value }))
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm text-muted-foreground">
-                      {selectedFile ? `Arquivo selecionado: ${selectedFile.name}` : "Nenhum arquivo selecionado"}
-                    </div>
-                    <Button onClick={() => void handleSendUpload()} disabled={uploading}>
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4 mr-2" />
-                      )}
-                      Enviar e Atualizar Status
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                        {sendingPreflight ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                        Enviar selecionados
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Historico de envios</CardTitle>
+                  <CardTitle className="text-base">Histórico de envios</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {uploads.map((item) => (
@@ -1119,7 +1520,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             </span>
             <span className="inline-flex items-center gap-1">
               <CalendarClock className="h-3.5 w-3.5 text-amber-600" />
-              Obrigacoes usam cache salvo e atualizam somente ao clicar em Sincronizar agora.
+              Obrigações usam cache salvo e atualizam somente ao clicar em Sincronizar agora.
             </span>
             <span className="inline-flex items-center gap-1">
               <Send className="h-3.5 w-3.5 text-primary" />
@@ -1127,7 +1528,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
             </span>
             <span className="inline-flex items-center gap-1">
               <Pencil className="h-3.5 w-3.5 text-primary" />
-              Integracao de obrigacoes com Kanban desativada temporariamente.
+              Integracao de obrigações com Kanban desativada temporariamente.
             </span>
           </CardContent>
         </Card>
@@ -1135,15 +1536,15 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
         <Dialog open={Boolean(editingObligation)} onOpenChange={(open) => !open && setEditingObligation(null)}>
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
-              <DialogTitle>Editar obrigacao</DialogTitle>
+              <DialogTitle>Editar obrigação</DialogTitle>
               <DialogDescription>
-                Atualize os dados da obrigacao para esta empresa. A alteracao e salva no Grow e enviada ao Acessorias.
+                Atualize os dados da obrigação para esta empresa. A alteracao e salva no Grow e enviada ao Acessorias.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Obrigacao</Label>
+                <Label>Obrigação</Label>
                 <Input
                   value={editObligationForm.obligation_name}
                   onChange={(event) =>
@@ -1154,7 +1555,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>Competencia</Label>
+                  <Label>Competência</Label>
                   <Input
                     placeholder="AAAA-MM"
                     value={editObligationForm.obligation_period}
@@ -1188,7 +1589,7 @@ export function AcessoriasPage({ module = "obrigacoes" }: AcessoriasPageProps) {
                       <SelectItem value="pendente">Pendente</SelectItem>
                       <SelectItem value="em_andamento">Em andamento</SelectItem>
                       <SelectItem value="atrasado">Atrasado</SelectItem>
-                      <SelectItem value="concluido">Concluido</SelectItem>
+                      <SelectItem value="concluído">Concluído</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -35,7 +35,7 @@ export function ClientPortalOverview({
             <div className="space-y-1">
               <CardTitle className="text-xl">Ola, {clientName}</CardTitle>
               <CardDescription className="text-sm">
-                Aqui voce acompanha solicitacoes, documentos e pendencias em um fluxo unico.
+                Aqui voce acompanha solicitações, documentos e pendencias em um fluxo unico.
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-xs">
@@ -109,7 +109,7 @@ export function ClientPortalOverview({
           <CardContent className="space-y-1">
             {recentUpdates.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Ainda nao temos atualizacoes recentes. Voce recebera novidades por aqui.
+                Ainda não temos atualizacoes recentes. Voce recebera novidades por aqui.
               </p>
             ) : (
               recentUpdates.map((item) => (

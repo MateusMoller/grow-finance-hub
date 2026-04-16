@@ -59,7 +59,7 @@ export function ClientPortalSupport({
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Falar com a equipe</CardTitle>
           <CardDescription>
-            Abra uma nova conversa por setor e acompanhe tudo em um unico historico.
+            Abra uma nova conversa por setor e acompanhe tudo em um unico histórico.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -81,7 +81,7 @@ export function ClientPortalSupport({
           <CardContent className="p-3 space-y-2 max-h-[560px] overflow-y-auto">
             {conversationRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Ainda nao ha conversas iniciadas. Abra uma solicitacao para comecar.
+                Ainda não há conversas iniciadas. Abra uma solicitação para comecar.
               </p>
             ) : (
               conversationRequests.map((request) => {

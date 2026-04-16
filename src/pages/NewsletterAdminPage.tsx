@@ -88,10 +88,10 @@ const getFunctionErrorMessage = async (error: unknown) => {
   }
 
   if (typeof error === "object" && error !== null && "message" in error) {
-    return String((error as { message?: unknown }).message || "Erro ao executar funcao");
+    return String((error as { message?: unknown }).message || "Erro ao executar função");
   }
 
-  return "Erro ao executar funcao";
+  return "Erro ao executar função";
 };
 
 export default function NewsletterAdminPage() {
@@ -220,7 +220,7 @@ export default function NewsletterAdminPage() {
     }
 
     if (!content) {
-      toast.error("Informe o conteudo da newsletter");
+      toast.error("Informe o conteúdo da newsletter");
       return;
     }
 
@@ -322,7 +322,7 @@ export default function NewsletterAdminPage() {
     setTogglingId(null);
 
     if (error) {
-      toast.error(`Erro ao atualizar publicacao: ${error.message}`);
+      toast.error(`Erro ao atualizar publicação: ${error.message}`);
       return;
     }
 
@@ -360,7 +360,7 @@ export default function NewsletterAdminPage() {
           <h1 className="font-heading text-2xl font-bold">Newsletter</h1>
           <div className="rounded-xl border bg-card p-6">
             <p className="text-sm">
-              Esta area e exclusiva para administradores. Use um usuario com perfil admin para cadastrar e publicar
+              Esta area e exclusiva para administradores. Use um usuário com perfil admin para cadastrar e publicar
               newsletters.
             </p>
           </div>
@@ -459,7 +459,7 @@ export default function NewsletterAdminPage() {
                       E-mail pendente
                     </Badge>
                   ) : (
-                    <Badge variant="outline">Aguardando publicacao</Badge>
+                    <Badge variant="outline">Aguardando publicação</Badge>
                   )}
                   <span className="text-muted-foreground">Slug: /newsletter/{newsletter.slug}</span>
                 </div>
@@ -549,7 +549,7 @@ export default function NewsletterAdminPage() {
                     slug: prev.slug || buildNewsletterSlug(event.target.value),
                   }))
                 }
-                placeholder="Ex: Planejamento tributario para 2026"
+                placeholder="Ex: Planejamento tributário para 2026"
               />
             </div>
 
@@ -558,7 +558,7 @@ export default function NewsletterAdminPage() {
               <Input
                 value={draft.slug}
                 onChange={(event) => setDraft((prev) => ({ ...prev, slug: event.target.value }))}
-                placeholder="planejamento-tributario-2026"
+                placeholder="planejamento-tributário-2026"
               />
               <p className="text-xs text-muted-foreground">URL publica: /newsletter/{buildNewsletterSlug(draft.slug || draft.title)}</p>
             </div>
@@ -574,12 +574,12 @@ export default function NewsletterAdminPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Conteudo</Label>
+              <Label>Conteúdo</Label>
               <Textarea
                 rows={12}
                 value={draft.content}
                 onChange={(event) => setDraft((prev) => ({ ...prev, content: event.target.value }))}
-                placeholder="Escreva aqui o conteudo completo da newsletter."
+                placeholder="Escreva aqui o conteúdo completo da newsletter."
               />
             </div>
 

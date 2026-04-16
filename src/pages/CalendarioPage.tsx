@@ -46,7 +46,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type EntryType = "evento" | "obrigacao";
+type EntryType = "evento" | "obrigação";
 type EntryPriority = "baixa" | "media" | "alta" | "urgente";
 type EntryStatus = "pending" | "completed" | "cancelled";
 
@@ -103,7 +103,7 @@ const priorityClasses: Record<EntryPriority, string> = {
 
 const typeClasses: Record<EntryType, string> = {
   evento: "bg-primary/10 text-primary",
-  obrigacao: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  obrigação: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
 };
 
 const statusLabels: Record<EntryStatus, string> = {
@@ -187,7 +187,7 @@ export default function CalendarioPage() {
       .filter((event) => {
         const date = parseISO(event.due_at);
         return (
-          event.entry_type === "obrigacao"
+          event.entry_type === "obrigação"
           && event.status !== "completed"
           && date >= today
           && date <= nextWeek
@@ -199,7 +199,7 @@ export default function CalendarioPage() {
 
   const stats = {
     total: events.length,
-    obligations: events.filter((event) => event.entry_type === "obrigacao").length,
+    obligations: events.filter((event) => event.entry_type === "obrigação").length,
     pending: events.filter((event) => event.status === "pending").length,
   };
 
@@ -209,7 +209,7 @@ export default function CalendarioPage() {
   );
 
   const obligationDays = useMemo(
-    () => events.filter((event) => event.entry_type === "obrigacao").map((event) => parseISO(event.due_at)),
+    () => events.filter((event) => event.entry_type === "obrigação").map((event) => parseISO(event.due_at)),
     [events]
   );
 
@@ -442,7 +442,7 @@ export default function CalendarioPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-medium mr-auto">{event.title}</p>
                         <Badge variant="outline" className={`border-0 ${typeClasses[event.entry_type]}`}>
-                          {event.entry_type === "obrigacao" ? "Obrigação" : "Evento"}
+                          {event.entry_type === "obrigação" ? "Obrigação" : "Evento"}
                         </Badge>
                         <Badge variant="outline" className={`border-0 ${priorityClasses[event.priority]}`}>
                           {priorityLabels[event.priority]}
@@ -557,7 +557,7 @@ export default function CalendarioPage() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="evento">Evento</SelectItem>
-                    <SelectItem value="obrigacao">Obrigação</SelectItem>
+                    <SelectItem value="obrigação">Obrigação</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

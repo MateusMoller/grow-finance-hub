@@ -9,53 +9,53 @@ import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
 
 const heroStats = [
-  { value: "+12", label: "Anos de mercado", detail: "Experiencia solida" },
-  { value: "98%", label: "Satisfacao dos clientes", detail: "Relacionamentos duradouros" },
-  { value: "100%", label: "Conformidade", detail: "Seguranca e precisao" },
+  { value: "+12", label: "Anos de mercado", detail: "Experiência sólida" },
+  { value: "98%", label: "Satisfação dos clientes", detail: "Relacionamentos duradouros" },
+  { value: "100%", label: "Conformidade", detail: "Segurança e precisão" },
 ];
 
 const services = [
-  { icon: BarChart3, title: "Contabilidade Consultiva", description: "Acompanhamento contabil para decisoes estrategicas e crescimento sustentavel." },
-  { icon: Shield, title: "Assessoria Fiscal", description: "Planejamento fiscal para reducao de riscos e otimizacao tributaria." },
-  { icon: Users, title: "Departamento Pessoal", description: "Gestao de folha, rotinas trabalhistas e atendimento aos colaboradores." },
+  { icon: BarChart3, title: "Contabilidade Consultiva", description: "Acompanhamento contábil para decisões estratégicas e crescimento sustentável." },
+  { icon: Shield, title: "Assessoria Fiscal", description: "Planejamento fiscal para redução de riscos e otimização tributária." },
+  { icon: Users, title: "Departamento Pessoal", description: "Gestão de folha, rotinas trabalhistas e atendimento aos colaboradores." },
   { icon: Building2, title: "Abertura de Empresas", description: "Apoio completo desde a escolha do regime ate o registro legal." },
-  { icon: CheckCircle2, title: "Regularizacoes", description: "Regularizamos pendencias fiscais e contabils com agilidade e precisao." },
-  { icon: FileText, title: "Relatorios Gerenciais", description: "Dashboards e relatorios para analise de desempenho e tomada de decisao." },
-  { icon: Briefcase, title: "Suporte Estrategico ao Empresario", description: "Mentoria e suporte para planejamento e execucao de estrategias de crescimento." },
+  { icon: CheckCircle2, title: "Regularizacoes", description: "Regularizamos pendências fiscais e contábeis com agilidade e precisão." },
+  { icon: FileText, title: "Relatórios Gerenciais", description: "Dashboards e relatórios para análise de desempenho e tomada de decisão." },
+  { icon: Briefcase, title: "Suporte Estratégico ao Empresário", description: "Mentoria e suporte para planejamento e execução de estratégias de crescimento." },
 ];
 
 const differentials = [
-  { icon: Users, title: "Atendimento Proximo", description: "Relacionamento continuo e atendimento personalizado para cada cliente." },
-  { icon: Search, title: "Visao Estrategica", description: "Transformamos dados contabils em insights para decisoes inteligentes." },
-  { icon: Zap, title: "Agilidade", description: "Respostas rapidas e processos otimizados para reduzir tempo de espera." },
-  { icon: Shield, title: "Precisao", description: "Conformidade rigorosa e atencao aos detalhes fiscais e contabils." },
-  { icon: TrendingUp, title: "Inovacao", description: "Ferramentas tecnologicas que aumentam eficiencia e transparencia." },
-  { icon: BarChart3, title: "Foco em Resultados", description: "Metas alinhadas com o crescimento sustentavel do cliente." },
+  { icon: Users, title: "Atendimento Próximo", description: "Relacionamento contínuo e atendimento personalizado para cada cliente." },
+  { icon: Search, title: "Visão Estratégica", description: "Transformamos dados contábeis em insights para decisões inteligentes." },
+  { icon: Zap, title: "Agilidade", description: "Respostas rápidas e processos otimizados para reduzir tempo de espera." },
+  { icon: Shield, title: "Precisão", description: "Conformidade rigorosa e atenção aos detalhes fiscais e contábeis." },
+  { icon: TrendingUp, title: "Inovação", description: "Ferramentas tecnológicas que aumentam eficiência e transparência." },
+  { icon: BarChart3, title: "Foco em Resultados", description: "Metas alinhadas com o crescimento sustentável do cliente." },
 ];
 
 const journey = [
-  { icon: FolderOpen, title: "Organizacao", description: "Processos, documentos e prioridades." },
-  { icon: Search, title: "Clareza Financeira", description: "Relatorios praticos e objetivos." },
-  { icon: Shield, title: "Conformidade", description: "Obrigacoes em dia, sem preocupacoes." },
-  { icon: TrendingUp, title: "Suporte a Decisao", description: "Insights estrategicos para crescer." },
-  { icon: CheckCircle2, title: "Crescimento Seguro", description: "Evolucao sustentavel e controlada." },
+  { icon: FolderOpen, title: "Organização", description: "Processos, documentos e prioridades." },
+  { icon: Search, title: "Clareza Financeira", description: "Relatórios práticos e objetivos." },
+  { icon: Shield, title: "Conformidade", description: "Obrigações em dia, sem preocupações." },
+  { icon: TrendingUp, title: "Suporte a Decisão", description: "Insights estratégicos para crescer." },
+  { icon: CheckCircle2, title: "Crescimento Seguro", description: "Evolução sustentável e controlada." },
 ];
 
 const testimonials = [
   {
     name: "Lucas Moreira",
     role: "CEO, TechNova",
-    text: "A Grow transformou nossa gestao financeira. Recebemos relatorios claros que facilitaram decisoes e aumentaram nossa margem.",
+    text: "A Grow transformou nossa gestão financeira. Recebemos relatórios claros que facilitaram decisões e aumentaram nossa margem.",
   },
   {
     name: "Mariana Ribeiro",
     role: "Fundadora, Casa Verde",
-    text: "Atendimento humano e solucoes praticas. A Grow nos ajudou a regularizar pendencias e planejar a expansao.",
+    text: "Atendimento humano e soluções práticas. A Grow nos ajudou a regularizar pendências e planejar a expansão.",
   },
   {
     name: "Rafael Alves",
     role: "Diretor Financeiro, BlueLine",
-    text: "Relatorios gerenciais consistentes e suporte estrategico. Parceria essencial em momentos de crescimento.",
+    text: "Relatórios gerenciais consistentes e suporte estratégico. Parceria essencial em momentos de crescimento.",
   },
 ];
 
@@ -82,7 +82,7 @@ export default function HomePage() {
     const email = leadForm.email.trim();
 
     if (!fullName || !email) {
-      toast.error("Preencha nome e e-mail para continuar.");
+      toast.error("Preencha nome e e-mail para contínuar.");
       return;
     }
 
@@ -98,7 +98,7 @@ export default function HomePage() {
     setSending(false);
 
     if (error) {
-      toast.error(`Nao foi possivel enviar sua solicitacao: ${error.message}`);
+      toast.error(`Não foi possível enviar sua solicitação: ${error.message}`);
       return;
     }
 
@@ -107,7 +107,7 @@ export default function HomePage() {
       companyName: "",
       email: "",
     });
-    toast.success("Solicitacao enviada com sucesso. Nossa equipe entrara em contato em breve.");
+    toast.success("Solicitação enviada com sucesso. Nossa equipe entrará em contato em breve.");
   };
 
   return (
@@ -118,11 +118,11 @@ export default function HomePage() {
             <motion.div {...fadeIn} className="space-y-8">
               <div className="space-y-5">
                 <h1 className="font-heading text-3xl font-bold leading-tight text-foreground sm:text-4xl md:text-5xl">
-                  Mais do que contabilidade, impulsionamos o crescimento do seu negocio
+                  Mais do que contabilidade, impulsionamos o crescimento do seu negócio
                 </h1>
                 <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                  A Grow oferece contabilidade consultiva e assessoria estrategica para empresas que buscam organizacao,
-                  seguranca fiscal e decisoes embasadas para crescer com confianca.
+                  A Grow oferece contabilidade consultiva e assessoria estratégica para empresas que buscam organização,
+                  segurança fiscal e decisoes embasadas para crescer com confiança.
                 </p>
               </div>
 
@@ -154,7 +154,7 @@ export default function HomePage() {
               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="font-heading text-lg font-semibold">Dashboard de Resultados</h3>
-                  <p className="text-xs text-muted-foreground">Relatorios gerenciais para decisoes estrategicas.</p>
+                  <p className="text-xs text-muted-foreground">Relatórios gerenciais para decisoes estratégicas.</p>
                 </div>
                 <span className="text-xs text-muted-foreground">Atualizado hoje</span>
               </div>
@@ -166,7 +166,7 @@ export default function HomePage() {
                   ))}
                 </div>
                 <div className="mt-3 flex flex-col items-start gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                  <span>Consultoria continua + relatorios mensais</span>
+                  <span>Consultoria contínua + relatórios mensais</span>
                   <Button asChild size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
                     <Link to="/solucoes">Ver Demonstracao</Link>
                   </Button>
@@ -181,21 +181,21 @@ export default function HomePage() {
             <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6">
               <h2 className="font-heading text-2xl font-semibold">Quem somos</h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                A Grow Contabilidade combina expertise tecnica com atendimento proximo e estrategico. Atuamos como seu
-                parceiro de negocios, oferecendo clareza, conformidade e visao para que sua empresa cresca com seguranca.
+                A Grow Contabilidade combina expertise técnica com atendimento proximo e estratégico. Atuamos como seu
+                parceiro de negócios, oferecendo clareza, conformidade e visão para que sua empresa cresca com segurança.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Missao</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Missão</p>
                   <p className="mt-1 text-sm">Transformar dados em decisoes que geram crescimento.</p>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Visao</p>
-                  <p className="mt-1 text-sm">Ser referencia em contabilidade consultiva e estrategica.</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Visão</p>
+                  <p className="mt-1 text-sm">Ser referência em contabilidade consultiva e estratégica.</p>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valores</p>
-                  <p className="mt-1 text-sm">Transparencia, proximidade e precisao.</p>
+                  <p className="mt-1 text-sm">Transparência, proximidade e precisão.</p>
                 </div>
               </div>
             </motion.article>
@@ -203,17 +203,17 @@ export default function HomePage() {
             <motion.article {...fadeIn} transition={{ duration: 0.45, delay: 0.1 }} className="rounded-2xl border border-border bg-card p-6">
               <h2 className="font-heading text-2xl font-semibold">Atendimento consultivo e humano</h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                Na Grow, cada cliente tem um time dedicado para apoiar decisoes com relatorios claros, prioridades fiscais
-                e planos de acao personalizados para cada fase do negocio.
+                Na Grow, cada cliente tem um time dedicado para apoiar decisoes com relatórios claros, prioridades fiscais
+                e planos de acao personalizados para cada fase do negócio.
               </p>
               <div className="mt-5 space-y-3 text-sm">
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
-                  <span>Atendimento proximo com foco no contexto do seu negocio.</span>
+                  <span>Atendimento proximo com foco no contexto do seu negócio.</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
-                  <span>Visao estrategica para decisões de curto, medio e longo prazo.</span>
+                  <span>Visão estratégica para decisões de curto, médio e longo prazo.</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
@@ -224,10 +224,10 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="servicos" className="py-12 md:py-16">
+        <section id="serviços" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos servicos</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
             </motion.div>
             <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-3">
               {services.map((service, index) => (
@@ -284,7 +284,7 @@ export default function HomePage() {
         <section className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Como ajudamos seu negocio</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Como ajudamos seu negócio</h2>
             </motion.div>
             <div className="rounded-2xl border border-border bg-card px-4 py-6 md:px-8">
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
@@ -348,10 +348,10 @@ export default function HomePage() {
               <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
                 <motion.div {...fadeIn}>
                   <h2 className="font-heading text-2xl font-semibold leading-tight sm:text-3xl">
-                    Pronto para crescer com organizacao e estrategia?
+                    Pronto para crescer com organização e estratégia?
                   </h2>
                   <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
-                    Agende uma avaliacao gratuita e descubra como a Grow pode estruturar sua contabilidade para apoiar
+                    Agende uma avaliação gratuita e descubra como a Grow pode estruturar sua contabilidade para apoiar
                     decisoes que impulsionam resultados.
                   </p>
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -359,7 +359,7 @@ export default function HomePage() {
                       asChild
                       className="w-full rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] sm:w-auto dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
                     >
-                      <Link to="/contato">Solicitar Avaliacao Gratuita</Link>
+                      <Link to="/contato">Solicitar Avaliação Gratuita</Link>
                     </Button>
                     <Button asChild variant="outline" className="w-full rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] sm:w-auto dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
                       <Link to="/contato">Falar com Consultor</Link>
@@ -396,9 +396,9 @@ export default function HomePage() {
                       className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
                     />
                   </div>
-                  <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e seguranca dos seus dados.</p>
+                  <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e segurança dos seus dados.</p>
                   <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>
-                    {sending ? "Enviando..." : "Enviar Solicitacao"}
+                    {sending ? "Enviando..." : "Enviar Solicitação"}
                     {!sending && <ArrowRight className="h-4 w-4" />}
                   </Button>
                 </motion.form>

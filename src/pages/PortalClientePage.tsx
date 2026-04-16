@@ -65,7 +65,7 @@ import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 const DEFAULT_PORTAL_ACCESS_MESSAGE =
-  "Este usuario ainda nao possui permissao de cliente para acessar o portal.";
+  "Este usuário ainda não possui permissão de cliente para acessar o portal.";
 
 const parseFunctionError = async (error: unknown): Promise<{ message: string; status: number | null }> => {
   const fallbackMessage = error instanceof Error ? error.message : "Erro desconhecido ao sincronizar acesso";
@@ -211,7 +211,7 @@ export default function PortalClientePage() {
       ensureMessage = parsedEnsureError.message || DEFAULT_PORTAL_ACCESS_MESSAGE;
 
       if (ensureStatus !== 403 && ensureStatus !== 409) {
-        toast.error("Nao foi possivel sincronizar automaticamente o acesso do portal.");
+        toast.error("Não foi possível sincronizar automaticamente o acesso do portal.");
       }
     }
 
@@ -223,8 +223,8 @@ export default function PortalClientePage() {
       .maybeSingle();
 
     if (roleError) {
-      toast.error("Nao foi possivel validar a permissao de acesso ao portal.");
-      setPortalAccessMessage("Nao foi possivel validar a permissao de acesso ao portal.");
+      toast.error("Não foi possível validar a permissão de acesso ao portal.");
+      setPortalAccessMessage("Não foi possível validar a permissão de acesso ao portal.");
       resetPortalCollections();
       setLoadingData(false);
       setPortalAccessDenied(true);
@@ -274,7 +274,7 @@ export default function PortalClientePage() {
           "Encontramos mais de um cadastro de cliente para este portal. Solicite ajuste ao admin.",
         );
       } else {
-        setPortalAccessMessage("Nao foi possivel carregar o cadastro do cliente para este portal.");
+        setPortalAccessMessage("Não foi possível carregar o cadastro do cliente para este portal.");
       }
 
       resetPortalCollections();
@@ -399,7 +399,7 @@ export default function PortalClientePage() {
           if (eventType === "UPDATE") {
             const nextStatus = String((payload.new as { status?: string })?.status || "");
             if (nextStatus === "completed") {
-              toast.success("Uma pendencia foi concluida pela equipe.");
+              toast.success("Uma pendencia foi concluída pela equipe.");
             }
           }
 
@@ -891,12 +891,12 @@ export default function PortalClientePage() {
 
   const handleCreateCashflowEntry = async (payload: NewPortalCashflowEntryPayload) => {
     if (!user || !clientProfile?.id) {
-      toast.error("Cliente nao vinculado ao portal para registrar lancamentos.");
+      toast.error("Cliente não vinculado ao portal para registrar lançamentos.");
       return false;
     }
 
     if (!clientProfile.portal_cashflow_enabled) {
-      toast.error("Controle de caixa ainda nao liberado para este cliente.");
+      toast.error("Controle de caixa ainda não liberado para este cliente.");
       return false;
     }
 
@@ -914,28 +914,28 @@ export default function PortalClientePage() {
     setCreatingCashflowEntry(false);
 
     if (error) {
-      toast.error("Nao foi possivel registrar o lancamento no caixa.");
+      toast.error("Não foi possível registrar o lançamento no caixa.");
       return false;
     }
 
-    toast.success("Lancamento registrado no controle de caixa.");
+    toast.success("Lançamento registrado no controle de caixa.");
     await fetchPortalData();
     return true;
   };
 
   const handleCreateCashflowEntriesBatch = async (payloads: NewPortalCashflowEntryPayload[]) => {
     if (!user || !clientProfile?.id) {
-      toast.error("Cliente nao vinculado ao portal para registrar lancamentos.");
+      toast.error("Cliente não vinculado ao portal para registrar lançamentos.");
       return { success: false, inserted: 0 };
     }
 
     if (!clientProfile.portal_cashflow_enabled) {
-      toast.error("Controle de caixa ainda nao liberado para este cliente.");
+      toast.error("Controle de caixa ainda não liberado para este cliente.");
       return { success: false, inserted: 0 };
     }
 
     if (payloads.length === 0) {
-      toast.error("Nenhum lancamento selecionado para importacao.");
+      toast.error("Nenhum lançamento selecionado para importacao.");
       return { success: false, inserted: 0 };
     }
 
@@ -955,7 +955,7 @@ export default function PortalClientePage() {
     setCreatingCashflowEntry(false);
 
     if (error) {
-      toast.error("Nao foi possivel importar os lancamentos no controle de caixa.");
+      toast.error("Não foi possível importar os lançamentos no controle de caixa.");
       return { success: false, inserted: 0 };
     }
 
@@ -966,7 +966,7 @@ export default function PortalClientePage() {
   const handlePortalPasswordChange = async () => {
     const accountEmail = user?.email?.trim().toLowerCase();
     if (!accountEmail) {
-      toast.error("Nao foi possivel identificar o e-mail da conta.");
+      toast.error("Não foi possível identificar o e-mail da conta.");
       return;
     }
 
@@ -976,12 +976,12 @@ export default function PortalClientePage() {
     }
 
     if (passwordForm.newPassword.length < 6) {
-      toast.error("A nova senha precisa ter no minimo 6 caracteres.");
+      toast.error("A nova senha precisa ter no mínimo 6 caracteres.");
       return;
     }
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error("A confirmacao da nova senha nao confere.");
+      toast.error("A confirmação da nova senha não confere.");
       return;
     }
 
@@ -1005,7 +1005,7 @@ export default function PortalClientePage() {
     setChangingPortalPassword(false);
 
     if (updateError) {
-      toast.error("Nao foi possivel alterar a senha do portal.");
+      toast.error("Não foi possível alterar a senha do portal.");
       return;
     }
 
@@ -1073,7 +1073,7 @@ export default function PortalClientePage() {
               <SidebarTrigger />
               <div className="min-w-0">
                 <p className="font-semibold text-sm">Portal do Cliente</p>
-                <p className="text-xs text-muted-foreground">Solicitacoes, documentos, atendimento e caixa</p>
+                <p className="text-xs text-muted-foreground">Solicitações, documentos, atendimento e caixa</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1100,7 +1100,7 @@ export default function PortalClientePage() {
                       {clientProfile?.name || clientProfile?.contact || "Area do cliente"}
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                      Acompanhe tudo em um fluxo simples: abrir solicitacao, enviar documentos e conversar com a equipe.
+                      Acompanhe tudo em um fluxo simples: abrir solicitação, enviar documentos e conversar com a equipe.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1135,7 +1135,7 @@ export default function PortalClientePage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Pendências do cliente</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Visualize o que depende da sua acao, o que esta em analise e o que ja foi concluido.
+                  Visualize o que depende da sua acao, o que esta em análise e o que ja foi concluído.
                 </p>
               </CardHeader>
             </Card>
@@ -1248,8 +1248,8 @@ export default function PortalClientePage() {
               onRequestEnable={() =>
                 openNewRequestDialog({
                   sector: "Financeiro",
-                  title: "Liberacao do controle de caixa no portal",
-                  description: "Solicito a liberacao do modulo de controle de caixa para uso no portal do cliente.",
+                  title: "Liberação do controle de caixa no portal",
+                  description: "Solicito a liberação do módulo de controle de caixa para uso no portal do cliente.",
                 })
               }
             />
@@ -1402,7 +1402,7 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">2. Envie documentos</p>
                       <p className="text-sm text-muted-foreground">
-                        Use o botao de envio para anexar os arquivos do mes de forma rapida e organizada.
+                        Use o botao de envio para anexar os arquivos do mes de forma rápida e organizada.
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => setUploadDialogOpen(true)}>
@@ -1534,7 +1534,7 @@ export default function PortalClientePage() {
                       />
                       <Input
                         type="password"
-                        placeholder="Nova senha (minimo 6 caracteres)"
+                        placeholder="Nova senha (mínimo 6 caracteres)"
                         value={passwordForm.newPassword}
                         onChange={(event) =>
                           setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))
@@ -1562,7 +1562,7 @@ export default function PortalClientePage() {
                   <div className="rounded-lg border bg-muted/20 px-3 py-2">
                     <p className="text-sm font-medium">Modulo de controle de caixa</p>
                     <p className="text-sm text-muted-foreground">
-                      Status atual: {clientProfile?.portal_cashflow_enabled ? "liberado pelo admin" : "aguardando liberacao do admin"}.
+                      Status atual: {clientProfile?.portal_cashflow_enabled ? "liberado pelo admin" : "aguardando liberação do admin"}.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1585,7 +1585,7 @@ export default function PortalClientePage() {
                         })
                       }
                     >
-                      Abrir solicitacao de suporte
+                      Abrir solicitação de suporte
                     </Button>
                   </div>
                 </CardContent>
@@ -1625,15 +1625,15 @@ export default function PortalClientePage() {
       >
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nova solicitacao</DialogTitle>
+            <DialogTitle>Nova solicitação</DialogTitle>
             <DialogDescription>
-              Sua solicitacao sera direcionada ao setor responsavel.
+              Sua solicitação sera direcionada ao setor responsavel.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Tipo da solicitacao</label>
+              <label className="text-sm font-medium">Tipo da solicitação</label>
               <Select value={newRequestType} onValueChange={handleRequestTypeChange}>
                 <SelectTrigger>
                   <SelectValue />
@@ -1663,7 +1663,7 @@ export default function PortalClientePage() {
                 <Input
                   value={newRequestTitle}
                   onChange={(event) => setNewRequestTitle(event.target.value)}
-                  placeholder="Ex.: Conferencia de impostos do mes"
+                  placeholder="Ex.: Conferência de impostos do mes"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1737,7 +1737,7 @@ export default function PortalClientePage() {
             </Button>
             <Button type="button" className="gap-2" onClick={() => void handleCreateRequest()} disabled={creatingRequest}>
               {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Enviar solicitacao
+              Enviar solicitação
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1756,7 +1756,7 @@ export default function PortalClientePage() {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Enviar documentos</DialogTitle>
-            <DialogDescription>Envie seus documentos de forma rapida e organizada.</DialogDescription>
+            <DialogDescription>Envie seus documentos de forma rápida e organizada.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1777,7 +1777,7 @@ export default function PortalClientePage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Vincular a solicitacao (opcional)</label>
+              <label className="text-sm font-medium">Vincular a solicitação (opcional)</label>
               <Select value={uploadRequestId} onValueChange={setUploadRequestId}>
                 <SelectTrigger>
                   <SelectValue />
@@ -1865,9 +1865,9 @@ export default function PortalClientePage() {
 
                   <Card>
                     <CardContent className="p-4 space-y-3">
-                      <p className="text-sm font-medium">Resumo da solicitacao</p>
+                      <p className="text-sm font-medium">Resumo da solicitação</p>
                       <p className="text-sm text-muted-foreground">
-                        {selectedRequest.description || "Sem descricao informada."}
+                        {selectedRequest.description || "Sem descrição informada."}
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
                         <span>Aberta em {new Date(selectedRequest.created_at).toLocaleDateString("pt-BR")}</span>
@@ -1897,7 +1897,7 @@ export default function PortalClientePage() {
                         }}
                       >
                         <Upload className="h-3.5 w-3.5 mr-1" />
-                        Enviar documento para esta solicitacao
+                        Enviar documento para esta solicitação
                       </Button>
                     </div>
                     <RequestChat requestId={selectedRequest.id} isTeamMember={false} />

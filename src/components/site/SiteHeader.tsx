@@ -8,7 +8,7 @@ import growIcon from "@/assets/grow-icon.png";
 
 const navLinks = [
   { label: "Institucional", to: "/" },
-  { label: "Servicos", to: "/#servicos" },
+  { label: "Serviços", to: "/#servicos" },
   { label: "Diferenciais", to: "/#diferenciais" },
   { label: "Clientes", to: "/#clientes" },
   { label: "Newsletter", to: "/newsletter" },
@@ -90,7 +90,7 @@ export function SiteHeader() {
             <Link to="/login">Entrar</Link>
           </Button>
           <Button asChild size="sm" className="rounded-full px-5">
-            <Link to="/#contato">Agende uma Avaliacao</Link>
+            <Link to="/#contato">Agende uma Avaliação</Link>
           </Button>
         </div>
 
@@ -117,14 +117,14 @@ export function SiteHeader() {
 
           <div className="h-full overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <div className="mb-4 rounded-xl border bg-card p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso rapido</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso rápido</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Link
                   to="/#contato"
                   onClick={() => setOpen(false)}
                   className="rounded-lg border bg-background px-3 py-2 text-xs font-medium text-foreground"
                 >
-                  Agendar avaliacao
+                  Agendar avaliação
                 </Link>
                 <Link
                   to="/newsletter"
@@ -175,7 +175,7 @@ export function SiteHeader() {
               </Button>
               <Button asChild className="w-full">
                 <Link to="/#contato" onClick={() => setOpen(false)}>
-                  Agende uma Avaliacao
+                  Agende uma Avaliação
                 </Link>
               </Button>
             </div>

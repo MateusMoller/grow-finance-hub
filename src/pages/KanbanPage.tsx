@@ -25,8 +25,8 @@ const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
   { id: "todo", label: "A Fazer", color: "bg-amber-500" },
   { id: "doing", label: "Em Andamento", color: "bg-primary" },
-  { id: "review", label: "Revisao", color: "bg-purple-500" },
-  { id: "done", label: "Concluido", color: "bg-primary" },
+  { id: "review", label: "Revisão", color: "bg-purple-500" },
+  { id: "done", label: "Concluído", color: "bg-primary" },
 ];
 
 const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
@@ -117,7 +117,7 @@ const isObligationTask = (task: KanbanTaskItem) => {
   if (hasObligationTag) return true;
 
   const title = normalizeText(task.title || "");
-  return title.startsWith("[obrigacao") || title.startsWith("obrigacao");
+  return title.startsWith("[obrigação") || title.startsWith("obrigação");
 };
 
 const emptyStatusBuckets = (): Record<KanbanStatus, KanbanTaskItem[]> => ({
@@ -159,7 +159,7 @@ export default function KanbanPage() {
     subtasks: [] as TaskSubtask[],
   });
 
-  const actorLabel = user?.email || "Usuario";
+  const actorLabel = user?.email || "Usuário";
 
   const registerTaskHistory = (taskId: string, action: string, details?: string) => {
     if (!user?.id) return;
@@ -315,7 +315,7 @@ export default function KanbanPage() {
         label: "Desfazer",
         onClick: () => {
           void handleStatusChange(taskId, previousStatus, { undoable: false, skipHistory: true });
-          registerTaskHistory(taskId, "Alteracao de status desfeita", `${newStatus} -> ${previousStatus}`);
+          registerTaskHistory(taskId, "Alteração de status desfeita", `${newStatus} -> ${previousStatus}`);
         },
       },
     });
@@ -348,7 +348,7 @@ export default function KanbanPage() {
     setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, ...updates } : prev));
     if (previousTask) {
       const changedFields: string[] = [];
-      if ((previousTask.description || "") !== (updates.description || "")) changedFields.push("descricao");
+      if ((previousTask.description || "") !== (updates.description || "")) changedFields.push("descrição");
       if ((previousTask.client_name || "") !== (updates.client_name || "")) changedFields.push("cliente");
       if ((previousTask.assignee || "") !== (updates.assignee || "")) changedFields.push("responsavel");
       if (previousTask.priority !== updates.priority) changedFields.push("prioridade");
@@ -388,7 +388,7 @@ export default function KanbanPage() {
 
     registerTaskHistory(
       taskId,
-      toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluida",
+      toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluída",
       toggledSubtask.title,
     );
 
@@ -399,7 +399,7 @@ export default function KanbanPage() {
       .then(({ error }) => {
         if (error) {
           if (isSubtasksColumnIssue(error.message)) {
-            toast.warning("Subtarefas nao estao disponiveis no banco atual.");
+            toast.warning("Subtarefas não estão disponíveis no banco atual.");
             return;
           }
           toast.error(`Erro ao atualizar subtarefa: ${error.message}`);
@@ -443,7 +443,7 @@ export default function KanbanPage() {
       .single();
 
     if (error || !createdTask) {
-      toast.error(`Erro ao criar tarefa: ${error?.message || "Nao foi possivel criar a tarefa"}`);
+      toast.error(`Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`);
       return;
     }
 
@@ -502,7 +502,7 @@ export default function KanbanPage() {
     handleDragEnd();
     if (!draggedTask || draggedTask.status === status) return;
     if (status === "archived" && draggedTask.status !== "done") {
-      toast.error("Somente tarefas concluidas podem ser movidas para o arquivo");
+      toast.error("Somente tarefas concluídas podem ser movidas para o arquivo");
       return;
     }
 
@@ -520,7 +520,7 @@ export default function KanbanPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Kanban</h1>
-            <p className="text-sm text-muted-foreground">Gestao visual de demandas</p>
+            <p className="text-sm text-muted-foreground">Gestão visual de demandas</p>
           </div>
           <div className="flex gap-2">
             <Select value={sectorFilter} onValueChange={setSectorFilter}>
@@ -626,16 +626,16 @@ export default function KanbanPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4" />
-              Pasta de Obrigacoes - {selectedObligationFolderLabel || "Etapa"}
+              Pasta de Obrigações - {selectedObligationFolderLabel || "Etapa"}
             </DialogTitle>
             <DialogDescription>
-              Veja as obrigacoes desta etapa, marque as empresas concluidas e mova a obrigacao inteira de etapa.
+              Veja as obrigações desta etapa, marque as empresas concluídas e mova a obrigação inteira de etapa.
             </DialogDescription>
           </DialogHeader>
 
           {selectedObligationFolderTasks.length === 0 ? (
             <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-              Nenhuma obrigacao nesta etapa.
+              Nenhuma obrigação nesta etapa.
             </div>
           ) : (
             <div className="space-y-4">
@@ -656,13 +656,13 @@ export default function KanbanPage() {
                           </span>
                           <span className="inline-flex items-center gap-1">
                             <ListChecks className="h-3.5 w-3.5" />
-                            {doneCount} concluida(s)
+                            {doneCount} concluída(s)
                           </span>
                           {task.due_date && <span>Vencimento: {new Date(task.due_date).toLocaleDateString("pt-BR")}</span>}
                         </div>
                       </div>
                       <div className="w-full md:w-56 space-y-1">
-                        <Label className="text-xs">Mover obrigacao para etapa</Label>
+                        <Label className="text-xs">Mover obrigação para etapa</Label>
                         <Select
                           value={task.status}
                           onValueChange={(value) =>
@@ -690,7 +690,7 @@ export default function KanbanPage() {
 
                     {totalCount === 0 ? (
                       <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                        Esta obrigacao ainda nao possui empresas cadastradas como subtarefa.
+                        Esta obrigação ainda não possui empresas cadastradas como subtarefa.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -726,7 +726,7 @@ export default function KanbanPage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Titulo *</Label>
-              <Input placeholder="Ex: Fechamento contabil" value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))} />
+              <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label>Subtarefas</Label>
@@ -883,12 +883,12 @@ function ObligationsFolderCard({
       <div className="flex items-start gap-2">
         <FolderOpen className="h-4 w-4 mt-0.5 text-primary shrink-0" />
         <div className="min-w-0">
-          <p className="text-sm font-semibold">Obrigacoes</p>
+          <p className="text-sm font-semibold">Obrigações</p>
           <p className="text-xs text-muted-foreground">
-            Etapa {columnLabel}: {obligationsCount} obrigacao(oes)
+            Etapa {columnLabel}: {obligationsCount} obrigação(oes)
           </p>
           <p className="text-xs text-muted-foreground">
-            Empresas: {companiesDone}/{companiesCount} concluidas
+            Empresas: {companiesDone}/{companiesCount} concluídas
           </p>
         </div>
       </div>
@@ -920,7 +920,7 @@ function KanbanCard({
   const nextStatus: Partial<Record<KanbanStatus, { label: string; target: KanbanStatus }>> = {
     backlog: { label: "Mover para A Fazer", target: "todo" },
     todo: { label: "Iniciar", target: "doing" },
-    doing: { label: "Enviar para Revisao", target: "review" },
+    doing: { label: "Enviar para Revisão", target: "review" },
     review: { label: "Concluir", target: "done" },
     done: canArchive ? { label: "Arquivar", target: "archived" } : undefined,
   };
@@ -961,7 +961,7 @@ function KanbanCard({
           </span>
           {task.request_id && (
             <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0">
-              <ExternalLink className="h-2.5 w-2.5" /> Solicitacao
+              <ExternalLink className="h-2.5 w-2.5" /> Solicitação
             </Badge>
           )}
         </div>

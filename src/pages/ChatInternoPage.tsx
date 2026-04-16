@@ -91,7 +91,7 @@ export default function ChatInternoPage() {
 
     const { data, error } = await supabase.rpc("list_internal_user_profiles");
     if (error) {
-      toast.error(`Nao foi possivel carregar usuarios do chat: ${error.message}`);
+      toast.error(`Não foi possível carregar usuários do chat: ${error.message}`);
       setContacts([]);
       setLoadingContacts(false);
       return;
@@ -101,7 +101,7 @@ export default function ChatInternoPage() {
       .filter((item) => item.user_id !== user.id)
       .map((item) => ({
         userId: item.user_id,
-        displayName: resolveDisplayName(item.display_name, `Usuario ${item.user_id.slice(0, 6)}`),
+        displayName: resolveDisplayName(item.display_name, `Usuário ${item.user_id.slice(0, 6)}`),
       }));
 
     setContacts(users);
@@ -138,7 +138,7 @@ export default function ChatInternoPage() {
     const { data, error } = await query;
 
     if (error) {
-      toast.error(`Nao foi possivel carregar o chat interno: ${error.message}`);
+      toast.error(`Não foi possível carregar o chat interno: ${error.message}`);
       setMessages([]);
       setLoadingMessages(false);
       return;
@@ -255,7 +255,7 @@ export default function ChatInternoPage() {
     setSending(false);
 
     if (error) {
-      toast.error(`Nao foi possivel enviar mensagem: ${error.message}`);
+      toast.error(`Não foi possível enviar mensagem: ${error.message}`);
       return;
     }
 
@@ -279,11 +279,11 @@ export default function ChatInternoPage() {
   const chatTitle =
     activeChat.type === "group"
       ? "Grupo Geral"
-      : `Conversa com ${activeDirectUser?.displayName || "usuario"}`;
+      : `Conversa com ${activeDirectUser?.displayName || "usuário"}`;
   const inputPlaceholder =
     activeChat.type === "group"
       ? "Digite uma mensagem para o grupo geral..."
-      : `Digite uma mensagem para ${activeDirectUser?.displayName || "este usuario"}...`;
+      : `Digite uma mensagem para ${activeDirectUser?.displayName || "este usuário"}...`;
 
   if (authLoading) {
     return (
@@ -302,7 +302,7 @@ export default function ChatInternoPage() {
           <h1 className="font-heading text-2xl font-bold">Chat Interno</h1>
           <div className="rounded-xl border bg-card p-6">
             <p className="text-sm">
-              Esta area e exclusiva para funcionarios da equipe interna.
+              Esta area e exclusiva para funcionários da equipe interna.
             </p>
           </div>
         </div>
@@ -317,7 +317,7 @@ export default function ChatInternoPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Chat Interno</h1>
             <p className="text-sm text-muted-foreground">
-              Grupo geral da equipe e conversas pessoais entre usuarios.
+              Grupo geral da equipe e conversas pessoais entre usuários.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -325,7 +325,7 @@ export default function ChatInternoPage() {
               <MessageSquare className="h-3.5 w-3.5" /> {messages.length} mensagens
             </Badge>
             <Badge variant="outline" className="gap-1.5">
-              <Users className="h-3.5 w-3.5" /> {totalUsers} usuarios internos
+              <Users className="h-3.5 w-3.5" /> {totalUsers} usuários internos
             </Badge>
             <Badge variant="outline" className="gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5" /> So equipe interna
@@ -373,7 +373,7 @@ export default function ChatInternoPage() {
                 </div>
               ) : contacts.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                  Nenhum outro usuario interno encontrado.
+                  Nenhum outro usuário interno encontrado.
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -443,7 +443,7 @@ export default function ChatInternoPage() {
                     const isOwn = message.user_id === user?.id;
                     const senderName =
                       message.profile?.display_name?.trim() ||
-                      (isOwn ? "Voce" : `Usuario ${message.user_id.slice(0, 6)}`);
+                      (isOwn ? "Voce" : `Usuário ${message.user_id.slice(0, 6)}`);
 
                     return (
                       <motion.div

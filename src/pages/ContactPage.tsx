@@ -32,7 +32,7 @@ export default function ContactPage() {
     const message = contactForm.message.trim();
 
     if (!fullName || !email || !message) {
-      toast.error("Preencha nome, e-mail e mensagem para continuar.");
+      toast.error("Preencha nome, e-mail e mensagem para contínuar.");
       return;
     }
 
@@ -50,7 +50,7 @@ export default function ContactPage() {
     setLoading(false);
 
     if (error) {
-      toast.error(`Nao foi possivel enviar a mensagem: ${error.message}`);
+      toast.error(`Não foi possível enviar a mensagem: ${error.message}`);
       return;
     }
 

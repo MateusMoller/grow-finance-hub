@@ -56,7 +56,7 @@ export default function NewsletterPage() {
       setLoading(false);
 
       if (error) {
-        toast.error(`Nao foi possivel carregar a newsletter: ${error.message}`);
+        toast.error(`Não foi possível carregar a newsletter: ${error.message}`);
         return;
       }
 
@@ -78,10 +78,10 @@ export default function NewsletterPage() {
       <section className="bg-[#f3f3f6] py-12 sm:py-16 dark:bg-[#051334]">
         <div className="container max-w-6xl space-y-6 sm:space-y-8">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Conteudo Grow</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Conteúdo Grow</p>
             <h1 className="font-heading text-2xl font-bold sm:text-3xl md:text-4xl">Newsletter Grow</h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Insights de gestao, contabilidade e estrategias para acelerar o crescimento da sua empresa.
+              Insights de gestão, contabilidade e estratégias para acelerar o crescimento da sua empresa.
             </p>
           </div>
 
@@ -91,7 +91,7 @@ export default function NewsletterPage() {
             </div>
           ) : newsletters.length === 0 ? (
             <div className="rounded-2xl border bg-card p-10 text-center">
-              <p className="font-medium">Ainda nao temos newsletters publicadas.</p>
+              <p className="font-medium">Ainda não temos newsletters publicadas.</p>
               <p className="mt-2 text-sm text-muted-foreground">
                 Assim que uma nova edicao for publicada, ela aparecera aqui.
               </p>

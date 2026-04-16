@@ -1,9 +1,9 @@
 export const clientSegmentOptions = [
-  "Comercio",
+  "Comércio",
   "Industria",
-  "Servicos",
+  "Serviços",
   "Tecnologia",
-  "Saude",
+  "Saúde",
   "Educacao",
   "Construcao",
   "Agronegocio",

@@ -69,14 +69,14 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
-    { title: "Formularios", url: "/app/formularios" },
+    { title: "Formularios", url: "/app/formulários" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
-    { title: "Relatorios", url: "/app/relatorios" },
-    { title: "Obrigacoes", url: "/app/obrigacoes" },
+    { title: "Relatórios", url: "/app/relatorios" },
+    { title: "Obrigações", url: "/app/obrigacoes" },
     { title: "E-continuo", url: "/app/econtinuo" },
     { title: "Notificacoes", url: "/app/notificacoes" },
-    { title: "Usuarios", url: "/app/usuarios" },
+    { title: "Usuários", url: "/app/usuarios" },
     { title: "Sugestoes", url: "/app/sugestoes" },
     { title: "Configuracoes", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
@@ -92,7 +92,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
       item.url === "/app/tarefas" ||
       item.url === "/app/clientes" ||
       item.url === "/app/solicitacoes" ||
-      item.url === "/app/formularios" ||
+      item.url === "/app/formulários" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
       item.url === "/app/obrigacoes" ||
@@ -110,7 +110,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     item.url === "/app/tarefas" ||
     item.url === "/app/clientes" ||
     item.url === "/app/solicitacoes" ||
-    item.url === "/app/formularios" ||
+    item.url === "/app/formulários" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
     item.url === "/app/obrigacoes" ||
@@ -287,7 +287,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
                     <span>Notificacoes</span>
-                    <span className="text-xs text-muted-foreground">{unreadCount} nao lidas</span>
+                    <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <div className="max-h-72 overflow-y-auto">
@@ -352,7 +352,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(14rem,calc(100vw-1rem))]">
-                  <DropdownMenuLabel className="truncate">{user?.email || "Usuario"}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
                     <UserRound className="h-4 w-4 mr-2" /> Meu perfil
@@ -420,7 +420,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="sm:max-w-md max-h-[85svh]">
           <DialogHeader>
-            <DialogTitle>Busca rapida</DialogTitle>
+            <DialogTitle>Busca rápida</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <input
@@ -473,7 +473,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Competencia</label>
+              <label className="text-sm font-medium">Competência</label>
               <select
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 value={selectedCompetence || ""}
@@ -499,7 +499,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 Aplicar
               </Button>
             </div>
-            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opcoes...</p>}
+            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opções...</p>}
           </div>
         </SheetContent>
       </Sheet>

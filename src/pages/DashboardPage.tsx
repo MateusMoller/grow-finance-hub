@@ -130,7 +130,7 @@ const dashboardCardDefinitions: DashboardCardDefinition[] = [
     getValue: (summary) => String(summary.openTasks),
   },
   {
-    label: "Concluidas",
+    label: "Concluídas",
     icon: CheckCircle2,
     color: "text-primary",
     getValue: (summary) => String(summary.doneTasks),
@@ -171,9 +171,9 @@ const getPriorityClass = (priority: string) => {
 
 const getStatusBadge = (status: string) => {
   const normalized = normalizeText(status || "");
-  if (normalized === "done") return { label: "Concluido", className: "bg-primary/10 text-primary" };
+  if (normalized === "done") return { label: "Concluído", className: "bg-primary/10 text-primary" };
   if (normalized === "archived") return { label: "Arquivado", className: "bg-muted text-muted-foreground" };
-  if (normalized === "review") return { label: "Revisao", className: "bg-purple-100 text-purple-700 dark:bg-purple-900/30" };
+  if (normalized === "review") return { label: "Revisão", className: "bg-purple-100 text-purple-700 dark:bg-purple-900/30" };
   if (normalized === "doing") return { label: "Em andamento", className: "bg-primary/10 text-primary" };
   if (normalized === "todo") return { label: "A fazer", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30" };
   return { label: "Backlog", className: "bg-muted text-muted-foreground" };
@@ -379,7 +379,7 @@ export default function DashboardPage() {
         .map((userId) => {
           const metrics = computeMetrics(tasksByOwner.get(userId) || []);
           const profile = profileById.get(userId);
-          const displayName = profile?.display_name || `Usuario ${userId.slice(0, 6)}`;
+          const displayName = profile?.display_name || `Usuário ${userId.slice(0, 6)}`;
           const roleLabel = (rolesByUser.get(userId) || []).map(formatRole).join(", ") || "Sem papel";
           return {
             userId,
@@ -412,7 +412,7 @@ export default function DashboardPage() {
           <h1 className="font-heading text-2xl font-bold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {isAdmin
-              ? "Visao geral da equipe e indicadores por usuario"
+              ? "Visão geral da equipe e indicadores por usuário"
               : "Indicadores pessoais de produtividade e prazos"}
           </p>
         </div>
@@ -446,7 +446,7 @@ export default function DashboardPage() {
                 <div className="p-5 border-b">
                   <h2 className="font-heading font-semibold">Tarefas realizadas por dia (7 dias)</h2>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Volume diario de tarefas concluidas
+                    Volume diario de tarefas concluídas
                   </p>
                 </div>
                 <div className="p-5">
@@ -514,15 +514,15 @@ export default function DashboardPage() {
             {isAdmin && (
               <div className="rounded-xl border bg-card overflow-hidden">
                 <div className="p-5 border-b">
-                  <h2 className="font-heading font-semibold">Indicadores por usuario</h2>
+                  <h2 className="font-heading font-semibold">Indicadores por usuário</h2>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Visao consolidada de produtividade e prazo por colaborador
+                    Visao consólidada de produtividade e prazo por colaborador
                   </p>
                 </div>
                 <div className="divide-y">
                   {userIndicators.length === 0 ? (
                     <div className="p-8 text-center text-sm text-muted-foreground">
-                      Nenhum usuario com tarefas encontradas.
+                      Nenhum usuário com tarefas encontradas.
                     </div>
                   ) : (
                     userIndicators.map((indicator) => (
@@ -538,7 +538,7 @@ export default function DashboardPage() {
                           <span className="text-muted-foreground">Abertas:</span> <span className="font-semibold">{indicator.openTasks}</span>
                         </div>
                         <div className="text-xs">
-                          <span className="text-muted-foreground">Concluidas:</span> <span className="font-semibold">{indicator.doneTasks}</span>
+                          <span className="text-muted-foreground">Concluídas:</span> <span className="font-semibold">{indicator.doneTasks}</span>
                         </div>
                         <div className="text-xs">
                           <span className="text-muted-foreground">Para hoje:</span> <span className="font-semibold">{indicator.dueToday}</span>

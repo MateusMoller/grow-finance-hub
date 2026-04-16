@@ -52,7 +52,7 @@ interface Task {
   assignee: string;
   priority: "Alta" | "Media" | "Baixa" | "Urgente";
   dueDate: string;
-  status: "Pendente" | "Em andamento" | "Em revisao" | "Concluido" | "Atrasado";
+  status: "Pendente" | "Em andamento" | "Em revisão" | "Concluído" | "Atrasado";
   createdAt: string;
   tags: string[];
   subtasks: TaskSubtask[];
@@ -92,13 +92,13 @@ const priorityConfig: Record<string, { color: string; bg: string }> = {
 const statusConfig: Record<string, { color: string; bg: string; icon: typeof Circle }> = {
   Pendente: { color: "text-muted-foreground", bg: "bg-muted", icon: Circle },
   "Em andamento": { color: "text-primary", bg: "bg-primary/10", icon: Clock },
-  "Em revisao": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20", icon: AlertTriangle },
-  Concluido: { color: "text-primary", bg: "bg-primary/10", icon: CheckCircle2 },
+  "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20", icon: AlertTriangle },
+  Concluído: { color: "text-primary", bg: "bg-primary/10", icon: CheckCircle2 },
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
 };
 
 const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"];
-const statuses = ["Todos", "Pendente", "Em andamento", "Em revisao", "Concluido", "Atrasado"];
+const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
 
 const normalizeText = (value: string) =>
   value
@@ -128,7 +128,7 @@ const deriveStatus = (status: string, dueDate: string | null): Task["status"] =>
   const normalizedStatus = normalizeText(status);
 
   if (normalizedStatus === "done" || normalizedStatus === "archived") {
-    return "Concluido";
+    return "Concluído";
   }
 
   if (dueDate) {
@@ -139,7 +139,7 @@ const deriveStatus = (status: string, dueDate: string | null): Task["status"] =>
   }
 
   if (normalizedStatus === "doing") return "Em andamento";
-  if (normalizedStatus === "review") return "Em revisao";
+  if (normalizedStatus === "review") return "Em revisão";
   return "Pendente";
 };
 
@@ -216,7 +216,7 @@ export default function TarefasPage() {
     subtasks: [] as TaskSubtask[],
   });
 
-  const actorLabel = user?.email || "Usuario";
+  const actorLabel = user?.email || "Usuário";
 
   const registerTaskHistory = (taskId: string, action: string, details?: string) => {
     if (!user?.id) return;
@@ -326,7 +326,7 @@ export default function TarefasPage() {
 
   const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
     if (!subtasksAvailable) {
-      toast.warning("Subtarefas nao estao disponiveis no banco atual.");
+      toast.warning("Subtarefas não estão disponíveis no banco atual.");
       return;
     }
 
@@ -352,7 +352,7 @@ export default function TarefasPage() {
 
     registerTaskHistory(
       taskId,
-      toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluida",
+      toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluída",
       toggledSubtask.title,
     );
 
@@ -364,7 +364,7 @@ export default function TarefasPage() {
         if (error) {
           if (isSubtasksColumnIssue(error.message)) {
             setSubtasksAvailable(false);
-            toast.warning("Subtarefas nao estao disponiveis no banco atual.");
+            toast.warning("Subtarefas não estão disponíveis no banco atual.");
             return;
           }
           toast.error(`Erro ao atualizar subtarefa: ${error.message}`);
@@ -427,7 +427,7 @@ export default function TarefasPage() {
     }
 
     if (error || !createdTask) {
-      toast.error(`Erro ao criar tarefa: ${error?.message || "Nao foi possivel criar a tarefa"}`);
+      toast.error(`Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`);
       return;
     }
 
@@ -446,7 +446,7 @@ export default function TarefasPage() {
       subtasks: [],
     });
     if (savedWithoutSubtasks && newTask.subtasks.length > 0) {
-      toast.success("Tarefa criada. Subtarefas nao foram salvas neste banco.");
+      toast.success("Tarefa criada. Subtarefas não foram salvas neste banco.");
     } else {
       toast.success("Tarefa criada com sucesso");
     }
@@ -512,7 +512,7 @@ export default function TarefasPage() {
               .insert(snapshot as KanbanTaskSnapshot);
 
             if (restoreError) {
-              toast.error(`Nao foi possivel desfazer: ${restoreError.message}`);
+              toast.error(`Não foi possível desfazer: ${restoreError.message}`);
               return;
             }
 
@@ -550,7 +550,7 @@ export default function TarefasPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
-            <p className="text-sm text-muted-foreground">Gestao completa de tarefas da equipe</p>
+            <p className="text-sm text-muted-foreground">Gestão completa de tarefas da equipe</p>
           </div>
           <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Nova Tarefa
@@ -563,7 +563,7 @@ export default function TarefasPage() {
             { label: "Pendentes", value: scopedTasks.filter((t) => t.status === "Pendente").length, color: "text-muted-foreground" },
             { label: "Em andamento", value: scopedTasks.filter((t) => t.status === "Em andamento").length, color: "text-primary" },
             { label: "Atrasadas", value: scopedTasks.filter((t) => t.status === "Atrasado").length, color: "text-destructive" },
-            { label: "Concluidas", value: scopedTasks.filter((t) => t.status === "Concluido").length, color: "text-primary" },
+            { label: "Concluídas", value: scopedTasks.filter((t) => t.status === "Concluído").length, color: "text-primary" },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border bg-card p-3 text-center">
               <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
@@ -695,10 +695,10 @@ export default function TarefasPage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Titulo *</Label>
-              <Input placeholder="Ex: Fechamento contabil" value={newTask.title} onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))} />
+              <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>Descricao</Label>
+              <Label>Descrição</Label>
               <Textarea placeholder="Descreva a tarefa..." value={newTask.description} onChange={(event) => setNewTask((prev) => ({ ...prev, description: event.target.value }))} />
             </div>
             <div className="space-y-2">

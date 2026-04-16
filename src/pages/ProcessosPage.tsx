@@ -82,7 +82,7 @@ const sanitizeRelativePath = (relativePath: string) => {
 };
 
 const getBrowserRelativePath = (file: File) => {
-  const candidate = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  const candidate = (file as File & { webkitRelativePathá: string }).webkitRelativePath;
   if (typeof candidate === "string" && candidate.trim().length > 0) {
     return candidate.replace(/\\/g, "/");
   }
@@ -372,7 +372,7 @@ export default function ProcessosPage() {
     }
 
     if (failCount > 0) {
-      const baseMessage = `Upload concluido com ressalvas: ${successCount} arquivo(s) enviado(s), ${failCount} falha(s).`;
+      const baseMessage = `Upload concluído com ressalvas: ${successCount} arquivo(s) enviado(s), ${failCount} falha(s).`;
       toast.warning(firstErrorMessage ? `${baseMessage} ${firstErrorMessage}` : baseMessage);
       return;
     }
@@ -383,7 +383,7 @@ export default function ProcessosPage() {
   const handleDownload = async (document: ProcessDocumentRow) => {
     const { data, error } = await supabase.storage.from(processStorageBucket).download(document.file_path);
     if (error || !data) {
-      toast.error(error?.message || "Nao foi possivel baixar o arquivo.");
+      toast.error(error?.message || "Não foi possível baixar o arquivo.");
       return;
     }
 
@@ -485,7 +485,7 @@ export default function ProcessosPage() {
               <Input
                 value={newFolderName}
                 onChange={(event) => setNewFolderName(event.target.value)}
-                placeholder="Ex: Admissao - Colaborador Joao"
+                placeholder="Ex: Admissão - Colaborador João"
               />
               <p className="text-xs text-muted-foreground">
                 Se preencher, o upload cria uma nova pasta. Se deixar em branco, envia para a pasta selecionada.
@@ -561,7 +561,7 @@ export default function ProcessosPage() {
                 onClick={resetUploadSelection}
                 disabled={uploadingDocuments || uploadQueue.length === 0}
               >
-                Limpar selecao
+                Limpar seleção
               </Button>
             </div>
           </CardContent>

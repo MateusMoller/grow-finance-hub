@@ -13,7 +13,7 @@ if (
   import.meta.env.MODE !== "production"
 ) {
   console.warn(
-    "[supabase] VITE_SUPABASE_URL e/ou VITE_SUPABASE_PUBLISHABLE_KEY nao definidos no build. Aplicando fallback padrao.",
+    "[supabase] VITE_SUPABASE_URL e/ou VITE_SUPABASE_PUBLISHABLE_KEY não definidos no build. Aplicando fallback padrão.",
   );
 }
 

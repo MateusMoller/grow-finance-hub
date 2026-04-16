@@ -55,7 +55,7 @@ type Json = Database["public"]["Tables"]["form_submissions"]["Row"]["data"];
 type PortalTab = "requests" | "tasks" | "forms";
 type TaskStatus = "pending_client" | "in_analysis" | "completed" | "cancelled";
 type TaskType = "document" | "request_return" | "operational" | "deadline" | "other";
-type WaitingSide = "cliente" | "equipe" | "analise" | "concluido" | "cancelado";
+type WaitingSide = "cliente" | "equipe" | "análise" | "concluído" | "cancelado";
 
 type ProfileSummary = Pick<Database["public"]["Tables"]["profiles"]["Row"], "user_id" | "display_name">;
 type ClientSummary = Pick<ClientRow, "id" | "name" | "contact" | "email" | "portal_user_id">;
@@ -103,7 +103,7 @@ const statusConfig: Record<RequestStatus, { label: string; icon: typeof Clock; c
     className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   },
   completed: {
-    label: "Concluida",
+    label: "Concluída",
     icon: CheckCircle2,
     className: "bg-primary/10 text-primary",
   },
@@ -123,12 +123,12 @@ const waitingConfig: Record<WaitingSide, { label: string; className: string }> =
     label: "Aguardando equipe",
     className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   },
-  analise: {
-    label: "Em analise",
+  análise: {
+    label: "Em análise",
     className: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
   },
-  concluido: {
-    label: "Concluido",
+  concluído: {
+    label: "Concluído",
     className: "bg-primary/10 text-primary",
   },
   cancelado: {
@@ -139,14 +139,14 @@ const waitingConfig: Record<WaitingSide, { label: string; className: string }> =
 
 const taskStatusConfig: Record<TaskStatus, { label: string; className: string }> = {
   pending_client: { label: "Aguardando cliente", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
-  in_analysis: { label: "Em analise", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
-  completed: { label: "Concluida", className: "bg-primary/10 text-primary" },
+  in_analysis: { label: "Em análise", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
+  completed: { label: "Concluída", className: "bg-primary/10 text-primary" },
   cancelled: { label: "Cancelada", className: "bg-destructive/10 text-destructive" },
 };
 
 const taskTypeLabel: Record<TaskType, string> = {
   document: "Documento",
-  request_return: "Retorno de solicitacao",
+  request_return: "Retorno de solicitação",
   operational: "Operacional",
   deadline: "Prazo",
   other: "Outro",
@@ -178,9 +178,9 @@ const createEmptyTaskDraft = (): TaskDraft => ({
 });
 
 const deriveWaitingSide = (status: RequestStatus, lastMessage: RequestMessageRow | null): WaitingSide => {
-  if (status === "completed") return "concluido";
+  if (status === "completed") return "concluído";
   if (status === "cancelled") return "cancelado";
-  if (status === "in_progress") return "analise";
+  if (status === "in_progress") return "análise";
   if (lastMessage?.is_from_team) return "cliente";
   return "equipe";
 };
@@ -270,7 +270,7 @@ export default function SolicitacoesPage() {
       .order("created_at", { ascending: false });
 
     if (requestError) {
-      toast.error("Erro ao carregar solicitacoes.");
+      toast.error("Erro ao carregar solicitações.");
       setLoadingRequests(false);
       return;
     }
@@ -408,7 +408,7 @@ export default function SolicitacoesPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast.error("Erro ao carregar formularios recebidos.");
+      toast.error("Erro ao carregar formulários recebidos.");
       setLoadingSubmissions(false);
       return;
     }
@@ -527,7 +527,7 @@ export default function SolicitacoesPage() {
   const requestStats = useMemo(() => {
     const awaitingClient = requests.filter((request) => request.waitingSide === "cliente").length;
     const awaitingTeam = requests.filter((request) => request.waitingSide === "equipe").length;
-    const inAnalysis = requests.filter((request) => request.waitingSide === "analise").length;
+    const inAnalysis = requests.filter((request) => request.waitingSide === "análise").length;
     const withDocuments = requests.filter((request) => request.documents.length > 0).length;
     return {
       total: requests.length,
@@ -573,7 +573,7 @@ export default function SolicitacoesPage() {
 
   const openTaskDialogForRequest = (request: EnrichedClientRequest) => {
     if (!request.client?.id) {
-      toast.error("Esta solicitacao nao possui cliente vinculado para criar pendencia.");
+      toast.error("Esta solicitação não possui cliente vinculado para criar pendencia.");
       return;
     }
 
@@ -639,7 +639,7 @@ export default function SolicitacoesPage() {
     setChangingTaskId(null);
 
     if (error) {
-      toast.error("Nao foi possivel atualizar o status da pendencia.");
+      toast.error("Não foi possível atualizar o status da pendencia.");
       return;
     }
 
@@ -674,7 +674,7 @@ export default function SolicitacoesPage() {
     setUpdatingRequestStatus(false);
 
     if (error) {
-      toast.error("Erro ao atualizar status da solicitacao.");
+      toast.error("Erro ao atualizar status da solicitação.");
       return;
     }
 
@@ -685,7 +685,7 @@ export default function SolicitacoesPage() {
           : request
       )
     );
-    toast.success("Status da solicitacao atualizado.");
+    toast.success("Status da solicitação atualizado.");
   };
 
   const handleDownloadDocument = async (document: DocumentSummary) => {
@@ -693,7 +693,7 @@ export default function SolicitacoesPage() {
       .from("client-documents")
       .createSignedUrl(document.file_path, 120);
     if (error || !data?.signedUrl) {
-      toast.error("Nao foi possivel gerar o link de download.");
+      toast.error("Não foi possível gerar o link de download.");
       return;
     }
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
@@ -712,7 +712,7 @@ export default function SolicitacoesPage() {
     setUpdatingDocumentId(null);
 
     if (error) {
-      toast.error("Nao foi possivel atualizar o processamento do documento.");
+      toast.error("Não foi possível atualizar o processamento do documento.");
       return;
     }
 
@@ -726,7 +726,7 @@ export default function SolicitacoesPage() {
         ),
       }))
     );
-    toast.success(processed ? "Documento marcado como processado." : "Documento voltou para nao processado.");
+    toast.success(processed ? "Documento marcado como processado." : "Documento voltou para não processado.");
   };
 
   const handleSubmissionStatusChange = async (submissionId: string, status: string) => {
@@ -792,7 +792,7 @@ export default function SolicitacoesPage() {
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
           <TabsList className="flex flex-wrap h-auto">
-            <TabsTrigger value="requests">Solicitacoes e chat</TabsTrigger>
+            <TabsTrigger value="requests">Solicitações e chat</TabsTrigger>
             <TabsTrigger value="tasks">Pendencias do portal</TabsTrigger>
             <TabsTrigger value="forms">Formularios recebidos</TabsTrigger>
           </TabsList>
@@ -803,7 +803,7 @@ export default function SolicitacoesPage() {
                 { label: "Total", value: requestStats.total, icon: MessageSquare },
                 { label: "Aguardando cliente", value: requestStats.awaitingClient, icon: Clock, color: "text-amber-600" },
                 { label: "Aguardando equipe", value: requestStats.awaitingTeam, icon: Headset, color: "text-blue-600" },
-                { label: "Em analise", value: requestStats.inAnalysis, icon: AlertCircle, color: "text-violet-600" },
+                { label: "Em análise", value: requestStats.inAnalysis, icon: AlertCircle, color: "text-violet-600" },
                 { label: "Com anexos", value: requestStats.withDocuments, icon: FolderOpen, color: "text-primary" },
               ].map((item, index) => (
                 <motion.div
@@ -842,7 +842,7 @@ export default function SolicitacoesPage() {
                     <SelectItem value="all">Todos os status</SelectItem>
                     <SelectItem value="pending">Pendentes</SelectItem>
                     <SelectItem value="in_progress">Em andamento</SelectItem>
-                    <SelectItem value="completed">Concluidas</SelectItem>
+                    <SelectItem value="completed">Concluídas</SelectItem>
                     <SelectItem value="cancelled">Canceladas</SelectItem>
                   </SelectContent>
                 </Select>
@@ -857,7 +857,7 @@ export default function SolicitacoesPage() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <MessageSquare className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="font-medium">Nenhuma solicitacao encontrada.</p>
+                  <p className="font-medium">Nenhuma solicitação encontrada.</p>
                 </CardContent>
               </Card>
             ) : (
@@ -927,8 +927,8 @@ export default function SolicitacoesPage() {
               {[
                 { label: "Pendencias totais", value: taskStats.total, icon: MessageSquare },
                 { label: "Aguardando cliente", value: taskStats.pendingClient, icon: Clock, color: "text-amber-600" },
-                { label: "Em analise", value: taskStats.inAnalysis, icon: AlertCircle, color: "text-blue-600" },
-                { label: "Concluidas", value: taskStats.completed, icon: ShieldCheck, color: "text-primary" },
+                { label: "Em análise", value: taskStats.inAnalysis, icon: AlertCircle, color: "text-blue-600" },
+                { label: "Concluídas", value: taskStats.completed, icon: ShieldCheck, color: "text-primary" },
               ].map((item) => (
                 <Card key={item.label}>
                   <CardContent className="p-4">
@@ -949,7 +949,7 @@ export default function SolicitacoesPage() {
                     <Search className="h-4 w-4 text-muted-foreground" />
                     <input
                       className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                      placeholder="Buscar pendencia por cliente, titulo ou solicitacao..."
+                      placeholder="Buscar pendencia por cliente, titulo ou solicitação..."
                       value={taskSearch}
                       onChange={(event) => setTaskSearch(event.target.value)}
                     />
@@ -1018,7 +1018,7 @@ export default function SolicitacoesPage() {
                         <div className="min-w-0">
                           <p className="font-medium">{task.title}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {task.client?.name || "Cliente nao encontrado"} • {taskTypeLabel[(task.type as TaskType) || "other"]}
+                            {task.client?.name || "Cliente não encontrado"} • {taskTypeLabel[(task.type as TaskType) || "other"]}
                           </p>
                         </div>
                         <Badge variant="outline" className={`border-0 ${taskStatusConfig[(task.status as TaskStatus) || "pending_client"]?.className || ""}`}>
@@ -1099,7 +1099,7 @@ export default function SolicitacoesPage() {
               {[
                 { label: "Total recebido", value: submissionStats.total, icon: FileText },
                 { label: "Pendentes", value: submissionStats.pending, icon: Clock, color: "text-amber-600" },
-                { label: "Em revisao", value: submissionStats.inReview, icon: AlertCircle, color: "text-blue-600" },
+                { label: "Em revisão", value: submissionStats.inReview, icon: AlertCircle, color: "text-blue-600" },
                 { label: "Concluidos", value: submissionStats.completed, icon: CheckCircle2, color: "text-primary" },
               ].map((item) => (
                 <Card key={item.label}>
@@ -1120,7 +1120,7 @@ export default function SolicitacoesPage() {
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <input
                     className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                    placeholder="Buscar por formulario, cliente ou solicitacao..."
+                    placeholder="Buscar por formulario, cliente ou solicitação..."
                     value={submissionSearch}
                     onChange={(event) => setSubmissionSearch(event.target.value)}
                   />
@@ -1132,8 +1132,8 @@ export default function SolicitacoesPage() {
                   <SelectContent>
                     <SelectItem value="all">Todos os status</SelectItem>
                     <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="in_review">Em revisao</SelectItem>
-                    <SelectItem value="completed">Concluido</SelectItem>
+                    <SelectItem value="in_review">Em revisão</SelectItem>
+                    <SelectItem value="completed">Concluído</SelectItem>
                   </SelectContent>
                 </Select>
               </CardContent>
@@ -1159,7 +1159,7 @@ export default function SolicitacoesPage() {
                         <div>
                           <p className="font-medium">{submission.template_title}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {submission.client?.name || "Cliente nao vinculado"} •{" "}
+                            {submission.client?.name || "Cliente não vinculado"} •{" "}
                             {submission.submitted_by_name || "Sem nome informado"}
                           </p>
                         </div>
@@ -1257,15 +1257,15 @@ export default function SolicitacoesPage() {
                       <CardContent className="space-y-2 text-sm">
                         <p>
                           <span className="text-muted-foreground">Empresa:</span>{" "}
-                          {selectedRequest.client?.name || "Nao vinculada"}
+                          {selectedRequest.client?.name || "Não vinculada"}
                         </p>
                         <p>
                           <span className="text-muted-foreground">Contato:</span>{" "}
-                          {selectedRequest.client?.contact || selectedRequest.profileName || "Nao informado"}
+                          {selectedRequest.client?.contact || selectedRequest.profileName || "Não informado"}
                         </p>
                         <p>
                           <span className="text-muted-foreground">Email:</span>{" "}
-                          {selectedRequest.client?.email?.toLowerCase() || "Nao informado"}
+                          {selectedRequest.client?.email?.toLowerCase() || "Não informado"}
                         </p>
                         <p>
                           <span className="text-muted-foreground">Categoria:</span> {selectedRequest.category}
@@ -1286,16 +1286,16 @@ export default function SolicitacoesPage() {
                         <SelectContent>
                           <SelectItem value="pending">Pendente</SelectItem>
                           <SelectItem value="in_progress">Em andamento</SelectItem>
-                          <SelectItem value="completed">Concluida</SelectItem>
+                          <SelectItem value="completed">Concluída</SelectItem>
                           <SelectItem value="cancelled">Cancelada</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-1">
-                      <h4 className="text-sm font-medium">Descricao</h4>
+                      <h4 className="text-sm font-medium">Descrição</h4>
                       <p className="text-sm text-muted-foreground">
-                        {selectedRequest.description || "Sem descricao informada."}
+                        {selectedRequest.description || "Sem descrição informada."}
                       </p>
                     </div>
 
@@ -1342,7 +1342,7 @@ export default function SolicitacoesPage() {
                     <div className="space-y-2">
                       <h4 className="text-sm font-medium">Documentos vinculados ({selectedRequest.documents.length})</h4>
                       {selectedRequest.documents.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Nenhum documento anexado nesta solicitacao.</p>
+                        <p className="text-sm text-muted-foreground">Nenhum documento anexado nesta solicitação.</p>
                       ) : (
                         <div className="space-y-2">
                           {selectedRequest.documents.map((document) => (
@@ -1437,7 +1437,7 @@ export default function SolicitacoesPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Solicitacao vinculada (opcional)</label>
+                  <label className="text-sm font-medium">Solicitação vinculada (opcional)</label>
                   <Select
                     value={taskDraft.requestId}
                     onValueChange={(value) => setTaskDraft((previous) => ({ ...previous, requestId: value }))}
@@ -1467,7 +1467,7 @@ export default function SolicitacoesPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Descricao</label>
+                <label className="text-sm font-medium">Descrição</label>
                 <Textarea
                   rows={4}
                   value={taskDraft.description}
@@ -1569,7 +1569,7 @@ export default function SolicitacoesPage() {
                     <CardContent className="p-4 space-y-2 text-sm">
                       <p>
                         <span className="text-muted-foreground">Cliente:</span>{" "}
-                        {selectedSubmission.client?.name || "Nao vinculado"}
+                        {selectedSubmission.client?.name || "Não vinculado"}
                       </p>
                       <p>
                         <span className="text-muted-foreground">Enviado por:</span>{" "}
@@ -1581,7 +1581,7 @@ export default function SolicitacoesPage() {
                       </p>
                       {selectedSubmission.request && (
                         <p>
-                          <span className="text-muted-foreground">Solicitacao:</span>{" "}
+                          <span className="text-muted-foreground">Solicitação:</span>{" "}
                           <button
                             type="button"
                             className="text-primary hover:underline"
@@ -1635,7 +1635,7 @@ export default function SolicitacoesPage() {
                       rows={4}
                       value={submissionNotes}
                       onChange={(event) => setSubmissionNotes(event.target.value)}
-                      placeholder="Registre aqui orientacoes internas ou proximos passos."
+                      placeholder="Registre aqui orientações internas ou próximos passos."
                     />
                     <div className="flex justify-end">
                       <Button type="button" onClick={() => void handleSaveSubmissionNotes()} disabled={savingSubmissionNotes}>

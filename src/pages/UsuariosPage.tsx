@@ -85,7 +85,7 @@ export default function UsuariosPage() {
     setLoadingUsers(false);
 
     if (error) {
-      toast.error(`Nao foi possivel carregar usuarios: ${error.message}`);
+      toast.error(`Não foi possível carregar usuários: ${error.message}`);
       return;
     }
 
@@ -107,7 +107,7 @@ export default function UsuariosPage() {
       .maybeSingle();
 
     if (clientError) {
-      toast.error("Nao foi possivel validar o usuario existente para promocao de perfil.");
+      toast.error("Não foi possível validar o usuário existente para promocao de perfil.");
       return false;
     }
 
@@ -123,7 +123,7 @@ export default function UsuariosPage() {
     );
 
     if (upsertRoleError) {
-      toast.error("Nao foi possivel aplicar o novo perfil no usuario existente.");
+      toast.error("Não foi possível aplicar o novo perfil no usuário existente.");
       return false;
     }
 
@@ -134,7 +134,7 @@ export default function UsuariosPage() {
       .eq("role", "client");
 
     if (removeClientRoleError) {
-      toast.error("Nao foi possivel remover o perfil de cliente do usuario promovido.");
+      toast.error("Não foi possível remover o perfil de cliente do usuário promovido.");
       return false;
     }
 
@@ -144,7 +144,7 @@ export default function UsuariosPage() {
       .eq("portal_user_id", portalUserId);
 
     if (removeClientRecordError) {
-      toast.error("Nao foi possivel remover o vinculo de cliente do usuario promovido.");
+      toast.error("Não foi possível remover o vinculo de cliente do usuário promovido.");
       return false;
     }
 
@@ -169,24 +169,24 @@ export default function UsuariosPage() {
 
   const handleCreateUser = async () => {
     if (!isAdmin) {
-      toast.error("Apenas admin pode cadastrar usuarios.");
+      toast.error("Apenas admin pode cadastrar usuários.");
       return;
     }
 
     if (!form.displayName.trim()) {
-      toast.error("Informe o nome do usuario.");
+      toast.error("Informe o nome do usuário.");
       return;
     }
 
     if (!form.email.trim()) {
-      toast.error("Informe o e-mail do usuario.");
+      toast.error("Informe o e-mail do usuário.");
       return;
     }
 
     const password = form.password.trim();
     const isValidPassword = password.length >= 6;
     if (!isValidPassword) {
-      toast.error("A senha precisa ter no minimo 6 caracteres.");
+      toast.error("A senha precisa ter no mínimo 6 caracteres.");
       return;
     }
 
@@ -226,7 +226,7 @@ export default function UsuariosPage() {
         setCreating(false);
 
         if (promoted) {
-          toast.success("Usuario existente encontrado. Perfil interno aplicado com sucesso.");
+          toast.success("Usuário existente encontrado. Perfil interno aplicado com sucesso.");
           setCreateOpen(false);
           resetCreateForm();
           void loadUsers();
@@ -239,11 +239,11 @@ export default function UsuariosPage() {
         return;
       }
 
-      toast.error(error.message || "Nao foi possivel cadastrar usuario.");
+      toast.error(error.message || "Não foi possível cadastrar usuário.");
       return;
     }
 
-    toast.success("Usuario cadastrado com sucesso.");
+    toast.success("Usuário cadastrado com sucesso.");
     setCreateOpen(false);
     resetCreateForm();
     void loadUsers();
@@ -253,14 +253,14 @@ export default function UsuariosPage() {
     return (
       <AppLayout>
         <div className="max-w-4xl space-y-4">
-          <h1 className="font-heading text-2xl font-bold">Controle de Usuarios</h1>
+          <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
           <div className="rounded-xl border bg-card p-6">
             <div className="flex items-center gap-2 text-destructive mb-2">
               <ShieldAlert className="h-4 w-4" />
               <p className="text-sm font-semibold">Acesso restrito</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Apenas administradores podem acessar o controle de usuarios.
+              Apenas administradores podem acessar o controle de usuários.
             </p>
           </div>
         </div>
@@ -273,19 +273,19 @@ export default function UsuariosPage() {
       <div className="space-y-5 max-w-7xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Controle de Usuarios</h1>
+            <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
             <p className="text-sm text-muted-foreground">
-              Cadastre novos usuarios internos e gerencie permissoes da equipe.
+              Cadastre novos usuários internos e gerencie permissoes da equipe.
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar Usuario
+            <Plus className="h-4 w-4 mr-1" /> Adicionar Usuário
           </Button>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground mb-1">Usuarios internos</p>
+            <p className="text-xs text-muted-foreground mb-1">Usuários internos</p>
             <p className="font-heading text-2xl font-bold">{users.length}</p>
           </div>
           <div className="rounded-xl border bg-card p-4">
@@ -324,7 +324,7 @@ export default function UsuariosPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/30">
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Usuario</th>
+                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Usuário</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden md:table-cell">E-mail</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Perfil</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden lg:table-cell">Criado em</th>
@@ -375,7 +375,7 @@ export default function UsuariosPage() {
                       <td colSpan={4} className="py-14 text-center text-sm text-muted-foreground">
                         <div className="inline-flex flex-col items-center gap-2">
                           <Users className="h-6 w-6" />
-                          Nenhum usuario encontrado para esse filtro.
+                          Nenhum usuário encontrado para esse filtro.
                         </div>
                       </td>
                     </tr>
@@ -390,7 +390,7 @@ export default function UsuariosPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Adicionar usuario</DialogTitle>
+            <DialogTitle>Adicionar usuário</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -405,7 +405,7 @@ export default function UsuariosPage() {
               <Label>E-mail *</Label>
               <Input
                 type="email"
-                placeholder="usuario@empresa.com"
+                placeholder="usuário@empresa.com"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
               />
@@ -414,13 +414,13 @@ export default function UsuariosPage() {
               <Label>Senha temporaria *</Label>
               <Input
                 type="password"
-                placeholder="Minimo 6 caracteres"
+                placeholder="Mínimo 6 caracteres"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
               />
             </div>
             <div className="space-y-2">
-              <Label>Permissao *</Label>
+              <Label>Permissão *</Label>
               <select
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
                 value={form.role}
@@ -440,7 +440,7 @@ export default function UsuariosPage() {
             </Button>
             <Button onClick={handleCreateUser} disabled={creating}>
               {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {creating ? "Cadastrando..." : "Cadastrar usuario"}
+              {creating ? "Cadastrando..." : "Cadastrar usuário"}
             </Button>
           </DialogFooter>
         </DialogContent>

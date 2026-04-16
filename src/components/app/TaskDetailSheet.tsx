@@ -61,9 +61,9 @@ const priorityConfig: Record<string, { color: string; bg: string }> = {
 const statusConfig: Record<string, { color: string; bg: string }> = {
   Pendente: { color: "text-muted-foreground", bg: "bg-muted" },
   "Em andamento": { color: "text-primary", bg: "bg-primary/10" },
-  "Em revisao": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
   "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  Concluido: { color: "text-primary", bg: "bg-primary/10" },
+  "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
+  Concluído: { color: "text-primary", bg: "bg-primary/10" },
   "Concluído": { color: "text-primary", bg: "bg-primary/10" },
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10" },
 };
@@ -292,7 +292,7 @@ export function TaskDetailSheet({
           <div>
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold">Subtarefas</span>
-              <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} concluidas</span>
+              <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} concluídas</span>
             </div>
             <Progress value={subtaskPct} className="h-2 mb-3" />
             <div className="space-y-2">
@@ -331,7 +331,7 @@ export function TaskDetailSheet({
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium truncate">{attachment.fileName}</div>
                       <div className="text-xs text-muted-foreground">
-                        {attachment.size > 0 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : "Tamanho nao informado"}
+                        {attachment.size > 0 ? `${Math.max(1, Math.round(attachment.size / 1024))} KB` : "Tamanho não informado"}
                       </div>
                     </div>
                   </div>
@@ -407,7 +407,7 @@ export function TaskDetailSheet({
           <Separator />
 
           <div>
-            <h3 className="text-sm font-semibold mb-3">Historico de alteracoes</h3>
+            <h3 className="text-sm font-semibold mb-3">Histórico de alteracoes</h3>
             {historyEntries.length === 0 ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
                 Nenhuma alteracao registrada.
@@ -439,7 +439,7 @@ export function TaskDetailSheet({
                   onEditTask(task.id);
                   return;
                 }
-                toast.info("Edicao direta desta tela ainda nao esta disponivel.");
+                toast.info("Edicao direta desta tela ainda não esta disponível.");
               }}
             >
               <Edit className="h-3.5 w-3.5" /> Editar

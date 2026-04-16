@@ -61,7 +61,7 @@ export default function NotificacoesPage() {
         try {
           await syncPushSubscriptionOnServer(user.id);
         } catch {
-          // Nao derruba o status local do push se a sincronizacao remota falhar.
+          // Nao derruba o status local do push se a sincronização remota falhar.
         }
       }
     } catch {
@@ -80,24 +80,24 @@ export default function NotificacoesPage() {
   }, [filter, notifications]);
 
   const pushStatusLabel = useMemo(() => {
-    if (!pushStatus.supported) return "Push nao suportado neste navegador.";
-    if (!pushStatus.hasPublicKey) return "Chave publica VAPID nao configurada no app.";
-    if (pushStatus.permission === "denied") return "Permissao bloqueada no navegador.";
-    if (pushStatus.permission !== "granted") return "Permissao ainda nao concedida.";
+    if (!pushStatus.supported) return "Push não suportado neste navegador.";
+    if (!pushStatus.hasPublicKey) return "Chave publica VAPID não configurada no app.";
+    if (pushStatus.permission === "denied") return "Permissão bloqueada no navegador.";
+    if (pushStatus.permission !== "granted") return "Permissão ainda não concedida.";
     if (!pushStatus.subscribed) return "Push habilitado no navegador, mas sem inscricao ativa.";
     return "Push ativo neste dispositivo.";
   }, [pushStatus]);
 
   const handleEnablePush = async () => {
     if (!user?.id) {
-      toast.error("Usuario nao autenticado.");
+      toast.error("Usuário não autenticado.");
       return;
     }
 
     setPushActionLoading("enable");
     try {
       await subscribePushOnCurrentDevice(user.id);
-      toast.success("Notificacoes push ativadas neste dispositivo.");
+      toast.success("Notificações push ativadas neste dispositivo.");
       await loadPushStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao ativar push.";
@@ -109,14 +109,14 @@ export default function NotificacoesPage() {
 
   const handleDisablePush = async () => {
     if (!user?.id) {
-      toast.error("Usuario nao autenticado.");
+      toast.error("Usuário não autenticado.");
       return;
     }
 
     setPushActionLoading("disable");
     try {
       await disablePushOnCurrentDevice(user.id);
-      toast.success("Notificacoes push desativadas neste dispositivo.");
+      toast.success("Notificações push desativadas neste dispositivo.");
       await loadPushStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao desativar push.";
@@ -128,7 +128,7 @@ export default function NotificacoesPage() {
 
   const handleSendPushTest = async () => {
     if (!user?.id) {
-      toast.error("Usuario nao autenticado.");
+      toast.error("Usuário não autenticado.");
       return;
     }
 
@@ -180,7 +180,7 @@ export default function NotificacoesPage() {
             size="sm"
             onClick={() => setFilter("unread")}
           >
-            Nao lidas ({unreadCount})
+            Não lidas ({unreadCount})
           </Button>
           <Button variant={filter === "alta" ? "default" : "outline"} size="sm" onClick={() => setFilter("alta")}>
             Prioridade alta

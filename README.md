@@ -1,6 +1,6 @@
 # Grow Finance Hub (Web)
 
-Aplicacao web principal do Grow Finance.
+Aplicação web principal do Grow Finance.
 
 ## Requisitos
 
@@ -31,7 +31,7 @@ Para o push funcionar em dispositivos instalados, configure tambem estes secrets
 
 A function responsável pelo envio é `send-push-notification`.
 
-Geracao rapida das chaves VAPID:
+Geração rápida das chaves VAPID:
 
 ```bash
 npx web-push generate-vapid-keys
@@ -46,7 +46,7 @@ npm run test
 npm run build
 ```
 
-## Validacao para deploy
+## Validação para deploy
 
 Comando unico para validar ambiente + lint + build:
 
@@ -60,9 +60,9 @@ A aba `Processos` usa a Edge Function `process-repository` para gravar arquivos 
 
 Defina estes secrets no Supabase antes de publicar a function:
 
-- `GITHUB_PROCESS_REPO_TOKEN` (PAT com permissao de `contents:write` no repo)
-- `GITHUB_PROCESS_REPO` (opcional, padrao: `MateusMoller/processos-contabeis`)
-- `GITHUB_PROCESS_REPO_BRANCH` (opcional, padrao: `main`)
+- `GITHUB_PROCESS_REPO_TOKEN` (PAT com permissão de `contents:write` no repo)
+- `GITHUB_PROCESS_REPO` (opcional, padrão: `MateusMoller/processos-contabeis`)
+- `GITHUB_PROCESS_REPO_BRANCH` (opcional, padrão: `main`)
 - `GITHUB_PROCESS_REPO_BASE_PATH` (opcional, vazio = raiz do repo)
 
 ## Deploy no GitHub Pages
@@ -75,12 +75,12 @@ npm run deploy:pages
 
 O script faz automaticamente:
 
-- Validacao de `.env`
+- Validação de `.env`
 - Build com `base` correto para GitHub Pages
 - Copia de `index.html` para `404.html` (SPA fallback)
-- Publicacao forcada em `gh-pages`
+- Publicação forçada em `gh-pages`
 
-### Opcoes de deploy (GitHub Pages)
+### Opções de deploy (GitHub Pages)
 
 - `PAGES_BASE_PATH`: sobrescreve o base path (ex: `/meu-site/` ou `/`)
 - `PAGES_CNAME`: gera arquivo `CNAME` (dominio customizado)

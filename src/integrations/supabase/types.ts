@@ -138,7 +138,7 @@ export type Database = {
           category?: string
           created_at?: string
           file_name?: string
-          file_path?: string
+          file_pathá: string
           file_size?: number | null
           id?: string
           processed_at?: string | null
@@ -189,7 +189,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           file_name?: string
-          file_path?: string
+          file_pathá: string
           file_size?: number | null
           id?: string
           uploaded_by?: string | null
@@ -238,7 +238,7 @@ export type Database = {
           created_by?: string | null
           department?: string
           file_name?: string
-          file_path?: string
+          file_pathá: string
           file_size?: number | null
           id?: string
           process_description?: string | null
@@ -287,7 +287,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          auth?: string
+          authá: string
           created_at?: string
           device_label?: string | null
           endpoint?: string
@@ -295,7 +295,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_seen_at?: string
-          p256dh?: string
+          p256dhá: string
           updated_at?: string
           user_agent?: string | null
           user_id?: string

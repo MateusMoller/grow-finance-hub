@@ -36,11 +36,11 @@ export const isPushSupported = () =>
 
 const ensureServiceWorkerRegistration = async () => {
   if (!isPushSupported()) {
-    throw new Error("Push notifications nao sao suportadas neste navegador.");
+    throw new Error("Push notifications não sao suportadas neste navegador.");
   }
 
   if (!isFunctionalPwaRoute(window.location.pathname)) {
-    throw new Error("Notificacoes push so podem ser ativadas no login, portal e area interna.");
+    throw new Error("Notificações push so podem ser ativadas no login, portal e area interna.");
   }
 
   await syncPwaModeForPath(window.location.pathname);
@@ -76,7 +76,7 @@ const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubs
   const auth = payload.keys?.auth;
 
   if (!endpoint || !p256dh || !auth) {
-    throw new Error("Nao foi possivel ler as chaves da inscricao push.");
+    throw new Error("Não foi possível ler as chaves da inscricao push.");
   }
 
   const expiration =
@@ -102,7 +102,7 @@ const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubs
   );
 
   if (error) {
-    throw new Error(error.message || "Falha ao registrar dispositivo para notificacoes push.");
+    throw new Error(error.message || "Falha ao registrar dispositivo para notificações push.");
   }
 };
 
@@ -132,12 +132,12 @@ export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatu
 
 export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?: string | null) => {
   if (!WEB_PUSH_PUBLIC_KEY) {
-    throw new Error("VITE_WEB_PUSH_PUBLIC_KEY nao configurada no frontend.");
+    throw new Error("VITE_WEB_PUSH_PUBLIC_KEY não configurada no frontend.");
   }
 
   const permission = await ensurePermission();
   if (permission !== "granted") {
-    throw new Error("Permissao de notificacao nao concedida.");
+    throw new Error("Permissão de notificação não concedida.");
   }
 
   const registration = await ensureServiceWorkerRegistration();
@@ -186,7 +186,7 @@ export const sendPushTestToCurrentUser = async (userId: string) => {
     body: {
       target_user_id: userId,
       title: "Push de teste",
-      body: "As notificacoes push do Grow Finance Hub estao ativas neste dispositivo.",
+      body: "As notificações push do Grow Finance Hub estão ativas neste dispositivo.",
       url: "/app/notificacoes",
       tag: `grow-push-test-${Date.now()}`,
     },
