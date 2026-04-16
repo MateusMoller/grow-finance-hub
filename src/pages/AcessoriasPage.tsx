@@ -380,6 +380,16 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     return map;
   }, [clients]);
 
+  const acessoriasCompanyIdByClientId = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const companyId = String(client.link?.acessorias_company_id || "").trim();
+      if (!companyId) return;
+      map.set(client.id, companyId);
+    });
+    return map;
+  }, [clients]);
+
   useEffect(() => {
     setPreflightRows((current) =>
       current.map((row) => {
@@ -1002,6 +1012,10 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                 file_name: row.fileName,
                 content_type: row.file.type || "application/octet-stream",
                 file_content_base64: base64,
+                client_id: row.clientId || undefined,
+                acessorias_company_id: row.clientId
+                  ? acessoriasCompanyIdByClientId.get(row.clientId) || undefined
+                  : undefined,
               });
               return {
                 rowId: row.id,

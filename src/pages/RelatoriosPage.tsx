@@ -372,7 +372,6 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
   ],
   cadastro_departamento_pessoal: [
-    { name: "convencao_coletiva", label: "Convencao Coletiva" },
     { name: "possui_pro_labore", label: "Possui Pro-labore" },
     { name: "possui_funcionarios", label: "Possui Funcionários" },
     { name: "possui_variaveis", label: "Possui Variaveis" },
@@ -385,6 +384,12 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "envia_relatorio_ferias", label: "Envia relatório de férias?" },
     { name: "clinica_parceira", label: "Clinica parceira" },
     { name: "possui_decimo_terceiro", label: "Possui 13o?" },
+    { name: "sindicato_nome", label: "Nome do Sindicato" },
+    { name: "sindicato_cnpj", label: "CNPJ do Sindicato" },
+    { name: "sindicato_codigo_registro", label: "Codigo/Registro do Sindicato" },
+    { name: "sindicato_contato", label: "Contato do Sindicato" },
+    { name: "sindicato_telefone_whatsapp", label: "Telefone/WhatsApp do Sindicato" },
+    { name: "sindicato_observacoes", label: "Observacoes do Sindicato" },
   ],
   cadastro_contabil: [
     { name: "obrigacao_contabil", label: "Obrigação Contábil" },

@@ -3144,9 +3144,11 @@ async function handleListUploads(
 }
 
 async function handlePreflightEcontinuo(
+  supabaseAdmin: ReturnType<typeof createClient>,
   body: JsonRecord,
   acessoriasApiBaseUrl: string,
   acessoriasApiToken: string,
+  callerUserId: string,
 ) {
   const fileName = asTrimmedString(body.file_name);
   const contentType = asTrimmedString(body.content_type) || "application/octet-stream";
@@ -3186,6 +3188,33 @@ async function handlePreflightEcontinuo(
   formData.append("simulacao", "1");
   formData.append("simulate", "1");
   formData.append("dry_run", "1");
+
+  let resolvedCompanyId =
+    asTrimmedString(body.acessorias_company_id) ||
+    asTrimmedString(body.company_id) ||
+    asTrimmedString(body.empresa_id);
+  const clientId = asTrimmedString(body.client_id);
+  if (!resolvedCompanyId && clientId) {
+    const { data: existingLink, error: existingLinkError } = await supabaseAdmin
+      .from("client_acessorias_links")
+      .select("acessorias_company_id")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (existingLinkError) throw existingLinkError;
+
+    resolvedCompanyId = asTrimmedString(existingLink?.acessorias_company_id);
+
+    if (!resolvedCompanyId) {
+      const ensuredLink = await ensureLinkForClientByCnpj(supabaseAdmin, clientId, callerUserId);
+      resolvedCompanyId = asTrimmedString(ensuredLink?.acessorias_company_id);
+    }
+  }
+
+  if (resolvedCompanyId) {
+    formData.append("company_id", resolvedCompanyId);
+    formData.append("empresa_id", resolvedCompanyId);
+  }
+
   if (referenceModelId) {
     formData.append("reference_model_id", referenceModelId);
     formData.append("modelo_id", referenceModelId);
@@ -3204,15 +3233,37 @@ async function handlePreflightEcontinuo(
     : pathCandidates;
   const uniqueCandidates = Array.from(new Set(requestedCandidates));
 
-  const response = await requestFirstSuccessful(
-    acessoriasApiBaseUrl,
-    acessoriasApiToken,
-    uniqueCandidates,
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
+  let response: AcessoriasRequestResult;
+  try {
+    response = await requestFirstSuccessful(
+      acessoriasApiBaseUrl,
+      acessoriasApiToken,
+      uniqueCandidates,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Falha desconhecida ao consultar o Acessorias.";
+    const compactMessage = message.length > 220 ? `${message.slice(0, 220)}...` : message;
+    return jsonResponse({
+      ok: true,
+      preflight: {
+        endpoint_used: null,
+        message: null,
+        client_cnpj: null,
+        competence: null,
+        obligation_name: null,
+        path_folder: null,
+        confidence: 0,
+        warnings: [
+          "Leitura remota do Acessorias indisponivel para este arquivo.",
+          compactMessage,
+        ],
+      },
+    });
+  }
 
   const payloadRecord = asRecord(response.payload);
   const message = extractApiMessage(response.payload);
@@ -3675,9 +3726,11 @@ Deno.serve(async (req) => {
 
     if (actionKey === "preflight_econtinuo") {
       return await handlePreflightEcontinuo(
+        supabaseAdmin,
         body,
         acessoriasApiBaseUrl,
         acessoriasApiToken as string,
+        callerUser.id,
       );
     }
 

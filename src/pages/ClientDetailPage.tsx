@@ -174,7 +174,6 @@ const cadastroFiscalFields = [
   { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
 ];
 const cadastroDpFields = [
-  { name: "convencao_coletiva", label: "Convencao Coletiva" },
   { name: "possui_pro_labore", label: "Possui Pro-labore" },
   { name: "possui_funcionarios", label: "Possui Funcionários" },
   { name: "possui_variaveis", label: "Possui Variaveis" },
@@ -188,6 +187,15 @@ const cadastroDpFields = [
   { name: "clinica_parceira", label: "Clinica parceira" },
   { name: "possui_decimo_terceiro", label: "Possui 13o?" },
 ];
+const cadastroDpSindicatoFields = [
+  { name: "sindicato_nome", label: "Nome do Sindicato" },
+  { name: "sindicato_cnpj", label: "CNPJ do Sindicato" },
+  { name: "sindicato_codigo_registro", label: "Codigo/Registro do Sindicato" },
+  { name: "sindicato_contato", label: "Contato do Sindicato" },
+  { name: "sindicato_telefone_whatsapp", label: "Telefone/WhatsApp do Sindicato" },
+  { name: "sindicato_observacoes", label: "Observacoes do Sindicato" },
+];
+const cadastroDpSindicatoFieldNames = new Set(cadastroDpSindicatoFields.map((field) => field.name));
 const cadastroContabilFields = [
   { name: "obrigacao_contabil", label: "Obrigação Contábil" },
   { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
@@ -270,7 +278,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     description: "Informações cadastrais do setor Fiscal conforme planilha.",
   },
   cadastro_departamento_pessoal: {
-    fields: cadastroDpFields,
+    fields: [...cadastroDpFields, ...cadastroDpSindicatoFields],
     icon: Users,
     label: "Setor DP",
     color: "text-emerald-600",
@@ -389,6 +397,7 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
     hora_extra_banco_horas: yesNoRule,
     envia_relatorio_ferias: yesNoRule,
     possui_decimo_terceiro: yesNoRule,
+    sindicato_telefone_whatsapp: { type: "phone" },
   },
   cadastro_contabil: {
     envia_extratos_bancarios: yesNoRule,
@@ -1722,6 +1731,54 @@ export default function ClientDetailPage() {
     const config = categoryConfig[category];
     const categoryFiles = files.filter((file) => file.category === category);
     const isCadastroClientes = category === "cadastro_clientes";
+    const isCadastroDp = category === "cadastro_departamento_pessoal";
+    const primaryFields = isCadastroDp
+      ? config.fields.filter((field) => !cadastroDpSindicatoFieldNames.has(field.name))
+      : config.fields;
+
+    const renderField = (field: ClientDataField) => {
+      const key = `${category}__${field.name}`;
+      const rule = getFieldRule(category, field.name);
+      const fieldError = dataFieldErrors[key];
+      const isYesNoField = rule?.type === "yesNo";
+      const inputMode = rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
+        ? "decimal"
+        : rule?.type === "cep"
+          ? "numeric"
+          : rule?.type === "phone"
+            ? "tel"
+            : "text";
+
+      return (
+        <div key={key} className="space-y-1.5">
+          <Label className="text-xs">{field.label}</Label>
+          {isYesNoField ? (
+            <select
+              className={`h-9 w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none ${fieldError ? "border-destructive" : ""}`}
+              value={normalizeYesNoValue(dataEntries[key] || "")}
+              onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
+            >
+              <option value="">-</option>
+              <option value="sim">Sim</option>
+              <option value="nao">Nao</option>
+            </select>
+          ) : (
+            <Input
+              value={dataEntries[key] || ""}
+              onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
+              inputMode={inputMode}
+              type={rule?.type === "date" ? "date" : "text"}
+              placeholder="-"
+              className={`h-9 ${fieldError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
+            />
+          )}
+          {fieldError && (
+            <p className="text-[11px] text-destructive">{fieldError}</p>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-6">
         <div className="space-y-2">
@@ -1732,49 +1789,21 @@ export default function ClientDetailPage() {
           <p className="text-xs text-muted-foreground">{config.description}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {config.fields.map((field) => {
-            const key = `${category}__${field.name}`;
-            const rule = getFieldRule(category, field.name);
-            const fieldError = dataFieldErrors[key];
-            const isYesNoField = rule?.type === "yesNo";
-            const inputMode = rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
-              ? "decimal"
-              : rule?.type === "cep"
-                ? "numeric"
-              : rule?.type === "phone"
-                ? "tel"
-                : "text";
-
-            return (
-              <div key={key} className="space-y-1.5">
-                <Label className="text-xs">{field.label}</Label>
-                {isYesNoField ? (
-                  <select
-                    className={`h-9 w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none ${fieldError ? "border-destructive" : ""}`}
-                    value={normalizeYesNoValue(dataEntries[key] || "")}
-                    onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
-                  >
-                    <option value="">-</option>
-                    <option value="sim">Sim</option>
-                    <option value="nao">Nao</option>
-                  </select>
-                ) : (
-                  <Input
-                    value={dataEntries[key] || ""}
-                    onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
-                    inputMode={inputMode}
-                    type={rule?.type === "date" ? "date" : "text"}
-                    placeholder="-"
-                    className={`h-9 ${fieldError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
-                  />
-                )}
-                {fieldError && (
-                  <p className="text-[11px] text-destructive">{fieldError}</p>
-                )}
-              </div>
-            );
-          })}
+          {primaryFields.map(renderField)}
         </div>
+        {isCadastroDp && (
+          <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium">Informacoes do Sindicato</h4>
+              <p className="text-xs text-muted-foreground">
+                Dados de contato e identificacao do sindicato relacionado ao cliente.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {cadastroDpSindicatoFields.map(renderField)}
+            </div>
+          </div>
+        )}
         {isCadastroClientes && (
           <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
