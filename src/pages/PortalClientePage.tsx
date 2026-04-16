@@ -113,6 +113,22 @@ const getMonthKey = (dateString: string) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
 
+const normalizeLooseToken = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const isEcontinuoDocument = (document: PortalClientDocument) => {
+  const categoryToken = normalizeLooseToken(document.category || "");
+  if (categoryToken.includes("e_continuo") || categoryToken.includes("econtinuo")) return true;
+
+  const pathToken = normalizeLooseToken(document.file_path || "");
+  return pathToken.includes("envios_econtinuo") || pathToken.includes("econtinuo");
+};
+
 const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
   id: task.id,
   title: task.title,
@@ -431,6 +447,11 @@ export default function PortalClientePage() {
     });
     return map;
   }, [documents]);
+
+  const econtinuoDocuments = useMemo(
+    () => documents.filter((document) => isEcontinuoDocument(document)),
+    [documents],
+  );
 
   const requestsAwaitingClient = useMemo(
     () =>
@@ -1234,6 +1255,65 @@ export default function PortalClientePage() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+          </TabsContent>
+          <TabsContent value="uploads" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Envios do e-continuo</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Historico automatico dos arquivos enviados pela equipe para este cliente.
+                </p>
+              </CardHeader>
+            </Card>
+
+            {loadingData ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : econtinuoDocuments.length === 0 ? (
+              <Card>
+                <CardContent className="p-10 text-center">
+                  <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                  <p className="font-medium">Nenhum envio do e-continuo encontrado.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Assim que houver envios, eles serao listados automaticamente aqui.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {econtinuoDocuments.map((document) => (
+                  <div
+                    key={document.id}
+                    className="rounded-xl border bg-card px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{document.file_name}</p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
+                        <span>Enviado em {new Date(document.created_at).toLocaleString("pt-BR")}</span>
+                        <span>•</span>
+                        <span>{document.category}</span>
+                        {document.file_size ? (
+                          <>
+                            <span>•</span>
+                            <span>{(document.file_size / 1024).toFixed(1)} KB</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 shrink-0"
+                      onClick={() => void handleDownloadDocument(document)}
+                    >
+                      <Download className="h-4 w-4" /> Baixar
+                    </Button>
+                  </div>
+                ))}
               </div>
             )}
           </TabsContent>

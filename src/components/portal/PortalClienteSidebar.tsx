@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Settings2,
+  Upload,
   Wallet,
 } from "lucide-react";
 import growIcon from "@/assets/grow-icon.png";
@@ -25,6 +26,7 @@ export type PortalTab =
   | "overview"
   | "pending"
   | "requests"
+  | "uploads"
   | "cashflow"
   | "forms"
   | "manual"
@@ -59,6 +61,7 @@ const menuSections: PortalMenuSection[] = [
     label: "Operação",
     items: [
       { key: "requests", title: "Solicitações", icon: ClipboardList },
+      { key: "uploads", title: "Envios", icon: Upload },
       { key: "forms", title: "Formulários", icon: FileText },
     ],
   },
@@ -122,4 +125,3 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
     </Sidebar>
   );
 }
-

@@ -49,6 +49,17 @@ const defaultEcontinuoPathCandidates = [
   "/econtinuo/send",
 ];
 
+const defaultEcontinuoPreflightPathCandidates = [
+  "/v1/econtinuo/preflight",
+  "/v1/econtinuo/preview",
+  "/v1/econtinuo/read",
+  "/v1/econtinuo/analyze",
+  "/econtinuo/preflight",
+  "/econtinuo/preview",
+  "/econtinuo/read",
+  "/econtinuo/analyze",
+];
+
 const defaultRequestsPathCandidates = [
   "/requests",
   "/requests/",
@@ -159,6 +170,30 @@ function normalizePhoneDigits(value: unknown): string | null {
     return `55${digits}`;
   }
   return digits;
+}
+
+function combineDddAndPhone(dddValue: unknown, phoneValue: unknown): string | null {
+  const dddDigits = String(dddValue || "").replace(/\D/g, "");
+  const phoneDigits = String(phoneValue || "").replace(/\D/g, "");
+  if (!phoneDigits) return null;
+  if (phoneDigits.length >= 10) return phoneDigits;
+  if (!dddDigits) return phoneDigits;
+  return `${dddDigits}${phoneDigits}`;
+}
+
+function sanitizeStorageFileName(value: string) {
+  const sanitized = value
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  return sanitized || "arquivo";
+}
+
+function buildStorageObjectPath(folderPath: string, fileName: string) {
+  const now = Date.now();
+  const safeFileName = sanitizeStorageFileName(fileName);
+  const randomSuffix = crypto.randomUUID().slice(0, 8);
+  return `${folderPath}/${now}_${randomSuffix}_${safeFileName}`;
 }
 
 type UploadHistoryItem = {
@@ -309,6 +344,60 @@ function normalizeDateTime(value: unknown): string | null {
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
+}
+
+function extractCnpjFromText(rawText: string): string | null {
+  const cnpjPattern = /\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;
+  const directMatch = rawText.match(cnpjPattern);
+  if (directMatch && directMatch.length > 0) {
+    const normalized = normalizeCnpj(directMatch[0]);
+    if (normalized) return normalized;
+  }
+
+  const digitsOnlyPattern = /(?:^|[^0-9])(\d{14})(?:[^0-9]|$)/;
+  const digitsMatch = rawText.match(digitsOnlyPattern);
+  if (digitsMatch?.[1]) {
+    return normalizeCnpj(digitsMatch[1]);
+  }
+
+  return null;
+}
+
+function extractCompetenceFromText(rawText: string): string | null {
+  const text = rawText.replace(/\s+/g, " ");
+  const yearMonthPattern = /(?:competencia|competência|periodo|período|ref(?:erencia|erência)?)?\s*[:\-]?\s*(20\d{2})[\/\-_.]?(0[1-9]|1[0-2])/i;
+  const monthYearPattern = /(?:competencia|competência|periodo|período|ref(?:erencia|erência)?)?\s*[:\-]?\s*(0[1-9]|1[0-2])[\/\-_.](20\d{2})/i;
+
+  const yearMonthMatch = text.match(yearMonthPattern);
+  if (yearMonthMatch) return `${yearMonthMatch[1]}-${yearMonthMatch[2]}`;
+
+  const monthYearMatch = text.match(monthYearPattern);
+  if (monthYearMatch) return `${monthYearMatch[2]}-${monthYearMatch[1]}`;
+
+  return null;
+}
+
+function extractObligationNameFromPath(pathFolder: string | null): string | null {
+  const value = asTrimmedString(pathFolder);
+  if (!value) return null;
+  const normalized = value.replace(/\\/g, "/");
+  const segments = normalized.split("/").map((part) => part.trim()).filter(Boolean);
+  if (segments.length === 0) return null;
+
+  const guiasIndex = segments.findIndex((segment) => normalizeToken(segment) === "guias");
+  if (guiasIndex >= 0 && segments[guiasIndex + 1]) {
+    return segments[guiasIndex + 1];
+  }
+
+  return segments[segments.length - 1] || null;
+}
+
+function extractBracketedObligation(message: string | null): string | null {
+  const value = asTrimmedString(message);
+  if (!value) return null;
+  const match = value.match(/\[([^\]]+)\]/);
+  if (!match?.[1]) return null;
+  return asTrimmedString(match[1]);
 }
 
 function parseBodyAsRecord(value: unknown): JsonRecord {
@@ -1515,7 +1604,6 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
       .from("client_data")
       .select("client_id, field_name, field_value")
       .eq("category", "cadastro_clientes")
-      .in("field_name", ["whatsapp", "telefone"])
       .is("period", null),
   ]);
 
@@ -1552,6 +1640,7 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
   const mappedUploads = mapUploadsForHistory(uploads, clientNameById, companyNameById);
   const whatsappByClient = new Map<string, string | null>();
   const telefoneByClient = new Map<string, string | null>();
+  const dddByClient = new Map<string, string | null>();
 
   for (const row of clientDataRows) {
     const clientId = asTrimmedString(row.client_id);
@@ -1564,6 +1653,10 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
     }
     if (fieldName === "telefone") {
       telefoneByClient.set(clientId, fieldValue);
+      continue;
+    }
+    if (fieldName === "ddd") {
+      dddByClient.set(clientId, fieldValue);
     }
   }
 
@@ -1612,14 +1705,20 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
       status: client.status,
       contact: client.contact,
       email: client.email,
-      phone: asTrimmedString(client.phone) || telefoneByClient.get(client.id) || null,
+      phone:
+        asTrimmedString(client.phone) ||
+        combineDddAndPhone(dddByClient.get(client.id), telefoneByClient.get(client.id)) ||
+        telefoneByClient.get(client.id) ||
+        null,
       whatsapp_phone:
         whatsappByClient.get(client.id) ||
-        asTrimmedString(client.phone) ||
+        combineDddAndPhone(dddByClient.get(client.id), telefoneByClient.get(client.id)) ||
         telefoneByClient.get(client.id) ||
+        asTrimmedString(client.phone) ||
         null,
       whatsapp_phone_digits:
         normalizePhoneDigits(whatsappByClient.get(client.id)) ||
+        normalizePhoneDigits(combineDddAndPhone(dddByClient.get(client.id), telefoneByClient.get(client.id))) ||
         normalizePhoneDigits(client.phone) ||
         normalizePhoneDigits(telefoneByClient.get(client.id)),
       linked: Boolean(link),
@@ -3044,6 +3143,117 @@ async function handleListUploads(
   return { uploads: mapUploadsForHistory(uploads, clientNameById, companyNameById) };
 }
 
+async function handlePreflightEcontinuo(
+  body: JsonRecord,
+  acessoriasApiBaseUrl: string,
+  acessoriasApiToken: string,
+) {
+  const fileName = asTrimmedString(body.file_name);
+  const contentType = asTrimmedString(body.content_type) || "application/octet-stream";
+  const base64Content = asTrimmedString(body.file_content_base64);
+  if (!fileName || !base64Content) {
+    return jsonResponse(
+      { error: "file_name e file_content_base64 sao obrigatorios" },
+      400,
+    );
+  }
+
+  const commaIndex = base64Content.indexOf(",");
+  const cleanBase64 = commaIndex >= 0 ? base64Content.slice(commaIndex + 1) : base64Content;
+
+  let fileBytes: Uint8Array;
+  try {
+    const decoded = atob(cleanBase64);
+    fileBytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index += 1) {
+      fileBytes[index] = decoded.charCodeAt(index);
+    }
+  } catch {
+    return jsonResponse({ error: "Conteudo do arquivo em Base64 invalido" }, 400);
+  }
+
+  const fileField =
+    asTrimmedString(body.file_field) ||
+    asTrimmedString(Deno.env.get("ACESSORIAS_ECONTINUO_PREFLIGHT_FILE_FIELD")) ||
+    "file";
+  const referenceModelId =
+    asTrimmedString(body.reference_model_id) ||
+    asTrimmedString(Deno.env.get("ACESSORIAS_ECONTINUO_REFERENCE_MODEL_ID"));
+
+  const formData = new FormData();
+  formData.append(fileField, new Blob([fileBytes], { type: contentType }), fileName);
+  formData.append("preview", "1");
+  formData.append("simulacao", "1");
+  formData.append("simulate", "1");
+  formData.append("dry_run", "1");
+  if (referenceModelId) {
+    formData.append("reference_model_id", referenceModelId);
+    formData.append("modelo_id", referenceModelId);
+    formData.append("template_id", referenceModelId);
+  }
+
+  const allowUploadFallback =
+    asBoolean(body.allow_upload_fallback) ||
+    asBoolean(Deno.env.get("ACESSORIAS_ECONTINUO_PREFLIGHT_ALLOW_UPLOAD_FALLBACK"));
+  const pathCandidates = getPathCandidates(
+    "ACESSORIAS_ECONTINUO_PREFLIGHT_PATHS",
+    defaultEcontinuoPreflightPathCandidates,
+  );
+  const requestedCandidates = allowUploadFallback
+    ? [...pathCandidates, ...defaultEcontinuoPathCandidates]
+    : pathCandidates;
+  const uniqueCandidates = Array.from(new Set(requestedCandidates));
+
+  const response = await requestFirstSuccessful(
+    acessoriasApiBaseUrl,
+    acessoriasApiToken,
+    uniqueCandidates,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+
+  const payloadRecord = asRecord(response.payload);
+  const message = extractApiMessage(response.payload);
+  const pathFolder = payloadRecord
+    ? pickFirstString(payloadRecord, ["pathFolder", "pathfolder", "path_folder", "pasta", "folder", "caminho"])
+    : null;
+  const parsedText = [fileName, message || "", pathFolder || ""].filter(Boolean).join("\n");
+  const parsedCnpj = extractCnpjFromText(parsedText);
+  const parsedCompetence = extractCompetenceFromText(parsedText);
+  const parsedObligation =
+    extractBracketedObligation(message) ||
+    extractObligationNameFromPath(pathFolder);
+
+  let confidence = 25;
+  if (message) confidence += 18;
+  if (parsedCnpj) confidence += 25;
+  if (parsedCompetence) confidence += 20;
+  if (parsedObligation) confidence += 22;
+  confidence = Math.max(0, Math.min(100, Math.round(confidence)));
+
+  const warnings: string[] = [];
+  if (!parsedCnpj) warnings.push("CNPJ nao identificado pela leitura do Acessorias.");
+  if (!parsedCompetence) warnings.push("Competencia nao identificada pela leitura do Acessorias.");
+  if (!parsedObligation) warnings.push("Obrigacao nao identificada pela leitura do Acessorias.");
+
+  return jsonResponse({
+    ok: true,
+    preflight: {
+      endpoint_used: response.path,
+      message: message || null,
+      client_cnpj: parsedCnpj,
+      competence: parsedCompetence,
+      obligation_name: parsedObligation,
+      path_folder: pathFolder,
+      confidence,
+      warnings,
+    },
+    response: response.payload,
+  });
+}
+
 async function handleSendEcontinuo(
   supabaseAdmin: ReturnType<typeof createClient>,
   body: JsonRecord,
@@ -3062,6 +3272,16 @@ async function handleSendEcontinuo(
       { error: "client_id, file_name e file_content_base64 sao obrigatorios" },
       400,
     );
+  }
+
+  const { data: clientProfile, error: clientProfileError } = await supabaseAdmin
+    .from("clients")
+    .select("id, portal_user_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (clientProfileError) throw clientProfileError;
+  if (!clientProfile) {
+    return jsonResponse({ error: "Cliente nao encontrado para registrar o envio." }, 404);
   }
 
   const { data: link, error: linkError } = await supabaseAdmin
@@ -3138,6 +3358,23 @@ async function handleSendEcontinuo(
   let responseStatus = "error";
   let responseError: string | null = null;
   let endpointUsed: string | null = null;
+  const mirrorResults = {
+    portal: {
+      attempted: false,
+      ok: false,
+      message: "Espelhamento no portal nao executado.",
+      document_id: null as string | null,
+      file_path: null as string | null,
+    },
+    internal: {
+      attempted: false,
+      ok: false,
+      message: "Registro interno nao executado.",
+      file_id: null as string | null,
+      file_path: null as string | null,
+      category: "cadastro_documentos",
+    },
+  };
 
   try {
     const response = await requestFirstSuccessful(
@@ -3191,11 +3428,127 @@ async function handleSendEcontinuo(
     );
   }
 
+  if (responseStatus === "sent") {
+    if (clientProfile.portal_user_id) {
+      mirrorResults.portal.attempted = true;
+      try {
+        const portalFilePath = buildStorageObjectPath(`${clientProfile.portal_user_id}/envios-econtinuo`, fileName);
+        const { error: portalStorageError } = await supabaseAdmin.storage
+          .from("client-documents")
+          .upload(portalFilePath, fileBytes, {
+            contentType,
+            upsert: false,
+          });
+
+        if (portalStorageError) {
+          mirrorResults.portal.ok = false;
+          mirrorResults.portal.message = `Falha no upload para o portal: ${portalStorageError.message}`;
+        } else {
+          const { data: portalDocument, error: portalDocumentError } = await supabaseAdmin
+            .from("client_documents")
+            .insert({
+              user_id: clientProfile.portal_user_id,
+              request_id: null,
+              file_name: fileName,
+              file_path: portalFilePath,
+              file_size: fileBytes.byteLength,
+              category: "Envios e-continuo",
+            })
+            .select("id")
+            .maybeSingle();
+
+          if (portalDocumentError) {
+            mirrorResults.portal.ok = false;
+            mirrorResults.portal.message = `Falha ao registrar documento no portal: ${portalDocumentError.message}`;
+          } else {
+            mirrorResults.portal.ok = true;
+            mirrorResults.portal.message = "Copia registrada no portal do cliente.";
+            mirrorResults.portal.document_id = portalDocument?.id || null;
+            mirrorResults.portal.file_path = portalFilePath;
+          }
+        }
+      } catch (error) {
+        mirrorResults.portal.ok = false;
+        mirrorResults.portal.message =
+          error instanceof Error
+            ? `Falha no espelhamento para o portal: ${error.message}`
+            : "Falha no espelhamento para o portal.";
+      }
+    } else {
+      mirrorResults.portal.attempted = true;
+      mirrorResults.portal.ok = false;
+      mirrorResults.portal.message = "Cliente sem usuario de portal vinculado.";
+    }
+
+    mirrorResults.internal.attempted = true;
+    try {
+      const internalFilePath = buildStorageObjectPath(`${clientId}/cadastro_documentos`, fileName);
+      const { error: internalStorageError } = await supabaseAdmin.storage
+        .from("client-files")
+        .upload(internalFilePath, fileBytes, {
+          contentType,
+          upsert: false,
+        });
+
+      if (internalStorageError) {
+        mirrorResults.internal.ok = false;
+        mirrorResults.internal.message = `Falha no upload para registros internos: ${internalStorageError.message}`;
+      } else {
+        const { data: internalFileRow, error: internalFileRowError } = await supabaseAdmin
+          .from("client_files")
+          .insert({
+            client_id: clientId,
+            category: "cadastro_documentos",
+            file_name: fileName,
+            file_path: internalFilePath,
+            file_size: fileBytes.byteLength,
+            uploaded_by: callerUserId,
+          })
+          .select("id")
+          .maybeSingle();
+
+        if (internalFileRowError) {
+          mirrorResults.internal.ok = false;
+          mirrorResults.internal.message = `Falha ao registrar arquivo interno: ${internalFileRowError.message}`;
+        } else {
+          mirrorResults.internal.ok = true;
+          mirrorResults.internal.message = "Copia registrada no modulo de clientes.";
+          mirrorResults.internal.file_id = internalFileRow?.id || null;
+          mirrorResults.internal.file_path = internalFilePath;
+        }
+      }
+    } catch (error) {
+      mirrorResults.internal.ok = false;
+      mirrorResults.internal.message =
+        error instanceof Error
+          ? `Falha no espelhamento interno: ${error.message}`
+          : "Falha no espelhamento interno.";
+    }
+  }
+
+  if (uploadRow?.id) {
+    const { error: mirrorUpdateError } = await supabaseAdmin
+      .from("client_acessorias_uploads")
+      .update({
+        response_payload: {
+          endpoint_used: endpointUsed,
+          payload: responsePayload,
+          mirror_results: mirrorResults,
+        },
+      })
+      .eq("id", uploadRow.id);
+
+    if (mirrorUpdateError) {
+      console.error("Falha ao atualizar mirror_results no historico de uploads", mirrorUpdateError);
+    }
+  }
+
   return jsonResponse({
     ok: true,
     upload: uploadRow,
     endpoint_used: endpointUsed,
     response: responsePayload,
+    mirrors: mirrorResults,
   });
 }
 
@@ -3318,6 +3671,14 @@ Deno.serve(async (req) => {
     if (actionKey === "cleanup_kanban_obligations") {
       const data = await handleCleanupKanbanObligations(supabaseAdmin, body);
       return jsonResponse(data);
+    }
+
+    if (actionKey === "preflight_econtinuo") {
+      return await handlePreflightEcontinuo(
+        body,
+        acessoriasApiBaseUrl,
+        acessoriasApiToken as string,
+      );
     }
 
     if (actionKey === "send_econtinuo") {

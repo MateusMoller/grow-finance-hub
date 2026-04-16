@@ -133,6 +133,17 @@ type EcontinuoPreflightRowState = EcontinuoPreflightRow & {
   whatsappNumber: string;
 };
 
+type RemoteEcontinuoPreflight = {
+  endpoint_used: string | null;
+  message: string | null;
+  client_cnpj: string | null;
+  competence: string | null;
+  obligation_name: string | null;
+  path_folder: string | null;
+  confidence: number;
+  warnings: string[];
+};
+
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -199,6 +210,11 @@ const formatWhatsappDisplay = (value: string | null | undefined) => {
     return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
   }
   return digits;
+};
+
+const normalizeCnpjDigits = (value: string | null | undefined) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length === 14 ? digits : "";
 };
 
 interface AcessoriasPageProps {
@@ -353,6 +369,31 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     });
     return map;
   }, [clients]);
+
+  const clientIdByCnpj = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const normalizedCnpj = normalizeCnpjDigits(client.cnpj);
+      if (!normalizedCnpj) return;
+      map.set(normalizedCnpj, client.id);
+    });
+    return map;
+  }, [clients]);
+
+  useEffect(() => {
+    setPreflightRows((current) =>
+      current.map((row) => {
+        if (!row.clientId) return row;
+        if (normalizeWhatsappNumber(row.whatsappNumber)) return row;
+        const fallbackWhatsapp = clientWhatsappById.get(row.clientId) || "";
+        if (!fallbackWhatsapp) return row;
+        return {
+          ...row,
+          whatsappNumber: fallbackWhatsapp,
+        };
+      }),
+    );
+  }, [clientWhatsappById]);
 
   const preflightSummary = useMemo(() => {
     const selected = preflightRows.filter((row) => row.selectedForSend);
@@ -911,6 +952,18 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     );
   };
 
+  const resolveClientIdFromRemotePreflight = (suggestion: RemoteEcontinuoPreflight): string => {
+    const cnpj = normalizeCnpjDigits(suggestion.client_cnpj);
+    if (cnpj) {
+      return clientIdByCnpj.get(cnpj) || "";
+    }
+
+    const remoteName = String(suggestion.message || "").trim().toLowerCase();
+    if (!remoteName) return "";
+    const match = clients.find((client) => remoteName.includes(client.name.toLowerCase()));
+    return match?.id || "";
+  };
+
   const handleOpenPreflight = async (files: File[]) => {
     if (files.length === 0) return;
 
@@ -930,18 +983,99 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         })),
       });
 
-      setPreflightWarnings(result.warnings);
-      if (result.warnings.length > 0) {
-        result.warnings.slice(0, 3).forEach((warning) => toast.warning(warning));
+      const mergedWarnings = [...result.warnings];
+      let mergedRows = [...result.rows];
+
+      if (hasConfiguration) {
+        const remoteRows = result.rows.filter(
+          (row) =>
+            row.fileName.toLowerCase().endsWith(".pdf") ||
+            String(row.file.type || "").toLowerCase().includes("pdf"),
+        );
+
+        const remoteResults = await Promise.all(
+          remoteRows.map(async (row) => {
+            try {
+              const base64 = await readFileAsDataUrl(row.file);
+              const response = await invokeAcessorias<{ preflight?: RemoteEcontinuoPreflight }>({
+                action: "preflight_econtinuo",
+                file_name: row.fileName,
+                content_type: row.file.type || "application/octet-stream",
+                file_content_base64: base64,
+              });
+              return {
+                rowId: row.id,
+                suggestion: response.preflight || null,
+                warning: null as string | null,
+              };
+            } catch {
+              return {
+                rowId: row.id,
+                suggestion: null,
+                warning: `Leitura Acessorias indisponivel para ${row.fileName}. Mantida leitura local.`,
+              };
+            }
+          }),
+        );
+
+        const remoteByRowId = new Map(
+          remoteResults
+            .filter((item) => item.suggestion)
+            .map((item) => [item.rowId, item.suggestion as RemoteEcontinuoPreflight]),
+        );
+        remoteResults.forEach((item) => {
+          if (item.warning) mergedWarnings.push(item.warning);
+        });
+
+        mergedRows = mergedRows.map((row) => {
+          const remote = remoteByRowId.get(row.id);
+          if (!remote) return row;
+
+          const remoteClientId = resolveClientIdFromRemotePreflight(remote);
+          const remoteCompetence = normalizePreflightCompetence(remote.competence || "");
+          const remoteObligation = String(remote.obligation_name || "").trim();
+          const remoteWarnings = Array.isArray(remote.warnings)
+            ? remote.warnings
+                .map((warning) => String(warning || "").trim())
+                .filter(Boolean)
+            : [];
+          const remoteConfidenceRaw = Number(remote.confidence || 0);
+          const remoteConfidence = Number.isFinite(remoteConfidenceRaw) ? remoteConfidenceRaw : 0;
+          const remoteScore = Math.max(0, Math.min(1, remoteConfidence / 100));
+
+          return {
+            ...row,
+            clientId: remoteClientId || row.clientId,
+            competence: remoteCompetence || row.competence,
+            obligationName: remoteObligation || row.obligationName,
+            confidence: Math.max(row.confidence, Math.round(remoteConfidence)),
+            warnings: Array.from(new Set([...row.warnings, ...remoteWarnings])),
+            evidence: [
+              ...row.evidence,
+              {
+                source: "content",
+                detail: `Leitura Acessorias${remote.endpoint_used ? ` (${remote.endpoint_used})` : ""}${remote.message ? `: ${remote.message}` : ""}`,
+                score: Number(remoteScore.toFixed(2)),
+              },
+            ],
+          };
+        });
+      }
+
+      setPreflightWarnings(mergedWarnings);
+      if (mergedWarnings.length > 0) {
+        mergedWarnings.slice(0, 3).forEach((warning) => toast.warning(warning));
       }
 
       setPreflightRows(
-        result.rows.map((row) => ({
-          ...row,
-          sendStatus: "idle",
-          sendMessage: null,
-          whatsappNumber: row.clientId ? clientWhatsappById.get(row.clientId) || "" : "",
-        })),
+        mergedRows.map((row) =>
+          normalizePreflightRow({
+            ...row,
+            sendStatus: "idle",
+            sendMessage: null,
+            whatsappNumber: row.clientId ? clientWhatsappById.get(row.clientId) || "" : "",
+          }),
+        ),
       );
       setPreflightOpen(true);
     } catch (error) {
@@ -1549,7 +1683,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                                           clientId: nextClientId,
                                           obligationName: nextClientId ? current.obligationName : "",
                                           whatsappNumber: nextClientId
-                                            ? clientWhatsappById.get(nextClientId) || current.whatsappNumber || ""
+                                            ? clientWhatsappById.get(nextClientId) || ""
                                             : "",
                                         }));
                                       }}
