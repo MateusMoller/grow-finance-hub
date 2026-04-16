@@ -8,15 +8,15 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: "1.25rem",
       screens: {
         "2xl": "1400px",
       },
     },
     extend: {
       fontFamily: {
-        heading: ['Plus Jakarta Sans', 'sans-serif'],
-        body: ['Inter', 'sans-serif'],
+        heading: ["var(--font-heading)"],
+        body: ["var(--font-body)"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -76,6 +76,13 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        xs: "var(--shadow-xs)",
+        sm: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+        glow: "var(--shadow-glow)",
       },
       keyframes: {
         "accordion-down": {

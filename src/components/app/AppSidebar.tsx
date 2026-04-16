@@ -79,8 +79,8 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
                   onClick={() => {
                     if (isMobile) setOpenMobile(false);
                   }}
-                  className="hover:bg-sidebar-accent/50"
-                  activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                  className="rounded-xl text-sidebar-foreground/90 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+                  activeClassName="rounded-xl bg-sidebar-accent text-sidebar-primary font-semibold shadow-xs"
                 >
                   <item.icon className="mr-2 h-4 w-4" />
                   {!collapsed && <span>{item.title}</span>}
@@ -155,12 +155,12 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-        <div className="p-4 flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
+        <div className="m-3 mt-4 flex items-center gap-2.5 rounded-2xl border border-sidebar-border/80 bg-sidebar-accent/45 px-3 py-2.5">
+          <div className="h-8 w-8 overflow-hidden rounded-lg border border-sidebar-border/60 bg-sidebar-accent shrink-0">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           {!collapsed && (
-            <span className="font-heading font-bold text-sm text-sidebar-foreground">
+            <span className="font-heading text-sm font-semibold tracking-tight text-sidebar-accent-foreground">
               Grow Finance
             </span>
           )}

@@ -1,4 +1,4 @@
-export interface EcontinuoPreflightClient {
+﻿export interface EcontinuoPreflightClient {
   id: string;
   name: string;
   cnpj: string | null;
@@ -55,8 +55,8 @@ const tokenStopwords = new Set([
   "o",
   "as",
   "os",
-  "obrigação",
-  "obrigações",
+  "obrigaÃ§Ã£o",
+  "obrigaÃ§Ãµes",
   "mensal",
   "arquivo",
   "documento",
@@ -94,8 +94,8 @@ const toCompetence = (year: string, month: string) => {
 
 const extractCompetence = (rawText: string): string | null => {
   const text = rawText.replace(/\s+/g, " ");
-  const yearMonthPattern = /(?:competência|competência|período|ref(?:erencia)?)?\s*[:\-]?\s*(20\d{2})[\/\-_.]?(0[1-9]|1[0-2])/i;
-  const monthYearPattern = /(?:competência|competência|período|ref(?:erencia)?)?\s*[:\-]?\s*(0[1-9]|1[0-2])[\/\-_.](20\d{2})/i;
+  const yearMonthPattern = /(?:competÃªncia|competÃªncia|perÃ­odo|ref(?:erencia)?)?\s*[:-]?\s*(20\d{2})[/_.-]?(0[1-9]|1[0-2])/i;
+  const monthYearPattern = /(?:competÃªncia|competÃªncia|perÃ­odo|ref(?:erencia)?)?\s*[:-]?\s*(0[1-9]|1[0-2])[/_.-](20\d{2})/i;
   const compactMonthYearPattern = /(?:^|[^0-9])(0[1-9]|1[0-2])(20\d{2})(?:[^0-9]|$)/;
   const compactYearMonthPattern = /(?:^|[^0-9])(20\d{2})(0[1-9]|1[0-2])(?:[^0-9]|$)/;
 
@@ -123,7 +123,7 @@ const extractCompetence = (rawText: string): string | null => {
 };
 
 const extractCnpj = (rawText: string): string | null => {
-  const cnpjPattern = /\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;
+  const cnpjPattern = /\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2}/g;
   const directMatch = rawText.match(cnpjPattern);
   if (directMatch && directMatch.length > 0) {
     const normalized = normalizeCnpj(directMatch[0]);
@@ -239,7 +239,7 @@ const parseImageText = async (file: File): Promise<string> => {
       ?.recognize;
 
   if (!recognize) {
-    throw new Error("OCR indisponível neste navegador.");
+    throw new Error("OCR indisponÃ­vel neste navegador.");
   }
 
   const result = (await recognize(file, "por+eng")) as { data?: { text?: string } };
@@ -349,7 +349,7 @@ const findObligationSuggestion = (
       confidenceGain: Math.round(bestScore * 24),
       evidence: {
         source: "heuristic",
-        detail: `Obrigação sugerida por similaridade (${Math.round(bestScore * 100)}%).`,
+        detail: `ObrigaÃ§Ã£o sugerida por similaridade (${Math.round(bestScore * 100)}%).`,
         score: Number(bestScore.toFixed(2)),
       },
     };
@@ -360,9 +360,9 @@ const findObligationSuggestion = (
 
 export const getPreflightBlockingErrors = (row: Pick<EcontinuoPreflightRow, "clientId" | "competence" | "obligationName">) => {
   const errors: string[] = [];
-  if (!normalizeWhitespace(row.clientId)) errors.push("Cliente não identificado.");
-  if (!extractCompetence(row.competence || "")) errors.push("Competência invalida. Use AAAA-MM.");
-  if (!normalizeWhitespace(row.obligationName)) errors.push("Obrigação não identificada.");
+  if (!normalizeWhitespace(row.clientId)) errors.push("Cliente nÃ£o identificado.");
+  if (!extractCompetence(row.competence || "")) errors.push("CompetÃªncia invalida. Use AAAA-MM.");
+  if (!normalizeWhitespace(row.obligationName)) errors.push("ObrigaÃ§Ã£o nÃ£o identificada.");
   return errors;
 };
 
@@ -393,7 +393,7 @@ export async function parseEcontinuoFiles({
         contentText = await parseContentText(file);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Erro desconhecido";
-        rowWarnings.push(`Não foi possível extrair o conteúdo: ${message}`);
+        rowWarnings.push(`NÃ£o foi possÃ­vel extrair o conteÃºdo: ${message}`);
       }
     }
 
@@ -409,11 +409,11 @@ export async function parseEcontinuoFiles({
       confidence += 20;
       evidence.push({
         source: "content",
-        detail: `Competência detectada: ${competence}.`,
+        detail: `CompetÃªncia detectada: ${competence}.`,
         score: 0.85,
       });
     } else {
-      rowWarnings.push("Competência não detectada automaticamente.");
+      rowWarnings.push("CompetÃªncia nÃ£o detectada automaticamente.");
     }
 
     const obligationSuggestion = findObligationSuggestion(
@@ -449,3 +449,4 @@ export async function parseEcontinuoFiles({
 
   return { rows, warnings };
 }
+

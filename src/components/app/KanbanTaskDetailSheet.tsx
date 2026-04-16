@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,6 +69,16 @@ interface LinkedRequestAttachment {
   created_at: string;
 }
 
+interface LinkedFormSubmission {
+  id: string;
+  template_title: string;
+  submitted_by_name: string | null;
+  status: string | null;
+  notes: string | null;
+  data: unknown;
+  created_at: string;
+}
+
 interface KanbanTaskDetailSheetProps {
   task: KanbanTaskItem | null;
   open: boolean;
@@ -113,6 +123,7 @@ export function KanbanTaskDetailSheet({
   });
   const [requestInfo, setRequestInfo] = useState<LinkedRequestInfo | null>(null);
   const [requestAttachments, setRequestAttachments] = useState<LinkedRequestAttachment[]>([]);
+  const [requestFormSubmissions, setRequestFormSubmissions] = useState<LinkedFormSubmission[]>([]);
   const [loadingRequest, setLoadingRequest] = useState(false);
 
   useEffect(() => {
@@ -134,13 +145,14 @@ export function KanbanTaskDetailSheet({
     if (!open || !task?.request_id) {
       setRequestInfo(null);
       setRequestAttachments([]);
+      setRequestFormSubmissions([]);
       return;
     }
 
     let cancelled = false;
     const loadRequestData = async () => {
       setLoadingRequest(true);
-      const [requestRes, docsRes] = await Promise.all([
+      const [requestRes, docsRes, submissionsRes] = await Promise.all([
         supabase
           .from("client_requests")
           .select("id, title, description, category, sector, status, created_at")
@@ -149,6 +161,11 @@ export function KanbanTaskDetailSheet({
         supabase
           .from("client_documents")
           .select("id, file_name, file_path, file_size, created_at")
+          .eq("request_id", task.request_id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("form_submissions")
+          .select("id, template_title, submitted_by_name, status, notes, data, created_at")
           .eq("request_id", task.request_id)
           .order("created_at", { ascending: false }),
       ]);
@@ -161,9 +178,13 @@ export function KanbanTaskDetailSheet({
       if (docsRes.error) {
         toast.error("Não foi possível carregar os anexos da solicitação.");
       }
+      if (submissionsRes.error) {
+        toast.error("Não foi possível carregar o formulário vinculado a esta solicitação.");
+      }
 
       setRequestInfo((requestRes.data as LinkedRequestInfo | null) || null);
       setRequestAttachments((docsRes.data as LinkedRequestAttachment[]) || []);
+      setRequestFormSubmissions((submissionsRes.data as LinkedFormSubmission[]) || []);
       setLoadingRequest(false);
     };
 
@@ -212,6 +233,20 @@ export function KanbanTaskDetailSheet({
       return;
     }
     window.open(data.signedUrl, "_blank");
+  };
+
+  const parseSubmissionEntries = (rawData: unknown): Array<{ key: string; value: string }> => {
+    if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) return [];
+
+    const source = rawData as Record<string, unknown>;
+    return Object.entries(source).map(([key, value]) => {
+      if (value === null || value === undefined || value === "") {
+        return { key, value: "-" };
+      }
+      if (typeof value === "string") return { key, value };
+      if (typeof value === "number" || typeof value === "boolean") return { key, value: String(value) };
+      return { key, value: JSON.stringify(value) };
+    });
   };
 
   return (
@@ -384,6 +419,55 @@ export function KanbanTaskDetailSheet({
               ) : (
                 <>
                   <div className="space-y-2">
+                    <Label>Formulário respondido ({requestFormSubmissions.length})</Label>
+                    {requestFormSubmissions.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        Não há resposta de formulário vinculada a esta solicitação.
+                      </div>
+                    ) : (
+                      <div className="space-y-3 rounded-lg border bg-primary/5 p-3">
+                        {requestFormSubmissions.map((submission) => {
+                          const entries = parseSubmissionEntries(submission.data);
+                          return (
+                            <div key={submission.id} className="rounded-md border bg-card p-3 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-sm font-medium">{submission.template_title}</div>
+                                <Badge variant="outline" className="border-primary/30 text-primary">
+                                  {submission.status || "pending"}
+                                </Badge>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Respondido em {new Date(submission.created_at).toLocaleString("pt-BR")}
+                                {submission.submitted_by_name ? ` • ${submission.submitted_by_name}` : ""}
+                              </div>
+                              {entries.length > 0 ? (
+                                <div className="space-y-1">
+                                  {entries.map((entry) => (
+                                    <div key={`${submission.id}-${entry.key}`} className="text-xs">
+                                      <span className="font-medium">{entry.key}: </span>
+                                      <span className="text-muted-foreground">{entry.value}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">
+                                  O formulário não possui campos preenchidos.
+                                </div>
+                              )}
+                              {submission.notes ? (
+                                <div className="text-xs text-muted-foreground border-t pt-2">
+                                  <span className="font-medium">Notas internas: </span>
+                                  {submission.notes}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
                     <Label>Data de envio</Label>
                     <Input
                       value={requestInfo?.created_at ? new Date(requestInfo.created_at).toLocaleString("pt-BR") : "-"}
@@ -478,3 +562,4 @@ export function KanbanTaskDetailSheet({
     </Sheet>
   );
 }
+

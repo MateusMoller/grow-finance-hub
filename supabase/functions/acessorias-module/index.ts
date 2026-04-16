@@ -1,4 +1,4 @@
-
+﻿
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -218,7 +218,7 @@ function extractUploadMetadata(requestPayload: unknown) {
   const obligationName = metadata
     ? pickFirstString(metadata, [
       "obrigacao",
-      "obrigação",
+      "obrigaÃ§Ã£o",
       "obligation",
       "obligation_name",
       "entrega",
@@ -229,7 +229,7 @@ function extractUploadMetadata(requestPayload: unknown) {
   const competence = metadata
     ? pickFirstString(metadata, [
       "competencia",
-      "competência",
+      "competÃªncia",
       "competence",
       "periodo",
       "period",
@@ -347,7 +347,7 @@ function normalizeDateTime(value: unknown): string | null {
 }
 
 function extractCnpjFromText(rawText: string): string | null {
-  const cnpjPattern = /\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;
+  const cnpjPattern = /\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2}/g;
   const directMatch = rawText.match(cnpjPattern);
   if (directMatch && directMatch.length > 0) {
     const normalized = normalizeCnpj(directMatch[0]);
@@ -365,8 +365,8 @@ function extractCnpjFromText(rawText: string): string | null {
 
 function extractCompetenceFromText(rawText: string): string | null {
   const text = rawText.replace(/\s+/g, " ");
-  const yearMonthPattern = /(?:competencia|competência|periodo|período|ref(?:erencia|erência)?)?\s*[:\-]?\s*(20\d{2})[\/\-_.]?(0[1-9]|1[0-2])/i;
-  const monthYearPattern = /(?:competencia|competência|periodo|período|ref(?:erencia|erência)?)?\s*[:\-]?\s*(0[1-9]|1[0-2])[\/\-_.](20\d{2})/i;
+  const yearMonthPattern = /(?:competencia|competÃªncia|periodo|perÃ­odo|ref(?:erencia|erÃªncia)?)?\s*[:-]?\s*(20\d{2})[/_.-]?(0[1-9]|1[0-2])/i;
+  const monthYearPattern = /(?:competencia|competÃªncia|periodo|perÃ­odo|ref(?:erencia|erÃªncia)?)?\s*[:-]?\s*(0[1-9]|1[0-2])[/_.-](20\d{2})/i;
 
   const yearMonthMatch = text.match(yearMonthPattern);
   if (yearMonthMatch) return `${yearMonthMatch[1]}-${yearMonthMatch[2]}`;
@@ -3762,3 +3762,4 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: message }, 400);
   }
 });
+

@@ -112,7 +112,7 @@ export default function HomePage() {
 
   return (
     <SiteLayout>
-      <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
+      <div className="bg-background text-foreground transition-colors">
         <section className="border-b border-border/60 pb-10 pt-8 dark:border-[#243054] sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
           <div className="container grid gap-10 lg:grid-cols-2 lg:items-start">
             <motion.div {...fadeIn} className="space-y-8">
@@ -224,7 +224,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="serviços" className="py-12 md:py-16">
+        <section id="servicos" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
