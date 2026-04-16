@@ -14,6 +14,7 @@ import {
   RefreshCcw,
   Pencil,
   FileText,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FunctionsHttpError } from "@supabase/supabase-js";
@@ -59,6 +60,11 @@ type AcessoriasClientOverview = {
   name: string;
   cnpj: string | null;
   status: string | null;
+  contact: string | null;
+  email: string | null;
+  phone: string | null;
+  whatsapp_phone: string | null;
+  whatsapp_phone_digits: string | null;
   linked: boolean;
   acessorias_company_name: string | null;
   acessorias_company_status: string | null;
@@ -92,11 +98,16 @@ type AcessoriasObligation = {
 
 type AcessoriasUpload = {
   id: string;
-  client_id: string;
+  client_id: string | null;
+  acessorias_company_id: string | null;
+  client_name: string | null;
+  company_name: string | null;
+  obligation_name: string | null;
+  competence: string | null;
   file_name: string;
   status: string;
   error_message: string | null;
-  uploaded_at: string;
+  uploaded_at: string | null;
 };
 
 type OverviewPayload = {
@@ -119,6 +130,7 @@ type OverviewPayload = {
 type EcontinuoPreflightRowState = EcontinuoPreflightRow & {
   sendStatus: "idle" | "sending" | "sent" | "error";
   sendMessage: string | null;
+  whatsappNumber: string;
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -166,6 +178,28 @@ const readFileAsDataUrl = (file: File) =>
     reader.onerror = () => reject(new Error("Não foi possível ler o arquivo"));
     reader.readAsDataURL(file);
   });
+
+const normalizeWhatsappNumber = (value: string | null | undefined) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (!digits) return "";
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+};
+
+const formatWhatsappDisplay = (value: string | null | undefined) => {
+  const digits = normalizeWhatsappNumber(value);
+  if (!digits) return "";
+  if (digits.length === 13 && digits.startsWith("55")) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  return digits;
+};
 
 interface AcessoriasPageProps {
   module?: "obrigações" | "econtinuo";
@@ -307,6 +341,19 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     return map;
   }, [obligations]);
 
+  const clientWhatsappById = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach((client) => {
+      const candidate =
+        normalizeWhatsappNumber(client.whatsapp_phone_digits) ||
+        normalizeWhatsappNumber(client.whatsapp_phone) ||
+        normalizeWhatsappNumber(client.phone);
+      if (!candidate) return;
+      map.set(client.id, candidate);
+    });
+    return map;
+  }, [clients]);
+
   const preflightSummary = useMemo(() => {
     const selected = preflightRows.filter((row) => row.selectedForSend);
     const blocked = selected.filter((row) => row.blockingErrors.length > 0).length;
@@ -318,6 +365,87 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
       ready,
     };
   }, [preflightRows]);
+
+  const groupedUploads = useMemo(() => {
+    type ObligationGroup = {
+      key: string;
+      name: string;
+      items: AcessoriasUpload[];
+      sent: number;
+      error: number;
+    };
+
+    type CompanyGroup = {
+      key: string;
+      name: string;
+      obligations: ObligationGroup[];
+      total: number;
+      sent: number;
+      error: number;
+    };
+
+    const companyMap = new Map<
+      string,
+      {
+        name: string;
+        items: AcessoriasUpload[];
+      }
+    >();
+
+    for (const item of uploads) {
+      const companyName = String(item.company_name || item.client_name || "Empresa nao identificada").trim();
+      const safeCompanyName = companyName || "Empresa nao identificada";
+      const companyKey = String(item.acessorias_company_id || item.client_id || safeCompanyName);
+      const current = companyMap.get(companyKey) || { name: safeCompanyName, items: [] };
+      current.items.push(item);
+      companyMap.set(companyKey, current);
+    }
+
+    const groups: CompanyGroup[] = [];
+    for (const [companyKey, companyValue] of companyMap.entries()) {
+      const obligationMap = new Map<string, AcessoriasUpload[]>();
+      for (const item of companyValue.items) {
+        const obligationName = String(item.obligation_name || "Obrigacao nao informada").trim() || "Obrigacao nao informada";
+        const obligationKey = `${companyKey}:${obligationName.toLowerCase()}`;
+        const currentItems = obligationMap.get(obligationKey) || [];
+        currentItems.push(item);
+        obligationMap.set(obligationKey, currentItems);
+      }
+
+      const obligations: ObligationGroup[] = Array.from(obligationMap.entries())
+        .map(([obligationKey, items]) => {
+          const first = items[0];
+          const sent = items.filter((upload) => String(upload.status || "").toLowerCase() === "sent").length;
+          const error = items.filter((upload) => String(upload.status || "").toLowerCase() === "error").length;
+
+          return {
+            key: obligationKey,
+            name: String(first?.obligation_name || "Obrigacao nao informada"),
+            items: [...items].sort((left, right) =>
+              String(right.uploaded_at || "").localeCompare(String(left.uploaded_at || "")),
+            ),
+            sent,
+            error,
+          };
+        })
+        .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+
+      const total = companyValue.items.length;
+      const sent = companyValue.items.filter((upload) => String(upload.status || "").toLowerCase() === "sent").length;
+      const error = companyValue.items.filter((upload) => String(upload.status || "").toLowerCase() === "error").length;
+
+      groups.push({
+        key: companyKey,
+        name: companyValue.name,
+        obligations,
+        total,
+        sent,
+        error,
+      });
+    }
+
+    return groups.sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+  }, [uploads]);
 
   const invokeAcessorias = async <TData extends Record<string, unknown> = Record<string, unknown>>(
     body: Record<string, unknown>,
@@ -704,6 +832,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
   const normalizePreflightRow = (row: EcontinuoPreflightRowState): EcontinuoPreflightRowState => {
     const normalizedCompetence = normalizePreflightCompetence(row.competence || "");
+    const normalizedWhatsapp = normalizeWhatsappNumber(row.whatsappNumber || "");
     const blockingErrors = getPreflightBlockingErrors({
       clientId: row.clientId,
       competence: normalizedCompetence || row.competence || "",
@@ -713,9 +842,60 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     return {
       ...row,
       competence: normalizedCompetence || row.competence || "",
+      whatsappNumber: normalizedWhatsapp || row.whatsappNumber || "",
       blockingErrors,
       selectedForSend: blockingErrors.length > 0 ? false : row.selectedForSend,
     };
+  };
+
+  const getWhatsappMessageForRow = (row: EcontinuoPreflightRowState) => {
+    const client = clients.find((item) => item.id === row.clientId);
+    const clientName = client?.name || "cliente";
+    const contactName = client?.contact || clientName;
+    const obligationName = row.obligationName?.trim() || "documento";
+    const competence = normalizePreflightCompetence(row.competence || "") || row.competence || "nao informada";
+    const description = row.description?.trim();
+    const sentStatusMessage =
+      row.sendStatus === "sent"
+        ? "O arquivo ja foi enviado no e-Continuo pela equipe da Grow."
+        : "O arquivo esta em conferencia para envio no e-Continuo pela equipe da Grow.";
+
+    return [
+      `Ola, ${contactName}!`,
+      sentStatusMessage,
+      `Cliente: ${clientName}`,
+      `Arquivo: ${row.fileName}`,
+      `Obrigacao: ${obligationName}`,
+      `Competencia: ${competence}`,
+      description ? `Descricao: ${description}` : null,
+      "",
+      "Em caso de duvidas, responda por aqui.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  const handleOpenWhatsappForRow = (rowId: string) => {
+    const row = preflightRows.find((item) => item.id === rowId);
+    if (!row) return;
+    if (!row.clientId) {
+      toast.error("Selecione o cliente para abrir o WhatsApp.");
+      return;
+    }
+
+    const whatsappNumber = normalizeWhatsappNumber(row.whatsappNumber);
+    if (!whatsappNumber) {
+      toast.error("Numero de WhatsApp nao encontrado para este cliente.");
+      return;
+    }
+
+    const message = getWhatsappMessageForRow(row);
+    const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    updatePreflightRow(row.id, (current) => ({
+      ...current,
+      sendMessage: `WhatsApp aberto para ${formatWhatsappDisplay(whatsappNumber)}.`,
+    }));
   };
 
   const updatePreflightRow = (
@@ -760,6 +940,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
           ...row,
           sendStatus: "idle",
           sendMessage: null,
+          whatsappNumber: row.clientId ? clientWhatsappById.get(row.clientId) || "" : "",
         })),
       );
       setPreflightOpen(true);
@@ -858,6 +1039,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             competência: row.competence || null,
             obrigação: row.obligationName || null,
             descrição: row.description || null,
+            whatsapp: normalizeWhatsappNumber(row.whatsappNumber) || null,
             pre_conferencia: {
               confidence: row.confidence,
               warnings: row.warnings,
@@ -1335,27 +1517,42 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                                     />
                                     {row.fileName}
                                   </label>
-                                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                                    <Badge variant="outline">Confianca: {row.confidence}%</Badge>
-                                    {row.sendStatus === "sending" && <Badge variant="secondary">Enviando...</Badge>}
-                                    {row.sendStatus === "sent" && <Badge variant="default">Enviado</Badge>}
-                                    {row.sendStatus === "error" && <Badge variant="destructive">Erro</Badge>}
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                      <Badge variant="outline">Confianca: {row.confidence}%</Badge>
+                                      {row.sendStatus === "sending" && <Badge variant="secondary">Enviando...</Badge>}
+                                      {row.sendStatus === "sent" && <Badge variant="default">Enviado</Badge>}
+                                      {row.sendStatus === "error" && <Badge variant="destructive">Erro</Badge>}
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleOpenWhatsappForRow(row.id)}
+                                      disabled={!row.clientId || !normalizeWhatsappNumber(row.whatsappNumber)}
+                                    >
+                                      <MessageCircle className="h-4 w-4 mr-2" />
+                                      WhatsApp
+                                    </Button>
                                   </div>
                                 </div>
 
-                                <div className="grid gap-3 lg:grid-cols-4">
+                                <div className="grid gap-3 xl:grid-cols-5">
                                   <div className="space-y-1">
                                     <Label className="text-xs">Cliente</Label>
                                     <Select
                                       value={row.clientId || "__none__"}
-                                      onValueChange={(value) =>
+                                      onValueChange={(value) => {
+                                        const nextClientId = value === "__none__" ? "" : value;
                                         updatePreflightRow(row.id, (current) => ({
                                           ...current,
-                                          clientId: value === "__none__" ? "" : value,
-                                          obligationName:
-                                            value === "__none__" ? "" : current.obligationName,
-                                        }))
-                                      }
+                                          clientId: nextClientId,
+                                          obligationName: nextClientId ? current.obligationName : "",
+                                          whatsappNumber: nextClientId
+                                            ? clientWhatsappById.get(nextClientId) || current.whatsappNumber || ""
+                                            : "",
+                                        }));
+                                      }}
                                     >
                                       <SelectTrigger>
                                         <SelectValue placeholder="Selecione" />
@@ -1408,6 +1605,20 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                                         updatePreflightRow(row.id, (current) => ({
                                           ...current,
                                           description: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">WhatsApp</Label>
+                                    <Input
+                                      placeholder="+55 (00) 00000-0000"
+                                      value={row.whatsappNumber}
+                                      onChange={(event) =>
+                                        updatePreflightRow(row.id, (current) => ({
+                                          ...current,
+                                          whatsappNumber: event.target.value,
                                         }))
                                       }
                                     />
@@ -1476,34 +1687,81 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Histórico de envios</CardTitle>
+                  <CardDescription>Separado por empresa e obrigação para facilitar a conferência.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {uploads.map((item) => (
-                    <div key={item.id} className="rounded-lg border p-3">
-                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div className="space-y-1">
-                          <div className="font-medium text-sm flex items-center gap-2">
-                            <Upload className="h-4 w-4 text-primary" />
-                            {item.file_name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Enviado em {formatDateTime(item.uploaded_at)}
-                          </div>
-                        </div>
-                        <Badge className={uploadStatusBadgeClass(item.status)}>
-                          {item.status}
-                        </Badge>
-                      </div>
-                      {item.error_message && (
-                        <>
-                          <Separator className="my-2" />
-                          <div className="text-xs text-red-700">{item.error_message}</div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                  {uploads.length === 0 && (
+                  {groupedUploads.length === 0 && (
                     <div className="text-sm text-muted-foreground">Nenhum envio registrado.</div>
+                  )}
+                  {groupedUploads.length > 0 && (
+                    <Accordion type="multiple" className="w-full rounded-lg border px-3">
+                      {groupedUploads.map((company) => (
+                        <AccordionItem key={company.key} value={company.key}>
+                          <AccordionTrigger className="py-3 hover:no-underline">
+                            <div className="flex flex-col items-start gap-2 text-left md:flex-row md:items-center md:gap-3">
+                              <span className="text-sm font-semibold">{company.name}</span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline">Obrigacoes: {company.obligations.length}</Badge>
+                                <Badge variant="secondary">Envios: {company.total}</Badge>
+                                <Badge variant="default">Enviados: {company.sent}</Badge>
+                                {company.error > 0 && <Badge variant="destructive">Falhas: {company.error}</Badge>}
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="space-y-2 pb-3">
+                            <Accordion type="multiple" className="w-full rounded-lg border px-3">
+                              {company.obligations.map((obligation) => (
+                                <AccordionItem key={obligation.key} value={obligation.key}>
+                                  <AccordionTrigger className="py-2 hover:no-underline">
+                                    <div className="flex flex-col items-start gap-2 text-left md:flex-row md:items-center md:gap-3">
+                                      <span className="text-sm font-medium">{obligation.name}</span>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline">Arquivos: {obligation.items.length}</Badge>
+                                        <Badge variant="default">Enviados: {obligation.sent}</Badge>
+                                        {obligation.error > 0 && <Badge variant="destructive">Falhas: {obligation.error}</Badge>}
+                                      </div>
+                                    </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent>
+                                    <div className="space-y-2 pb-2">
+                                      {obligation.items.map((item) => (
+                                        <div key={item.id} className="rounded-lg border p-3">
+                                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                            <div className="space-y-1">
+                                              <div className="font-medium text-sm flex items-center gap-2">
+                                                <Upload className="h-4 w-4 text-primary" />
+                                                {item.file_name}
+                                              </div>
+                                              <div className="text-xs text-muted-foreground">
+                                                Enviado em {formatDateTime(item.uploaded_at)}
+                                              </div>
+                                              {item.competence && (
+                                                <div className="text-xs text-muted-foreground">
+                                                  Competencia: {item.competence}
+                                                </div>
+                                              )}
+                                            </div>
+                                            <Badge className={uploadStatusBadgeClass(item.status)}>
+                                              {item.status}
+                                            </Badge>
+                                          </div>
+                                          {item.error_message && (
+                                            <>
+                                              <Separator className="my-2" />
+                                              <div className="text-xs text-red-700">{item.error_message}</div>
+                                            </>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              ))}
+                            </Accordion>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
                   )}
                 </CardContent>
               </Card>

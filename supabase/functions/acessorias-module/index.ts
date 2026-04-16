@@ -146,6 +146,107 @@ function normalizeCnpj(value: unknown): string | null {
   return digits;
 }
 
+function normalizePhoneDigits(value: unknown): string | null {
+  const text = asTrimmedString(value);
+  if (!text) return null;
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
+    return digits;
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  return digits;
+}
+
+type UploadHistoryItem = {
+  id: string;
+  client_id: string | null;
+  acessorias_company_id: string | null;
+  client_name: string | null;
+  company_name: string | null;
+  obligation_name: string | null;
+  competence: string | null;
+  file_name: string;
+  status: string;
+  error_message: string | null;
+  uploaded_at: string | null;
+};
+
+function extractUploadMetadata(requestPayload: unknown) {
+  const requestRecord = asRecord(requestPayload);
+  const metadataCandidate = requestRecord ? getRecordValue(requestRecord, "metadata") : null;
+  const metadata = asRecord(metadataCandidate) || requestRecord;
+
+  const obligationName = metadata
+    ? pickFirstString(metadata, [
+      "obrigacao",
+      "obrigação",
+      "obligation",
+      "obligation_name",
+      "entrega",
+      "delivery",
+    ])
+    : null;
+
+  const competence = metadata
+    ? pickFirstString(metadata, [
+      "competencia",
+      "competência",
+      "competence",
+      "periodo",
+      "period",
+      "obligation_period",
+    ])
+    : null;
+
+  return { obligationName, competence };
+}
+
+function mapUploadsForHistory(
+  uploads: unknown[],
+  clientNameById: Map<string, string>,
+  companyNameById: Map<string, string>,
+): UploadHistoryItem[] {
+  const mapped: UploadHistoryItem[] = [];
+
+  for (const rawUpload of uploads) {
+    const upload = asRecord(rawUpload);
+    if (!upload) continue;
+
+    const id = asTrimmedString(getRecordValue(upload, "id"));
+    const clientId = asTrimmedString(getRecordValue(upload, "client_id"));
+    const companyId = asTrimmedString(getRecordValue(upload, "acessorias_company_id"));
+    const fileName = asTrimmedString(getRecordValue(upload, "file_name")) || "arquivo";
+    const status = asTrimmedString(getRecordValue(upload, "status")) || "processing";
+    const errorMessage = asTrimmedString(getRecordValue(upload, "error_message"));
+    const uploadedAt = asTrimmedString(getRecordValue(upload, "uploaded_at"));
+    const { obligationName, competence } = extractUploadMetadata(getRecordValue(upload, "request_payload"));
+
+    mapped.push({
+      id: id || `${clientId || "sem_cliente"}:${fileName}:${uploadedAt || "sem_data"}`,
+      client_id: clientId,
+      acessorias_company_id: companyId,
+      client_name: clientId ? clientNameById.get(clientId) || null : null,
+      company_name: companyId ? companyNameById.get(companyId) || null : null,
+      obligation_name: obligationName,
+      competence,
+      file_name: fileName,
+      status,
+      error_message: errorMessage,
+      uploaded_at: uploadedAt,
+    });
+  }
+
+  return mapped.sort((left, right) => {
+    const leftDate = left.uploaded_at || "";
+    const rightDate = right.uploaded_at || "";
+    return rightDate.localeCompare(leftDate);
+  });
+}
+
 function mapCompanyStatusToClientStatus(status: string | null) {
   const token = normalizeToken(status || "");
   if (!token) return "Ativo";
@@ -1388,10 +1489,10 @@ async function syncWeeklyObligationKanbanTasks(
 }
 
 async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
-  const [clientsResult, companiesResult, linksResult, obligationsResult, uploadsResult] = await Promise.all([
+  const [clientsResult, companiesResult, linksResult, obligationsResult, uploadsResult, clientDataResult] = await Promise.all([
     supabaseAdmin
       .from("clients")
-      .select("id, name, cnpj, status")
+      .select("id, name, cnpj, status, contact, email, phone")
       .order("name"),
     supabaseAdmin
       .from("acessorias_companies_cache")
@@ -1407,9 +1508,15 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
       .order("updated_at", { ascending: false }),
     supabaseAdmin
       .from("client_acessorias_uploads")
-      .select("id, client_id, file_name, status, error_message, uploaded_at")
+      .select("id, client_id, acessorias_company_id, file_name, status, error_message, uploaded_at, request_payload")
       .order("uploaded_at", { ascending: false })
       .limit(25),
+    supabaseAdmin
+      .from("client_data")
+      .select("client_id, field_name, field_value")
+      .eq("category", "cadastro_clientes")
+      .in("field_name", ["whatsapp", "telefone"])
+      .is("period", null),
   ]);
 
   if (clientsResult.error) throw clientsResult.error;
@@ -1417,17 +1524,48 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
   if (linksResult.error) throw linksResult.error;
   if (obligationsResult.error) throw obligationsResult.error;
   if (uploadsResult.error) throw uploadsResult.error;
+  if (clientDataResult.error) throw clientDataResult.error;
 
   const companies = companiesResult.data || [];
   const links = linksResult.data || [];
   const obligations = obligationsResult.data || [];
   const clients = clientsResult.data || [];
   const uploads = uploadsResult.data || [];
+  const clientDataRows = clientDataResult.data || [];
 
   const companyById = new Map(
     companies.map((company) => [company.acessorias_company_id, company]),
   );
   const linkByClient = new Map(links.map((link) => [link.client_id, link]));
+  const clientNameById = new Map<string, string>();
+  for (const client of clients) {
+    const name = asTrimmedString(client.name) || "Cliente sem nome";
+    clientNameById.set(client.id, name);
+  }
+  const companyNameById = new Map<string, string>();
+  for (const company of companies) {
+    const companyId = asTrimmedString(company.acessorias_company_id);
+    const companyName = asTrimmedString(company.company_name);
+    if (!companyId || !companyName) continue;
+    companyNameById.set(companyId, companyName);
+  }
+  const mappedUploads = mapUploadsForHistory(uploads, clientNameById, companyNameById);
+  const whatsappByClient = new Map<string, string | null>();
+  const telefoneByClient = new Map<string, string | null>();
+
+  for (const row of clientDataRows) {
+    const clientId = asTrimmedString(row.client_id);
+    const fieldName = normalizeToken(row.field_name || "");
+    const fieldValue = asTrimmedString(row.field_value);
+    if (!clientId || !fieldName || !fieldValue) continue;
+    if (fieldName === "whatsapp") {
+      whatsappByClient.set(clientId, fieldValue);
+      continue;
+    }
+    if (fieldName === "telefone") {
+      telefoneByClient.set(clientId, fieldValue);
+    }
+  }
 
   const obligationStatsByClient = new Map<
     string,
@@ -1472,6 +1610,18 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
       name: client.name,
       cnpj: normalizeCnpj(client.cnpj) || client.cnpj,
       status: client.status,
+      contact: client.contact,
+      email: client.email,
+      phone: asTrimmedString(client.phone) || telefoneByClient.get(client.id) || null,
+      whatsapp_phone:
+        whatsappByClient.get(client.id) ||
+        asTrimmedString(client.phone) ||
+        telefoneByClient.get(client.id) ||
+        null,
+      whatsapp_phone_digits:
+        normalizePhoneDigits(whatsappByClient.get(client.id)) ||
+        normalizePhoneDigits(client.phone) ||
+        normalizePhoneDigits(telefoneByClient.get(client.id)),
       linked: Boolean(link),
       link: link
         ? {
@@ -1489,7 +1639,7 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
   return {
     clients: mappedClients,
     companies,
-    uploads,
+    uploads: mappedUploads,
     summary: {
       clients_total: clients.length,
       clients_linked: mappedClients.filter((item) => item.linked).length,
@@ -1501,7 +1651,7 @@ async function handleOverview(supabaseAdmin: ReturnType<typeof createClient>) {
         const dueDate = normalizeDate(row.due_date);
         return Boolean(dueDate && dueDate < todayIso && isPendingLikeStatus(status));
       }).length,
-      recent_uploads: uploads.length,
+      recent_uploads: mappedUploads.length,
     },
   };
 }
@@ -2834,7 +2984,7 @@ async function handleListUploads(
   const clientId = asTrimmedString(body.client_id);
   let query = supabaseAdmin
     .from("client_acessorias_uploads")
-    .select("id, client_id, acessorias_company_id, file_name, file_size, content_type, status, error_message, uploaded_by, uploaded_at")
+    .select("id, client_id, acessorias_company_id, file_name, file_size, content_type, status, error_message, uploaded_by, uploaded_at, request_payload")
     .order("uploaded_at", { ascending: false })
     .limit(100);
 
@@ -2842,8 +2992,56 @@ async function handleListUploads(
 
   const { data, error } = await query;
   if (error) throw error;
+  const uploads = data || [];
+  if (uploads.length === 0) return { uploads: [] };
 
-  return { uploads: data || [] };
+  const clientIds = Array.from(
+    new Set(
+      uploads
+        .map((row) => asTrimmedString(row.client_id))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const companyIds = Array.from(
+    new Set(
+      uploads
+        .map((row) => asTrimmedString(row.acessorias_company_id))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  const clientNameById = new Map<string, string>();
+  if (clientIds.length > 0) {
+    const { data: clients, error: clientsError } = await supabaseAdmin
+      .from("clients")
+      .select("id, name")
+      .in("id", clientIds);
+    if (clientsError) throw clientsError;
+
+    for (const client of clients || []) {
+      const id = asTrimmedString(client.id);
+      if (!id) continue;
+      clientNameById.set(id, asTrimmedString(client.name) || "Cliente sem nome");
+    }
+  }
+
+  const companyNameById = new Map<string, string>();
+  if (companyIds.length > 0) {
+    const { data: companies, error: companiesError } = await supabaseAdmin
+      .from("acessorias_companies_cache")
+      .select("acessorias_company_id, company_name")
+      .in("acessorias_company_id", companyIds);
+    if (companiesError) throw companiesError;
+
+    for (const company of companies || []) {
+      const id = asTrimmedString(company.acessorias_company_id);
+      const name = asTrimmedString(company.company_name);
+      if (!id || !name) continue;
+      companyNameById.set(id, name);
+    }
+  }
+
+  return { uploads: mapUploadsForHistory(uploads, clientNameById, companyNameById) };
 }
 
 async function handleSendEcontinuo(
