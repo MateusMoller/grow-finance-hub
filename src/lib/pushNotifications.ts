@@ -1,7 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import { isFunctionalPwaRoute, normalizePwaAppScopePath, normalizePwaBasePath, syncPwaModeForPath } from "@/lib/pwaScope";
 
-const WEB_PUSH_PUBLIC_KEY = (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || "").trim();
+const FALLBACK_WEB_PUSH_PUBLIC_KEY =
+  "BC16oL1ad4y93LHHSe4c044NpuDUaPGGqnw39xZ7R9v6yLmh6eKPnuGVX-3amlZxGT45nZDZfQ3UsHFrgZ5DAVk";
+const WEB_PUSH_PUBLIC_KEY = (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || FALLBACK_WEB_PUSH_PUBLIC_KEY).trim();
 
 export type PushPermissionState = NotificationPermission | "unsupported";
 
