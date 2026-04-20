@@ -1089,7 +1089,7 @@ export default function PortalClientePage() {
         <PortalClienteSidebar activeTab={activeTab} onChangeTab={setActiveTab} />
 
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-20 h-16 flex items-center justify-between border-b border-border/70 px-3 md:px-4 bg-background/88 backdrop-blur-xl shrink-0">
+          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <SidebarTrigger />
               <div className="min-w-0">
@@ -1100,9 +1100,8 @@ export default function PortalClientePage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground hidden sm:inline">{user.email}</span>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="rounded-xl"
                 onClick={() => {
                   void signOut();
                   navigate("/app/login");
@@ -1113,9 +1112,9 @@ export default function PortalClientePage() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
+          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6">
             <div className="w-full max-w-7xl mx-auto space-y-5">
-              <div className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs sm:p-5">
+              <div className="rounded-xl border bg-card p-4 sm:p-5">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div className="space-y-1">
                     <h1 className="text-lg font-semibold">

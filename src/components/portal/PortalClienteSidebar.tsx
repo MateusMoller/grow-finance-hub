@@ -86,12 +86,12 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
   return (
     <Sidebar collapsible="icon">
       <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-        <div className="m-3 mt-4 flex items-center gap-2.5 rounded-2xl border border-sidebar-border/80 bg-sidebar-accent/45 px-3 py-2.5">
-          <div className="h-8 w-8 overflow-hidden rounded-lg border border-sidebar-border/60 bg-sidebar-accent shrink-0">
+        <div className="p-4 flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           {!collapsed && (
-            <span className="font-heading text-sm font-semibold tracking-tight text-sidebar-accent-foreground">
+            <span className="font-heading font-bold text-sm text-sidebar-foreground">
               Portal do Cliente
             </span>
           )}
@@ -107,7 +107,6 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
                     <SidebarMenuButton
                       tooltip={item.title}
                       isActive={activeTab === item.key}
-                      className="rounded-xl text-sidebar-foreground/90 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-xs"
                       onClick={() => {
                         onChangeTab(item.key);
                         if (isMobile) setOpenMobile(false);

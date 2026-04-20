@@ -112,11 +112,10 @@ export default function HomePage() {
 
   return (
     <SiteLayout>
-      <div className="bg-background text-foreground transition-colors">
-        <section className="relative overflow-hidden border-b border-border/60 pb-10 pt-8 sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(214_88%_52%_/_0.09),transparent_35%),radial-gradient(circle_at_bottom_left,hsl(44_95%_58%_/_0.08),transparent_30%)]" />
+      <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
+        <section className="border-b border-border/60 pb-10 pt-8 dark:border-[#243054] sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
           <div className="container grid gap-10 lg:grid-cols-2 lg:items-start">
-            <motion.div {...fadeIn} className="relative z-[1] space-y-8">
+            <motion.div {...fadeIn} className="space-y-8">
               <div className="space-y-5">
                 <h1 className="font-heading text-3xl font-bold leading-tight text-foreground sm:text-4xl md:text-5xl">
                   Mais do que contabilidade, impulsionamos o crescimento do seu negócio
@@ -128,7 +127,7 @@ export default function HomePage() {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button asChild variant="hero" className="w-full rounded-full px-6 sm:w-auto" size="lg">
+                <Button asChild className="w-full rounded-full px-6 sm:w-auto" size="lg">
                   <Link to="/#contato">Quero Crescer</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full rounded-full px-6 sm:w-auto" size="lg">
@@ -138,7 +137,7 @@ export default function HomePage() {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 {heroStats.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs">
+                  <div key={item.label} className="rounded-2xl border border-border/70 bg-card/80 p-4">
                     <div className="text-lg font-bold text-foreground">{item.value}</div>
                     <p className="text-xs font-medium text-foreground/90">{item.label}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
@@ -150,25 +149,25 @@ export default function HomePage() {
             <motion.div
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="relative z-[1] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-md"
+              className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734] dark:shadow-[0_14px_40px_rgba(0,0,0,0.32)]"
             >
               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="font-heading text-lg font-semibold text-foreground">Dashboard de Resultados</h3>
+                  <h3 className="font-heading text-lg font-semibold">Dashboard de Resultados</h3>
                   <p className="text-xs text-muted-foreground">Relatórios gerenciais para decisoes estratégicas.</p>
                 </div>
                 <span className="text-xs text-muted-foreground">Atualizado hoje</span>
               </div>
 
-              <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+              <div className="rounded-xl border border-border/70 bg-[#fafafa] p-4 dark:border-[#27345b] dark:bg-[#111f3d]">
                 <div className="flex h-40 items-end gap-3">
                   {[35, 58, 72, 82, 60, 88].map((height, index) => (
-                    <div key={index} className="flex-1 rounded-t-md bg-gradient-to-t from-primary/85 to-primary/25" style={{ height: `${height}%` }} />
+                    <div key={index} className="flex-1 rounded-t-md bg-gradient-to-t from-orange-500 to-amber-300" style={{ height: `${height}%` }} />
                   ))}
                 </div>
                 <div className="mt-3 flex flex-col items-start gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                   <span>Consultoria contínua + relatórios mensais</span>
-                  <Button asChild variant="hero" size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
+                  <Button asChild size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
                     <Link to="/solucoes">Ver Demonstracao</Link>
                   </Button>
                 </div>
@@ -225,7 +224,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="servicos" className="py-12 md:py-16">
+        <section id="serviços" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
@@ -345,21 +344,24 @@ export default function HomePage() {
 
         <section id="contato" className="py-14 md:py-16">
           <div className="container">
-            <div className="rounded-3xl border border-border bg-card p-5 sm:p-6 md:p-10">
+            <div className="rounded-2xl bg-primary p-5 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] sm:p-6 md:p-10">
               <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
                 <motion.div {...fadeIn}>
-                  <h2 className="font-heading text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+                  <h2 className="font-heading text-2xl font-semibold leading-tight sm:text-3xl">
                     Pronto para crescer com organização e estratégia?
                   </h2>
-                  <p className="mt-3 max-w-xl text-sm text-muted-foreground">
+                  <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
                     Agende uma avaliação gratuita e descubra como a Grow pode estruturar sua contabilidade para apoiar
                     decisoes que impulsionam resultados.
                   </p>
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <Button asChild variant="hero" className="w-full rounded-full px-5 text-sm font-semibold sm:w-auto">
+                    <Button
+                      asChild
+                      className="w-full rounded-full bg-gradient-to-r from-[#6d4dff] to-[#3f85ff] px-5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(70,98,255,0.35)] hover:from-[#7a5cff] hover:to-[#4b8fff] sm:w-auto dark:from-[#836dff] dark:to-[#5f93ff] dark:hover:from-[#907dff] dark:hover:to-[#6aa0ff]"
+                    >
                       <Link to="/contato">Solicitar Avaliação Gratuita</Link>
                     </Button>
-                    <Button asChild variant="outline" className="w-full rounded-full px-5 text-sm sm:w-auto">
+                    <Button asChild variant="outline" className="w-full rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] sm:w-auto dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
                       <Link to="/contato">Falar com Consultor</Link>
                     </Button>
                   </div>
@@ -369,7 +371,7 @@ export default function HomePage() {
                   {...fadeIn}
                   transition={{ duration: 0.45, delay: 0.1 }}
                   onSubmit={handleLeadSubmit}
-                  className="rounded-2xl border border-border bg-background p-5 text-foreground"
+                  className="rounded-2xl bg-white p-5 text-foreground dark:border dark:border-[#2b3861] dark:bg-[#08142f] dark:text-[#e9eeff]"
                 >
                   <div className="space-y-3">
                     <Input
@@ -377,13 +379,13 @@ export default function HomePage() {
                       required
                       value={leadForm.fullName}
                       onChange={(event) => setLeadForm((prev) => ({ ...prev, fullName: event.target.value }))}
-                      className="rounded-full bg-background"
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
                     />
                     <Input
                       placeholder="Empresa"
                       value={leadForm.companyName}
                       onChange={(event) => setLeadForm((prev) => ({ ...prev, companyName: event.target.value }))}
-                      className="rounded-full bg-background"
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
                     />
                     <Input
                       type="email"
@@ -391,11 +393,11 @@ export default function HomePage() {
                       required
                       value={leadForm.email}
                       onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
-                      className="rounded-full bg-background"
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
                     />
                   </div>
-                  <p className="mt-3 text-xs text-muted-foreground">Garantimos confidencialidade e segurança dos seus dados.</p>
-                  <Button type="submit" variant="hero" className="mt-4 w-full rounded-full" disabled={sending}>
+                  <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e segurança dos seus dados.</p>
+                  <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>
                     {sending ? "Enviando..." : "Enviar Solicitação"}
                     {!sending && <ArrowRight className="h-4 w-4" />}
                   </Button>

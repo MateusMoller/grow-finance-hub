@@ -244,10 +244,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-20 h-16 flex items-center justify-between border-b border-border/70 px-3 md:px-4 bg-background/88 backdrop-blur-xl shrink-0">
+          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <SidebarTrigger />
-              <div className="hidden md:flex items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-1.5 shadow-xs">
+              <div className="hidden md:flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
                   className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-44 lg:w-56"
@@ -268,7 +268,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden rounded-xl border border-border/70 bg-card shadow-xs"
+                className="md:hidden"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Buscar"
               >
@@ -277,14 +277,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative rounded-xl border border-border/70 bg-card shadow-xs">
+                  <Button variant="ghost" size="icon" className="relative">
                     <Bell className="h-4 w-4" />
                     {unreadCount > 0 && (
                       <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-1rem))] rounded-xl border-border/70">
+                <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
                     <span>Notificacoes</span>
                     <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
@@ -346,12 +346,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 rounded-full border border-border/70 bg-card text-primary shadow-xs hover:bg-primary/10"
+                    className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
                   >
                     <span className="text-xs font-semibold">{userInitials}</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[min(15rem,calc(100vw-1rem))] rounded-xl border-border/70">
+                <DropdownMenuContent align="end" className="w-[min(14rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
@@ -375,22 +375,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
+          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
             {children}
           </main>
 
-          <footer className="border-t border-border/70 bg-background/86 px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
+          <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
             Grow Finance Hub - Area interna
           </footer>
 
-          <div className="fixed bottom-0 left-0 right-0 border-t border-border/70 bg-background/92 backdrop-blur-xl md:hidden z-30">
+          <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
             <div
-              className="grid grid-cols-3 gap-1 px-2 pb-[calc(env(safe-area-inset-bottom)+0.125rem)] pt-1"
+              className="grid grid-cols-3 px-1 pb-[calc(env(safe-area-inset-bottom)+0.125rem)]"
               style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.125rem)" }}
             >
               <button
                 type="button"
-                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px]"
                 onClick={() => setSearchOpen(true)}
               >
                 <Search className="h-4 w-4" />
@@ -398,7 +398,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
               <button
                 type="button"
-                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px]"
                 onClick={() => setMobileFiltersOpen(true)}
               >
                 <Filter className="h-4 w-4" />
@@ -406,7 +406,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </button>
               <button
                 type="button"
-                className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 text-[11px] text-primary font-semibold transition-colors hover:bg-primary/10"
+                className="flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] text-primary font-semibold"
                 onClick={() => navigate("/app/tarefas?create=1")}
               >
                 <PlusCircle className="h-4 w-4" />
@@ -418,20 +418,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </div>
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85svh] rounded-2xl border-border/70">
+        <DialogContent className="sm:max-w-md max-h-[85svh]">
           <DialogHeader>
             <DialogTitle>Busca rápida</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <input
-              className="w-full rounded-xl border border-border/70 bg-background px-3 py-2 text-sm outline-none ring-ring transition-shadow focus-visible:ring-2"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none"
               placeholder="Buscar pagina..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
             <div className="max-h-72 overflow-y-auto space-y-1">
               {filteredLinks.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
                   Nenhuma pagina encontrada.
                 </div>
               ) : (
@@ -439,7 +439,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <button
                     key={item.url}
                     type="button"
-                    className="w-full rounded-xl border border-border/70 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/70"
+                    className="w-full rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
                     onClick={() => openLink(item.url)}
                   >
                     {item.title}
@@ -452,7 +452,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </Dialog>
 
       <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-        <SheetContent side="bottom" className="rounded-t-3xl border border-border/70 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+        <SheetContent side="bottom" className="rounded-t-2xl px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
           <SheetHeader>
             <SheetTitle>Filtros globais</SheetTitle>
           </SheetHeader>
@@ -460,7 +460,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Empresa</label>
               <select
-                className="h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm outline-none ring-ring transition-shadow focus-visible:ring-2"
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 value={selectedCompany || ""}
                 onChange={(event) => setSelectedCompany(event.target.value || null)}
               >
@@ -475,7 +475,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Competência</label>
               <select
-                className="h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm outline-none ring-ring transition-shadow focus-visible:ring-2"
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 value={selectedCompetence || ""}
                 onChange={(event) => setSelectedCompetence(event.target.value || null)}
               >
