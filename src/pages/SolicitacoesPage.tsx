@@ -42,6 +42,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
+import { completeLinkedRequestAndFormSubmissions } from "@/lib/requestStatusCascade";
 import { toast } from "sonner";
 
 type RequestStatus = Database["public"]["Enums"]["request_status"];
@@ -683,9 +684,41 @@ export default function SolicitacoesPage() {
       return;
     }
 
+    let cascadeErrors: string[] = [];
+    if (status === "completed" && task.request_id) {
+      const cascadeResult = await completeLinkedRequestAndFormSubmissions(task.request_id);
+      cascadeErrors = cascadeResult.errors;
+
+      setRequests((previous) =>
+        previous.map((request) =>
+          request.id === task.request_id
+            ? { ...request, status: "completed", waitingSide: deriveWaitingSide("completed", request.lastMessage) }
+            : request
+        )
+      );
+
+      setSubmissions((previous) =>
+        previous.map((submission) =>
+          submission.request_id === task.request_id ? { ...submission, status: "completed" } : submission
+        )
+      );
+    }
+
     setTasks((previous) =>
       previous.map((item) => (item.id === task.id ? { ...item, status } : item))
     );
+
+    if (cascadeErrors.length > 0) {
+      toast.warning(`Pendencia concluida, mas houve falha na cascata: ${cascadeErrors.join(" | ")}`);
+      return;
+    }
+
+    if (status === "completed" && task.request_id) {
+      toast.success("Pendencia concluida e itens vinculados finalizados.");
+      return;
+    }
+
+    toast.success("Status da pendencia atualizado.");
   };
 
   const handleDeleteTask = async (taskId: string) => {

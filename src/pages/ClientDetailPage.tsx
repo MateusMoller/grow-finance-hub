@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { getClientSegmentOptions } from "@/lib/clientSegments";
+import { completeLinkedRequestAndFormSubmissions } from "@/lib/requestStatusCascade";
 import { sectorOptions } from "@/components/portal/types";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -1543,6 +1544,8 @@ export default function ClientDetailPage() {
   };
 
   const handlePortalTaskStatusChange = async (taskId: string, status: PortalTaskStatus) => {
+    const targetTask = portalTasks.find((task) => task.id === taskId) || null;
+
     setUpdatingPortalTaskId(taskId);
     const { error } = await supabase.from("client_portal_tasks").update({ status }).eq("id", taskId);
     setUpdatingPortalTaskId(null);
@@ -1553,6 +1556,17 @@ export default function ClientDetailPage() {
     }
 
     setPortalTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status } : task)));
+
+    if (status === "completed" && targetTask?.request_id) {
+      const cascadeResult = await completeLinkedRequestAndFormSubmissions(targetTask.request_id);
+      if (cascadeResult.errors.length > 0) {
+        toast.warning(`Pendencia concluida, mas houve falha na cascata: ${cascadeResult.errors.join(" | ")}`);
+        return;
+      }
+      toast.success("Pendencia concluida e itens vinculados finalizados.");
+      return;
+    }
+
     toast.success("Status da pendencia atualizado.");
   };
 

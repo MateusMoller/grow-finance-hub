@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { motion } from "framer-motion";
-import { Loader2, Plus, Search, ShieldAlert, UserCog, Users } from "lucide-react";
+import { Loader2, Pencil, Plus, Search, ShieldAlert, Trash2, UserCog, Users } from "lucide-react";
 
 import { AppLayout } from "@/components/app/AppLayout";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,7 +58,7 @@ const roleColorMap: Record<string, string> = {
 };
 
 export default function UsuariosPage() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -60,6 +70,15 @@ export default function UsuariosPage() {
     password: "",
     role: "employee",
   });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUserRow | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    displayName: "",
+    role: "employee",
+  });
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isAdmin = role === "admin";
 
@@ -70,6 +89,21 @@ export default function UsuariosPage() {
       password: "",
       role: "employee",
     });
+  };
+
+  const extractFunctionErrorMessage = async (error: unknown) => {
+    if (!(error instanceof FunctionsHttpError)) return null;
+
+    try {
+      const errorResponse = await error.context.json();
+      if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
+        return String(errorResponse.error);
+      }
+    } catch {
+      // ignore parsing errors and fallback to generic message
+    }
+
+    return null;
   };
 
   const loadUsers = useCallback(async () => {
@@ -202,18 +236,7 @@ export default function UsuariosPage() {
     setCreating(false);
 
     if (error) {
-      let detailedErrorMessage: string | null = null;
-
-      if (error instanceof FunctionsHttpError) {
-        try {
-          const errorResponse = await error.context.json();
-          if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
-            detailedErrorMessage = String(errorResponse.error);
-          }
-        } catch {
-          // ignore parsing errors and fallback to generic message
-        }
-      }
+      const detailedErrorMessage = await extractFunctionErrorMessage(error);
 
       const normalizedMessage = (detailedErrorMessage || error.message || "").toLowerCase();
       const shouldTryPromotion =
@@ -246,6 +269,85 @@ export default function UsuariosPage() {
     toast.success("Usuário cadastrado com sucesso.");
     setCreateOpen(false);
     resetCreateForm();
+    void loadUsers();
+  };
+
+  const openEditDialog = (userRow: AdminUserRow) => {
+    setEditingUser(userRow);
+    setEditForm({
+      displayName: userRow.display_name?.trim() || "",
+      role: userRow.role || "employee",
+    });
+    setEditOpen(true);
+  };
+
+  const handleSaveUserEdit = async () => {
+    if (!isAdmin || !editingUser) {
+      toast.error("Apenas admin pode editar usuÃ¡rios.");
+      return;
+    }
+
+    if (!editForm.displayName.trim()) {
+      toast.error("Informe o nome do usuÃ¡rio.");
+      return;
+    }
+
+    if (!editForm.role.trim()) {
+      toast.error("Selecione um perfil.");
+      return;
+    }
+
+    setSavingEdit(true);
+    const { error } = await supabase.functions.invoke("manage-team-user", {
+      body: {
+        action: "update",
+        userId: editingUser.user_id,
+        displayName: editForm.displayName,
+        role: editForm.role,
+      },
+    });
+    setSavingEdit(false);
+
+    if (error) {
+      const detailedErrorMessage = await extractFunctionErrorMessage(error);
+      toast.error(detailedErrorMessage || error.message || "NÃ£o foi possÃ­vel atualizar usuÃ¡rio.");
+      return;
+    }
+
+    toast.success("UsuÃ¡rio atualizado com sucesso.");
+    setEditOpen(false);
+    setEditingUser(null);
+    void loadUsers();
+  };
+
+  const handleDeleteUser = async () => {
+    if (!isAdmin || !deleteTarget) {
+      toast.error("Apenas admin pode excluir usuÃ¡rios.");
+      return;
+    }
+
+    if (deleteTarget.user_id === user?.id) {
+      toast.error("NÃ£o Ã© permitido excluir o prÃ³prio usuÃ¡rio.");
+      return;
+    }
+
+    setDeleting(true);
+    const { error } = await supabase.functions.invoke("manage-team-user", {
+      body: {
+        action: "delete",
+        userId: deleteTarget.user_id,
+      },
+    });
+    setDeleting(false);
+
+    if (error) {
+      const detailedErrorMessage = await extractFunctionErrorMessage(error);
+      toast.error(detailedErrorMessage || error.message || "NÃ£o foi possÃ­vel excluir usuÃ¡rio.");
+      return;
+    }
+
+    toast.success("UsuÃ¡rio excluÃ­do com sucesso.");
+    setDeleteTarget(null);
     void loadUsers();
   };
 
@@ -328,12 +430,14 @@ export default function UsuariosPage() {
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden md:table-cell">E-mail</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Perfil</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden lg:table-cell">Criado em</th>
+                    <th className="p-4 text-right text-xs font-semibold text-muted-foreground">AÃ§Ãµes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {filteredUsers.map((userRow, index) => {
                     const label = roleLabelMap.get(userRow.role || "") || "Sem perfil";
                     const badgeClass = roleColorMap[userRow.role || ""] || "bg-muted text-foreground";
+                    const isOwnUser = userRow.user_id === user?.id;
 
                     return (
                       <motion.tr
@@ -367,12 +471,34 @@ export default function UsuariosPage() {
                         <td className="p-4 text-sm text-muted-foreground hidden lg:table-cell">
                           {new Date(userRow.created_at).toLocaleDateString("pt-BR")}
                         </td>
+                        <td className="p-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={() => openEditDialog(userRow)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Editar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-destructive hover:text-destructive"
+                              onClick={() => setDeleteTarget(userRow)}
+                              disabled={isOwnUser}
+                              title={isOwnUser ? "NÃ£o Ã© permitido excluir seu prÃ³prio usuÃ¡rio." : undefined}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Excluir
+                            </Button>
+                          </div>
+                        </td>
                       </motion.tr>
                     );
                   })}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="py-14 text-center text-sm text-muted-foreground">
+                      <td colSpan={5} className="py-14 text-center text-sm text-muted-foreground">
                         <div className="inline-flex flex-col items-center gap-2">
                           <Users className="h-6 w-6" />
                           Nenhum usuário encontrado para esse filtro.
@@ -445,6 +571,93 @@ export default function UsuariosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) setEditingUser(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar usuÃ¡rio</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome completo *</Label>
+              <Input
+                placeholder="Nome do colaborador"
+                value={editForm.displayName}
+                onChange={(event) => setEditForm((prev) => ({ ...prev, displayName: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>E-mail</Label>
+              <Input value={editingUser?.email || ""} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label>PermissÃ£o *</Label>
+              <select
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
+                value={editForm.role}
+                onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value }))}
+              >
+                {roleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={savingEdit}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveUserEdit} disabled={savingEdit}>
+              {savingEdit ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              {savingEdit ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !deleting) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuÃ¡rio</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa aÃ§Ã£o irÃ¡ remover o acesso de{" "}
+              <span className="font-semibold text-foreground">
+                {deleteTarget?.display_name?.trim() || deleteTarget?.email || "este usuÃ¡rio"}
+              </span>{" "}
+              permanentemente. Essa aÃ§Ã£o nÃ£o pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteUser();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              {deleting ? "Excluindo..." : "Confirmar exclusÃ£o"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

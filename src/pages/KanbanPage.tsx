@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
+import { completeLinkedRequestAndFormSubmissions } from "@/lib/requestStatusCascade";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -305,7 +306,24 @@ export default function KanbanPage() {
       registerTaskHistory(taskId, "Status alterado", `${previousStatus} -> ${newStatus}`);
     }
 
-    if (options?.undoable === false) {
+    const shouldCascadeCompletion = newStatus === "done" && Boolean(currentTask.request_id);
+    let cascadeErrors: string[] = [];
+
+    if (shouldCascadeCompletion) {
+      const cascadeResult = await completeLinkedRequestAndFormSubmissions(currentTask.request_id);
+      cascadeErrors = cascadeResult.errors;
+    }
+
+    if (cascadeErrors.length > 0) {
+      toast.warning(`Tarefa atualizada, mas houve falha na cascata: ${cascadeErrors.join(" | ")}`);
+      return;
+    }
+
+    if (options?.undoable === false || shouldCascadeCompletion) {
+      if (shouldCascadeCompletion) {
+        toast.success("Tarefa concluida e itens vinculados finalizados.");
+        return;
+      }
       toast.success("Status da tarefa atualizado");
       return;
     }
@@ -346,6 +364,15 @@ export default function KanbanPage() {
 
     setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, ...updates } : task)));
     setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, ...updates } : prev));
+
+    const shouldCascadeCompletion =
+      Boolean(previousTask?.request_id) && updates.status === "done" && previousTask?.status !== "done";
+    let cascadeErrors: string[] = [];
+
+    if (shouldCascadeCompletion && previousTask?.request_id) {
+      const cascadeResult = await completeLinkedRequestAndFormSubmissions(previousTask.request_id);
+      cascadeErrors = cascadeResult.errors;
+    }
     if (previousTask) {
       const changedFields: string[] = [];
       if ((previousTask.description || "") !== (updates.description || "")) changedFields.push("descrição");
@@ -362,6 +389,16 @@ export default function KanbanPage() {
         registerTaskHistory(taskId, "Detalhes da tarefa atualizados", changedFields.join(", "));
       }
     }
+    if (cascadeErrors.length > 0) {
+      toast.warning(`Tarefa atualizada, mas houve falha na cascata: ${cascadeErrors.join(" | ")}`);
+      return;
+    }
+
+    if (shouldCascadeCompletion) {
+      toast.success("Tarefa atualizada e itens vinculados finalizados.");
+      return;
+    }
+
     toast.success("Tarefa atualizada");
   };
 
