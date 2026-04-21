@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { motion } from "framer-motion";
 import { Loader2, Pencil, Plus, Search, ShieldAlert, Trash2, UserCog, Users } from "lucide-react";
@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +119,7 @@ export default function UsuariosPage() {
     setLoadingUsers(false);
 
     if (error) {
-      toast.error(`Não foi possível carregar usuários: ${error.message}`);
+      toast.error(`NÃ£o foi possÃ­vel carregar usuÃ¡rios: ${error.message}`);
       return;
     }
 
@@ -141,7 +141,7 @@ export default function UsuariosPage() {
       .maybeSingle();
 
     if (clientError) {
-      toast.error("Não foi possível validar o usuário existente para promocao de perfil.");
+      toast.error("NÃ£o foi possÃ­vel validar o usuÃ¡rio existente para promocao de perfil.");
       return false;
     }
 
@@ -157,7 +157,7 @@ export default function UsuariosPage() {
     );
 
     if (upsertRoleError) {
-      toast.error("Não foi possível aplicar o novo perfil no usuário existente.");
+      toast.error("NÃ£o foi possÃ­vel aplicar o novo perfil no usuÃ¡rio existente.");
       return false;
     }
 
@@ -168,7 +168,7 @@ export default function UsuariosPage() {
       .eq("role", "client");
 
     if (removeClientRoleError) {
-      toast.error("Não foi possível remover o perfil de cliente do usuário promovido.");
+      toast.error("NÃ£o foi possÃ­vel remover o perfil de cliente do usuÃ¡rio promovido.");
       return false;
     }
 
@@ -178,7 +178,7 @@ export default function UsuariosPage() {
       .eq("portal_user_id", portalUserId);
 
     if (removeClientRecordError) {
-      toast.error("Não foi possível remover o vinculo de cliente do usuário promovido.");
+      toast.error("NÃ£o foi possÃ­vel remover o vinculo de cliente do usuÃ¡rio promovido.");
       return false;
     }
 
@@ -203,24 +203,24 @@ export default function UsuariosPage() {
 
   const handleCreateUser = async () => {
     if (!isAdmin) {
-      toast.error("Apenas admin pode cadastrar usuários.");
+      toast.error("Apenas admin pode cadastrar usuÃ¡rios.");
       return;
     }
 
     if (!form.displayName.trim()) {
-      toast.error("Informe o nome do usuário.");
+      toast.error("Informe o nome do usuÃ¡rio.");
       return;
     }
 
     if (!form.email.trim()) {
-      toast.error("Informe o e-mail do usuário.");
+      toast.error("Informe o e-mail do usuÃ¡rio.");
       return;
     }
 
     const password = form.password.trim();
     const isValidPassword = password.length >= 6;
     if (!isValidPassword) {
-      toast.error("A senha precisa ter no mínimo 6 caracteres.");
+      toast.error("A senha precisa ter no mÃ­nimo 6 caracteres.");
       return;
     }
 
@@ -249,7 +249,7 @@ export default function UsuariosPage() {
         setCreating(false);
 
         if (promoted) {
-          toast.success("Usuário existente encontrado. Perfil interno aplicado com sucesso.");
+          toast.success("UsuÃ¡rio existente encontrado. Perfil interno aplicado com sucesso.");
           setCreateOpen(false);
           resetCreateForm();
           void loadUsers();
@@ -262,11 +262,11 @@ export default function UsuariosPage() {
         return;
       }
 
-      toast.error(error.message || "Não foi possível cadastrar usuário.");
+      toast.error(error.message || "NÃ£o foi possÃ­vel cadastrar usuÃ¡rio.");
       return;
     }
 
-    toast.success("Usuário cadastrado com sucesso.");
+    toast.success("UsuÃ¡rio cadastrado com sucesso.");
     setCreateOpen(false);
     resetCreateForm();
     void loadUsers();
@@ -283,12 +283,12 @@ export default function UsuariosPage() {
 
   const handleSaveUserEdit = async () => {
     if (!isAdmin || !editingUser) {
-      toast.error("Apenas admin pode editar usuÃ¡rios.");
+      toast.error("Apenas admin pode editar usuÃƒÂ¡rios.");
       return;
     }
 
     if (!editForm.displayName.trim()) {
-      toast.error("Informe o nome do usuÃ¡rio.");
+      toast.error("Informe o nome do usuÃƒÂ¡rio.");
       return;
     }
 
@@ -310,11 +310,11 @@ export default function UsuariosPage() {
 
     if (error) {
       const detailedErrorMessage = await extractFunctionErrorMessage(error);
-      toast.error(detailedErrorMessage || error.message || "NÃ£o foi possÃ­vel atualizar usuÃ¡rio.");
+      toast.error(detailedErrorMessage || error.message || "NÃƒÂ£o foi possÃƒÂ­vel atualizar usuÃƒÂ¡rio.");
       return;
     }
 
-    toast.success("UsuÃ¡rio atualizado com sucesso.");
+    toast.success("UsuÃƒÂ¡rio atualizado com sucesso.");
     setEditOpen(false);
     setEditingUser(null);
     void loadUsers();
@@ -322,12 +322,12 @@ export default function UsuariosPage() {
 
   const handleDeleteUser = async () => {
     if (!isAdmin || !deleteTarget) {
-      toast.error("Apenas admin pode excluir usuÃ¡rios.");
+      toast.error("Apenas admin pode excluir usuÃƒÂ¡rios.");
       return;
     }
 
     if (deleteTarget.user_id === user?.id) {
-      toast.error("NÃ£o Ã© permitido excluir o prÃ³prio usuÃ¡rio.");
+      toast.error("NÃƒÂ£o ÃƒÂ© permitido excluir o prÃƒÂ³prio usuÃƒÂ¡rio.");
       return;
     }
 
@@ -342,11 +342,11 @@ export default function UsuariosPage() {
 
     if (error) {
       const detailedErrorMessage = await extractFunctionErrorMessage(error);
-      toast.error(detailedErrorMessage || error.message || "NÃ£o foi possÃ­vel excluir usuÃ¡rio.");
+      toast.error(detailedErrorMessage || error.message || "NÃƒÂ£o foi possÃƒÂ­vel excluir usuÃƒÂ¡rio.");
       return;
     }
 
-    toast.success("UsuÃ¡rio excluÃ­do com sucesso.");
+    toast.success("UsuÃƒÂ¡rio excluÃƒÂ­do com sucesso.");
     setDeleteTarget(null);
     void loadUsers();
   };
@@ -355,14 +355,14 @@ export default function UsuariosPage() {
     return (
       <AppLayout>
         <div className="max-w-4xl space-y-4">
-          <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
+          <h1 className="font-heading text-2xl font-bold">Controle de UsuÃ¡rios</h1>
           <div className="rounded-xl border bg-card p-6">
             <div className="flex items-center gap-2 text-destructive mb-2">
               <ShieldAlert className="h-4 w-4" />
               <p className="text-sm font-semibold">Acesso restrito</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Apenas administradores podem acessar o controle de usuários.
+              Apenas administradores podem acessar o controle de usuÃ¡rios.
             </p>
           </div>
         </div>
@@ -375,19 +375,19 @@ export default function UsuariosPage() {
       <div className="space-y-5 max-w-7xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
+            <h1 className="font-heading text-2xl font-bold">Controle de UsuÃ¡rios</h1>
             <p className="text-sm text-muted-foreground">
-              Cadastre novos usuários internos e gerencie permissoes da equipe.
+              Cadastre novos usuÃ¡rios internos e gerencie permissoes da equipe.
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar Usuário
+            <Plus className="h-4 w-4 mr-1" /> Adicionar UsuÃ¡rio
           </Button>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground mb-1">Usuários internos</p>
+            <p className="text-xs text-muted-foreground mb-1">UsuÃ¡rios internos</p>
             <p className="font-heading text-2xl font-bold">{users.length}</p>
           </div>
           <div className="rounded-xl border bg-card p-4">
@@ -426,11 +426,11 @@ export default function UsuariosPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/30">
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Usuário</th>
+                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">UsuÃ¡rio</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden md:table-cell">E-mail</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Perfil</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden lg:table-cell">Criado em</th>
-                    <th className="p-4 text-right text-xs font-semibold text-muted-foreground">AÃ§Ãµes</th>
+                    <th className="p-4 text-right text-xs font-semibold text-muted-foreground">AÃƒÂ§ÃƒÂµes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -487,7 +487,7 @@ export default function UsuariosPage() {
                               className="gap-1.5 text-destructive hover:text-destructive"
                               onClick={() => setDeleteTarget(userRow)}
                               disabled={isOwnUser}
-                              title={isOwnUser ? "NÃ£o Ã© permitido excluir seu prÃ³prio usuÃ¡rio." : undefined}
+                              title={isOwnUser ? "NÃƒÂ£o ÃƒÂ© permitido excluir seu prÃƒÂ³prio usuÃƒÂ¡rio." : undefined}
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Excluir
                             </Button>
@@ -501,7 +501,7 @@ export default function UsuariosPage() {
                       <td colSpan={5} className="py-14 text-center text-sm text-muted-foreground">
                         <div className="inline-flex flex-col items-center gap-2">
                           <Users className="h-6 w-6" />
-                          Nenhum usuário encontrado para esse filtro.
+                          Nenhum usuÃ¡rio encontrado para esse filtro.
                         </div>
                       </td>
                     </tr>
@@ -517,6 +517,9 @@ export default function UsuariosPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Adicionar usuário</DialogTitle>
+            <DialogDescription>
+              Preencha os dados para criar um novo usuário interno.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -531,7 +534,7 @@ export default function UsuariosPage() {
               <Label>E-mail *</Label>
               <Input
                 type="email"
-                placeholder="usuário@empresa.com"
+                placeholder="usuÃ¡rio@empresa.com"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
               />
@@ -540,13 +543,13 @@ export default function UsuariosPage() {
               <Label>Senha temporaria *</Label>
               <Input
                 type="password"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="MÃ­nimo 6 caracteres"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
               />
             </div>
             <div className="space-y-2">
-              <Label>Permissão *</Label>
+              <Label>PermissÃ£o *</Label>
               <select
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
                 value={form.role}
@@ -566,7 +569,7 @@ export default function UsuariosPage() {
             </Button>
             <Button onClick={handleCreateUser} disabled={creating}>
               {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {creating ? "Cadastrando..." : "Cadastrar usuário"}
+              {creating ? "Cadastrando..." : "Cadastrar usuÃ¡rio"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -581,7 +584,10 @@ export default function UsuariosPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar usuÃ¡rio</DialogTitle>
+            <DialogTitle>Editar usuário</DialogTitle>
+            <DialogDescription>
+              Atualize nome e permissão do usuário selecionado.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -597,7 +603,7 @@ export default function UsuariosPage() {
               <Input value={editingUser?.email || ""} disabled />
             </div>
             <div className="space-y-2">
-              <Label>PermissÃ£o *</Label>
+              <Label>PermissÃƒÂ£o *</Label>
               <select
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
                 value={editForm.role}
@@ -617,7 +623,7 @@ export default function UsuariosPage() {
             </Button>
             <Button onClick={handleSaveUserEdit} disabled={savingEdit}>
               {savingEdit ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {savingEdit ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
+              {savingEdit ? "Salvando..." : "Salvar alteraÃƒÂ§ÃƒÂµes"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -633,13 +639,13 @@ export default function UsuariosPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir usuÃ¡rio</AlertDialogTitle>
+            <AlertDialogTitle>Excluir usuÃƒÂ¡rio</AlertDialogTitle>
             <AlertDialogDescription>
-              Essa aÃ§Ã£o irÃ¡ remover o acesso de{" "}
+              Essa aÃƒÂ§ÃƒÂ£o irÃƒÂ¡ remover o acesso de{" "}
               <span className="font-semibold text-foreground">
-                {deleteTarget?.display_name?.trim() || deleteTarget?.email || "este usuÃ¡rio"}
+                {deleteTarget?.display_name?.trim() || deleteTarget?.email || "este usuÃƒÂ¡rio"}
               </span>{" "}
-              permanentemente. Essa aÃ§Ã£o nÃ£o pode ser desfeita.
+              permanentemente. Essa aÃƒÂ§ÃƒÂ£o nÃƒÂ£o pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -653,7 +659,7 @@ export default function UsuariosPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {deleting ? "Excluindo..." : "Confirmar exclusÃ£o"}
+              {deleting ? "Excluindo..." : "Confirmar exclusÃƒÂ£o"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -661,3 +667,4 @@ export default function UsuariosPage() {
     </AppLayout>
   );
 }
+
