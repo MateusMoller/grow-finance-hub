@@ -1,20 +1,10 @@
-import { AppLayout } from "@/components/app/AppLayout";
+﻿import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
-import { AlertTriangle, Bell, BellOff, Check, Clock3, Loader2, RefreshCcw, Smartphone, UserX } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Bell, Check, Clock3, Loader2, RefreshCcw, UserX } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
-import { useAuth } from "@/hooks/useAuth";
-import {
-  disablePushOnCurrentDevice,
-  getPushSubscriptionStatus,
-  sendPushTestToCurrentUser,
-  subscribePushOnCurrentDevice,
-  syncPushSubscriptionOnServer,
-  type PushSubscriptionStatus,
-} from "@/lib/pushNotifications";
-import { toast } from "sonner";
 
 type NotificationFilter = "all" | "unread" | "alta" | "media" | "baixa";
 
@@ -24,17 +14,16 @@ const toRelativeTime = (isoDate: string) => {
 
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.max(1, Math.floor(diffMs / 60000));
-  if (diffMin < 60) return `Ha ${diffMin} min`;
+  if (diffMin < 60) return `Há ${diffMin} min`;
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `Ha ${diffHours}h`;
+  if (diffHours < 24) return `Há ${diffHours}h`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return "Ontem";
-  if (diffDays < 7) return `Ha ${diffDays} dias`;
+  if (diffDays < 7) return `Há ${diffDays} dias`;
   return date.toLocaleDateString("pt-BR");
 };
 
 export default function NotificacoesPage() {
-  const { user } = useAuth();
   const {
     notifications,
     unreadCount,
@@ -44,107 +33,12 @@ export default function NotificacoesPage() {
     refresh,
   } = usePriorityNotifications();
   const [filter, setFilter] = useState<NotificationFilter>("all");
-  const [pushStatus, setPushStatus] = useState<PushSubscriptionStatus>({
-    supported: false,
-    hasPublicKey: false,
-    permission: "unsupported",
-    subscribed: false,
-    endpoint: null,
-  });
-  const [pushActionLoading, setPushActionLoading] = useState<"enable" | "disable" | "test" | null>(null);
-
-  const loadPushStatus = useCallback(async () => {
-    try {
-      const status = await getPushSubscriptionStatus();
-      setPushStatus(status);
-      if (status.subscribed && user?.id) {
-        try {
-          await syncPushSubscriptionOnServer(user.id);
-        } catch {
-          // Nao derruba o status local do push se a sincronização remota falhar.
-        }
-      }
-    } catch {
-      setPushStatus((prev) => ({ ...prev, supported: false }));
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    void loadPushStatus();
-  }, [loadPushStatus]);
 
   const filteredNotifications = useMemo(() => {
     if (filter === "all") return notifications;
     if (filter === "unread") return notifications.filter((notification) => !notification.read);
     return notifications.filter((notification) => notification.priority === filter);
   }, [filter, notifications]);
-
-  const pushStatusLabel = useMemo(() => {
-    if (!pushStatus.supported) return "Push não suportado neste navegador.";
-    if (!pushStatus.hasPublicKey) return "Chave publica VAPID não configurada no app.";
-    if (pushStatus.permission === "denied") return "Permissão bloqueada no navegador.";
-    if (pushStatus.permission !== "granted") return "Permissão ainda não concedida.";
-    if (!pushStatus.subscribed) return "Push habilitado no navegador, mas sem inscricao ativa.";
-    return "Push ativo neste dispositivo.";
-  }, [pushStatus]);
-
-  const handleEnablePush = async () => {
-    if (!user?.id) {
-      toast.error("Usuário não autenticado.");
-      return;
-    }
-
-    setPushActionLoading("enable");
-    try {
-      await subscribePushOnCurrentDevice(user.id);
-      toast.success("Notificações push ativadas neste dispositivo.");
-      await loadPushStatus();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao ativar push.";
-      toast.error(message);
-    } finally {
-      setPushActionLoading(null);
-    }
-  };
-
-  const handleDisablePush = async () => {
-    if (!user?.id) {
-      toast.error("Usuário não autenticado.");
-      return;
-    }
-
-    setPushActionLoading("disable");
-    try {
-      await disablePushOnCurrentDevice(user.id);
-      toast.success("Notificações push desativadas neste dispositivo.");
-      await loadPushStatus();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao desativar push.";
-      toast.error(message);
-    } finally {
-      setPushActionLoading(null);
-    }
-  };
-
-  const handleSendPushTest = async () => {
-    if (!user?.id) {
-      toast.error("Usuário não autenticado.");
-      return;
-    }
-
-    setPushActionLoading("test");
-    try {
-      await syncPushSubscriptionOnServer(user.id);
-      await sendPushTestToCurrentUser(user.id);
-      toast.success("Push de teste enviado.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao enviar push de teste.";
-      toast.error(message);
-    } finally {
-      setPushActionLoading(null);
-      await loadPushStatus();
-    }
-  };
 
   return (
     <AppLayout>
@@ -158,7 +52,7 @@ export default function NotificacoesPage() {
               )}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Alertas priorizados: atrasadas, vencendo hoje e tarefas sem responsavel
+              Alertas priorizados: atrasadas, vencendo hoje e tarefas sem responsável
             </p>
           </div>
           <div className="flex gap-2">
@@ -186,89 +80,11 @@ export default function NotificacoesPage() {
             Prioridade alta
           </Button>
           <Button variant={filter === "media" ? "default" : "outline"} size="sm" onClick={() => setFilter("media")}>
-            Prioridade media
+            Prioridade média
           </Button>
           <Button variant={filter === "baixa" ? "default" : "outline"} size="sm" onClick={() => setFilter("baixa")}>
             Prioridade baixa
           </Button>
-        </div>
-
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold flex items-center gap-2">
-                <Smartphone className="h-4 w-4" />
-                Notificações Push (PWA)
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">{pushStatusLabel}</p>
-            </div>
-            <Badge variant={pushStatus.subscribed ? "default" : "outline"}>
-              {pushStatus.subscribed ? "Ativo" : "Inativo"}
-            </Badge>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              onClick={() => void handleEnablePush()}
-              disabled={
-                pushActionLoading !== null ||
-                !pushStatus.supported ||
-                !pushStatus.hasPublicKey
-              }
-            >
-              {pushActionLoading === "enable" && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-              Ativar no dispositivo
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleDisablePush()}
-              disabled={pushActionLoading !== null || !pushStatus.subscribed}
-            >
-              {pushActionLoading === "disable" ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <BellOff className="h-3.5 w-3.5 mr-1" />
-              )}
-              Desativar
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleSendPushTest()}
-              disabled={pushActionLoading !== null || !pushStatus.subscribed}
-            >
-              {pushActionLoading === "test" ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Bell className="h-3.5 w-3.5 mr-1" />
-              )}
-              Enviar teste
-            </Button>
-
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => void loadPushStatus()}
-              disabled={pushActionLoading !== null}
-            >
-              Atualizar status
-            </Button>
-          </div>
-
-          {pushStatus.permission === "denied" && (
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              O navegador bloqueou notificacoes. Libere nas configuracoes do site/app no celular.
-            </p>
-          )}
-          {!pushStatus.hasPublicKey && (
-            <p className="text-xs text-muted-foreground">
-              Configure a variavel <code>VITE_WEB_PUSH_PUBLIC_KEY</code> para habilitar inscricoes push.
-            </p>
-          )}
         </div>
 
         {loading ? (
@@ -280,7 +96,7 @@ export default function NotificacoesPage() {
             <Bell className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">Nenhuma notificação para este filtro</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Quando surgirem novos alertas de prioridade, eles aparecerao aqui.
+              Quando surgirem novos alertas de prioridade, eles aparecerão aqui.
             </p>
           </div>
         ) : (

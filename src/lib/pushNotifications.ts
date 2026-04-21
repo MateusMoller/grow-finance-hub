@@ -183,8 +183,34 @@ export const disablePushOnCurrentDevice = async (userId: string) => {
   }
 };
 
+const getCurrentAccessToken = async () => {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    throw new Error(sessionError.message || "Nao foi possivel validar a sessao atual.");
+  }
+
+  let accessToken = sessionData.session?.access_token?.trim();
+  if (accessToken) return accessToken;
+
+  const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    throw new Error(refreshError.message || "Sessao expirada. Faca login novamente.");
+  }
+
+  accessToken = refreshedData.session?.access_token?.trim();
+  if (!accessToken) {
+    throw new Error("Sessao expirada. Faca login novamente.");
+  }
+
+  return accessToken;
+};
+
 export const sendPushTestToCurrentUser = async (userId: string) => {
+  const accessToken = await getCurrentAccessToken();
   const { data, error } = await supabase.functions.invoke("send-push-notification", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: {
       target_user_id: userId,
       title: "Push de teste",

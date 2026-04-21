@@ -25,7 +25,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.send-push-notification]
-verify_jwt = true
+verify_jwt = false
 
 [functions.manage-team-user]
 verify_jwt = false

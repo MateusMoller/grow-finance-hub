@@ -40,6 +40,7 @@ const defaultDeliveriesPathCandidates = [
 
 const defaultObligationsMinDate = "2026-04-01";
 const weeklyObligationKanbanIntegrationSource = "acessorias_obrigacao_semanal";
+const obligationCalendarIntegrationSource = "acessorias_obrigacao";
 
 const defaultEcontinuoPathCandidates = [
   "/v1/econtinuo/upload",
@@ -1726,6 +1727,169 @@ async function cleanupObligationKanbanTasks(
   if (error) throw error;
 }
 
+function mapObligationStatusToCalendarStatus(status: string | null) {
+  const token = normalizeToken(status || "");
+  if (
+    token === "cancelado" ||
+    token === "cancelada" ||
+    token === "cancelled" ||
+    token === "canceled" ||
+    token === "anulado" ||
+    token === "anulada"
+  ) {
+    return "cancelled";
+  }
+  return isCompletedStatus(status) ? "completed" : "pending";
+}
+
+function computeCalendarPriorityByDueDate(dueDate: string | null) {
+  const token = normalizeToken(computePriorityByDueDate(dueDate));
+  if (token === "urgente") return "urgente";
+  if (token === "alta") return "alta";
+  if (token === "baixa") return "baixa";
+  return "media";
+}
+
+function isCalendarEntryTypeConstraintError(error: unknown) {
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+
+  if (!message) return false;
+  return (
+    message.includes("calendar_events_entry_type_check") ||
+    (message.includes("entry_type") && message.includes("check"))
+  );
+}
+
+async function syncCalendarEventsForObligations(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  rows: Array<Record<string, unknown>>,
+  clientNameById: Map<string, string>,
+  callerUserId: string | null,
+) {
+  let created = 0;
+  let updated = 0;
+  let cancelled = 0;
+  let skipped = 0;
+
+  const upsertByKey = new Map<string, Record<string, unknown>>();
+  const keysWithoutDueDate = new Set<string>();
+
+  for (const row of rows) {
+    const clientId = asTrimmedString(row.client_id);
+    const obligationId = asTrimmedString(row.acessorias_obligation_id);
+    const obligationName = asTrimmedString(row.obligation_name);
+    const obligationPeriod = asTrimmedString(row.obligation_period);
+    const periodKey = asTrimmedString(row.obligation_period_key) || toPeriodKey(obligationPeriod) || "sem_periodo";
+    const dueDate = normalizeDate(asTrimmedString(row.due_date));
+    const normalizedStatus = normalizeObligationStatus(asTrimmedString(row.status));
+
+    if (!clientId || !obligationId || !obligationName) {
+      skipped += 1;
+      continue;
+    }
+
+    const integrationKey = `${clientId}:${obligationId}:${periodKey}`;
+    if (!dueDate) {
+      keysWithoutDueDate.add(integrationKey);
+      skipped += 1;
+      continue;
+    }
+
+    const clientName = clientNameById.get(clientId) || "Cliente sem nome";
+    const description = [
+      "Obrigacao sincronizada automaticamente via Acessorias.",
+      `Cliente: ${clientName}`,
+      `Obrigacao: ${obligationName}`,
+      obligationPeriod ? `Competencia: ${obligationPeriod}` : null,
+      `Prazo tecnico: ${dueDate}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    upsertByKey.set(integrationKey, {
+      integration_source: obligationCalendarIntegrationSource,
+      integration_key: integrationKey,
+      title: `[Obrigacao] ${obligationName} - ${clientName}`,
+      description,
+      entry_type: "obriga\u00e7\u00e3o",
+      priority: computeCalendarPriorityByDueDate(dueDate),
+      sector: normalizeSectorFromObligationName(obligationName),
+      due_at: `${dueDate}T12:00:00.000Z`,
+      all_day: true,
+      status: mapObligationStatusToCalendarStatus(normalizedStatus),
+      created_by: callerUserId,
+    });
+  }
+
+  const upsertRows = Array.from(upsertByKey.values());
+
+  for (const rowsChunk of chunkArray(upsertRows, 300)) {
+    const integrationKeys = rowsChunk
+      .map((item) => asTrimmedString(item.integration_key))
+      .filter((value): value is string => Boolean(value));
+
+    const existingSet = new Set<string>();
+    if (integrationKeys.length > 0) {
+      const { data: existingRows, error: existingError } = await supabaseAdmin
+        .from("calendar_events")
+        .select("integration_key")
+        .eq("integration_source", obligationCalendarIntegrationSource)
+        .in("integration_key", integrationKeys);
+      if (existingError) throw existingError;
+
+      for (const existingRow of existingRows || []) {
+        const key = asTrimmedString(existingRow.integration_key);
+        if (key) existingSet.add(key);
+      }
+    }
+
+    let { error: upsertError } = await supabaseAdmin
+      .from("calendar_events")
+      .upsert(rowsChunk, { onConflict: "integration_source,integration_key" });
+
+    if (upsertError && isCalendarEntryTypeConstraintError(upsertError)) {
+      const fallbackRows = rowsChunk.map((item) => ({ ...item, entry_type: "obrigacao" }));
+      const fallbackResult = await supabaseAdmin
+        .from("calendar_events")
+        .upsert(fallbackRows, { onConflict: "integration_source,integration_key" });
+      upsertError = fallbackResult.error;
+    }
+
+    if (upsertError) throw upsertError;
+
+    created += integrationKeys.filter((key) => !existingSet.has(key)).length;
+    updated += integrationKeys.filter((key) => existingSet.has(key)).length;
+  }
+
+  const keysToCancel = Array.from(keysWithoutDueDate);
+  for (const keysChunk of chunkArray(keysToCancel, 300)) {
+    if (keysChunk.length === 0) continue;
+    const { data: cancelledRows, error: cancelError } = await supabaseAdmin
+      .from("calendar_events")
+      .update({ status: "cancelled" })
+      .eq("integration_source", obligationCalendarIntegrationSource)
+      .in("integration_key", keysChunk)
+      .neq("status", "cancelled")
+      .select("id");
+    if (cancelError) throw cancelError;
+    cancelled += (cancelledRows || []).length;
+  }
+
+  return {
+    created,
+    updated,
+    cancelled,
+    processed: upsertRows.length,
+    skipped,
+  };
+}
+
 type ParsedKanbanSubtaskState = {
   title: string;
   done: boolean;
@@ -3140,6 +3304,13 @@ async function handleSyncObligations(
     }
   }
 
+  const calendarSyncSummary = await syncCalendarEventsForObligations(
+    supabaseAdmin,
+    dedupedObligationRows,
+    clientsById,
+    callerUserId,
+  );
+
   const processedInBatch = processedLinks;
   const nextCursor = clientIdFilter ? null : cursor + processedInBatch;
   const hasMore = !clientIdFilter && nextCursor < totalLinks;
@@ -3159,6 +3330,10 @@ async function handleSyncObligations(
     synced_obligations: dedupedObligationRows.length,
     clients_processed: processedInBatch,
     created_tasks: weeklyKanbanSummary?.created || 0,
+    calendar_events_created: calendarSyncSummary.created,
+    calendar_events_updated: calendarSyncSummary.updated,
+    calendar_events_cancelled: calendarSyncSummary.cancelled,
+    calendar_sync: calendarSyncSummary,
     details,
     weekly_kanban: weeklyKanbanSummary,
     auto_linked_clients: autoLinkedClients,
@@ -3363,6 +3538,14 @@ async function handleAssignObligation(
     .select("id, client_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, status")
     .maybeSingle();
   if (upsertError) throw upsertError;
+
+  const calendarSyncSummary = await syncCalendarEventsForObligations(
+    supabaseAdmin,
+    [row],
+    new Map<string, string>([[client.id, client.name || "Cliente sem nome"]]),
+    callerUserId,
+  );
+
   await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: client.id });
   const weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
 
@@ -3371,6 +3554,7 @@ async function handleAssignObligation(
     obligation: upserted,
     kanban_task_id: null,
     weekly_kanban: weeklyKanbanSummary,
+    calendar_sync: calendarSyncSummary,
     remote_sync: remoteSync,
   });
 }
@@ -3560,6 +3744,15 @@ async function handleUpdateObligation(
     .maybeSingle();
   if (updateError) throw updateError;
 
+  const calendarSyncSummary = await syncCalendarEventsForObligations(
+    supabaseAdmin,
+    updated ? [updated as unknown as Record<string, unknown>] : [],
+    new Map<string, string>([
+      [existing.client_id, client?.name || "Cliente sem nome"],
+    ]),
+    callerUserId,
+  );
+
   await cleanupObligationKanbanTasks(supabaseAdmin, { clientId: existing.client_id });
   const weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
 
@@ -3567,6 +3760,7 @@ async function handleUpdateObligation(
     ok: true,
     obligation: updated,
     weekly_kanban: weeklyKanbanSummary,
+    calendar_sync: calendarSyncSummary,
     remote_sync: remoteSync,
   });
 }

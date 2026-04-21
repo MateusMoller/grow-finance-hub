@@ -588,6 +588,15 @@ const lookupCepAddress = async (cepDigits: string): Promise<CepLookupAddress> =>
     `Não foi possível consultar o CEP agora. Falhas: ${attempts.join(" | ")}`,
   );
 };
+const normalizeFieldValueForInput = (rule: FieldValidationRule | undefined, value: string) => {
+  if (!rule) return value;
+
+  if (rule.type === "yesNo") return normalizeYesNoValue(value);
+  if (rule.type === "state") return value.toUpperCase();
+  if (rule.type === "cep") return formatCepValue(value);
+
+  return value;
+};
 
 const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value: string) => {
   const trimmed = value.trim();
@@ -1128,7 +1137,7 @@ export default function ClientDetailPage() {
   const handleDataFieldChange = (category: ClientCategoryKey, fieldName: string, value: string) => {
     const key = getCategoryFieldEntryKey(category, fieldName);
     const rule = getFieldRule(category, fieldName);
-    const normalizedValue = normalizeFieldValueForSave(rule, value);
+    const normalizedValue = normalizeFieldValueForInput(rule, value);
 
     const updates: Array<{ key: string; fieldName: string; value: string }> = [
       { key, fieldName, value: normalizedValue },
