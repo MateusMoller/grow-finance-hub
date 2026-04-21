@@ -150,12 +150,23 @@ const cadastroClientesFields = [
   { name: "cep", label: "CEP" },
   { name: "endereço", label: "Rua / Logradouro" },
   { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
+  { name: "complemento_endereco", label: "Complemento" },
   { name: "bairro", label: "Bairro" },
   { name: "cidade", label: "Cidade" },
   { name: "estado", label: "Estado" },
+  { name: "inscricao_estadual_uf", label: "UF da Inscricao Estadual" },
+  { name: "inscricao_estadual_data", label: "Data da Inscricao Estadual" },
+  { name: "inscricao_municipal_data", label: "Data da Inscricao Municipal" },
   { name: "ddd", label: "DDD" },
   { name: "telefone", label: "Telefone" },
   { name: "whatsapp", label: "WhatsApp" },
+  { name: "website_empresa", label: "Website da Empresa" },
+  { name: "grupo_empresas", label: "Grupo de Empresas" },
+  { name: "apelido_econtinuo", label: "Apelido E-Continuo" },
+  { name: "nire", label: "NIRE" },
+  { name: "outros_identificadores", label: "Outros Identificadores" },
+  { name: "empresa_ativa", label: "Empresa Ativa?" },
+  { name: "empresa_isenta", label: "Empresa Isenta?" },
 ];
 const cadastroFiscalFields = [
   { name: "regime_icms", label: "Regime ICMS" },
@@ -371,9 +382,14 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
     data_abertura: { type: "date" },
     cep: { type: "cep" },
     estado: { type: "state" },
+    inscricao_estadual_uf: { type: "state" },
+    inscricao_estadual_data: { type: "date" },
+    inscricao_municipal_data: { type: "date" },
     ddd: { type: "integer", min: 0, max: 999 },
     telefone: { type: "phone" },
     whatsapp: { type: "phone" },
+    empresa_ativa: yesNoRule,
+    empresa_isenta: yesNoRule,
   },
   cadastro_fiscal: {
     contribuinte_icms: yesNoRule,
@@ -642,9 +658,9 @@ type GeneralInfoCadastralFieldName = (typeof generalInfoCadastralFields)[number]
 const getCategoryFieldEntryKey = (category: ClientCategoryKey, fieldName: string) => `${category}__${fieldName}`;
 
 const clientBusinessProfileOptions = [
-  { key: "comércio", label: "Comércio" },
-  { key: "industria", label: "Industria" },
-  { key: "prestador_servicos", label: "Prestador de Serviços" },
+  { key: "comercio", label: "Com\u00e9rcio" },
+  { key: "industria", label: "Ind\u00fastria" },
+  { key: "prestador_servicos", label: "Prestador de Servi\u00e7os" },
 ] as const;
 
 type ClientBusinessProfileKey = (typeof clientBusinessProfileOptions)[number]["key"];
@@ -658,19 +674,25 @@ const normalizeProfileToken = (value: string) =>
     .replace(/\s+/g, "_");
 
 const clientBusinessProfileLabelByKey: Record<ClientBusinessProfileKey, string> = {
-  comércio: "Comércio",
-  industria: "Industria",
-  prestador_servicos: "Prestador de Serviços",
+  comercio: "Com\u00e9rcio",
+  industria: "Ind\u00fastria",
+  prestador_servicos: "Prestador de Servi\u00e7os",
 };
 
 const clientBusinessProfileKeyByToken: Record<string, ClientBusinessProfileKey> = {
-  comércio: "comércio",
+  comercio: "comercio",
+  "com\u00e9rcio": "comercio",
+  "com\u00c3\u00a9rcio": "comercio",
   industria: "industria",
+  "ind\u00fastria": "industria",
+  "ind\u00c3\u00bastria": "industria",
   prestador_de_servicos: "prestador_servicos",
   prestador_servicos: "prestador_servicos",
   "prestador_de_servico": "prestador_servicos",
   "prestador_servico": "prestador_servicos",
-  serviços: "prestador_servicos",
+  servicos: "prestador_servicos",
+  "servi\u00e7os": "prestador_servicos",
+  "servi\u00c3\u00a7os": "prestador_servicos",
 };
 
 const parseBusinessProfilesValue = (rawValue: string | undefined) => {
@@ -1661,7 +1683,7 @@ export default function ClientDetailPage() {
   };
 
   const formatBytes = (bytes: number | null) => {
-    if (!bytes) return "–";
+    if (!bytes) return "-";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -2616,4 +2638,5 @@ export default function ClientDetailPage() {
     </AppLayout>
   );
 }
+
 

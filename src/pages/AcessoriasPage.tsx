@@ -638,14 +638,17 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         clients_created: number;
         clients_updated: number;
         clients_inactivated: number;
+        cadastro_clientes_fields_synced: number;
+        cadastro_honorarios_fields_synced: number;
       }>({
         action: "sync_companies",
         sync_grow_clients: true,
-        restrict_to_acessorias: true,
+        restrict_to_acessorias: false,
+        allow_client_inactivation: false,
       });
       if (!silent) {
         toast.success(
-          `Empresas sincronizadas: ${result.synced || 0}. Clientes criados: ${result.clients_created || 0}. Atualizados: ${result.clients_updated || 0}. Vinculos automaticos: ${result.auto_linked || 0}. Inativados: ${result.clients_inactivated || 0}.`,
+          `Empresas sincronizadas em modo seguro: ${result.synced || 0}. Clientes criados: ${result.clients_created || 0}. Atualizados: ${result.clients_updated || 0}. Vinculos automaticos: ${result.auto_linked || 0}. Campos cadastrais atualizados: ${result.cadastro_clientes_fields_synced || 0}.`,
         );
       }
       if (refreshAfter) {

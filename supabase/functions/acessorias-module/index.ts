@@ -82,6 +82,34 @@ type ParsedCompany = {
   raw_payload: JsonRecord;
 };
 
+type CompanyRegistrationSnapshot = {
+  codigo: string | null;
+  regimeTributario: string | null;
+  grupoEmpresas: string | null;
+  nomeFantasia: string | null;
+  apelidoEcontinuo: string | null;
+  endereco: string | null;
+  numeroEstabelecimento: string | null;
+  complementoEndereco: string | null;
+  cep: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+  inscricaoEstadual: string | null;
+  inscricaoEstadualUf: string | null;
+  inscricaoEstadualData: string | null;
+  inscricaoMunicipal: string | null;
+  inscricaoMunicipalData: string | null;
+  nire: string | null;
+  outrosIdentificadores: string | null;
+  websiteEmpresa: string | null;
+  empresaAtiva: string | null;
+  empresaIsenta: string | null;
+  ddd: string | null;
+  telefone: string | null;
+  honorario: string | null;
+};
+
 type ParsedObligation = {
   acessorias_obligation_id: string;
   obligation_name: string;
@@ -127,6 +155,20 @@ function asTrimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function asTrimmedText(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "Sim" : "Nao";
+  }
+  return null;
+}
+
 function asBoolean(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value > 0;
@@ -155,6 +197,50 @@ function normalizeCnpj(value: unknown): string | null {
   const digits = text.replace(/\D/g, "");
   if (digits.length !== 14) return null;
   return digits;
+}
+
+function normalizeCepDigits(value: unknown): string | null {
+  const text = asTrimmedText(value);
+  if (!text) return null;
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  return digits.slice(0, 8);
+}
+
+function normalizeStateCode(value: unknown): string | null {
+  const text = asTrimmedText(value);
+  if (!text) return null;
+  const letters = text.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (letters.length === 2) return letters;
+  return text.trim().toUpperCase();
+}
+
+function normalizeYesNo(value: unknown): string | null {
+  const text = asTrimmedText(value);
+  if (!text) return null;
+  const token = normalizeToken(text);
+  if (["sim", "yes", "true", "ativo", "ativa", "1"].includes(token)) return "Sim";
+  if (["nao", "no", "false", "inativo", "inativa", "0"].includes(token)) return "Nao";
+  return text;
+}
+
+function splitBrazilPhone(value: unknown) {
+  const text = asTrimmedText(value);
+  if (!text) return { ddd: null as string | null, telefone: null as string | null };
+  let digits = text.replace(/\D/g, "");
+  if (!digits) return { ddd: null as string | null, telefone: null as string | null };
+
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length >= 10) {
+    const ddd = digits.slice(0, 2);
+    const telefone = digits.slice(2);
+    return { ddd, telefone };
+  }
+
+  return { ddd: null as string | null, telefone: digits };
 }
 
 function normalizePhoneDigits(value: unknown): string | null {
@@ -481,6 +567,16 @@ function pickFirstString(source: unknown, keys: string[]): string | null {
   return null;
 }
 
+function pickFirstText(source: unknown, keys: string[]): string | null {
+  const record = asRecord(source);
+  if (!record) return null;
+  for (const key of keys) {
+    const directText = asTrimmedText(getRecordValue(record, key));
+    if (directText) return directText;
+  }
+  return null;
+}
+
 function pickFirstNestedString(source: unknown, paths: string[]): string | null {
   for (const path of paths) {
     const segments = path.split(".");
@@ -499,6 +595,347 @@ function pickFirstNestedString(source: unknown, paths: string[]): string | null 
     if (value) return value;
   }
   return null;
+}
+
+function pickFirstNestedText(source: unknown, paths: string[]): string | null {
+  for (const path of paths) {
+    const segments = path.split(".");
+    let current: unknown = source;
+    let valid = true;
+    for (const segment of segments) {
+      const record = asRecord(current);
+      if (!record) {
+        valid = false;
+        break;
+      }
+      current = getRecordValue(record, segment);
+    }
+    if (!valid) continue;
+    const value = asTrimmedText(current);
+    if (value) return value;
+  }
+  return null;
+}
+
+function pickFirstRecord(source: unknown, keys: string[]): JsonRecord | null {
+  const record = asRecord(source);
+  if (!record) return null;
+  for (const key of keys) {
+    const value = getRecordValue(record, key);
+    const valueRecord = asRecord(value);
+    if (valueRecord) return valueRecord;
+    const valueArray = asArray(value);
+    if (!valueArray) continue;
+    for (const item of valueArray) {
+      const itemRecord = asRecord(item);
+      if (itemRecord) return itemRecord;
+    }
+  }
+  return null;
+}
+
+function collectCompanyRecordCandidates(companyRecord: JsonRecord): JsonRecord[] {
+  const candidates: JsonRecord[] = [companyRecord];
+  const nestedKeys = [
+    "registration_data",
+    "registrationData",
+    "dados_cadastrais",
+    "cadastro",
+    "empresa",
+    "company",
+    "dadosEmpresa",
+    "DadosEmpresa",
+  ];
+  for (const key of nestedKeys) {
+    const nested = asRecord(getRecordValue(companyRecord, key));
+    if (nested) candidates.push(nested);
+  }
+  return candidates;
+}
+
+function pickCompanyText(records: JsonRecord[], keys: string[], nestedPaths: string[] = []): string | null {
+  for (const record of records) {
+    const directValue = pickFirstText(record, keys);
+    if (directValue) return directValue;
+  }
+  if (nestedPaths.length > 0) {
+    for (const record of records) {
+      const nestedValue = pickFirstNestedText(record, nestedPaths);
+      if (nestedValue) return nestedValue;
+    }
+  }
+  return null;
+}
+
+function pickCompanyRecord(records: JsonRecord[], keys: string[]): JsonRecord | null {
+  for (const record of records) {
+    const nested = pickFirstRecord(record, keys);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function buildClientAddressFromSnapshot(snapshot: CompanyRegistrationSnapshot): string | null {
+  const streetLine = [snapshot.endereco, snapshot.numeroEstabelecimento ? `N ${snapshot.numeroEstabelecimento}` : null]
+    .filter(Boolean)
+    .join(", ");
+  const cityState = [snapshot.cidade, snapshot.estado].filter(Boolean).join("/");
+  const localityLine = [snapshot.bairro, cityState, snapshot.cep].filter(Boolean).join(" - ");
+  const composed = [streetLine, snapshot.complementoEndereco, localityLine].filter(Boolean).join(" | ");
+  return asTrimmedText(composed);
+}
+
+function normalizeMoneyText(value: string | null): string | null {
+  if (!value) return null;
+  const cleaned = value.replace(/[^\d,.-]/g, "").trim();
+  if (!/\d/.test(cleaned)) return null;
+  return cleaned;
+}
+
+function extractCompanyRegistrationSnapshot(company: ParsedCompany): CompanyRegistrationSnapshot {
+  const records = collectCompanyRecordCandidates(company.raw_payload);
+  const rawCompanyData = pickCompanyRecord(records, [
+    "dados_empresa",
+    "dados da empresa",
+    "empresa_dados",
+  ]);
+  if (rawCompanyData) records.push(rawCompanyData);
+
+  const inscricaoEstadualRecord = pickCompanyRecord(records, [
+    "inscricoes_estaduais",
+    "inscricao_estadual_detalhes",
+    "inscricao_estadual",
+  ]);
+  const inscricaoMunicipalRecord = pickCompanyRecord(records, [
+    "inscricao_municipal_detalhes",
+    "insc_municipal",
+    "inscricao_municipal",
+  ]);
+
+  const foneValue = pickCompanyText(records, [
+    "fone",
+    "fone(s)",
+    "fones",
+    "telefone",
+    "telefone_principal",
+    "phone",
+  ], [
+    "contato.telefone",
+    "contato.fone",
+  ]);
+  const { ddd, telefone } = splitBrazilPhone(foneValue);
+
+  const codigo =
+    pickCompanyText(records, ["id_empresa", "id empresa", "codigo", "code", "id"]) ||
+    company.acessorias_company_id;
+  const regimeTributario = pickCompanyText(records, [
+    "regime_tributario",
+    "regime tributario",
+    "regime",
+  ]);
+  const grupoEmpresas = pickCompanyText(records, [
+    "grupo_de_empresas",
+    "grupo empresas",
+    "grupo",
+  ]);
+  const nomeFantasia = pickCompanyText(records, ["nome_fantasia", "nome fantasia", "fantasia"]);
+  const apelidoEcontinuo = pickCompanyText(records, [
+    "apelido_e_continuo",
+    "apelido_econtinuo",
+    "apelido e-continuo",
+    "apelido econtinuo",
+  ]);
+  const endereco = pickCompanyText(records, [
+    "endereco",
+    "endereço",
+    "logradouro",
+    "rua",
+  ]);
+  const numeroEstabelecimento = pickCompanyText(records, [
+    "numero_estabelecimento",
+    "numero",
+    "número",
+    "endereco_numero",
+  ]);
+  const complementoEndereco = pickCompanyText(records, ["complemento", "endereco_complemento"]);
+  const cep = normalizeCepDigits(
+    pickCompanyText(records, ["cep", "codigo_postal", "postal_code"]),
+  );
+  const bairro = pickCompanyText(records, ["bairro", "distrito"]);
+  const cidade = pickCompanyText(records, ["cidade", "municipio", "município"]);
+  const estado = normalizeStateCode(
+    pickCompanyText(records, ["uf", "estado", "sigla_uf"]),
+  );
+  const inscricaoEstadual =
+    pickCompanyText(records, ["inscricao_estadual", "inscricoes_estaduais", "ie"]) ||
+    pickFirstText(inscricaoEstadualRecord, ["numero", "inscricao", "value"]);
+  const inscricaoEstadualUf = normalizeStateCode(
+    pickCompanyText(records, ["inscricao_estadual_uf", "uf_inscricao_estadual"]) ||
+      pickFirstText(inscricaoEstadualRecord, ["uf", "estado"]),
+  );
+  const inscricaoEstadualData = normalizeDate(
+    pickCompanyText(records, ["inscricao_estadual_data", "data_inscricao_estadual"]) ||
+      pickFirstText(inscricaoEstadualRecord, ["data", "date"]),
+  );
+  const inscricaoMunicipal =
+    pickCompanyText(records, ["inscricao_municipal", "insc_municipal", "im"]) ||
+    pickFirstText(inscricaoMunicipalRecord, ["numero", "inscricao", "value"]);
+  const inscricaoMunicipalData = normalizeDate(
+    pickCompanyText(records, ["inscricao_municipal_data", "data_inscricao_municipal"]) ||
+      pickFirstText(inscricaoMunicipalRecord, ["data", "date"]),
+  );
+  const nire = pickCompanyText(records, ["nire"]);
+  const outrosIdentificadores = pickCompanyText(records, [
+    "outros_identificadores",
+    "outros identificadores",
+    "cpf_cei",
+  ]);
+  const websiteEmpresa = pickCompanyText(records, [
+    "website_da_empresa",
+    "website_empresa",
+    "website",
+    "site",
+  ]);
+  const empresaAtiva = normalizeYesNo(
+    pickCompanyText(records, ["ativa", "ativo", "situacao_ativa", "status"]) || company.status,
+  );
+  const empresaIsenta = normalizeYesNo(
+    pickCompanyText(records, ["empresa_isenta", "isenta"]),
+  );
+  const honorario = normalizeMoneyText(
+    pickCompanyText(records, ["honorario", "honorário", "valor_honorario"]),
+  );
+
+  return {
+    codigo,
+    regimeTributario,
+    grupoEmpresas,
+    nomeFantasia,
+    apelidoEcontinuo,
+    endereco,
+    numeroEstabelecimento,
+    complementoEndereco,
+    cep,
+    bairro,
+    cidade,
+    estado,
+    inscricaoEstadual,
+    inscricaoEstadualUf,
+    inscricaoEstadualData,
+    inscricaoMunicipal,
+    inscricaoMunicipalData,
+    nire,
+    outrosIdentificadores,
+    websiteEmpresa,
+    empresaAtiva,
+    empresaIsenta,
+    ddd,
+    telefone,
+    honorario,
+  };
+}
+
+function buildCadastroClientesEntriesFromSnapshot(snapshot: CompanyRegistrationSnapshot) {
+  const entries: Array<{ field_name: string; field_value: string }> = [];
+  const addEntry = (fieldName: string, value: string | null) => {
+    const normalized = asTrimmedText(value);
+    if (!normalized) return;
+    entries.push({ field_name: fieldName, field_value: normalized });
+  };
+  const whatsappValue =
+    snapshot.ddd && snapshot.telefone ? `${snapshot.ddd}${snapshot.telefone}` : snapshot.telefone;
+
+  addEntry("codigo", snapshot.codigo);
+  addEntry("nome_fantasia", snapshot.nomeFantasia);
+  addEntry("regime_tribut\u00e1rio", snapshot.regimeTributario);
+  addEntry("cep", snapshot.cep);
+  addEntry("endere\u00e7o", snapshot.endereco);
+  addEntry("numero_estabelecimento", snapshot.numeroEstabelecimento);
+  addEntry("complemento_endereco", snapshot.complementoEndereco);
+  addEntry("bairro", snapshot.bairro);
+  addEntry("cidade", snapshot.cidade);
+  addEntry("estado", snapshot.estado);
+  addEntry("inscricao_estadual", snapshot.inscricaoEstadual);
+  addEntry("inscricao_estadual_uf", snapshot.inscricaoEstadualUf);
+  addEntry("inscricao_estadual_data", snapshot.inscricaoEstadualData);
+  addEntry("inscricao_municipal", snapshot.inscricaoMunicipal);
+  addEntry("inscricao_municipal_data", snapshot.inscricaoMunicipalData);
+  addEntry("ddd", snapshot.ddd);
+  addEntry("telefone", snapshot.telefone);
+  addEntry("whatsapp", whatsappValue);
+  addEntry("website_empresa", snapshot.websiteEmpresa);
+  addEntry("grupo_empresas", snapshot.grupoEmpresas);
+  addEntry("apelido_econtinuo", snapshot.apelidoEcontinuo);
+  addEntry("nire", snapshot.nire);
+  addEntry("outros_identificadores", snapshot.outrosIdentificadores);
+  addEntry("empresa_ativa", snapshot.empresaAtiva);
+  addEntry("empresa_isenta", snapshot.empresaIsenta);
+
+  return entries;
+}
+
+async function upsertClientDataFields(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  category: string,
+  entriesByClient: Map<string, Map<string, string>>,
+  callerUserId: string,
+) {
+  if (entriesByClient.size === 0) return 0;
+
+  const clientIds = [...entriesByClient.keys()];
+  const fieldNames = [...new Set(
+    clientIds.flatMap((clientId) => [...(entriesByClient.get(clientId)?.keys() || [])]),
+  )];
+
+  if (fieldNames.length === 0) return 0;
+
+  const existingByKey = new Map<string, string>();
+  for (const chunk of chunkArray(clientIds, 200)) {
+    const { data, error } = await supabaseAdmin
+      .from("client_data")
+      .select("id, client_id, field_name")
+      .eq("category", category)
+      .is("period", null)
+      .in("client_id", chunk)
+      .in("field_name", fieldNames);
+    if (error) throw error;
+
+    for (const row of data || []) {
+      const clientId = asTrimmedText(row.client_id);
+      const fieldName = asTrimmedText(row.field_name);
+      const rowId = asTrimmedText(row.id);
+      if (!clientId || !fieldName || !rowId) continue;
+      existingByKey.set(`${clientId}__${fieldName}`, rowId);
+    }
+  }
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (const [clientId, fieldMap] of entriesByClient.entries()) {
+    for (const [fieldName, fieldValue] of fieldMap.entries()) {
+      const row: Record<string, unknown> = {
+        client_id: clientId,
+        category,
+        field_name: fieldName,
+        field_value: fieldValue,
+        period: null,
+        created_by: callerUserId,
+      };
+      const existingId = existingByKey.get(`${clientId}__${fieldName}`);
+      if (existingId) row.id = existingId;
+      rows.push(row);
+    }
+  }
+
+  let upserted = 0;
+  for (const chunk of chunkArray(rows, 300)) {
+    const { error } = await supabaseAdmin
+      .from("client_data")
+      .upsert(chunk, { onConflict: "id" });
+    if (error) throw error;
+    upserted += chunk.length;
+  }
+
+  return upserted;
 }
 
 function extractArrayCandidates(payload: unknown): unknown[] {
@@ -902,7 +1339,7 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
     if (!record) continue;
 
     const companyId =
-      pickFirstString(record, [
+      pickFirstText(record, [
         "id",
         "ID",
         "company_id",
@@ -913,14 +1350,14 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
         "Identificador",
         "identificador",
       ]) ||
-      pickFirstNestedString(record, ["company.id", "empresa.id"]);
+      pickFirstNestedText(record, ["company.id", "empresa.id"]);
     if (!companyId) continue;
 
     if (seenIds.has(companyId)) continue;
     seenIds.add(companyId);
 
     const companyName =
-      pickFirstString(record, [
+      pickFirstText(record, [
         "company_name",
         "name",
         "razao_social",
@@ -933,7 +1370,7 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
 
     const cnpj =
       normalizeCnpj(
-        pickFirstString(record, [
+        pickFirstText(record, [
           "cnpj",
           "CNPJ",
           "Identificador",
@@ -944,11 +1381,11 @@ function parseCompanies(payload: unknown): ParsedCompany[] {
           "numero_cnpj",
         ]),
       ) ||
-      normalizeCnpj(pickFirstNestedString(record, ["document.number", "empresa.cnpj"]));
+      normalizeCnpj(pickFirstNestedText(record, ["document.number", "empresa.cnpj"]));
 
     const status =
-      pickFirstString(record, ["status", "Status", "situacao", "company_status"]) ||
-      pickFirstNestedString(record, ["situation.name", "situacao.nome"]);
+      pickFirstText(record, ["status", "Status", "situacao", "company_status"]) ||
+      pickFirstNestedText(record, ["situation.name", "situacao.nome"]);
 
     parsed.push({
       acessorias_company_id: companyId,
@@ -1765,6 +2202,8 @@ async function handleSyncCompanies(
   const syncGrowClients = options.sync_grow_clients === undefined ? true : asBoolean(options.sync_grow_clients);
   const restrictToAcessorias =
     options.restrict_to_acessorias === undefined ? true : asBoolean(options.restrict_to_acessorias);
+  const allowClientInactivation =
+    options.allow_client_inactivation === undefined ? false : asBoolean(options.allow_client_inactivation);
 
   const pathCandidates = getPathCandidates("ACESSORIAS_COMPANIES_PATHS", defaultCompaniesPathCandidates);
   const supportsPaging = pathCandidates.some((path) => path.includes("{page}") || path.includes(":page"));
@@ -1812,8 +2251,11 @@ async function handleSyncCompanies(
       clients_inactivated: 0,
       stale_links_removed: 0,
       mirrored_clients: 0,
+      cadastro_clientes_fields_synced: 0,
+      cadastro_honorarios_fields_synced: 0,
       sync_grow_clients: syncGrowClients,
       restrict_to_acessorias: syncGrowClients ? restrictToAcessorias : false,
+      allow_client_inactivation: syncGrowClients ? allowClientInactivation : false,
       message:
         "Nenhuma empresa retornada pela API. Verifique os endpoints em ACESSORIAS_COMPANIES_PATHS.",
       endpoint_used: endpointUsed || null,
@@ -1839,6 +2281,9 @@ async function handleSyncCompanies(
     id: string;
     name: string;
     cnpj: string | null;
+    regime: string | null;
+    phone: string | null;
+    address: string | null;
     status: string | null;
   };
 
@@ -1850,7 +2295,7 @@ async function handleSyncCompanies(
   const [{ data: clients, error: clientsError }, { data: links, error: linksError }] = await Promise.all([
     supabaseAdmin
       .from("clients")
-      .select("id, name, cnpj, status")
+      .select("id, name, cnpj, regime, phone, address, status")
       .order("created_at"),
     supabaseAdmin
       .from("client_acessorias_links")
@@ -1891,6 +2336,10 @@ async function handleSyncCompanies(
   let clientsUpdated = 0;
   let clientsInactivated = 0;
   let staleLinksRemoved = 0;
+  let cadastroClientesFieldsSynced = 0;
+  let cadastroHonorariosFieldsSynced = 0;
+  const cadastroClientesEntriesByClient = new Map<string, Map<string, string>>();
+  const cadastroHonorariosEntriesByClient = new Map<string, Map<string, string>>();
 
   if (syncGrowClients) {
     const clientsById = new Map<string, ClientSyncRow>();
@@ -1948,15 +2397,27 @@ async function handleSyncCompanies(
       }
 
       const mappedStatus = mapCompanyStatusToClientStatus(company.status);
+      const registrationSnapshot = extractCompanyRegistrationSnapshot(company);
+      const snapshotAddress = buildClientAddressFromSnapshot(registrationSnapshot);
+      const snapshotPhone =
+        registrationSnapshot.ddd && registrationSnapshot.telefone
+          ? `${registrationSnapshot.ddd}${registrationSnapshot.telefone}`
+          : registrationSnapshot.telefone;
 
       if (resolvedClient) {
         const updates: {
           name?: string;
           cnpj?: string | null;
+          regime?: string | null;
+          phone?: string | null;
+          address?: string | null;
           status?: string;
         } = {};
         const currentName = asTrimmedString(resolvedClient.name) || "";
         const currentCnpj = normalizeCnpj(resolvedClient.cnpj);
+        const currentRegime = asTrimmedText(resolvedClient.regime);
+        const currentPhone = asTrimmedText(resolvedClient.phone);
+        const currentAddress = asTrimmedText(resolvedClient.address);
         const currentStatus = asTrimmedString(resolvedClient.status) || "";
 
         if (company.company_name && currentName !== company.company_name) {
@@ -1964,6 +2425,18 @@ async function handleSyncCompanies(
         }
         if (company.cnpj && currentCnpj !== company.cnpj) {
           updates.cnpj = company.cnpj;
+        }
+        if (
+          registrationSnapshot.regimeTributario &&
+          registrationSnapshot.regimeTributario !== currentRegime
+        ) {
+          updates.regime = registrationSnapshot.regimeTributario;
+        }
+        if (snapshotPhone && snapshotPhone !== currentPhone) {
+          updates.phone = snapshotPhone;
+        }
+        if (snapshotAddress && snapshotAddress !== currentAddress) {
+          updates.address = snapshotAddress;
         }
         if (currentStatus !== mappedStatus) {
           updates.status = mappedStatus;
@@ -1981,6 +2454,9 @@ async function handleSyncCompanies(
             ...resolvedClient,
             ...updates,
             cnpj: updates.cnpj === undefined ? resolvedClient.cnpj : updates.cnpj,
+            regime: updates.regime === undefined ? resolvedClient.regime : updates.regime,
+            phone: updates.phone === undefined ? resolvedClient.phone : updates.phone,
+            address: updates.address === undefined ? resolvedClient.address : updates.address,
             status: updates.status === undefined ? resolvedClient.status : updates.status,
           };
           clientsById.set(resolvedClient.id, resolvedClient);
@@ -1991,10 +2467,13 @@ async function handleSyncCompanies(
           .insert({
             name: company.company_name,
             cnpj: company.cnpj,
+            regime: registrationSnapshot.regimeTributario,
+            phone: snapshotPhone,
+            address: snapshotAddress,
             status: mappedStatus,
             created_by: callerUserId,
           })
-          .select("id, name, cnpj, status")
+          .select("id, name, cnpj, regime, phone, address, status")
           .single();
 
         if (insertClientError) throw insertClientError;
@@ -2005,6 +2484,20 @@ async function handleSyncCompanies(
       }
 
       mirroredClientIds.add(resolvedClient.id);
+      const cadastroEntries = buildCadastroClientesEntriesFromSnapshot(registrationSnapshot);
+      if (cadastroEntries.length > 0) {
+        const currentMap = cadastroClientesEntriesByClient.get(resolvedClient.id) || new Map<string, string>();
+        for (const entry of cadastroEntries) {
+          currentMap.set(entry.field_name, entry.field_value);
+        }
+        cadastroClientesEntriesByClient.set(resolvedClient.id, currentMap);
+      }
+      if (registrationSnapshot.honorario) {
+        const currentHonorariosMap =
+          cadastroHonorariosEntriesByClient.get(resolvedClient.id) || new Map<string, string>();
+        currentHonorariosMap.set("valor_mensal", registrationSnapshot.honorario);
+        cadastroHonorariosEntriesByClient.set(resolvedClient.id, currentHonorariosMap);
+      }
       const existingLinkedClientId = linkByCompanyId.get(company.acessorias_company_id) || null;
 
       if (!existingLinkedClientId || existingLinkedClientId !== resolvedClient.id) {
@@ -2044,7 +2537,7 @@ async function handleSyncCompanies(
       }
     }
 
-    if (restrictToAcessorias) {
+    if (restrictToAcessorias && allowClientInactivation) {
       const clientsToInactivate = new Set(
         clientsRows
         .filter((client) => !mirroredClientIds.has(client.id))
@@ -2074,6 +2567,19 @@ async function handleSyncCompanies(
 
       clientsInactivated = deactivatableIds.length;
     }
+
+    cadastroClientesFieldsSynced = await upsertClientDataFields(
+      supabaseAdmin,
+      "cadastro_clientes",
+      cadastroClientesEntriesByClient,
+      callerUserId,
+    );
+    cadastroHonorariosFieldsSynced = await upsertClientDataFields(
+      supabaseAdmin,
+      "cadastro_honorarios",
+      cadastroHonorariosEntriesByClient,
+      callerUserId,
+    );
   } else {
     for (const client of clientsRows) {
       if (linkedClientIds.has(client.id)) continue;
@@ -2110,8 +2616,11 @@ async function handleSyncCompanies(
     clients_inactivated: syncGrowClients && restrictToAcessorias ? clientsInactivated : 0,
     stale_links_removed: syncGrowClients ? staleLinksRemoved : 0,
     mirrored_clients: syncGrowClients ? mirroredClientIds.size : 0,
+    cadastro_clientes_fields_synced: syncGrowClients ? cadastroClientesFieldsSynced : 0,
+    cadastro_honorarios_fields_synced: syncGrowClients ? cadastroHonorariosFieldsSynced : 0,
     sync_grow_clients: syncGrowClients,
     restrict_to_acessorias: syncGrowClients ? restrictToAcessorias : false,
+    allow_client_inactivation: syncGrowClients ? allowClientInactivation : false,
     endpoint_used: endpointUsed || null,
   };
 }

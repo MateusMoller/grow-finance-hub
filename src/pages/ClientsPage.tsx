@@ -7,6 +7,16 @@ import { Search, Filter, Building2, Loader2, FolderClosed, FolderOpen, ChevronDo
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { clientSegmentOptions } from "@/lib/clientSegments";
@@ -44,6 +54,7 @@ export default function ClientsPage() {
   const [inactiveFolderOpen, setInactiveFolderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "",
     cnpj: "",
@@ -158,7 +169,8 @@ export default function ClientsPage() {
       body: {
         action: "sync_companies",
         sync_grow_clients: true,
-        restrict_to_acessorias: true,
+        restrict_to_acessorias: false,
+        allow_client_inactivation: false,
         access_token: session.access_token,
       },
       headers: {
@@ -190,9 +202,10 @@ export default function ClientsPage() {
     const updated = Number(payload.clients_updated || 0);
     const linked = Number(payload.auto_linked || 0);
     const inactivated = Number(payload.clients_inactivated || 0);
+    const cadastralSynced = Number(payload.cadastro_clientes_fields_synced || 0);
 
     toast.success(
-      `Sincronização concluída: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${inactivated} inativadas.`,
+      `Sincronização concluída em modo seguro: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${cadastralSynced} campos cadastrais atualizados${inactivated > 0 ? `, ${inactivated} inativadas` : ""}.`,
     );
     void loadClients();
   };
@@ -211,7 +224,7 @@ export default function ClientsPage() {
           </div>
           {canCreateClients && (
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => void handleSyncFromAcessorias()} disabled={syncingAcessorias}>
+              <Button size="sm" onClick={() => setSyncConfirmOpen(true)} disabled={syncingAcessorias}>
                 {syncingAcessorias ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                 {syncingAcessorias ? "Sincronizando..." : "Sincronizar com Acessorias"}
               </Button>
@@ -353,6 +366,29 @@ export default function ClientsPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={syncConfirmOpen} onOpenChange={setSyncConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar sincronização de clientes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta sincronização está em modo seguro e não pode inativar clientes automaticamente.
+              Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setSyncConfirmOpen(false);
+                void handleSyncFromAcessorias();
+              }}
+            >
+              Confirmar sincronização
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
