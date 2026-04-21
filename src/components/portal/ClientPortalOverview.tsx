@@ -33,9 +33,9 @@ export function ClientPortalOverview({
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="space-y-1">
-              <CardTitle className="text-xl">Ola, {clientName}</CardTitle>
+              <CardTitle className="text-xl">Olá, {clientName}</CardTitle>
               <CardDescription className="text-sm">
-                Aqui voce acompanha solicitações, documentos e pendencias em um fluxo unico.
+                Aqui você acompanha solicitações, documentos e pendências em um fluxo único.
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-xs">
@@ -74,7 +74,7 @@ export function ClientPortalOverview({
           <CardContent className="space-y-1">
             {pendingNow.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Tudo certo por enquanto. Assim que houver nova pendencia, ela aparece aqui.
+                Tudo certo por enquanto. Assim que houver nova pendência, ela aparece aqui.
               </p>
             ) : (
               pendingNow.map((item) => (

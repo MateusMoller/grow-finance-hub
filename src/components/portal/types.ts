@@ -145,11 +145,11 @@ export const portalRequestTemplates: PortalRequestTemplate[] = [
     defaultSector: "Fiscal",
   },
   {
-    key: "Contabil",
-    label: "Contabil",
+    key: "Contábil",
+    label: "Contábil",
     description: "Assuntos de fechamento, balanco, DRE e lançamentos.",
     examples: ["Fechamento contábil mensal", "Revisão de lançamentos"],
-    defaultSector: "Contabil",
+    defaultSector: "Contábil",
   },
   {
     key: "Departamento pessoal",
@@ -162,7 +162,7 @@ export const portalRequestTemplates: PortalRequestTemplate[] = [
     key: "Documentacao",
     label: "Documentacao",
     description: "Envio e conferência de documentos para rotinas internas.",
-    examples: ["Envio de contrato social", "Documentos para cadastro bancario"],
+    examples: ["Envio de contrato social", "Documentos para cadastro bancário"],
     defaultSector: "Geral",
   },
   {
@@ -189,7 +189,7 @@ export const portalRequestTemplates: PortalRequestTemplate[] = [
 ];
 
 export const sectorOptions = [
-  "Contabil",
+  "Contábil",
   "Fiscal",
   "Departamento Pessoal",
   "Financeiro",
@@ -208,7 +208,7 @@ export const documentCategories = [
 ];
 
 export const recommendedMonthlyUploads = [
-  { id: "extratos", label: "Extratos bancarios" },
+  { id: "extratos", label: "Extratos bancários" },
   { id: "notas", label: "XML/PDF de notas emitidas e recebidas" },
   { id: "folha", label: "Folhas e recibos de pagamento" },
   { id: "contratos", label: "Contratos novos ou alterados no mes" },
@@ -217,7 +217,7 @@ export const recommendedMonthlyUploads = [
 
 export const supportSectors = [
   "Fiscal",
-  "Contabil",
+  "Contábil",
   "Departamento Pessoal",
   "Financeiro",
   "Societario",
@@ -227,7 +227,7 @@ export const cashflowCategoriesByType: Record<PortalCashflowEntryType, string[]>
   income: [
     "Recebimento de clientes",
     "Aporte dos sócios",
-    "Crédito bancario",
+    "Crédito bancário",
     "Outras entradas",
   ],
   expense: [

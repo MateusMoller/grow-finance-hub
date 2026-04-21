@@ -326,7 +326,7 @@ export default function SugestoesPage() {
     } else if (uploadSuccess > 0) {
       toast.success(`Sugestão enviada ao admin com ${uploadSuccess} anexo(s).`);
     } else {
-      toast.success("Sugestão enviada ao admin e pendencia criada no Kanban.");
+      toast.success("Sugestão enviada ao admin e pendência criada no Kanban.");
     }
 
     await loadRecords();
@@ -339,7 +339,7 @@ export default function SugestoesPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Sugestoes de melhoria</h1>
             <p className="text-sm text-muted-foreground">
-              Envie melhorias para o admin. Cada envio gera uma pendencia e um registro desta solicitação.
+              Envie melhorias para o admin. Cada envio gera uma pendência e um registro desta solicitação.
             </p>
           </div>
           <Button variant="outline" className="gap-1.5" onClick={() => void loadRecords()} disabled={loading}>
@@ -358,7 +358,7 @@ export default function SugestoesPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Titulo</Label>
+                <Label>Título</Label>
                 <Input
                   placeholder="Ex: Adicionar filtro por período no relatório"
                   value={title}
@@ -484,7 +484,7 @@ export default function SugestoesPage() {
                 <p className="text-2xl font-semibold">{records.length}</p>
               </div>
               <div className="rounded-lg border bg-background p-3">
-                <p className="text-muted-foreground">Pendencias em aberto</p>
+                <p className="text-muted-foreground">Pendências em aberto</p>
                 <p className="text-2xl font-semibold">{pendingCount}</p>
               </div>
               <div className="rounded-lg border bg-background p-3">
@@ -513,7 +513,7 @@ export default function SugestoesPage() {
               <div className="rounded-lg border bg-muted/20 p-8 text-center">
                 <p className="font-medium">Nenhuma sugestão registrada ainda.</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Envie a primeira melhoria para gerar a pendencia e criar o histórico.
+                  Envie a primeira melhoria para gerar a pendência e criar o histórico.
                 </p>
               </div>
             ) : (

@@ -115,7 +115,7 @@ export default function NewsletterPage() {
                     >
                       <p className="text-sm font-semibold">{item.title}</p>
                       <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                        {item.excerpt || "Clique para ler esta edicao da newsletter."}
+                        {item.excerpt || "Clique para ler esta edição da newsletter."}
                       </p>
                       <p className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
                         <CalendarDays className="h-3.5 w-3.5" />

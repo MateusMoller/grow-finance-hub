@@ -125,7 +125,7 @@ const inferCategory = (
 
   if (entryType === "income") {
     if (/(aporte|capital social|socio|sócio)/.test(normalized)) return "Aporte dos sócios";
-    if (/(emprestimo|empréstimo|financiamento|credito bancario|crédito bancário)/.test(normalized)) return "Crédito bancario";
+    if (/(emprestimo|empréstimo|financiamento|credito bancario|crédito bancário)/.test(normalized)) return "Crédito bancário";
     if (/(pix|transferencia recebida|transferência recebida|ted|doc|deposito|depósito|receb)/.test(normalized)) {
       return "Recebimento de clientes";
     }
@@ -512,7 +512,7 @@ export async function parseCashflowFiles(files: File[]): Promise<ParseCashflowFi
       }
 
       if (suggestions.length === 0) {
-        warnings.push(`Nenhum lancamento foi identificado automaticamente em ${file.name}.`);
+        warnings.push(`Nenhum lançamento foi identificado automaticamente em ${file.name}.`);
         continue;
       }
 

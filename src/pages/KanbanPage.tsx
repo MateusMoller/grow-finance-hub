@@ -48,16 +48,16 @@ const priorityDot: Record<string, string> = {
 
 const normalizeSector = (value: string) =>
   value
-    .replace("ContÃ¡bil", "Contábil")
-    .replace("ContÃƒÂ¡bil", "Contábil")
-    .replace("SocietÃ¡rio", "Societário")
-    .replace("SocietÃƒÂ¡rio", "Societário")
+    .replace("Contábil", "Contábil")
+    .replace("Contábil", "Contábil")
+    .replace("Societário", "Societário")
+    .replace("Societário", "Societário")
     .trim();
 
 const normalizePriority = (value: string) =>
   value
-    .replace("MÃ©dia", "Média")
-    .replace("MÃƒÂ©dia", "Média")
+    .replace("Média", "Média")
+    .replace("Média", "Média")
     .replace("MÃƒÆ’Ã‚Â©dia", "Média")
     .trim();
 
@@ -446,7 +446,7 @@ export default function KanbanPage() {
 
   const handleCreate = async () => {
     if (!newTask.title.trim()) {
-      toast.error("Titulo e obrigatorio");
+      toast.error("Título é obrigatório");
       return;
     }
 
@@ -762,7 +762,7 @@ export default function KanbanPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Titulo *</Label>
+              <Label>Título *</Label>
               <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))} />
             </div>
             <div className="space-y-2">

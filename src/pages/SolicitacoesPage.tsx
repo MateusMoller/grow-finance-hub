@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 import {
@@ -159,7 +159,7 @@ const taskStatusOptions: TaskStatus[] = ["pending_client", "in_analysis", "compl
 const submissionStatusOptions = ["pending", "in_review", "completed"];
 
 const sectorOptions = [
-  "Contabil",
+  "Contábil",
   "Fiscal",
   "Departamento Pessoal",
   "Financeiro",
@@ -372,7 +372,7 @@ export default function SolicitacoesPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast.error("Erro ao carregar pendencias do portal.");
+      toast.error("Erro ao carregar pendências do portal.");
       setLoadingTasks(false);
       return;
     }
@@ -614,7 +614,7 @@ export default function SolicitacoesPage() {
 
   const openTaskDialogForRequest = (request: EnrichedClientRequest) => {
     if (!request.client?.id) {
-      toast.error("Esta solicitação não possui cliente vinculado para criar pendencia.");
+      toast.error("Esta solicitação não possui cliente vinculado para criar pendência.");
       return;
     }
 
@@ -639,11 +639,11 @@ export default function SolicitacoesPage() {
   const handleCreateTask = async () => {
     if (!user) return;
     if (!taskDraft.clientId) {
-      toast.error("Selecione o cliente da pendencia.");
+      toast.error("Selecione o cliente da pendência.");
       return;
     }
     if (!taskDraft.title.trim()) {
-      toast.error("Informe o titulo da pendencia.");
+      toast.error("Informe o titulo da pendência.");
       return;
     }
 
@@ -662,7 +662,7 @@ export default function SolicitacoesPage() {
     setCreatingTask(false);
 
     if (error) {
-      toast.error("Erro ao criar pendencia do portal.");
+      toast.error("Erro ao criar pendência do portal.");
       return;
     }
 
@@ -680,7 +680,7 @@ export default function SolicitacoesPage() {
     setChangingTaskId(null);
 
     if (error) {
-      toast.error("Não foi possível atualizar o status da pendencia.");
+      toast.error("Não foi possível atualizar o status da pendência.");
       return;
     }
 
@@ -718,11 +718,11 @@ export default function SolicitacoesPage() {
       return;
     }
 
-    toast.success("Status da pendencia atualizado.");
+    toast.success("Status da pendência atualizado.");
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    const confirmed = window.confirm("Deseja excluir esta pendencia do portal?");
+    const confirmed = window.confirm("Deseja excluir esta pendência do portal?");
     if (!confirmed) return;
 
     setDeletingTaskId(taskId);
@@ -730,7 +730,7 @@ export default function SolicitacoesPage() {
     setDeletingTaskId(null);
 
     if (error) {
-      toast.error("Erro ao excluir pendencia.");
+      toast.error("Erro ao excluir pendência.");
       return;
     }
 
@@ -861,9 +861,9 @@ export default function SolicitacoesPage() {
     const deepLink = buildSubmissionDeepLink(submissionId);
     try {
       await navigator.clipboard.writeText(deepLink);
-      toast.success("Link do formulario copiado.");
+      toast.success("Link do formulário copiado.");
     } catch {
-      toast.error("Nao foi possivel copiar o link do formulario.");
+      toast.error("Não foi possível copiar o link do formulário.");
     }
   };
 
@@ -873,7 +873,7 @@ export default function SolicitacoesPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold">Central de atendimento do portal</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Tudo que o cliente envia ou acompanha no portal esta centralizado aqui com fluxo operacional real.
+            Tudo que o cliente envia ou acompanha no portal está centralizado aqui com fluxo operacional real.
           </p>
           {role && <p className="text-xs text-muted-foreground mt-1">Perfil interno: {role}</p>}
         </motion.div>
@@ -881,8 +881,8 @@ export default function SolicitacoesPage() {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
           <TabsList className="flex flex-wrap h-auto">
             <TabsTrigger value="requests">Solicitações e chat</TabsTrigger>
-            <TabsTrigger value="tasks">Pendencias do portal</TabsTrigger>
-            <TabsTrigger value="forms">Formularios recebidos</TabsTrigger>
+            <TabsTrigger value="tasks">Pendências do portal</TabsTrigger>
+            <TabsTrigger value="forms">Formulários recebidos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="requests" className="space-y-4">
@@ -997,7 +997,7 @@ export default function SolicitacoesPage() {
                           {request.documents.length} documento(s)
                         </Badge>
                         <Badge variant="outline" className="text-[10px]">
-                          Ultima interacao:{" "}
+                          Última interação:{" "}
                           {request.lastMessage
                             ? new Date(request.lastMessage.created_at).toLocaleDateString("pt-BR")
                             : "sem mensagens"}
@@ -1013,7 +1013,7 @@ export default function SolicitacoesPage() {
           <TabsContent value="tasks" className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               {[
-                { label: "Pendencias totais", value: taskStats.total, icon: MessageSquare },
+                { label: "Pendências totais", value: taskStats.total, icon: MessageSquare },
                 { label: "Aguardando cliente", value: taskStats.pendingClient, icon: Clock, color: "text-amber-600" },
                 { label: "Em análise", value: taskStats.inAnalysis, icon: AlertCircle, color: "text-blue-600" },
                 { label: "Concluídas", value: taskStats.completed, icon: ShieldCheck, color: "text-primary" },
@@ -1037,7 +1037,7 @@ export default function SolicitacoesPage() {
                     <Search className="h-4 w-4 text-muted-foreground" />
                     <input
                       className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                      placeholder="Buscar pendencia por cliente, titulo ou solicitação..."
+                      placeholder="Buscar pendência por cliente, titulo ou solicitação..."
                       value={taskSearch}
                       onChange={(event) => setTaskSearch(event.target.value)}
                     />
@@ -1080,7 +1080,7 @@ export default function SolicitacoesPage() {
                     disabled={loadingClients}
                   >
                     <Plus className="h-4 w-4" />
-                    Nova pendencia para cliente
+                    Nova pendência para cliente
                   </Button>
                 </div>
               </CardContent>
@@ -1094,7 +1094,7 @@ export default function SolicitacoesPage() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="font-medium">Nenhuma pendencia encontrada.</p>
+                  <p className="font-medium">Nenhuma pendência encontrada.</p>
                 </CardContent>
               </Card>
             ) : (
@@ -1334,7 +1334,7 @@ export default function SolicitacoesPage() {
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => openTaskDialogForRequest(selectedRequest)}>
                         <Plus className="h-3.5 w-3.5 mr-1" />
-                        Criar pendencia para cliente
+                        Criar pendência para cliente
                       </Button>
                       {selectedRequestSubmission && (
                         <>
@@ -1431,7 +1431,7 @@ export default function SolicitacoesPage() {
                     </div>
 
                     <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                      <p className="text-xs font-medium mb-1">Ultima interacao</p>
+                      <p className="text-xs font-medium mb-1">Última interação</p>
                       {selectedRequest.lastMessage ? (
                         <>
                           <p className="text-muted-foreground">
@@ -1511,9 +1511,9 @@ export default function SolicitacoesPage() {
         <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Nova pendencia do portal</DialogTitle>
+              <DialogTitle>Nova pendência do portal</DialogTitle>
               <DialogDescription>
-                Esta pendencia aparecera para o cliente na aba de pendencias e na visao geral.
+                Esta pendência aparecera para o cliente na aba de pendências e na visao geral.
               </DialogDescription>
             </DialogHeader>
 
@@ -1555,7 +1555,7 @@ export default function SolicitacoesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Nao vincular</SelectItem>
+                      <SelectItem value="none">Não vincular</SelectItem>
                       {requestOptionsForTaskClient.map((request) => (
                         <SelectItem key={request.id} value={request.id}>
                           {request.title}
@@ -1567,11 +1567,11 @@ export default function SolicitacoesPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Titulo</label>
+                <label className="text-sm font-medium">Título</label>
                 <Input
                   value={taskDraft.title}
                   onChange={(event) => setTaskDraft((previous) => ({ ...previous, title: event.target.value }))}
-                  placeholder="Ex: Enviar extrato bancario do mes"
+                  placeholder="Ex.: Enviar extrato bancário do mês"
                 />
               </div>
 
@@ -1659,7 +1659,7 @@ export default function SolicitacoesPage() {
                 Cancelar
               </Button>
               <Button type="button" onClick={() => void handleCreateTask()} disabled={creatingTask}>
-                {creatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publicar pendencia"}
+                {creatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publicar pendência"}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -106,7 +106,7 @@ const App = () => (
                 <Route path="/app/clientes" element={<ProtectedRoute scope="internal"><ClientsPage /></ProtectedRoute>} />
                 <Route path="/app/clientes/:id" element={<ProtectedRoute scope="internal"><ClientDetailPage /></ProtectedRoute>} />
                 <Route path="/app/tarefas" element={<ProtectedRoute scope="internal"><TarefasPage /></ProtectedRoute>} />
-                <Route path="/app/formulários" element={<ProtectedRoute scope="internal"><FormulariosPage /></ProtectedRoute>} />
+                <Route path="/app/formularios" element={<ProtectedRoute scope="internal"><FormulariosPage /></ProtectedRoute>} />
                 <Route path="/app/processos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                 <Route path="/app/documentos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                 <Route path="/app/crm" element={<ProtectedRoute scope="internal"><CRMPage /></ProtectedRoute>} />

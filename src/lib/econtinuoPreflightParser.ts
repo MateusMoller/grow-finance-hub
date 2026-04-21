@@ -1,4 +1,4 @@
-﻿export interface EcontinuoPreflightClient {
+export interface EcontinuoPreflightClient {
   id: string;
   name: string;
   cnpj: string | null;
@@ -55,8 +55,8 @@ const tokenStopwords = new Set([
   "o",
   "as",
   "os",
-  "obrigaÃ§Ã£o",
-  "obrigaÃ§Ãµes",
+  "obrigação",
+  "obrigações",
   "mensal",
   "arquivo",
   "documento",
@@ -94,8 +94,8 @@ const toCompetence = (year: string, month: string) => {
 
 const extractCompetence = (rawText: string): string | null => {
   const text = rawText.replace(/\s+/g, " ");
-  const yearMonthPattern = /(?:competÃªncia|competÃªncia|perÃ­odo|ref(?:erencia)?)?\s*[:-]?\s*(20\d{2})[/_.-]?(0[1-9]|1[0-2])/i;
-  const monthYearPattern = /(?:competÃªncia|competÃªncia|perÃ­odo|ref(?:erencia)?)?\s*[:-]?\s*(0[1-9]|1[0-2])[/_.-](20\d{2})/i;
+  const yearMonthPattern = /(?:competência|competência|período|ref(?:erencia)?)?\s*[:-]?\s*(20\d{2})[/_.-]?(0[1-9]|1[0-2])/i;
+  const monthYearPattern = /(?:competência|competência|período|ref(?:erencia)?)?\s*[:-]?\s*(0[1-9]|1[0-2])[/_.-](20\d{2})/i;
   const compactMonthYearPattern = /(?:^|[^0-9])(0[1-9]|1[0-2])(20\d{2})(?:[^0-9]|$)/;
   const compactYearMonthPattern = /(?:^|[^0-9])(20\d{2})(0[1-9]|1[0-2])(?:[^0-9]|$)/;
 
@@ -239,7 +239,7 @@ const parseImageText = async (file: File): Promise<string> => {
       ?.recognize;
 
   if (!recognize) {
-    throw new Error("OCR indisponÃ­vel neste navegador.");
+    throw new Error("OCR indisponível neste navegador.");
   }
 
   const result = (await recognize(file, "por+eng")) as { data?: { text?: string } };
@@ -349,7 +349,7 @@ const findObligationSuggestion = (
       confidenceGain: Math.round(bestScore * 24),
       evidence: {
         source: "heuristic",
-        detail: `ObrigaÃ§Ã£o sugerida por similaridade (${Math.round(bestScore * 100)}%).`,
+        detail: `Obrigação sugerida por similaridade (${Math.round(bestScore * 100)}%).`,
         score: Number(bestScore.toFixed(2)),
       },
     };
@@ -360,9 +360,9 @@ const findObligationSuggestion = (
 
 export const getPreflightBlockingErrors = (row: Pick<EcontinuoPreflightRow, "clientId" | "competence" | "obligationName">) => {
   const errors: string[] = [];
-  if (!normalizeWhitespace(row.clientId)) errors.push("Cliente nÃ£o identificado.");
-  if (!extractCompetence(row.competence || "")) errors.push("CompetÃªncia invalida. Use AAAA-MM.");
-  if (!normalizeWhitespace(row.obligationName)) errors.push("ObrigaÃ§Ã£o nÃ£o identificada.");
+  if (!normalizeWhitespace(row.clientId)) errors.push("Cliente não identificado.");
+  if (!extractCompetence(row.competence || "")) errors.push("Competência inválida. Use AAAA-MM.");
+  if (!normalizeWhitespace(row.obligationName)) errors.push("Obrigação não identificada.");
   return errors;
 };
 
@@ -386,14 +386,14 @@ export async function parseEcontinuoFiles({
     let contentText = "";
 
     if (!acceptedExtensions.has(extension)) {
-      rowWarnings.push("Formato sem leitura automatica completa. Revise manualmente.");
+      rowWarnings.push("Formato sem leitura automática completa. Revise manualmente.");
       warnings.push(`Formato com suporte parcial: ${file.name}.`);
     } else {
       try {
         contentText = await parseContentText(file);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Erro desconhecido";
-        rowWarnings.push(`NÃ£o foi possÃ­vel extrair o conteÃºdo: ${message}`);
+        rowWarnings.push(`Não foi possível extrair o conteúdo: ${message}`);
       }
     }
 
@@ -409,11 +409,11 @@ export async function parseEcontinuoFiles({
       confidence += 20;
       evidence.push({
         source: "content",
-        detail: `CompetÃªncia detectada: ${competence}.`,
+        detail: `Competência detectada: ${competence}.`,
         score: 0.85,
       });
     } else {
-      rowWarnings.push("CompetÃªncia nÃ£o detectada automaticamente.");
+      rowWarnings.push("Competência não detectada automáticamente.");
     }
 
     const obligationSuggestion = findObligationSuggestion(

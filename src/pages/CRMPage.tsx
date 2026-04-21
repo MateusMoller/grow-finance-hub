@@ -678,7 +678,7 @@ export default function CRMPage() {
   const handleSaveLead = () => {
     const name = leadForm.name.trim();
     if (!name) {
-      toast.error("Nome da empresa e obrigatorio");
+      toast.error("Nome da empresa é obrigatório");
       return;
     }
 

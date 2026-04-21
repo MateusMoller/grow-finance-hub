@@ -97,7 +97,7 @@ const statusConfig: Record<string, { color: string; bg: string; icon: typeof Cir
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
 };
 
-const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"];
+const sectors = ["Todos", "Contábil", "Fiscal", "Departamento Pessoal", "Financeiro"];
 const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
 
 const normalizeText = (value: string) =>
@@ -109,7 +109,7 @@ const normalizeText = (value: string) =>
 
 const normalizeSector = (value: string): string => {
   const normalized = normalizeText(value);
-  if (normalized.includes("contabil")) return "Contabil";
+  if (normalized.includes("contabil")) return "Contábil";
   if (normalized.includes("fiscal")) return "Fiscal";
   if (normalized.includes("pessoal")) return "Departamento Pessoal";
   if (normalized.includes("finance")) return "Financeiro";
@@ -209,7 +209,7 @@ export default function TarefasPage() {
     title: "",
     description: "",
     client: "",
-    sector: "Contabil",
+    sector: "Contábil",
     assignee: "",
     priority: "Media" as Task["priority"],
     dueDate: "",
@@ -374,7 +374,7 @@ export default function TarefasPage() {
 
   const handleCreate = async () => {
     if (!newTask.title.trim()) {
-      toast.error("Titulo e obrigatorio");
+      toast.error("Título é obrigatório");
       return;
     }
 
@@ -439,7 +439,7 @@ export default function TarefasPage() {
       title: "",
       description: "",
       client: "",
-      sector: "Contabil",
+      sector: "Contábil",
       assignee: "",
       priority: "Media",
       dueDate: "",
@@ -694,7 +694,7 @@ export default function TarefasPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Titulo *</Label>
+              <Label>Título *</Label>
               <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))} />
             </div>
             <div className="space-y-2">
@@ -705,7 +705,7 @@ export default function TarefasPage() {
               <Label>Subtarefas</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Ex: Conferir pendencias do cliente"
+                  placeholder="Ex: Conferir pendências do cliente"
                   value={newSubtaskTitle}
                   onChange={(event) => setNewSubtaskTitle(event.target.value)}
                   onKeyDown={(event) => {
@@ -827,7 +827,7 @@ export default function TarefasPage() {
                   title: "",
                   description: "",
                   client: "",
-                  sector: "Contabil",
+                  sector: "Contábil",
                   assignee: "",
                   priority: "Media",
                   dueDate: "",

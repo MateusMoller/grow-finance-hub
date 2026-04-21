@@ -444,8 +444,8 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     >();
 
     for (const item of uploads) {
-      const companyName = String(item.company_name || item.client_name || "Empresa nao identificada").trim();
-      const safeCompanyName = companyName || "Empresa nao identificada";
+      const companyName = String(item.company_name || item.client_name || "Empresa não identificada").trim();
+      const safeCompanyName = companyName || "Empresa não identificada";
       const companyKey = String(item.acessorias_company_id || item.client_id || safeCompanyName);
       const current = companyMap.get(companyKey) || { name: safeCompanyName, items: [] };
       current.items.push(item);
@@ -456,7 +456,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     for (const [companyKey, companyValue] of companyMap.entries()) {
       const obligationMap = new Map<string, AcessoriasUpload[]>();
       for (const item of companyValue.items) {
-        const obligationName = String(item.obligation_name || "Obrigacao nao informada").trim() || "Obrigacao nao informada";
+        const obligationName = String(item.obligation_name || "Obrigação não informada").trim() || "Obrigação não informada";
         const obligationKey = `${companyKey}:${obligationName.toLowerCase()}`;
         const currentItems = obligationMap.get(obligationKey) || [];
         currentItems.push(item);
@@ -471,7 +471,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
           return {
             key: obligationKey,
-            name: String(first?.obligation_name || "Obrigacao nao informada"),
+            name: String(first?.obligation_name || "Obrigação não informada"),
             items: [...items].sort((left, right) =>
               String(right.uploaded_at || "").localeCompare(String(left.uploaded_at || "")),
             ),
@@ -512,7 +512,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
     const accessToken = session?.access_token;
     if (!accessToken) {
-      throw new Error("Sessao expirada. Entre novamente para acessar o módulo Acessorias.");
+      throw new Error("Sessão expirada. Entre novamente para acessar o módulo Acessorias.");
     }
 
     const invokeOnce = async (token: string) =>
@@ -870,7 +870,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         toast.success(remoteSync.message || "Obrigação atualizada no Grow e no Acessorias.");
       } else if (remoteSync?.attempted && !remoteSync.ok) {
         toast.success("Obrigação atualizada no Grow. Sincronização remota em processamento.");
-        toast.error(remoteSync.message || "Não foi possível confirmar atualizacao no Acessorias.");
+        toast.error(remoteSync.message || "Não foi possível confirmar atualização no Acessorias.");
       } else {
         toast.success("Obrigação atualizada no Grow.");
       }
@@ -907,23 +907,23 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     const clientName = client?.name || "cliente";
     const contactName = client?.contact || clientName;
     const obligationName = row.obligationName?.trim() || "documento";
-    const competence = normalizePreflightCompetence(row.competence || "") || row.competence || "nao informada";
+    const competence = normalizePreflightCompetence(row.competence || "") || row.competence || "não informada";
     const description = row.description?.trim();
     const sentStatusMessage =
       row.sendStatus === "sent"
-        ? "O arquivo ja foi enviado no e-Continuo pela equipe da Grow."
-        : "O arquivo esta em conferencia para envio no e-Continuo pela equipe da Grow.";
+        ? "O arquivo já foi enviado no e-Continuo pela equipe da Grow."
+        : "O arquivo está em conferência para envio no e-Continuo pela equipe da Grow.";
 
     return [
-      `Ola, ${contactName}!`,
+      `Olá, ${contactName}!`,
       sentStatusMessage,
       `Cliente: ${clientName}`,
       `Arquivo: ${row.fileName}`,
-      `Obrigacao: ${obligationName}`,
+      `Obrigação: ${obligationName}`,
       `Competencia: ${competence}`,
-      description ? `Descricao: ${description}` : null,
+      description ? `Descrição: ${description}` : null,
       "",
-      "Em caso de duvidas, responda por aqui.",
+      "Em caso de dúvidas, responda por aqui.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -939,7 +939,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
     const whatsappNumber = normalizeWhatsappNumber(row.whatsappNumber);
     if (!whatsappNumber) {
-      toast.error("Numero de WhatsApp nao encontrado para este cliente.");
+      toast.error("Número de WhatsApp não encontrado para este cliente.");
       return;
     }
 
@@ -1544,7 +1544,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">Envio rapido com pré-conferência</CardTitle>
                     <CardDescription>
-                      Arraste e solte um ou mais arquivos para leitura automatica. Antes do envio, revise cliente, competência e obrigação.
+                      Arraste e solte um ou mais arquivos para leitura automática. Antes do envio, revise cliente, competência e obrigação.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1937,7 +1937,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             </span>
             <span className="inline-flex items-center gap-1">
               <Pencil className="h-3.5 w-3.5 text-primary" />
-              Integracao de obrigações com Kanban desativada temporariamente.
+              Integração de obrigações com Kanban desativada temporariamente.
             </span>
           </CardContent>
         </Card>
@@ -1947,7 +1947,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             <DialogHeader>
               <DialogTitle>Editar obrigação</DialogTitle>
               <DialogDescription>
-                Atualize os dados da obrigação para esta empresa. A alteracao e salva no Grow e enviada ao Acessorias.
+                Atualize os dados da obrigação para esta empresa. A alteração é salva no Grow e enviada ao Acessorias.
               </DialogDescription>
             </DialogHeader>
 
@@ -2032,7 +2032,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
               </Button>
               <Button onClick={() => void handleUpdateObligation()} disabled={savingObligation}>
                 {savingObligation ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Salvar alteracoes
+                Salvar alterações
               </Button>
             </DialogFooter>
           </DialogContent>

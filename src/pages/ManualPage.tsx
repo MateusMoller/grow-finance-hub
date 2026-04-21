@@ -52,7 +52,7 @@ const glossaryItems: GlossaryItem[] = [
   {
     term: "Empresa",
     meaning: "Cliente/empresa usada como contexto principal de leitura dos dados.",
-    example: "Quando voce escolhe uma empresa no topo, as telas mostram apenas esse recorte.",
+    example: "Quando você escolhe uma empresa no topo, as telas mostram apenas esse recorte.",
   },
   {
     term: "Competência",
@@ -140,7 +140,7 @@ const moduleGuides: ModuleGuide[] = [
   },
   {
     id: "mod-calendario",
-    title: "Calendario",
+    title: "Calendário",
     access: "Todos os perfis",
     icon: CalendarDays,
     objective: "Transformar prazos em agenda visual para reduzir esquecimentos.",
@@ -179,7 +179,7 @@ const moduleGuides: ModuleGuide[] = [
     ],
     possibilities: [
       "Consultar base de clientes por filtro.",
-      "Abrir detalhes para entender andamento e pendencias.",
+      "Abrir detalhes para entender andamento e pendências.",
       "Manter informações atualizadas para evitar retrabalho no atendimento.",
     ],
     stepByStep: [
@@ -194,7 +194,7 @@ const moduleGuides: ModuleGuide[] = [
   },
   {
     id: "mod-formulários",
-    title: "Formularios",
+    title: "Formulários",
     access: "Todos os perfis",
     icon: FileText,
     objective: "Controlar entradas vindas do site e transformar solicitações em ação.",
@@ -291,9 +291,9 @@ const moduleGuides: ModuleGuide[] = [
     possibilities: [
       "Usar o Grupo Geral para avisos e alinhamentos da equipe inteira.",
       "Abrir conversa pessoal (1:1) com qualquer usuário interno.",
-      "Alinhar duvidas operacionais em tempo real.",
+      "Alinhar dúvidas operacionais em tempo real.",
       "Compartilhar contexto rápido para continuidade de tarefas.",
-      "Reduzir dependencia de canais externos para assuntos internos.",
+      "Reduzir dependência de canais externos para assuntos internos.",
     ],
     stepByStep: [
       "Enviar mensagem objetiva com contexto mínimo necessario.",
@@ -310,7 +310,7 @@ const moduleGuides: ModuleGuide[] = [
     title: "Newsletter",
     access: "Admin",
     icon: Newspaper,
-    objective: "Publicar comunicados e conteudos para base de assinantes.",
+    objective: "Publicar comunicados e conteúdos para base de assinantes.",
     practicalGoal: "Transformar conteúdo em relacionamento recorrente com leads e clientes.",
     nomenclatures: [
       { term: "Assinante", meaning: "Pessoa que se cadastrou para receber newsletters." },
@@ -361,11 +361,11 @@ const moduleGuides: ModuleGuide[] = [
   },
   {
     id: "mod-notificacoes",
-    title: "Notificacoes",
+    title: "Notificações",
     access: "Todos os perfis",
     icon: Bell,
     objective: "Avisar riscos operacionais para ação rápida.",
-    practicalGoal: "Tratar pendencias no momento certo e evitar atraso acumulado.",
+    practicalGoal: "Tratar pendências no momento certo e evitar atraso acumulado.",
     nomenclatures: [
       { term: "Alta prioridade", meaning: "Risco imediato de prazo ou operação." },
       { term: "Media prioridade", meaning: "Atenção necessaria no curto prazo." },
@@ -388,7 +388,7 @@ const moduleGuides: ModuleGuide[] = [
   },
   {
     id: "mod-configuracoes",
-    title: "Configuracoes",
+    title: "Configurações",
     access: "Todos os perfis",
     icon: Settings,
     objective: "Ajustar perfil e preferências para trabalhar com mais eficiência.",
@@ -464,7 +464,7 @@ export default function ManualPage() {
             <div className="space-y-1">
               <h1 className="font-heading text-2xl font-bold">Manual de uso da plataforma</h1>
               <p className="text-sm text-muted-foreground">
-                Versao mastigada: o que cada area faz, para que serve, como chamar as coisas e quais resultados voce consegue gerar.
+                Versão mastigada: o que cada área faz, para que serve, como chamar as coisas e quais resultados você consegue gerar.
               </p>
             </div>
           </div>
@@ -488,7 +488,7 @@ export default function ManualPage() {
           </div>
 
           <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-            Como usar este manual: leia primeiro Objetivos e Nomenclaturas. Depois abra apenas os modulos que fazem parte da sua rotina.
+            Como usar este manual: leia primeiro Objetivos e Nomenclaturas. Depois abra apenas os módulos que fazem parte da sua rotina.
           </div>
         </div>
 
@@ -530,10 +530,10 @@ export default function ManualPage() {
 
         <section id="funcionalidades" className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-primary" /> 3) Funcionalidades separadas por modulo
+            <CheckCircle2 className="h-5 w-5 text-primary" /> 3) Funcionalidades separadas por módulo
           </h2>
           <p className="text-sm text-muted-foreground">
-            Cada modulo abaixo esta separado com objetivo, nomenclaturas, possibilidades e passo a passo.
+            Cada módulo abaixo está separado com objetivo, nomenclaturas, possibilidades e passo a passo.
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
             {moduleGuides.map((module, index) => (
@@ -563,7 +563,7 @@ export default function ManualPage() {
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className={blockClass}>
-                  <p className="text-sm font-semibold">Objetivo do modulo</p>
+                  <p className="text-sm font-semibold">Objetivo do módulo</p>
                   <p className="text-sm text-muted-foreground">{module.objective}</p>
                   <p className="text-xs text-muted-foreground">
                     Resultado esperado: {module.practicalGoal}
@@ -571,7 +571,7 @@ export default function ManualPage() {
                 </div>
 
                 <div className={blockClass}>
-                  <p className="text-sm font-semibold">Nomenclaturas do modulo</p>
+                  <p className="text-sm font-semibold">Nomenclaturas do módulo</p>
                   <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
                     {module.nomenclatures.map((item) => (
                       <li key={item.term}>
@@ -582,7 +582,7 @@ export default function ManualPage() {
                 </div>
 
                 <div className={blockClass}>
-                  <p className="text-sm font-semibold">Possibilidades (o que voce consegue fazer)</p>
+                  <p className="text-sm font-semibold">Possibilidades (o que você consegue fazer)</p>
                   <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
                     {module.possibilities.map((item) => (
                       <li key={item}>{item}</li>
@@ -656,8 +656,8 @@ export default function ManualPage() {
           </p>
           <ol className="list-decimal pl-5 space-y-2 text-sm">
             <li>Ler Objetivos e Nomenclaturas do manual.</li>
-            <li>Treinar Tarefas/Kanban e Notificacoes no primeiro dia.</li>
-            <li>Treinar modulo principal da função no segundo dia (CRM, Atendimento ou Clientes).</li>
+            <li>Treinar Tarefas/Kanban e Notificações no primeiro dia.</li>
+            <li>Treinar módulo principal da função no segundo dia (CRM, Atendimento ou Clientes).</li>
             <li>Validar entendimento com um fluxo real supervisionado.</li>
           </ol>
           <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground flex items-start gap-2">

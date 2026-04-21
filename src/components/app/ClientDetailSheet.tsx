@@ -40,7 +40,7 @@ const statusColors: Record<string, string> = {
   Inativo: "bg-muted text-muted-foreground",
 };
 
-const mockServices = ["Contabilidade Completa", "BPO Financeiro", "Departamento Pessoal"];
+const mockServices = ["Contábilidade Completa", "BPO Financeiro", "Departamento Pessoal"];
 const mockHistory = [
   { action: "Formulário de admissão enviado", date: "15/03/2026", by: "Maria Santos" },
   { action: "Reunião de alinhamento realizada", date: "10/03/2026", by: "Carlos Ribeiro" },

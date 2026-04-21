@@ -7,7 +7,7 @@ import { ArrowRight, BarChart3, FileText, Users, Calculator, Briefcase, PieChart
 const solutions = [
   {
     icon: FileText,
-    title: "Contabilidade Digital",
+    title: "Contábilidade Digital",
     description: "Escrituracao fiscal e contábil automatizada, declaracoes e demonstrativos com acompanhamento em tempo real pelo portal.",
     features: ["Escrituracao completa", "Declaracoes fiscais", "Balanços patrimoniais", "Portal em tempo real"],
   },

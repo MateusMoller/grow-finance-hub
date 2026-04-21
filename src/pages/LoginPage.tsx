@@ -98,7 +98,7 @@ export default function LoginPage() {
     setLoading(false);
     if (roleError) {
       await signOut();
-      toast.error("Não foi possível validar suas permissoes de acesso.");
+      toast.error("Não foi possível validar suas permissões de acesso.");
       return;
     }
 

@@ -1,4 +1,4 @@
-﻿import { SiteLayout } from "@/components/site/SiteLayout";
+import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -24,7 +24,7 @@ const values = [
 ];
 
 const services = [
-  { icon: BarChart3, title: "Contabilidade consultiva", description: "Fechamentos, balanços e indicadores com orientação para decisões gerenciais." },
+  { icon: BarChart3, title: "Contábilidade consultiva", description: "Fechamentos, balanços e indicadores com orientação para decisões gerenciais." },
   { icon: Shield, title: "Assessoria fiscal", description: "Planejamento tributário e revisões periódicas para reduzir risco fiscal." },
   { icon: Users, title: "Departamento pessoal", description: "Rotinas trabalhistas, folha, admissões e suporte contínuo ao RH." },
   { icon: Building2, title: "Abertura e regularização", description: "Constituição de empresa, alterações contratuais e regularizações completas." },
@@ -138,7 +138,7 @@ export default function AboutPage() {
           <div className="container grid gap-8 sm:gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
             <motion.div {...fadeIn} className="space-y-6">
               <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                Grow Contabilidade - Institucional
+                Grow Contábilidade - Institucional
               </span>
               <h1 className="font-heading text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
                 Mais do que contabilidade, construímos estratégia para o crescimento do seu negócio
@@ -206,7 +206,7 @@ export default function AboutPage() {
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Quem somos</h2>
               <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
                 Somos uma consultoria contabil com abordagem proativa. Atuamos lado a lado com o empresário para transformar
-                dados em decisao e decisao em resultado.
+                dados em decisão e decisão em resultado.
               </p>
             </motion.div>
 
@@ -337,13 +337,13 @@ export default function AboutPage() {
             >
               <h2 className="font-heading text-2xl font-semibold">Por que escolher a Grow?</h2>
               <p className="mt-3 text-sm text-muted-foreground">
-                Porque nossa proposta combina técnica, proximidade e inteligencia de gestão. Nao entregamos apenas obrigações,
-                entregamos direcao para o seu negócio.
+                Porque nossa proposta combina técnica, proximidade e inteligência de gestão. Não entregamos apenas obrigações,
+                entregamos direção para o seu negócio.
               </p>
               <div className="mt-4 space-y-2 text-sm">
                 <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Equipe dedicada por cliente</p>
                 <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Entrega mensal com leitura executiva</p>
-                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Suporte contínuo para decisao</p>
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Suporte contínuo para decisão</p>
               </div>
             </motion.article>
           </div>

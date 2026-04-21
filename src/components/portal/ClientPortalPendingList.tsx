@@ -38,7 +38,7 @@ export function ClientPortalPendingList({ loading, groups }: ClientPortalPending
             </CardHeader>
             <CardContent className="space-y-3">
               {loading ? (
-                <div className="text-sm text-muted-foreground">Carregando pendencias...</div>
+                <div className="text-sm text-muted-foreground">Carregando pendências...</div>
               ) : group.items.length === 0 ? (
                 <div className="text-sm text-muted-foreground">{group.emptyText}</div>
               ) : (

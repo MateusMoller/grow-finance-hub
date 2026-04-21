@@ -1,4 +1,4 @@
-﻿import { SiteLayout } from "@/components/site/SiteLayout";
+import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router-dom";
@@ -15,7 +15,7 @@ const heroStats = [
 ];
 
 const services = [
-  { icon: BarChart3, title: "Contabilidade Consultiva", description: "Acompanhamento contábil para decisões estratégicas e crescimento sustentável." },
+  { icon: BarChart3, title: "Contábilidade Consultiva", description: "Acompanhamento contábil para decisões estratégicas e crescimento sustentável." },
   { icon: Shield, title: "Assessoria Fiscal", description: "Planejamento fiscal para redução de riscos e otimização tributária." },
   { icon: Users, title: "Departamento Pessoal", description: "Gestão de folha, rotinas trabalhistas e atendimento aos colaboradores." },
   { icon: Building2, title: "Abertura de Empresas", description: "Apoio completo desde a escolha do regime ate o registro legal." },
@@ -181,7 +181,7 @@ export default function HomePage() {
             <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6">
               <h2 className="font-heading text-2xl font-semibold">Quem somos</h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                A Grow Contabilidade combina expertise técnica com atendimento proximo e estratégico. Atuamos como seu
+                A Grow Contábilidade combina expertise técnica com atendimento proximo e estratégico. Atuamos como seu
                 parceiro de negócios, oferecendo clareza, conformidade e visão para que sua empresa cresca com segurança.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">

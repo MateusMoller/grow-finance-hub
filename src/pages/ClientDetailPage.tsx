@@ -215,9 +215,9 @@ const cadastroDpSindicatoFields = [
   { name: "sindicato_observacoes", label: "Observacoes do Sindicato" },
 ];
 const cadastroDpSindicatoFieldNames = new Set(cadastroDpSindicatoFields.map((field) => field.name));
-const cadastroContabilFields = [
+const cadastroContábilFields = [
   { name: "obrigacao_contabil", label: "Obrigação Contábil" },
-  { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
+  { name: "envia_extratos_bancarios", label: "Envia Extratos Bancários" },
   { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
   { name: "controle_financeiro", label: "Controle Financeiro" },
   { name: "sistema_financeiro", label: "Sistema Financeiro" },
@@ -237,16 +237,16 @@ const cadastroObrigacoesFields = [
   { name: "ecd", label: "ECD" },
   { name: "ecf", label: "ECF" },
 ];
-const cadastroHonorariosFields = [
+const cadastroHonoráriosFields = [
   { name: "plano", label: "Plano" },
   { name: "valor_mensal", label: "Valor Mensal (R$)" },
   { name: "forma_pagamento", label: "Forma de Pagamento" },
   { name: "vencimento", label: "Vencimento" },
-  { name: "situacao", label: "Situacao" },
+  { name: "situacao", label: "Situação" },
 ];
 const cadastroDocumentosFields = [
   { name: "contrato", label: "Contrato" },
-  { name: "procuracao", label: "Procuracao" },
+  { name: "procuracao", label: "Procuração" },
   { name: "certificado_digital", label: "Certificado Digital" },
   { name: "contrato_social", label: "Contrato Social" },
   { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
@@ -256,7 +256,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
   contabilidade: {
     fields: contabilidadeFields,
     icon: Calculator,
-    label: "Contabilidade",
+    label: "Contábilidade",
     color: "text-primary",
     mode: "monthly",
     description: "Indicadores mensais para relatório gerencial financeiro e contábil.",
@@ -305,7 +305,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     description: "Informações cadastrais do setor Departamento Pessoal conforme planilha.",
   },
   cadastro_contabil: {
-    fields: cadastroContabilFields,
+    fields: cadastroContábilFields,
     icon: Calculator,
     label: "Setor Contábil",
     color: "text-primary",
@@ -321,9 +321,9 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     description: "Obrigações acessorias cadastradas por cliente conforme planilha.",
   },
   cadastro_honorarios: {
-    fields: cadastroHonorariosFields,
+    fields: cadastroHonoráriosFields,
     icon: FileText,
-    label: "Honorarios",
+    label: "Honorários",
     color: "text-cyan-700",
     mode: "cadastral",
     description: "Dados cadastrais de plano e cobranca de honorarios conforme planilha.",
@@ -821,11 +821,11 @@ const parsePartnersEntry = (rawValue: string | undefined): ClientPartnerForm[] =
 
 const validatePartnerFieldValue = (field: ClientPartnerField, value: string) => {
   const trimmed = value.trim();
-  if (!trimmed) return "Campo obrigatorio.";
+  if (!trimmed) return "Campo obrigatório.";
 
   if (field === "ownershipPercent") {
     const numeric = parseNumericValue(trimmed);
-    if (numeric === null) return "Informe um percentual valido.";
+    if (numeric === null) return "Informe um percentual válido.";
     if (numeric <= 0 || numeric > 100) return "Informe um percentual entre 0,01 e 100.";
     return null;
   }
@@ -1080,7 +1080,7 @@ export default function ClientDetailPage() {
     setPortalTasks((tasksRes.data || []) as ClientPortalTaskRow[]);
 
     if (tasksRes.error) {
-      toast.error("Não foi possível carregar as pendencias do cliente.");
+      toast.error("Não foi possível carregar as pendências do cliente.");
     }
 
     if (normalizedClient.portal_user_id) {
@@ -1507,12 +1507,12 @@ export default function ClientDetailPage() {
     if (!id || !user?.id) return;
 
     if (!client?.portal_user_id || !portalAccessEnabled) {
-      toast.error("Libere o acesso ao portal deste cliente antes de criar pendencias.");
+      toast.error("Libere o acesso ao portal deste cliente antes de criar pendências.");
       return;
     }
 
     if (!portalTaskDraft.title.trim()) {
-      toast.error("Informe o titulo da pendencia.");
+      toast.error("Informe o titulo da pendência.");
       return;
     }
 
@@ -1534,7 +1534,7 @@ export default function ClientDetailPage() {
     setCreatingPortalTask(false);
 
     if (error) {
-      toast.error("Não foi possível criar a pendencia.");
+      toast.error("Não foi possível criar a pendência.");
       return;
     }
 
@@ -1551,7 +1551,7 @@ export default function ClientDetailPage() {
     setUpdatingPortalTaskId(null);
 
     if (error) {
-      toast.error("Não foi possível atualizar o status da pendencia.");
+      toast.error("Não foi possível atualizar o status da pendência.");
       return;
     }
 
@@ -1567,11 +1567,11 @@ export default function ClientDetailPage() {
       return;
     }
 
-    toast.success("Status da pendencia atualizado.");
+    toast.success("Status da pendência atualizado.");
   };
 
   const handleDeletePortalTask = async (taskId: string) => {
-    const confirmed = window.confirm("Deseja excluir esta pendencia?");
+    const confirmed = window.confirm("Deseja excluir esta pendência?");
     if (!confirmed) return;
 
     setDeletingPortalTaskId(taskId);
@@ -1579,7 +1579,7 @@ export default function ClientDetailPage() {
     setDeletingPortalTaskId(null);
 
     if (error) {
-      toast.error("Não foi possível excluir a pendencia.");
+      toast.error("Não foi possível excluir a pendência.");
       return;
     }
 
@@ -1826,7 +1826,7 @@ export default function ClientDetailPage() {
             >
               <option value="">-</option>
               <option value="sim">Sim</option>
-              <option value="nao">Nao</option>
+              <option value="nao">Não</option>
             </select>
           ) : (
             <Input
@@ -1862,7 +1862,7 @@ export default function ClientDetailPage() {
             <div className="space-y-1">
               <h4 className="text-sm font-medium">Informacoes do Sindicato</h4>
               <p className="text-xs text-muted-foreground">
-                Dados de contato e identificacao do sindicato relacionado ao cliente.
+                Dados de contato e identificação do sindicato relacionado ao cliente.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1876,7 +1876,7 @@ export default function ClientDetailPage() {
               <div className="space-y-1">
                 <h4 className="text-sm font-medium">Socios</h4>
                 <p className="text-xs text-muted-foreground">
-                  Cadastre os socios com participacao, pro-labore e senha GOV para relatórios.
+                  Cadastre os sócios com participação, pro-labore e senha GOV para relatórios.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={handleAddPartner}>
@@ -1925,7 +1925,7 @@ export default function ClientDetailPage() {
                           {nameError && <p className="text-[11px] text-destructive">{nameError}</p>}
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Participacao (%)</Label>
+                          <Label className="text-xs">Participação (%)</Label>
                           <Input
                             value={partner.ownershipPercent}
                             onChange={(event) => handlePartnerFieldChange(partner.id, "ownershipPercent", event.target.value)}
@@ -2072,7 +2072,7 @@ export default function ClientDetailPage() {
             <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
             <TabsTrigger value="obrigações">Obrigações</TabsTrigger>
-            <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
+            <TabsTrigger value="pendências">Pendências</TabsTrigger>
           </TabsList>
 
           {/* General Info */}
@@ -2109,7 +2109,7 @@ export default function ClientDetailPage() {
                   </select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="text-xs">Classificacao de Atividade</Label>
+                  <Label className="text-xs">Classificação de Atividade</Label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
                     {clientBusinessProfileOptions.map((profile) => (
                       <label key={profile.key} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -2241,7 +2241,7 @@ export default function ClientDetailPage() {
                     readOnly
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    O endereço completo sera salvo automaticamente a partir dos campos acima.
+                    O endereço completo será salvo automaticamente a partir dos campos acima.
                   </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -2253,7 +2253,7 @@ export default function ClientDetailPage() {
                     <div>
                       <p className="text-sm font-medium">Acesso ao portal do cliente</p>
                       <p className="text-xs text-muted-foreground">
-                        Gerencie a liberacao de login do cliente no portal.
+                        Gerencie a liberação de login do cliente no portal.
                       </p>
                       <p className="text-xs mt-1">
                         Status atual:{" "}
@@ -2303,7 +2303,7 @@ export default function ClientDetailPage() {
                   )}
                   {!canManageCashflowAccess && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Apenas usuário admin pode alterar esta liberacao.
+                      Apenas usuários admin podem alterar esta liberação.
                     </p>
                   )}
                 </div>
@@ -2395,7 +2395,7 @@ export default function ClientDetailPage() {
                     <ClipboardList className="h-4 w-4" /> Obrigações da empresa
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Exibe todas as obrigações cadastradas para este cliente e a situacao no mes selecionado.
+                    Exibe todas as obrigações cadastradas para este cliente e a situação no mês selecionado.
                   </p>
                 </div>
 
@@ -2413,7 +2413,7 @@ export default function ClientDetailPage() {
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   <p>Total de obrigações cadastradas: <span className="font-medium">{groupedClientObligations.length}</span></p>
-                  <p>Com situacao no mes: <span className="font-medium">{obligationsWithMonthStatus}</span></p>
+                  <p>Com situação no mês: <span className="font-medium">{obligationsWithMonthStatus}</span></p>
                   <p>Mes filtrado: <span className="font-medium">{obligationMonthFilter}</span></p>
                 </div>
               </div>
@@ -2447,7 +2447,7 @@ export default function ClientDetailPage() {
 
                       {group.rowsForMonth.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Sem registro desta obrigação no mes selecionado.
+                          Sem registro desta obrigação no mês selecionado.
                         </p>
                       ) : (
                         <div className="space-y-2">
@@ -2497,25 +2497,25 @@ export default function ClientDetailPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="pendencias" className="space-y-4">
+          <TabsContent value="pendências" className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <h3 className="font-semibold flex items-center gap-2">
-                <ClipboardList className="h-4 w-4" /> Pendencias do cliente
+                <ClipboardList className="h-4 w-4" /> Pendências do cliente
               </h3>
 
               {(!client?.portal_user_id || !portalAccessEnabled) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
-                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendencias sejam exibidas para ele.
+                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendências sejam exibidas para ele.
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Titulo da pendencia</Label>
+                  <Label className="text-xs">Título da pendência</Label>
                   <Input
                     value={portalTaskDraft.title}
                     onChange={(event) => setPortalTaskDraft((prev) => ({ ...prev, title: event.target.value }))}
-                    placeholder="Ex.: Enviar extrato bancario do mes"
+                    placeholder="Ex.: Enviar extrato bancário do mês"
                   />
                 </div>
 
@@ -2580,22 +2580,22 @@ export default function ClientDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={() => void handleCreatePortalTask()} disabled={creatingPortalTask}>
                   {creatingPortalTask ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Criar pendencia
+                  Criar pendência
                 </Button>
                 <Button type="button" variant="outline" onClick={resetPortalTaskDraft} disabled={creatingPortalTask}>
                   Limpar campos
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  A pendencia aparece no portal do cliente em "Pendencias" e na visao geral.
+                  A pendência aparece no portal do cliente em "Pendências" e na visao geral.
                 </p>
               </div>
             </div>
 
             <div className="rounded-xl border bg-card p-6 space-y-4">
-              <h3 className="font-semibold">Pendencias cadastradas</h3>
+              <h3 className="font-semibold">Pendências cadastradas</h3>
 
               {portalTasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma pendencia cadastrada para este cliente.</p>
+                <p className="text-sm text-muted-foreground">Nenhuma pendência cadastrada para este cliente.</p>
               ) : (
                 <div className="space-y-3">
                   {portalTasks.map((task) => {

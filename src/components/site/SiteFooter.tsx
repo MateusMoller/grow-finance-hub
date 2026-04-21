@@ -1,4 +1,4 @@
-﻿import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,17 +43,17 @@ export function SiteFooter() {
           <div className="space-y-3 lg:col-span-2">
             <Link to="/" className="flex items-center gap-3">
               <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md" />
-              <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
+              <span className="font-heading text-lg font-semibold text-foreground">Grow Contábilidade</span>
             </Link>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Parceiro estratégico de empresas que buscam crescimento com organização, compliance e inteligencia.
+              Parceiro estratégico de empresas que buscam crescimento com organização, compliance e inteligência.
             </p>
           </div>
 
           <div>
             <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Serviços</h4>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/solucoes" className="hover:text-foreground">Contabilidade Consultiva</Link></li>
+              <li><Link to="/solucoes" className="hover:text-foreground">Contábilidade Consultiva</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Assessoria Fiscal</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Departamento Pessoal</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Abertura de Empresas</Link></li>
@@ -116,7 +116,7 @@ export function SiteFooter() {
 
         <div className="mt-8 flex flex-col gap-3 border-t border-border pt-5 text-xs text-muted-foreground md:mt-10 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <p>© {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
+            <p>© {new Date().getFullYear()} Grow Contábilidade. Todos os direitos reservados.</p>
             <p>
               Criado por{" "}
               <a

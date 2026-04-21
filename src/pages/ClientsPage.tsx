@@ -106,7 +106,7 @@ export default function ClientsPage() {
       .eq("role", "client");
 
     if (rolesError) {
-      toast.error("Não foi possível validar permissoes atuais do portal.");
+      toast.error("Não foi possível validar permissões atuais do portal.");
       return;
     }
 
@@ -114,7 +114,7 @@ export default function ClientsPage() {
     const missingRoleIds = deduplicatedIds.filter((userId) => !alreadyAllowed.has(userId));
 
     if (missingRoleIds.length === 0) {
-      if (notifySuccess) toast.success("Todos os clientes ja possuem permissão do portal.");
+      if (notifySuccess) toast.success("Todos os clientes já possuem permissão do portal.");
       return;
     }
 
@@ -160,7 +160,7 @@ export default function ClientsPage() {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session?.access_token) {
-      toast.error("Sessao expirada. Entre novamente para sincronizar com o Acessorias.");
+      toast.error("Sessão expirada. Entre novamente para sincronizar com o Acessorias.");
       return;
     }
 

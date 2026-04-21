@@ -65,20 +65,20 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
   const base = [
     { title: "Dashboard", url: "/app" },
     { title: "Kanban", url: "/app/kanban" },
-    { title: "Calendario", url: "/app/calendario" },
+    { title: "Calendário", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
-    { title: "Formularios", url: "/app/formulários" },
+    { title: "Formulários", url: "/app/formularios" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatórios", url: "/app/relatorios" },
     { title: "Obrigações", url: "/app/obrigacoes" },
     { title: "E-continuo", url: "/app/econtinuo" },
-    { title: "Notificacoes", url: "/app/notificacoes" },
+    { title: "Notificações", url: "/app/notificacoes" },
     { title: "Usuários", url: "/app/usuarios" },
     { title: "Sugestoes", url: "/app/sugestoes" },
-    { title: "Configuracoes", url: "/app/configuracoes" },
+    { title: "Configurações", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
   ];
 
@@ -92,7 +92,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
       item.url === "/app/tarefas" ||
       item.url === "/app/clientes" ||
       item.url === "/app/solicitacoes" ||
-      item.url === "/app/formulários" ||
+      item.url === "/app/formularios" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
       item.url === "/app/obrigacoes" ||
@@ -110,7 +110,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     item.url === "/app/tarefas" ||
     item.url === "/app/clientes" ||
     item.url === "/app/solicitacoes" ||
-    item.url === "/app/formulários" ||
+    item.url === "/app/formularios" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
     item.url === "/app/obrigacoes" ||
@@ -346,7 +346,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notificacoes</span>
+                    <span>Notificações</span>
                     <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
@@ -418,10 +418,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <UserRound className="h-4 w-4 mr-2" /> Meu perfil
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <Settings className="h-4 w-4 mr-2" /> Configuracoes
+                    <Settings className="h-4 w-4 mr-2" /> Configurações
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    <Bell className="h-4 w-4 mr-2" /> Notificacoes
+                    <Bell className="h-4 w-4 mr-2" /> Notificações
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

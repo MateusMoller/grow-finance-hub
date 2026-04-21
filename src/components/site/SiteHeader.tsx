@@ -50,7 +50,7 @@ export function SiteHeader() {
         <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
           <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
           <span className="max-w-[165px] truncate font-heading text-[15px] font-semibold text-foreground sm:max-w-none sm:text-lg">
-            Grow Contabilidade
+            Grow Contábilidade
           </span>
         </Link>
 

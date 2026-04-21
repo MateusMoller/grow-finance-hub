@@ -348,12 +348,12 @@ export function ClientPortalCashflow({
       }
 
       if (description.length < 3) {
-        toast.error(`Descrição invalida na sugestão de ${draft.sourceFile}.`);
+        toast.error(`Descrição inválida na sugestão de ${draft.sourceFile}.`);
         return;
       }
 
       if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error(`Valor invalido na sugestão de ${draft.sourceFile}.`);
+        toast.error(`Valor inválido na sugestão de ${draft.sourceFile}.`);
         return;
       }
 
@@ -401,12 +401,12 @@ export function ClientPortalCashflow({
             Controle de caixa bloqueado
           </CardTitle>
           <CardDescription>
-            O acesso a este modulo depende de liberacao do admin. Ao ser liberado, voce podera acompanhar saldo, entradas, saidas e previsões.
+            O acesso a este módulo depende de liberação do admin. Ao ser liberado, você poderá acompanhar saldo, entradas, saídas e previsões.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <Button type="button" onClick={onRequestEnable}>
-            Solicitar liberacao do controle de caixa
+            Solicitar liberação do controle de caixa
           </Button>
         </CardContent>
       </Card>
@@ -422,7 +422,7 @@ export function ClientPortalCashflow({
             Dashboard de caixa
           </CardTitle>
           <CardDescription>
-            Visao mensal com saldo realizado, saldo projetado e principais saidas para apoiar decisao rápida.
+            Visão mensal com saldo realizado, saldo projetado e principais saídas para apoiar decisão rápida.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -434,7 +434,7 @@ export function ClientPortalCashflow({
             <p className={`text-2xl font-semibold mt-1 ${totals.realizedBalance >= 0 ? "text-emerald-600" : "text-destructive"}`}>
               {currencyFormatter.format(totals.realizedBalance)}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-1">Somente lancamentos confirmados</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Somente lançamentos confirmados</p>
           </CardContent>
         </Card>
 
@@ -577,10 +577,10 @@ export function ClientPortalCashflow({
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Upload className="h-4 w-4 text-primary" />
-            Importacao automatica de extratos
+            Importação automática de extratos
           </CardTitle>
           <CardDescription>
-            Envie OFX, PDF, Excel, CSV ou imagem do extrato. O sistema gera os lancamentos automaticamente para voce revisar e confirmar.
+            Envie OFX, PDF, Excel, CSV ou imagem do extrato. O sistema gera os lançamentos automaticamente para você revisar e confirmar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">

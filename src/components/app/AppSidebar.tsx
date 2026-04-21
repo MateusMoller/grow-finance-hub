@@ -37,14 +37,14 @@ import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
   { title: "Kanban", url: "/app/kanban", icon: KanbanSquare },
-  { title: "Calendario", url: "/app/calendario", icon: CalendarDays },
+  { title: "Calendário", url: "/app/calendario", icon: CalendarDays },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
   { title: "Clientes", url: "/app/clientes", icon: Users },
 ];
 
 const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
-  { title: "Formularios", url: "/app/formulários", icon: FileText },
+  { title: "Formulários", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
@@ -54,11 +54,11 @@ const operationalItems = [
 ];
 
 const systemItems = [
-  { title: "Notificacoes", url: "/app/notificacoes", icon: Bell },
+  { title: "Notificações", url: "/app/notificacoes", icon: Bell },
   { title: "Usuários", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestoes", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
-  { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
+  { title: "Configurações", url: "/app/configuracoes", icon: Settings },
 ];
 
 function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {
@@ -124,7 +124,7 @@ export function AppSidebar() {
     ? operationalItems.filter(
         (item) =>
           item.url === "/app/solicitacoes" ||
-          item.url === "/app/formulários" ||
+          item.url === "/app/formularios" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
           item.url === "/app/obrigacoes" ||

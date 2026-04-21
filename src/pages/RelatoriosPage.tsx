@@ -278,7 +278,7 @@ interface ClientPartnerReportEntry {
 }
 
 const monthlyClientDataCategoryLabel: Record<MonthlyClientDataCategory, string> = {
-  contabilidade: "Contabilidade",
+  contabilidade: "Contábilidade",
   fiscal: "Fiscal",
   dp: "Dept. Pessoal",
 };
@@ -289,7 +289,7 @@ const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, stri
   cadastro_departamento_pessoal: "Setor DP",
   cadastro_contabil: "Setor Contábil",
   cadastro_obrigacoes: "Obrigações",
-  cadastro_honorarios: "Honorarios",
+  cadastro_honorarios: "Honorários",
   cadastro_documentos: "Documentos",
 };
 
@@ -404,7 +404,7 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
   ],
   cadastro_contabil: [
     { name: "obrigacao_contabil", label: "Obrigação Contábil" },
-    { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
+    { name: "envia_extratos_bancarios", label: "Envia Extratos Bancários" },
     { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
     { name: "controle_financeiro", label: "Controle Financeiro" },
     { name: "sistema_financeiro", label: "Sistema Financeiro" },
@@ -429,11 +429,11 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "valor_mensal", label: "Valor Mensal (R$)" },
     { name: "forma_pagamento", label: "Forma de Pagamento" },
     { name: "vencimento", label: "Vencimento" },
-    { name: "situacao", label: "Situacao" },
+    { name: "situacao", label: "Situação" },
   ],
   cadastro_documentos: [
     { name: "contrato", label: "Contrato" },
-    { name: "procuracao", label: "Procuracao" },
+    { name: "procuracao", label: "Procuração" },
     { name: "certificado_digital", label: "Certificado Digital" },
     { name: "contrato_social", label: "Contrato Social" },
     { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
@@ -486,7 +486,7 @@ const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
   const totalProLabore = partners.reduce((sum, partner) => sum + partner.pro_labore, 0);
   const withGovPassword = partners.filter((partner) => Boolean(partner.senha_gov)).length;
   const govPasswordStatus =
-    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Nao";
+    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Não";
   const ownershipByPartner = partners
     .map((partner) => {
       const partnerName = partner.nome || "Sócio sem nome";
@@ -621,7 +621,7 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
     icon: ClipboardList,
     colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
     columns: [
-      { key: "titulo", label: "Titulo" },
+      { key: "titulo", label: "Título" },
       { key: "cliente", label: "Cliente" },
       { key: "responsavel", label: "Responsavel" },
       { key: "setor", label: "Setor" },
@@ -1323,7 +1323,7 @@ export default function RelatoriosPage() {
 
     if (error) {
       if (error.code === "23505") {
-        toast.error("Ja existe um relatório salvo com este nome nesta categoria.");
+        toast.error("Já existe um relatório salvo com este nome nesta categoria.");
         return;
       }
       toast.error(`Falha ao salvar relatório: ${error.message}`);
@@ -1603,7 +1603,7 @@ export default function RelatoriosPage() {
                 <div>
                   <h2 className="font-heading font-semibold">Gerar relatório</h2>
                   <p className="text-xs text-muted-foreground">
-                    Escolha o modulo, selecione as colunas e exporte seu modelo customizado.
+                    Escolha o módulo, selecione as colunas e exporte seu modelo customizado.
                   </p>
                 </div>
                 <div className="w-full lg:w-[280px]">
@@ -1655,7 +1655,7 @@ export default function RelatoriosPage() {
                 <div className="flex items-center gap-2">
                   <Switch checked={savedReportAutoGenerate} onCheckedChange={setSavedReportAutoGenerate} />
                   <p className="text-sm text-muted-foreground">
-                    Gerar automaticamente ao abrir esta pagina na proxima vez.
+                    Gerar automaticamente ao abrir esta página na próxima vez.
                   </p>
                 </div>
               </div>

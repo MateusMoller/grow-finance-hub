@@ -152,7 +152,7 @@ export default function NotificacoesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-              Notificacoes
+              Notificações
               {unreadCount > 0 && (
                 <Badge className="bg-destructive text-destructive-foreground">{unreadCount}</Badge>
               )}
@@ -198,7 +198,7 @@ export default function NotificacoesPage() {
             <div>
               <h2 className="text-sm font-semibold flex items-center gap-2">
                 <Smartphone className="h-4 w-4" />
-                Notificacoes Push (PWA)
+                Notificações Push (PWA)
               </h2>
               <p className="text-xs text-muted-foreground mt-1">{pushStatusLabel}</p>
             </div>
@@ -278,7 +278,7 @@ export default function NotificacoesPage() {
         ) : filteredNotifications.length === 0 ? (
           <div className="rounded-xl border bg-card p-12 text-center">
             <Bell className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium">Nenhuma notificacao para este filtro</p>
+            <p className="font-medium">Nenhuma notificação para este filtro</p>
             <p className="text-sm text-muted-foreground mt-1">
               Quando surgirem novos alertas de prioridade, eles aparecerao aqui.
             </p>
