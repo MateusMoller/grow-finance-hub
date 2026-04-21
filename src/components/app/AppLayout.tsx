@@ -138,6 +138,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     markAsRead,
     markAllAsRead,
     notificationSignal,
+    latestRealtimeNotifications,
   } = usePriorityNotifications();
 
   const navigate = useNavigate();
@@ -154,6 +155,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const notificationTargetPath = `${import.meta.env.BASE_URL || "/"}app/notificacoes`;
+  const notificationIconUrl = `${import.meta.env.BASE_URL || "/"}icons/icon-192.png`;
 
   const playNotificationSound = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -206,6 +209,63 @@ export function AppLayout({ children }: { children: ReactNode }) {
       // Browsers can block autoplay until user interaction; fail silently.
     });
   }, [notificationSignal, playNotificationSound]);
+
+  const showDesktopNotification = useCallback(async (title: string, description: string, tag: string) => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+
+    let permission = Notification.permission;
+    if (permission === "default") {
+      try {
+        permission = await Notification.requestPermission();
+      } catch {
+        return;
+      }
+    }
+
+    if (permission !== "granted") return;
+
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          await registration.showNotification(title, {
+            body: description,
+            icon: notificationIconUrl,
+            badge: notificationIconUrl,
+            tag,
+            renotify: true,
+            data: { url: notificationTargetPath },
+          });
+          return;
+        }
+      }
+
+      const desktopNotification = new Notification(title, {
+        body: description,
+        icon: notificationIconUrl,
+        tag,
+      });
+
+      desktopNotification.onclick = () => {
+        window.focus();
+        window.location.href = notificationTargetPath;
+      };
+    } catch {
+      // Se o navegador bloquear a exibicao, segue silenciosamente.
+    }
+  }, [notificationIconUrl, notificationTargetPath]);
+
+  useEffect(() => {
+    if (latestRealtimeNotifications.length === 0) return;
+
+    latestRealtimeNotifications.slice(0, 3).forEach((notification) => {
+      void showDesktopNotification(
+        notification.title,
+        notification.description,
+        `grow-live-${notification.id}`,
+      );
+    });
+  }, [latestRealtimeNotifications, showDesktopNotification]);
 
   useEffect(() => {
     return () => {

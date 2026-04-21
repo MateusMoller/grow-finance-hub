@@ -198,6 +198,13 @@ const cadastroDpFields = [
   { name: "clinica_parceira", label: "Clinica parceira" },
   { name: "possui_decimo_terceiro", label: "Possui 13o?" },
 ];
+const cadastroDpDependentYesFieldNames = [
+  "possui_fgts",
+  "possui_adiantamento_salarial",
+  "envia_relatorio_ferias",
+  "possui_decimo_terceiro",
+] as const;
+
 const cadastroDpSindicatoFields = [
   { name: "sindicato_nome", label: "Nome do Sindicato" },
   { name: "sindicato_cnpj", label: "CNPJ do Sindicato" },
@@ -1122,13 +1129,36 @@ export default function ClientDetailPage() {
     const rule = getFieldRule(category, fieldName);
     const normalizedValue = normalizeFieldValueForSave(rule, value);
 
-    setDataEntries((prev) => ({ ...prev, [key]: normalizedValue }));
+    const updates: Array<{ key: string; fieldName: string; value: string }> = [
+      { key, fieldName, value: normalizedValue },
+    ];
 
-    const error = validateFieldValue(rule, normalizedValue);
+    if (category === "cadastro_departamento_pessoal" && fieldName === "possui_funcionarios" && normalizedValue === "sim") {
+      for (const dependentFieldName of cadastroDpDependentYesFieldNames) {
+        updates.push({
+          key: getCategoryFieldEntryKey(category, dependentFieldName),
+          fieldName: dependentFieldName,
+          value: "sim",
+        });
+      }
+    }
+
+    setDataEntries((prev) => {
+      const next = { ...prev };
+      for (const update of updates) {
+        next[update.key] = update.value;
+      }
+      return next;
+    });
+
     setDataFieldErrors((prev) => {
       const next = { ...prev };
-      if (error) next[key] = error;
-      else delete next[key];
+      for (const update of updates) {
+        const updateRule = getFieldRule(category, update.fieldName);
+        const error = validateFieldValue(updateRule, update.value);
+        if (error) next[update.key] = error;
+        else delete next[update.key];
+      }
       return next;
     });
   };

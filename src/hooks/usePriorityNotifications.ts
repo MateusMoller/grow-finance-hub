@@ -30,6 +30,7 @@ export function usePriorityNotifications() {
   const [notifications, setNotifications] = useState<NotificationWithRead[]>([]);
   const [loading, setLoading] = useState(false);
   const [notificationSignal, setNotificationSignal] = useState(0);
+  const [latestRealtimeNotifications, setLatestRealtimeNotifications] = useState<NotificationWithRead[]>([]);
   const notificationsRef = useRef<NotificationWithRead[]>([]);
 
   useEffect(() => {
@@ -66,12 +67,18 @@ export function usePriorityNotifications() {
 
     if (source === "realtime") {
       const previousIds = new Set(notificationsRef.current.map((notification) => notification.id));
-      const hasNewUnread = built.some(
+      const newUnreadNotifications = built.filter(
         (notification) => !notification.read && !previousIds.has(notification.id),
       );
-      if (hasNewUnread) {
+
+      if (newUnreadNotifications.length > 0) {
         setNotificationSignal((prev) => prev + 1);
+        setLatestRealtimeNotifications(newUnreadNotifications);
+      } else {
+        setLatestRealtimeNotifications([]);
       }
+    } else {
+      setLatestRealtimeNotifications([]);
     }
 
     setNotifications(built);
@@ -141,5 +148,6 @@ export function usePriorityNotifications() {
     refresh,
     resetReadState,
     notificationSignal,
+    latestRealtimeNotifications,
   };
 }

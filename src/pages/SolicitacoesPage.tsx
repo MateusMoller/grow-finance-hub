@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useLocation } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -203,8 +204,18 @@ const parseSubmissionEntries = (data: Json): Array<{ key: string; value: string 
   });
 };
 
+const buildSubmissionDeepLinkPath = (submissionId: string) =>
+  `/app/solicitacoes?tab=forms&submission=${encodeURIComponent(submissionId)}`;
+
+const buildSubmissionDeepLink = (submissionId: string) => {
+  const path = buildSubmissionDeepLinkPath(submissionId);
+  if (typeof window === "undefined") return path;
+  return `${window.location.origin}${path}`;
+};
+
 export default function SolicitacoesPage() {
   const { user, role } = useAuth();
+  const location = useLocation();
 
   const [activeTab, setActiveTab] = useState<PortalTab>("requests");
 
@@ -461,6 +472,35 @@ export default function SolicitacoesPage() {
     () => submissions.find((submission) => submission.id === selectedSubmissionId) || null,
     [selectedSubmissionId, submissions]
   );
+
+  const submissionByRequestId = useMemo(() => {
+    const map = new Map<string, FormSubmissionView>();
+    submissions.forEach((submission) => {
+      if (!submission.request_id || map.has(submission.request_id)) return;
+      map.set(submission.request_id, submission);
+    });
+    return map;
+  }, [submissions]);
+
+  const selectedRequestSubmission = useMemo(() => {
+    if (!selectedRequestId) return null;
+    return submissionByRequestId.get(selectedRequestId) || null;
+  }, [selectedRequestId, submissionByRequestId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    const submissionId = params.get("submission");
+
+    if (tab === "forms" || submissionId) {
+      setActiveTab("forms");
+    }
+
+    if (submissionId) {
+      setSelectedSubmissionId(submissionId);
+      setSubmissionSheetOpen(true);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     setSubmissionNotes(selectedSubmission?.notes || "");
@@ -774,9 +814,24 @@ export default function SolicitacoesPage() {
     toast.success("Observacoes atualizadas.");
   };
 
-  const openSubmissionSheet = (submission: FormSubmissionView) => {
-    setSelectedSubmissionId(submission.id);
+  const openSubmissionSheetById = (submissionId: string) => {
+    setActiveTab("forms");
+    setSelectedSubmissionId(submissionId);
     setSubmissionSheetOpen(true);
+  };
+
+  const openSubmissionSheet = (submission: FormSubmissionView) => {
+    openSubmissionSheetById(submission.id);
+  };
+
+  const handleCopySubmissionLink = async (submissionId: string) => {
+    const deepLink = buildSubmissionDeepLink(submissionId);
+    try {
+      await navigator.clipboard.writeText(deepLink);
+      toast.success("Link do formulario copiado.");
+    } catch {
+      toast.error("Nao foi possivel copiar o link do formulario.");
+    }
   };
 
   return (
@@ -1248,6 +1303,27 @@ export default function SolicitacoesPage() {
                         <Plus className="h-3.5 w-3.5 mr-1" />
                         Criar pendencia para cliente
                       </Button>
+                      {selectedRequestSubmission && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openSubmissionSheetById(selectedRequestSubmission.id)}
+                          >
+                            <FileText className="h-3.5 w-3.5 mr-1" />
+                            Abrir formulario vinculado
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void handleCopySubmissionLink(selectedRequestSubmission.id)}
+                          >
+                            Copiar link da tela
+                          </Button>
+                        </>
+                      )}
                     </div>
 
                     <Card>

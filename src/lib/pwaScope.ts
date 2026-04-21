@@ -77,17 +77,6 @@ const ensureGrowServiceWorker = async () => {
   await navigator.serviceWorker.ready;
 };
 
-const disableGrowServiceWorker = async () => {
-  if (!("serviceWorker" in navigator)) return;
-  const registrations = await navigator.serviceWorker.getRegistrations();
-
-  await Promise.all(
-    registrations
-      .filter((registration) => isGrowServiceWorkerRegistration(registration))
-      .map((registration) => registration.unregister()),
-  );
-};
-
 export const syncPwaModeForPath = async (pathname: string) => {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
@@ -96,7 +85,5 @@ export const syncPwaModeForPath = async (pathname: string) => {
 
   if (enabled) {
     await ensureGrowServiceWorker();
-  } else {
-    await disableGrowServiceWorker();
   }
 };

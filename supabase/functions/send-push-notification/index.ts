@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
 
     const title = asTrimmedString(payload.title) || "Grow Finance Hub";
     const body = asTrimmedString(payload.body) || "Nova atualizacao recebida.";
-    const url = asTrimmedString(payload.url) || "./app/notificacoes";
+    const url = asTrimmedString(payload.url) || "/app/notificacoes";
     const tag = asTrimmedString(payload.tag) || "grow-push";
     const requireInteraction = asBoolean(payload.require_interaction);
     const renotify = asBoolean(payload.renotify);
