@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { captureSiteLead } from "@/lib/siteLeadCapture";
+import { captureSiteLead, sendSiteContactEmail } from "@/lib/siteLeadCapture";
 
 const fadeIn = {
   initial: { opacity: 0, y: 20 },
@@ -32,26 +32,35 @@ export default function ContactPage() {
     const message = contactForm.message.trim();
 
     if (!fullName || !email || !message) {
-      toast.error("Preencha nome, e-mail e mensagem para contínuar.");
+      toast.error("Preencha nome, e-mail e mensagem para continuar.");
       return;
     }
 
     setLoading(true);
 
-    const { error } = await captureSiteLead({
+    const payload = {
       fullName,
       companyName: contactForm.companyName.trim(),
       email,
       phone: contactForm.phone.trim(),
       message,
       originPage: "contact",
-    });
+    };
+
+    const { error } = await captureSiteLead(payload);
+
+    if (error) {
+      setLoading(false);
+      toast.error(`Nao foi possivel enviar a mensagem: ${error.message}`);
+      return;
+    }
+
+    const { error: emailError } = await sendSiteContactEmail(payload);
 
     setLoading(false);
 
-    if (error) {
-      toast.error(`Não foi possível enviar a mensagem: ${error.message}`);
-      return;
+    if (emailError) {
+      toast.warning("Recebemos sua mensagem, mas o aviso por e-mail falhou. Nossa equipe vai revisar no CRM.");
     }
 
     setContactForm({

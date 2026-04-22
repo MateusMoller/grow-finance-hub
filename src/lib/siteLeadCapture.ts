@@ -36,3 +36,25 @@ export const captureSiteLead = async (payload: CaptureSiteLeadInput) => {
     origin_page: originPage,
   });
 };
+
+interface SendSiteContactEmailInput {
+  fullName: string;
+  companyName?: string;
+  email: string;
+  phone?: string;
+  message: string;
+  originPage?: string;
+}
+
+export const sendSiteContactEmail = async (payload: SendSiteContactEmailInput) => {
+  return supabase.functions.invoke("send-site-contact-email", {
+    body: {
+      fullName: payload.fullName.trim(),
+      companyName: payload.companyName?.trim() || null,
+      email: payload.email.trim(),
+      phone: payload.phone?.trim() || null,
+      message: payload.message.trim(),
+      originPage: payload.originPage?.trim() || "contact",
+    },
+  });
+};

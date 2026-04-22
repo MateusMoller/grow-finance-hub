@@ -49,6 +49,7 @@ const operationalItems = [
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "Relatórios Salvos", url: "/app/relatorios-salvos", icon: FileText },
   { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
   { title: "E-continuo", url: "/app/econtinuo", icon: Send },
 ];
@@ -127,6 +128,7 @@ export function AppSidebar() {
           item.url === "/app/formularios" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
+          item.url === "/app/relatorios-salvos" ||
           item.url === "/app/obrigacoes" ||
           item.url === "/app/econtinuo",
       )

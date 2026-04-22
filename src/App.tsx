@@ -26,6 +26,7 @@ import FormulariosPage from "./pages/FormulariosPage";
 import CRMPage from "./pages/CRMPage";
 import ChatInternoPage from "./pages/ChatInternoPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
+import RelatoriosSalvosPage from "./pages/RelatoriosSalvosPage";
 import ObrigacoesPage from "./pages/ObrigacoesPage";
 import EContinuoPage from "./pages/EContinuoPage";
 import NewsletterAdminPage from "./pages/NewsletterAdminPage";
@@ -114,6 +115,7 @@ const App = () => (
                 <Route path="/app/newsletter" element={<ProtectedRoute scope="internal"><NewsletterAdminPage /></ProtectedRoute>} />
                 <Route path="/app/comercial" element={<ProtectedRoute scope="internal"><Navigate to="/app/crm" replace /></ProtectedRoute>} />
                 <Route path="/app/relatorios" element={<ProtectedRoute scope="internal"><RelatoriosPage /></ProtectedRoute>} />
+                <Route path="/app/relatorios-salvos" element={<ProtectedRoute scope="internal"><RelatoriosSalvosPage /></ProtectedRoute>} />
                 <Route path="/app/obrigacoes" element={<ProtectedRoute scope="internal"><ObrigacoesPage /></ProtectedRoute>} />
                 <Route path="/app/econtinuo" element={<ProtectedRoute scope="internal"><EContinuoPage /></ProtectedRoute>} />
                 <Route path="/app/acessorias" element={<ProtectedRoute scope="internal"><Navigate to="/app/obrigacoes" replace /></ProtectedRoute>} />

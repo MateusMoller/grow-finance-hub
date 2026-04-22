@@ -73,6 +73,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatórios", url: "/app/relatorios" },
+    { title: "Relatórios Salvos", url: "/app/relatorios-salvos" },
     { title: "Obrigações", url: "/app/obrigacoes" },
     { title: "E-continuo", url: "/app/econtinuo" },
     { title: "Notificações", url: "/app/notificacoes" },
@@ -95,6 +96,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
       item.url === "/app/formularios" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
+      item.url === "/app/relatorios-salvos" ||
       item.url === "/app/obrigacoes" ||
       item.url === "/app/econtinuo" ||
       item.url === "/app/sugestoes" ||
@@ -113,6 +115,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     item.url === "/app/formularios" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
+    item.url === "/app/relatorios-salvos" ||
     item.url === "/app/obrigacoes" ||
     item.url === "/app/econtinuo" ||
     item.url === "/app/sugestoes" ||

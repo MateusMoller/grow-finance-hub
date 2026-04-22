@@ -1724,7 +1724,12 @@ async function cleanupObligationKanbanTasks(
   }
 
   const { error } = await query;
-  if (error) throw error;
+  if (!error) return;
+  if (isSchemaDependencyError(error)) {
+    console.warn("cleanupObligationKanbanTasks skipped due to schema dependency error:", error);
+    return;
+  }
+  throw error;
 }
 
 function mapObligationStatusToCalendarStatus(status: string | null) {
@@ -1763,6 +1768,23 @@ function isCalendarEntryTypeConstraintError(error: unknown) {
   return (
     message.includes("calendar_events_entry_type_check") ||
     (message.includes("entry_type") && message.includes("check"))
+  );
+}
+
+function isSchemaDependencyError(error: unknown) {
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+
+  if (!message) return false;
+  return (
+    (message.includes("column") && message.includes("does not exist")) ||
+    (message.includes("relation") && message.includes("does not exist")) ||
+    message.includes("undefined column")
   );
 }
 
@@ -3304,12 +3326,25 @@ async function handleSyncObligations(
     }
   }
 
-  const calendarSyncSummary = await syncCalendarEventsForObligations(
-    supabaseAdmin,
-    dedupedObligationRows,
-    clientsById,
-    callerUserId,
-  );
+  let calendarSyncSummary = {
+    created: 0,
+    updated: 0,
+    cancelled: 0,
+    processed: 0,
+    skipped: 0,
+  };
+  let calendarSyncError: string | null = null;
+  try {
+    calendarSyncSummary = await syncCalendarEventsForObligations(
+      supabaseAdmin,
+      dedupedObligationRows,
+      clientsById,
+      callerUserId,
+    );
+  } catch (error) {
+    calendarSyncError = error instanceof Error ? error.message : "Falha ao sincronizar calendario.";
+    console.error("syncCalendarEventsForObligations failed:", error);
+  }
 
   const processedInBatch = processedLinks;
   const nextCursor = clientIdFilter ? null : cursor + processedInBatch;
@@ -3322,8 +3357,14 @@ async function handleSyncObligations(
     window_start: string;
     window_end: string;
   } | null = null;
+  let weeklyKanbanError: string | null = null;
   if (clientIdFilter || !hasMore) {
-    weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
+    try {
+      weeklyKanbanSummary = await syncWeeklyObligationKanbanTasks(supabaseAdmin, callerUserId);
+    } catch (error) {
+      weeklyKanbanError = error instanceof Error ? error.message : "Falha ao sincronizar Kanban semanal.";
+      console.error("syncWeeklyObligationKanbanTasks failed:", error);
+    }
   }
 
   return {
@@ -3334,8 +3375,10 @@ async function handleSyncObligations(
     calendar_events_updated: calendarSyncSummary.updated,
     calendar_events_cancelled: calendarSyncSummary.cancelled,
     calendar_sync: calendarSyncSummary,
+    calendar_sync_error: calendarSyncError,
     details,
     weekly_kanban: weeklyKanbanSummary,
+    weekly_kanban_error: weeklyKanbanError,
     auto_linked_clients: autoLinkedClients,
     total_links: totalLinks,
     processed_in_batch: processedInBatch,

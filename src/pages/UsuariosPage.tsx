@@ -57,6 +57,8 @@ const roleColorMap: Record<string, string> = {
   partner: "bg-orange-100 text-orange-700 dark:bg-orange-900/20",
 };
 
+const internalRoleValues = new Set(roleOptions.map((option) => option.value));
+
 export default function UsuariosPage() {
   const { role, user } = useAuth();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
@@ -123,7 +125,11 @@ export default function UsuariosPage() {
       return;
     }
 
-    setUsers((data || []) as AdminUserRow[]);
+    const normalizedRows = ((data || []) as AdminUserRow[]).filter((row) =>
+      row.role ? internalRoleValues.has(row.role) : false,
+    );
+
+    setUsers(normalizedRows);
   }, [isAdmin]);
 
   useEffect(() => {
