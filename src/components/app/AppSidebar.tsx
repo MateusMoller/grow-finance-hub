@@ -155,14 +155,14 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" variant="floating">
       <SidebarContent className="gap-3 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
-        <div className="executive-surface mx-1 flex items-center gap-3 rounded-2xl px-3 py-3">
-          <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10">
+        <div className="mx-1 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.08] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md">
+          <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 border border-white/12 bg-white/10 ring-1 ring-black/10">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="font-heading text-sm font-bold text-sidebar-foreground">Grow Finance</p>
-              <p className="text-[11px] text-sidebar-foreground/65">Hub operacional</p>
+              <p className="font-heading text-sm font-bold tracking-[0.01em] text-white">Grow Finance</p>
+              <p className="text-[11px] text-slate-300">Hub operacional</p>
             </div>
           )}
         </div>

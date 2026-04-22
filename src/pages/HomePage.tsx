@@ -7,6 +7,9 @@ import { ArrowRight, BarChart3, Briefcase, Building2, CheckCircle2, FileText, Fo
 import { useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
+import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
+import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
+import growStationery from "@/assets/brand/grow-stationery.jpg";
 
 const heroStats = [
   { value: "+12", label: "Anos de mercado", detail: "Experiência sólida" },
@@ -113,9 +116,15 @@ export default function HomePage() {
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
-        <section className="border-b border-border/60 pb-10 pt-8 dark:border-[#243054] sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
+        <section className="relative overflow-hidden border-b border-border/60 pb-10 pt-8 dark:border-[#243054] sm:pb-12 sm:pt-10 md:pb-16 md:pt-16">
+          <img
+            src={growMonogramVertical}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-20 top-0 hidden h-[30rem] w-auto mix-blend-multiply opacity-[0.06] lg:block dark:hidden"
+          />
           <div className="container grid gap-10 lg:grid-cols-2 lg:items-start">
-            <motion.div {...fadeIn} className="space-y-8">
+            <motion.div {...fadeIn} className="relative z-10 space-y-8">
               <div className="space-y-5">
                 <h1 className="font-heading text-3xl font-bold leading-tight text-foreground sm:text-4xl md:text-5xl">
                   Mais do que contabilidade, impulsionamos o crescimento do seu negócio
@@ -149,8 +158,16 @@ export default function HomePage() {
             <motion.div
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734] dark:shadow-[0_14px_40px_rgba(0,0,0,0.32)]"
+              className="relative z-10 overflow-hidden rounded-[1.75rem] border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734] dark:shadow-[0_14px_40px_rgba(0,0,0,0.32)]"
             >
+              <div className="overflow-hidden rounded-[1.35rem] border border-border/70 bg-[#50516f] p-3 shadow-sm">
+                <img
+                  src={growLockupHorizontalDark}
+                  alt="Identidade visual Grow Contabilidade"
+                  className="w-full rounded-[1rem] object-cover"
+                />
+              </div>
+
               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="font-heading text-lg font-semibold">Dashboard de Resultados</h3>
@@ -170,6 +187,23 @@ export default function HomePage() {
                   <Button asChild size="sm" className="h-8 w-full rounded-full px-4 text-xs sm:w-auto">
                     <Link to="/solucoes">Ver Demonstracao</Link>
                   </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-border/70 bg-muted/10">
+                <div className="relative">
+                  <img
+                    src={growStationery}
+                    alt="Aplicacao da identidade Grow"
+                    className="h-32 w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#1f2a4d]/78 via-[#1f2a4d]/34 to-transparent" />
+                  <div className="absolute inset-y-0 left-0 flex max-w-xs flex-col justify-end p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72">Marca aplicada</p>
+                    <p className="mt-1 text-sm leading-relaxed text-white">
+                      Identidade presente como camada de confianca, nao como excesso visual.
+                    </p>
+                  </div>
                 </div>
               </div>
             </motion.div>

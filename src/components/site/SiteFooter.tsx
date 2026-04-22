@@ -4,8 +4,9 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import growIcon from "@/assets/grow-icon.png";
 import { subscribeToNewsletter } from "@/lib/newsletter";
+import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
+import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 
 export function SiteFooter() {
   const [email, setEmail] = useState("");
@@ -28,32 +29,47 @@ export function SiteFooter() {
     setSubscribing(false);
 
     if (error) {
-      toast.error(`Não foi possível assinar a newsletter: ${error.message}`);
+      toast.error(`Nao foi possivel assinar a newsletter: ${error.message}`);
       return;
     }
 
     setEmail("");
-    toast.success("Pronto! Voce agora recebe as próximas newsletters da Grow.");
+    toast.success("Pronto! Voce agora recebe as proximas newsletters da Grow.");
   };
 
   return (
     <footer className="border-t border-border bg-[#efeff2] pb-16 dark:bg-[#031029] md:pb-0">
       <div className="container py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
-          <div className="executive-panel space-y-3 p-5 lg:col-span-2">
-            <Link to="/" className="flex items-center gap-3">
-              <img src={growIcon} alt="Grow" className="h-9 w-9 rounded-xl" />
-              <span className="font-heading text-lg font-semibold text-foreground">Grow Contábilidade</span>
+          <div className="executive-panel relative overflow-hidden space-y-4 p-5 lg:col-span-2">
+            <img
+              src={growMonogramVertical}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-20 -right-8 hidden h-64 w-auto mix-blend-multiply opacity-[0.07] md:block dark:hidden"
+            />
+            <Link
+              to="/"
+              className="relative z-10 block w-fit overflow-hidden rounded-[1.35rem] border border-[#50516f]/10 bg-[#50516f] p-2.5 shadow-sm"
+            >
+              <img
+                src={growLockupHorizontalDark}
+                alt="Grow Contabilidade"
+                className="h-12 w-auto rounded-[0.95rem] object-cover sm:h-14"
+              />
             </Link>
-            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Parceiro estratégico de empresas que buscam crescimento com organização, compliance e inteligência.
+            <p className="relative z-10 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Parceiro estrategico de empresas que buscam crescimento com organizacao, compliance e inteligencia.
+            </p>
+            <p className="relative z-10 max-w-sm text-xs uppercase tracking-[0.18em] text-muted-foreground/80">
+              Consultoria, clareza e presenca de marca com sobriedade.
             </p>
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Serviços</h4>
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Servicos</h4>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/solucoes" className="hover:text-foreground">Contábilidade Consultiva</Link></li>
+              <li><Link to="/solucoes" className="hover:text-foreground">Contabilidade Consultiva</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Assessoria Fiscal</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Departamento Pessoal</Link></li>
               <li><Link to="/solucoes" className="hover:text-foreground">Abertura de Empresas</Link></li>
@@ -116,7 +132,7 @@ export function SiteFooter() {
 
         <div className="mt-8 flex flex-col gap-3 border-t border-border pt-5 text-xs text-muted-foreground md:mt-10 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <p>© {new Date().getFullYear()} Grow Contábilidade. Todos os direitos reservados.</p>
+            <p>(c) {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
             <p>
               Criado por{" "}
               <a

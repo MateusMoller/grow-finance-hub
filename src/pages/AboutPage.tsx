@@ -8,6 +8,9 @@ import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock
 import { useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
+import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
+import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
+import growStationery from "@/assets/brand/grow-stationery.jpg";
 
 const metrics = [
   { value: "+12", label: "Anos de mercado", detail: "Experiência sólida em contabilidade consultiva" },
@@ -134,9 +137,15 @@ export default function AboutPage() {
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
-        <section id="institucional" className="border-b border-border/60 py-10 dark:border-[#243054] sm:py-12 md:py-16">
+        <section id="institucional" className="relative overflow-hidden border-b border-border/60 py-10 dark:border-[#243054] sm:py-12 md:py-16">
+          <img
+            src={growMonogramVertical}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-24 top-6 hidden h-[34rem] w-auto mix-blend-multiply opacity-[0.08] lg:block dark:hidden"
+          />
           <div className="container grid gap-8 sm:gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
-            <motion.div {...fadeIn} className="space-y-6">
+            <motion.div {...fadeIn} className="relative z-10 space-y-6">
               <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 Grow Contábilidade - Institucional
               </span>
@@ -163,10 +172,20 @@ export default function AboutPage() {
             <motion.aside
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]"
+              className="relative z-10 overflow-hidden rounded-[1.75rem] border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]"
             >
-              <h2 className="font-heading text-lg font-semibold">Painel institucional</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Panorama da proposta de valor da Grow para empresas em crescimento.</p>
+              <div className="overflow-hidden rounded-[1.35rem] border border-border/70 bg-[#50516f] p-3 shadow-sm">
+                <img
+                  src={growLockupHorizontalDark}
+                  alt="Identidade visual Grow Contabilidade"
+                  className="w-full rounded-[1rem] object-cover"
+                />
+              </div>
+
+              <h2 className="mt-5 font-heading text-lg font-semibold">Painel institucional</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Panorama da proposta de valor da Grow para empresas em crescimento, com linguagem visual mais editorial e premium.
+              </p>
               <div className="mt-5 space-y-3">
                 {[
                   "Consultoria contábil, fiscal e financeira integrada",
@@ -178,6 +197,23 @@ export default function AboutPage() {
                     <span className="text-sm text-foreground">{item}</span>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-[1.35rem] border border-border/70 bg-muted/10">
+                <div className="relative">
+                  <img
+                    src={growStationery}
+                    alt="Aplicacao da identidade Grow em papelaria"
+                    className="h-52 w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1f2a4d]/70 via-[#1f2a4d]/10 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72">Aplicacao de marca</p>
+                    <p className="mt-1 max-w-xs text-sm leading-relaxed text-white">
+                      Elementos visuais da Grow entram como apoio de marca, sem competir com a leitura do conteudo.
+                    </p>
+                  </div>
+                </div>
               </div>
             </motion.aside>
           </div>

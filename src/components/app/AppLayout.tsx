@@ -288,13 +288,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return username.slice(0, 2).toUpperCase();
   }, [user?.email]);
 
-  const activeFiltersSummary = useMemo(() => {
-    const items: string[] = [];
-    if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
-    if (selectedCompetence) items.push(`Competência: ${formatCompetence(selectedCompetence)}`);
-    return items;
-  }, [formatCompetence, selectedCompany, selectedCompetence]);
-
   const handleSignOut = async () => {
     await signOut();
     navigate("/app/login");
@@ -443,21 +436,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="executive-kicker">Central operacional</span>
-              {activeFiltersSummary.length > 0 ? (
-                activeFiltersSummary.map((item) => (
-                  <span
-                    key={item}
-                    className="inline-flex min-h-8 items-center rounded-full border border-border/80 bg-card/85 px-3 text-xs font-medium text-foreground shadow-sm"
-                  >
-                    {item}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-muted-foreground">Sem filtros globais aplicados.</span>
-              )}
-            </div>
           </header>
 
           <main className="flex-1 overflow-auto bg-transparent p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">

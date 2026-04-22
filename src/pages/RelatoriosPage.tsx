@@ -10,11 +10,13 @@ import {
   Briefcase,
   ClipboardList,
   Download,
+  Edit3,
   FileSpreadsheet,
   Loader2,
-
+  PlayCircle,
   RefreshCw,
   Save,
+  Trash2,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -737,7 +739,6 @@ const mapSavedReportRow = (row: SavedReportRow): SavedReportConfig | null => {
 
 export default function RelatoriosPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const clientDataReportPeriod = normalizeCompetence(selectedCompetence) || getCurrentCompetence();
@@ -759,6 +760,7 @@ export default function RelatoriosPage() {
   const [savedReportName, setSavedReportName] = useState("");
   const [savedReportFormat, setSavedReportFormat] = useState<ExportFormat>("xlsx");
   const [editingSavedReportId, setEditingSavedReportId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<"construtor" | "salvos">("construtor");
   const skipDatasetResetRef = useRef(false);
 
   const loadReportData = useCallback(async () => {
@@ -1294,6 +1296,60 @@ export default function RelatoriosPage() {
     toast.success("Configuração do relatório carregada.");
   };
 
+  const handleStartEditingSavedReport = (report: SavedReportConfig) => {
+    skipDatasetResetRef.current = true;
+    setCustomDatasetId(report.datasetId);
+    setSelectedColumns(report.columnKeys);
+    setSavedReportName(report.name);
+    setSavedReportFormat(report.format);
+    setLeftSelectedKeys([]);
+    setRightSelectedKeys([]);
+    setEditingSavedReportId(report.id);
+    setActiveView("construtor");
+    toast.success("Relatório carregado em modo de edicao.");
+  };
+
+  const handleDeleteSavedReport = useCallback(async (reportId: string, reportName: string) => {
+    if (!user?.id) {
+      toast.error("Voce precisa estar autenticado para excluir relatórios salvos.");
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Excluir o relatório salvo "${reportName}"?`);
+    if (!shouldDelete) return;
+
+    const { error } = await supabase
+      .from("saved_reports")
+      .delete()
+      .eq("id", reportId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      toast.error(`Falha ao remover relatório salvo: ${error.message}`);
+      return;
+    }
+
+    setSavedReports((current) => current.filter((report) => report.id !== reportId));
+    if (editingSavedReportId === reportId) {
+      setEditingSavedReportId(null);
+      setSavedReportName("");
+      setSavedReportFormat("xlsx");
+    }
+    toast.success("Relatório salvo removido.");
+  }, [editingSavedReportId, user?.id]);
+
+  const handleRunSavedReport = useCallback(
+    async (report: SavedReportConfig, scope: "manual" | "interno" = "manual") => {
+      await handleExport(
+        report.datasetId,
+        report.columnKeys,
+        report.format,
+        `salvo-${scope}-${sanitizeFileName(report.name)}`,
+      );
+    },
+    [handleExport],
+  );
+
   useEffect(() => {
     const savedId = searchParams.get("saved");
     if (!savedId || loadingSavedReports) return;
@@ -1302,6 +1358,7 @@ export default function RelatoriosPage() {
     if (!targetReport) return;
 
     handleLoadSavedReport(targetReport);
+    setActiveView("construtor");
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("saved");
@@ -1325,15 +1382,10 @@ export default function RelatoriosPage() {
               <p className="text-xs text-muted-foreground mt-1">Atualizado em {formatDateTime(lastUpdatedAt)}</p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate("/app/relatorios-salvos")}>
-              Relatórios salvos
-            </Button>
-            <Button variant="outline" className="gap-2 w-fit" onClick={() => void loadReportData()} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Atualizar dados
-            </Button>
-          </div>
+          <Button variant="outline" className="gap-2 w-fit" onClick={() => void loadReportData()} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Atualizar dados
+          </Button>
         </div>
 
         {activeFilterBadges.length > 0 && (
@@ -1347,6 +1399,26 @@ export default function RelatoriosPage() {
         )}
 
         <section className="space-y-4">
+          <div className="rounded-xl border bg-card p-2 inline-flex items-center gap-2">
+            <Button
+              type="button"
+              variant={activeView === "construtor" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveView("construtor")}
+            >
+              Construtor
+            </Button>
+            <Button
+              type="button"
+              variant={activeView === "salvos" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveView("salvos")}
+            >
+              Relatórios salvos
+            </Button>
+          </div>
+          {activeView === "construtor" ? (
+            <>
           <div className="rounded-xl border bg-card p-4 space-y-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -1551,12 +1623,6 @@ export default function RelatoriosPage() {
                 </Button>
               </div>
 
-              <div className="rounded-lg border p-3 flex items-center justify-between gap-3">
-                <p className="text-sm text-muted-foreground">Acesse os relatórios salvos em uma página dedicada.</p>
-                <Button type="button" variant="outline" onClick={() => navigate("/app/relatorios-salvos")}>
-                  Ver relatórios salvos
-                </Button>
-              </div>
             </div>
 
             <div className="rounded-xl border bg-card">
@@ -1611,6 +1677,76 @@ export default function RelatoriosPage() {
                 </div>
               )}
             </div>
+            </>
+          ) : (
+            <div className="rounded-xl border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">Relatórios salvos</p>
+                <Badge variant="outline">{savedReports.length}</Badge>
+              </div>
+              {loadingSavedReports ? (
+                <p className="text-sm text-muted-foreground">Carregando relatórios salvos...</p>
+              ) : savedReports.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum relatório salvo ainda. Monte o relatório e clique em salvar.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[32rem] overflow-auto pr-1">
+                  {savedReports.map((report) => {
+                    const definition = reportDefinitions[report.datasetId];
+                    return (
+                      <div key={report.id} className="rounded-md border p-2.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium">{report.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {definition.name} · {report.columnKeys.length} colunas · {report.format.toUpperCase()}
+                            </p>
+                          </div>
+                          <Badge variant="outline">{formatDateTime(report.updatedAt)}</Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => handleLoadSavedReport(report)}>
+                            Carregar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => handleStartEditingSavedReport(report)}
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => void handleRunSavedReport(report, "interno")}
+                          >
+                            <PlayCircle className="h-3.5 w-3.5" />
+                            Gerar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1.5 text-destructive hover:text-destructive"
+                            onClick={() => void handleDeleteSavedReport(report.id, report.name)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Excluir
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </div>
     </AppLayout>
