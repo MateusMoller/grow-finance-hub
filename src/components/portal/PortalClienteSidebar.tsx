@@ -84,16 +84,17 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
   const collapsed = state === "collapsed";
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-        <div className="p-4 flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
+    <Sidebar collapsible="icon" variant="floating">
+      <SidebarContent className="gap-3 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+        <div className="executive-surface mx-1 flex items-center gap-3 rounded-2xl px-3 py-3">
+          <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           {!collapsed && (
-            <span className="font-heading font-bold text-sm text-sidebar-foreground">
-              Portal do Cliente
-            </span>
+            <div className="min-w-0">
+              <p className="font-heading text-sm font-bold text-sidebar-foreground">Portal do Cliente</p>
+              <p className="text-[11px] text-sidebar-foreground/65">Documentos, suporte e caixa</p>
+            </div>
           )}
         </div>
 

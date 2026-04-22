@@ -1265,23 +1265,27 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
   return (
     <AppLayout>
       <div className="space-y-5 max-w-7xl">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="font-heading text-2xl font-bold">
+        <section className="executive-hero rounded-[1.8rem] px-5 py-5 text-white md:px-7 md:py-6">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="max-w-2xl">
+            <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/75">
+              Operação integrada
+            </span>
+            <h1 className="mt-3 font-heading text-2xl font-bold md:text-3xl">
               {isObrigacoesModule ? "Módulo Obrigações" : "Módulo E-continuo"}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="mt-2 text-sm leading-relaxed text-white/72">
               {isObrigacoesModule
                 ? "Controle das obrigações acessorias com sincronização e acompanhamento por cliente."
                 : "Envio de arquivos para o e-Continuo com histórico operacional por cliente."}
             </p>
           </div>
           <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center">
-            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground min-h-10 inline-flex items-center gap-2">
+            <div className="min-h-10 inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/8 px-3 py-2 text-xs text-white/78">
               {syncingCompanies || syncingObligations ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
               ) : (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
               )}
               <span>
                 {isObrigacoesModule
@@ -1294,9 +1298,10 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             {isObrigacoesModule && (
               <Button
                 type="button"
-                variant="outline"
+                variant="hero-outline"
                 onClick={() => void handleManualSync()}
                 disabled={syncingCompanies || syncingObligations || !hasConfiguration}
+                className="border-white/20 bg-white/10 text-white hover:bg-white hover:text-primary"
               >
                 {syncingCompanies || syncingObligations ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1307,7 +1312,8 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
               </Button>
             )}
           </div>
-        </div>
+          </div>
+        </section>
 
         {!hasConfiguration && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1318,7 +1324,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {metrics.map((metric) => (
             <motion.div key={metric.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-              <Card>
+              <Card className="executive-stat">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">{metric.label}</p>

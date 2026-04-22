@@ -128,7 +128,7 @@ export default function LoginPage() {
   };
 
   return (
-    <motion.div layout className="min-h-screen bg-background lg:flex">
+    <motion.div layout className="executive-shell min-h-screen bg-background lg:flex">
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 250, damping: 30, mass: 0.85 }}
@@ -139,7 +139,7 @@ export default function LoginPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md space-y-7"
+          className="executive-panel w-full max-w-md space-y-7 p-6 sm:p-8"
         >
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg overflow-hidden">
@@ -156,7 +156,7 @@ export default function LoginPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-[0.14em]">
               Ambiente de entrada
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-muted/35 p-1.5">
               {accessOptions.map((option) => {
                 const isActive = accessProfile === option.key;
                 const Icon = option.icon;
@@ -172,7 +172,7 @@ export default function LoginPage() {
                     {isActive && (
                       <motion.div
                         layoutId="access-mode-highlight"
-                        className="absolute inset-0 rounded-lg bg-background shadow-sm ring-1 ring-border"
+                        className="absolute inset-0 rounded-xl bg-background shadow-sm ring-1 ring-border"
                         transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.85 }}
                       />
                     )}

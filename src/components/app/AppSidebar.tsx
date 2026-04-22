@@ -1,4 +1,4 @@
-import {
+﻿import {
   LayoutDashboard,
   Users,
   FileText,
@@ -37,29 +37,28 @@ import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
   { title: "Kanban", url: "/app/kanban", icon: KanbanSquare },
-  { title: "Calendário", url: "/app/calendario", icon: CalendarDays },
+  { title: "CalendÃ¡rio", url: "/app/calendario", icon: CalendarDays },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
   { title: "Clientes", url: "/app/clientes", icon: Users },
 ];
 
 const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
-  { title: "Formulários", url: "/app/formularios", icon: FileText },
+  { title: "FormulÃ¡rios", url: "/app/formularios", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
-  { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Relatórios Salvos", url: "/app/relatorios-salvos", icon: FileText },
-  { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
+  { title: "RelatÃ³rios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "ObrigaÃ§Ãµes", url: "/app/obrigacoes", icon: FileSpreadsheet },
   { title: "E-continuo", url: "/app/econtinuo", icon: Send },
 ];
 
 const systemItems = [
-  { title: "Notificações", url: "/app/notificacoes", icon: Bell },
-  { title: "Usuários", url: "/app/usuarios", icon: UserCog },
+  { title: "NotificaÃ§Ãµes", url: "/app/notificacoes", icon: Bell },
+  { title: "UsuÃ¡rios", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestoes", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
-  { title: "Configurações", url: "/app/configuracoes", icon: Settings },
+  { title: "ConfiguraÃ§Ãµes", url: "/app/configuracoes", icon: Settings },
 ];
 
 function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {
@@ -128,7 +127,6 @@ export function AppSidebar() {
           item.url === "/app/formularios" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
-          item.url === "/app/relatorios-salvos" ||
           item.url === "/app/obrigacoes" ||
           item.url === "/app/econtinuo",
       )
@@ -155,16 +153,17 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-        <div className="p-4 flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg overflow-hidden shrink-0">
+    <Sidebar collapsible="icon" variant="floating">
+      <SidebarContent className="gap-3 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+        <div className="executive-surface mx-1 flex items-center gap-3 rounded-2xl px-3 py-3">
+          <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 ring-1 ring-white/10">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           {!collapsed && (
-            <span className="font-heading font-bold text-sm text-sidebar-foreground">
-              Grow Finance
-            </span>
+            <div className="min-w-0">
+              <p className="font-heading text-sm font-bold text-sidebar-foreground">Grow Finance</p>
+              <p className="text-[11px] text-sidebar-foreground/65">Hub operacional</p>
+            </div>
           )}
         </div>
 

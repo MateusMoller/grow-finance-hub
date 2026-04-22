@@ -37,12 +37,12 @@ export function SiteFooter() {
   };
 
   return (
-    <footer className="border-t border-border bg-[#efeff2] pb-16 dark:bg-[#031029] md:pb-0">
+    <footer className="border-t border-border bg-[linear-gradient(180deg,hsl(42_28%_95%)_0%,hsl(42_22%_92%)_100%)] pb-16 dark:bg-[#031029] md:pb-0">
       <div className="container py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
-          <div className="space-y-3 lg:col-span-2">
+          <div className="executive-panel space-y-3 p-5 lg:col-span-2">
             <Link to="/" className="flex items-center gap-3">
-              <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md" />
+              <img src={growIcon} alt="Grow" className="h-9 w-9 rounded-xl" />
               <span className="font-heading text-lg font-semibold text-foreground">Grow Contábilidade</span>
             </Link>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
@@ -105,7 +105,7 @@ export function SiteFooter() {
                   type="submit"
                   size="sm"
                   disabled={subscribing}
-                  className="h-10 w-full rounded-full px-4 sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                  className="h-10 w-full rounded-full px-4 sm:w-auto"
                 >
                   {subscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Inscrever"}
                 </Button>

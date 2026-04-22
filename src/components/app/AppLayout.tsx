@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import {
@@ -65,21 +65,20 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
   const base = [
     { title: "Dashboard", url: "/app" },
     { title: "Kanban", url: "/app/kanban" },
-    { title: "Calendário", url: "/app/calendario" },
+    { title: "CalendÃ¡rio", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
-    { title: "Formulários", url: "/app/formularios" },
+    { title: "FormulÃ¡rios", url: "/app/formularios" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
-    { title: "Relatórios", url: "/app/relatorios" },
-    { title: "Relatórios Salvos", url: "/app/relatorios-salvos" },
-    { title: "Obrigações", url: "/app/obrigacoes" },
+    { title: "RelatÃ³rios", url: "/app/relatorios" },
+    { title: "ObrigaÃ§Ãµes", url: "/app/obrigacoes" },
     { title: "E-continuo", url: "/app/econtinuo" },
-    { title: "Notificações", url: "/app/notificacoes" },
-    { title: "Usuários", url: "/app/usuarios" },
+    { title: "NotificaÃ§Ãµes", url: "/app/notificacoes" },
+    { title: "UsuÃ¡rios", url: "/app/usuarios" },
     { title: "Sugestoes", url: "/app/sugestoes" },
-    { title: "Configurações", url: "/app/configuracoes" },
+    { title: "ConfiguraÃ§Ãµes", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
   ];
 
@@ -96,7 +95,6 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
       item.url === "/app/formularios" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
-      item.url === "/app/relatorios-salvos" ||
       item.url === "/app/obrigacoes" ||
       item.url === "/app/econtinuo" ||
       item.url === "/app/sugestoes" ||
@@ -115,7 +113,6 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     item.url === "/app/formularios" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
-    item.url === "/app/relatorios-salvos" ||
     item.url === "/app/obrigacoes" ||
     item.url === "/app/econtinuo" ||
     item.url === "/app/sugestoes" ||
@@ -291,6 +288,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return username.slice(0, 2).toUpperCase();
   }, [user?.email]);
 
+  const activeFiltersSummary = useMemo(() => {
+    const items: string[] = [];
+    if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
+    if (selectedCompetence) items.push(`Competência: ${formatCompetence(selectedCompetence)}`);
+    return items;
+  }, [formatCompetence, selectedCompany, selectedCompetence]);
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/app/login");
@@ -304,13 +308,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="executive-shell min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
+          <header className="sticky top-0 z-20 border-b border-border/70 bg-background/88 px-3 py-3 backdrop-blur-xl md:px-5 shrink-0">
+            <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <SidebarTrigger />
-              <div className="hidden md:flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5">
+              <div className="hidden md:flex items-center gap-2 rounded-2xl border border-border/80 bg-card/90 px-3 py-2 shadow-sm">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
                   className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-44 lg:w-56"
@@ -349,8 +354,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notificações</span>
-                    <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
+                    <span>NotificaÃ§Ãµes</span>
+                    <span className="text-xs text-muted-foreground">{unreadCount} nÃ£o lidas</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <div className="max-h-72 overflow-y-auto">
@@ -415,16 +420,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(14rem,calc(100vw-1rem))]">
-                  <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="truncate">{user?.email || "UsuÃ¡rio"}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
                     <UserRound className="h-4 w-4 mr-2" /> Meu perfil
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <Settings className="h-4 w-4 mr-2" /> Configurações
+                    <Settings className="h-4 w-4 mr-2" /> ConfiguraÃ§Ãµes
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    <Bell className="h-4 w-4 mr-2" /> Notificações
+                    <Bell className="h-4 w-4 mr-2" /> NotificaÃ§Ãµes
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -436,17 +441,34 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="executive-kicker">Central operacional</span>
+              {activeFiltersSummary.length > 0 ? (
+                activeFiltersSummary.map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex min-h-8 items-center rounded-full border border-border/80 bg-card/85 px-3 text-xs font-medium text-foreground shadow-sm"
+                  >
+                    {item}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground">Sem filtros globais aplicados.</span>
+              )}
+            </div>
           </header>
 
-          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
+          <main className="flex-1 overflow-auto bg-transparent p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
             {children}
           </main>
 
-          <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
+          <footer className="border-t border-border/70 bg-background/80 px-4 py-3 text-center text-xs text-muted-foreground backdrop-blur mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
             Grow Finance Hub - Area interna
           </footer>
 
-          <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
+          <div className="fixed bottom-0 left-0 right-0 border-t border-border/80 bg-background/95 backdrop-blur md:hidden z-30">
             <div
               className="grid grid-cols-3 px-1 pb-[calc(env(safe-area-inset-bottom)+0.125rem)]"
               style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.125rem)" }}
@@ -483,7 +505,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="sm:max-w-md max-h-[85svh]">
           <DialogHeader>
-            <DialogTitle>Busca rápida</DialogTitle>
+            <DialogTitle>Busca rÃ¡pida</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <input
@@ -536,7 +558,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Competência</label>
+              <label className="text-sm font-medium">CompetÃªncia</label>
               <select
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 value={selectedCompetence || ""}
@@ -562,7 +584,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 Aplicar
               </Button>
             </div>
-            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opções...</p>}
+            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opÃ§Ãµes...</p>}
           </div>
         </SheetContent>
       </Sheet>

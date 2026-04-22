@@ -147,6 +147,7 @@ export default function ClientsPage() {
   const isInactiveClient = (client: Client) => String(client.status || "").trim().toLowerCase() === "inativo";
   const activeClients = filtered.filter((client) => !isInactiveClient(client));
   const inactiveClients = filtered.filter(isInactiveClient);
+  const portalEnabledCount = clients.filter((client) => Boolean(client.portal_user_id)).length;
 
   const handleSyncFromAcessorias = async () => {
     if (!canCreateClients) {
@@ -216,11 +217,41 @@ export default function ClientsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-4 max-w-7xl">
-        <div className="flex items-center justify-between">
+      <div className="space-y-5 max-w-7xl">
+        <section className="executive-hero rounded-[1.75rem] px-5 py-5 text-white md:px-7 md:py-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-3">
+              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
+                Workspace de clientes
+              </span>
+              <div>
+                <h1 className="font-heading text-2xl font-bold md:text-3xl">Clientes</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/72">
+                  Centralize cadastro, portal, sincronização e histórico do cliente em uma visão mais executiva e escaneável.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[460px]">
+              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Base total</p>
+                <p className="mt-2 text-2xl font-semibold">{clients.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Ativos</p>
+                <p className="mt-2 text-2xl font-semibold">{clients.filter((client) => !isInactiveClient(client)).length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Portal liberado</p>
+                <p className="mt-2 text-2xl font-semibold">{portalEnabledCount}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="executive-panel flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Clientes</h1>
-            <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados</p>
+            <p className="text-sm font-semibold text-foreground">Base operacional</p>
+            <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados e prontos para consulta detalhada.</p>
           </div>
           {canCreateClients && (
             <div className="flex items-center gap-2">
@@ -232,11 +263,11 @@ export default function ClientsPage() {
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="executive-surface flex flex-col gap-3 rounded-[1.35rem] p-4 md:flex-row">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="pl-9 bg-background/80"
               placeholder="Buscar por nome ou CNPJ..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -252,7 +283,7 @@ export default function ClientsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="executive-panel overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>

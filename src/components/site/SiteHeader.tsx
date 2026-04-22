@@ -45,10 +45,10 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/80 bg-white shadow-sm dark:bg-[#061330]">
+    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/60 bg-background/82 shadow-sm backdrop-blur-xl dark:bg-[#061330]/90">
       <div className="container flex h-[60px] items-center justify-between sm:h-20">
         <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
+          <img src={growIcon} alt="Grow" className="h-9 w-9 rounded-xl ring-1 ring-border/60 sm:h-10 sm:w-10" />
           <span className="max-w-[165px] truncate font-heading text-[15px] font-semibold text-foreground sm:max-w-none sm:text-lg">
             Grow Contábilidade
           </span>
@@ -61,8 +61,8 @@ export function SiteHeader() {
               to={link.to}
               className={`rounded-full px-4 py-2 text-sm transition-colors ${
                 isNavActive(location.pathname, location.hash, link.to)
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-card hover:text-foreground"
               }`}
             >
               {link.label}
@@ -76,7 +76,7 @@ export function SiteHeader() {
               type="button"
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-full border-border/80 bg-background"
+              className="h-10 w-10 rounded-full border-border/80 bg-background/85"
               onClick={toggleTheme}
               aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
             >
@@ -89,7 +89,7 @@ export function SiteHeader() {
           <Button asChild variant="ghost" size="sm" className="rounded-full">
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button asChild size="sm" className="rounded-full px-5">
+          <Button asChild variant="gold" size="sm" className="rounded-full px-5">
             <Link to="/#contato">Agende uma Avaliação</Link>
           </Button>
         </div>

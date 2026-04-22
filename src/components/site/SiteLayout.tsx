@@ -34,7 +34,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
   }, [location.pathname, location.hash]);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="executive-shell min-h-screen flex flex-col">
       <SiteHeader />
       <main className="flex-1 pt-16 pb-20 sm:pt-20 md:pb-0">{children}</main>
       <SiteFooter />
