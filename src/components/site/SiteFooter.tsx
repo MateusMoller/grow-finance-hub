@@ -37,7 +37,7 @@ export function SiteFooter() {
   };
 
   return (
-    <footer className="border-t border-border bg-[linear-gradient(180deg,hsl(42_28%_95%)_0%,hsl(42_22%_92%)_100%)] pb-16 dark:bg-[#031029] md:pb-0">
+    <footer className="border-t border-border bg-[#efeff2] pb-16 dark:bg-[#031029] md:pb-0">
       <div className="container py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="executive-panel space-y-3 p-5 lg:col-span-2">

@@ -89,7 +89,7 @@ export function SiteHeader() {
           <Button asChild variant="ghost" size="sm" className="rounded-full">
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button asChild variant="gold" size="sm" className="rounded-full px-5">
+          <Button asChild size="sm" className="rounded-full px-5">
             <Link to="/#contato">Agende uma Avaliação</Link>
           </Button>
         </div>
