@@ -224,8 +224,28 @@ export default function AboutPage() {
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
-        <section id="institucional" className="overflow-hidden border-b border-border/60 pt-28 dark:border-[#243054] md:pt-32">
-          <div className="container pb-14 md:pb-20">
+        <section
+          id="institucional"
+          className="relative overflow-hidden border-b border-border/60 pt-28 dark:border-[#243054] md:pt-32"
+        >
+          <div className="pointer-events-none absolute inset-0">
+            <video
+              className="h-full w-full scale-110 object-cover blur-xl saturate-[0.9]"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-hidden="true"
+            >
+              <source src="/videos/institutional-hero-bg.mp4" type="video/mp4" />
+            </video>
+            <div className="absolute inset-0 bg-[#f3f3f6]/75 backdrop-blur-[2px] dark:bg-[#051334]/72" />
+            <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#f3f3f6] to-transparent dark:from-[#051334]" />
+            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#f3f3f6] to-transparent dark:from-[#051334]" />
+          </div>
+
+          <div className="container relative z-[1] pb-14 md:pb-20">
             <motion.div {...sectionReveal} className="mx-auto max-w-4xl text-center">
               <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
                 <Sparkles className="h-3.5 w-3.5" />
