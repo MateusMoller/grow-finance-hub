@@ -163,22 +163,72 @@ export default function AboutPage() {
             <motion.aside
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]"
+              className="relative min-h-[340px] overflow-hidden rounded-[32px] px-2 py-3"
             >
-              <h2 className="font-heading text-lg font-semibold">Painel institucional</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Panorama da proposta de valor da Grow para empresas em crescimento.</p>
-              <div className="mt-5 space-y-3">
-                {[
-                  "Consultoria contábil, fiscal e financeira integrada",
-                  "Acompanhamento mensal com relatórios gerenciais",
-                  "Suporte estratégico para tomada de decisão",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 dark:border-[#2a3760] dark:bg-[#0d1a38]">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/12 blur-3xl" />
+              <div className="pointer-events-none absolute right-10 top-10 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+
+              <motion.div
+                className="absolute left-1/2 top-1/2 h-[250px] w-[250px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/15"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
+              >
+                <div className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full bg-primary/80 shadow-[0_0_24px_rgba(99,102,241,0.35)]" />
+                <div className="absolute left-4 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-primary/45" />
+                <div className="absolute bottom-8 right-8 h-4 w-4 rounded-full bg-primary/60" />
+              </motion.div>
+
+              <motion.div
+                className="absolute left-1/2 top-1/2 h-[170px] w-[170px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-border/60 dark:border-[#2a3760]"
+                animate={{ rotate: -360 }}
+                transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
+              />
+
+              <motion.div
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute left-6 top-6 max-w-[240px] rounded-full border border-border/70 bg-background/85 px-4 py-3 shadow-sm backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/85"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/12">
+                    <BarChart3 className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Painel institucional</p>
+                    <p className="text-sm text-foreground">Proposta de valor clara e consultiva.</p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {[
+                {
+                  item: "Consultoria contábil, fiscal e financeira integrada",
+                  className: "right-2 top-14 md:right-6",
+                  delay: 0,
+                },
+                {
+                  item: "Acompanhamento mensal com relatórios gerenciais",
+                  className: "left-10 bottom-24 md:left-16",
+                  delay: 0.6,
+                },
+                {
+                  item: "Suporte estratégico para tomada de decisão",
+                  className: "bottom-6 right-6 md:right-10",
+                  delay: 1.1,
+                },
+              ].map(({ item, className, delay }) => (
+                <motion.div
+                  key={item}
+                  className={`absolute max-w-[270px] rounded-full border border-border/70 bg-background/90 px-4 py-3 shadow-sm backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/88 ${className}`}
+                  animate={{ y: [0, -8, 0] }}
+                  transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut", delay }}
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
                     <span className="text-sm text-foreground">{item}</span>
                   </div>
-                ))}
-              </div>
+                </motion.div>
+              ))}
             </motion.aside>
           </div>
 
