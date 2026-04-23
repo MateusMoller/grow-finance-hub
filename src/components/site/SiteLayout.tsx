@@ -35,8 +35,14 @@ export function SiteLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="executive-shell min-h-screen flex flex-col">
+      <a
+        href="#site-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-full focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:ring-2 focus:ring-ring"
+      >
+        Pular para o conteudo
+      </a>
       <SiteHeader />
-      <main className="flex-1 pt-16 pb-20 sm:pt-20 md:pb-0">{children}</main>
+      <main id="site-main" className="flex-1 scroll-mt-24 pt-16 pb-20 sm:pt-20 md:pb-0">{children}</main>
       <SiteFooter />
       <SiteWhatsAppButton />
 

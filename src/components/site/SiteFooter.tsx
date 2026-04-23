@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,52 +38,61 @@ export function SiteFooter() {
   };
 
   return (
-    <footer className="border-t border-border bg-[#efeff2] pb-16 dark:bg-[#031029] md:pb-0">
-      <div className="container py-10 sm:py-14">
+    <footer className="relative overflow-hidden border-t border-border bg-[#eef0f4] pb-16 dark:bg-[#031029] md:pb-0">
+      <img
+        src={growMonogramVertical}
+        alt=""
+        aria-hidden="true"
+        width={360}
+        height={520}
+        loading="lazy"
+        className="brand-watermark -right-20 top-8 hidden h-[28rem] w-auto md:block"
+      />
+      <div className="container relative py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
-          <div className="executive-panel relative overflow-hidden space-y-4 p-5 lg:col-span-2">
-            <img
-              src={growMonogramVertical}
-              alt=""
-              aria-hidden="true"
-              className="pointer-events-none absolute -bottom-20 -right-8 hidden h-64 w-auto mix-blend-multiply opacity-[0.07] md:block dark:hidden"
-            />
+          <div className="institutional-card relative overflow-hidden space-y-4 p-5 lg:col-span-2">
             <Link
               to="/"
-              className="relative z-10 block w-fit overflow-hidden rounded-[1.35rem] border border-[#50516f]/10 bg-[#50516f] p-2.5 shadow-sm"
+              className="block w-fit rounded-[1.35rem] border border-[#50516f]/10 bg-[#50516f] p-2.5 shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <img
                 src={growLockupHorizontalDark}
                 alt="Grow Contabilidade"
+                width={220}
+                height={70}
                 className="h-12 w-auto rounded-[0.95rem] object-cover sm:h-14"
               />
             </Link>
-            <p className="relative z-10 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              Parceiro estrategico de empresas que buscam crescimento com organizacao, compliance e inteligencia.
+            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Contabilidade consultiva, proximidade e tecnologia para empresas que precisam crescer com clareza e solidez.
             </p>
-            <p className="relative z-10 max-w-sm text-xs uppercase tracking-[0.18em] text-muted-foreground/80">
-              Consultoria, clareza e presenca de marca com sobriedade.
-            </p>
+            <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <span>Compliance</span>
+              <span>•</span>
+              <span>Clareza</span>
+              <span>•</span>
+              <span>Decisao</span>
+            </div>
           </div>
 
           <div>
             <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Servicos</h4>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/solucoes" className="hover:text-foreground">Contabilidade Consultiva</Link></li>
-              <li><Link to="/solucoes" className="hover:text-foreground">Assessoria Fiscal</Link></li>
-              <li><Link to="/solucoes" className="hover:text-foreground">Departamento Pessoal</Link></li>
-              <li><Link to="/solucoes" className="hover:text-foreground">Abertura de Empresas</Link></li>
+              <li><Link to="/solucoes" className="premium-link">Contabilidade Consultiva</Link></li>
+              <li><Link to="/solucoes" className="premium-link">Assessoria Fiscal</Link></li>
+              <li><Link to="/solucoes" className="premium-link">Departamento Pessoal</Link></li>
+              <li><Link to="/solucoes" className="premium-link">Abertura de Empresas</Link></li>
             </ul>
           </div>
 
           <div>
             <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Institucional</h4>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/" className="hover:text-foreground">Sobre a Grow</Link></li>
-              <li><Link to="/#clientes" className="hover:text-foreground">Clientes</Link></li>
-              <li><Link to="/newsletter" className="hover:text-foreground">Newsletter</Link></li>
-              <li><Link to="/contato" className="hover:text-foreground">Contato</Link></li>
-              <li><Link to="/login" className="hover:text-foreground">Area interna</Link></li>
+              <li><Link to="/" className="premium-link">Sobre a Grow</Link></li>
+              <li><Link to="/#clientes" className="premium-link">Clientes</Link></li>
+              <li><Link to="/newsletter" className="premium-link">Newsletter</Link></li>
+              <li><Link to="/contato" className="premium-link">Contato</Link></li>
+              <li><Link to="/login" className="premium-link">Area interna</Link></li>
             </ul>
           </div>
 
@@ -92,15 +101,14 @@ export function SiteFooter() {
               <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Contato</h4>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                 <li>Rua Julio de Castilhos, 2579 - Sl 212 - Centro, Taquara - RS</li>
-                <li>Telefone: (51) 99532-5592</li>
-                <li>E-mail: contato@contabilidadegrow.com.br</li>
+                <li><a href="tel:+5551995325592" className="premium-link">Telefone: (51) 99532-5592</a></li>
+                <li><a href="mailto:contato@contabilidadegrow.com.br" className="premium-link">contato@contabilidadegrow.com.br</a></li>
                 <li>
-                  Instagram:{" "}
                   <a
                     href="https://www.instagram.com/contabilidade.grow/"
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:text-foreground"
+                    className="premium-link"
                   >
                     @contabilidade.grow
                   </a>
@@ -110,9 +118,15 @@ export function SiteFooter() {
             <div>
               <p className="text-sm font-medium text-foreground">Assine nossa newsletter</p>
               <form onSubmit={handleSubscribe} className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <label htmlFor="footer-newsletter-email" className="sr-only">E-mail para newsletter</label>
                 <Input
+                  id="footer-newsletter-email"
+                  name="newsletter_email"
                   type="email"
-                  placeholder="Seu e-mail"
+                  inputMode="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  placeholder="voce@empresa.com.br"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="h-10 bg-white dark:border-[#28355f] dark:bg-[#0a1734]"
@@ -123,7 +137,15 @@ export function SiteFooter() {
                   disabled={subscribing}
                   className="h-10 w-full rounded-full px-4 sm:w-auto"
                 >
-                  {subscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Inscrever"}
+                  {subscribing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      <span className="sr-only">Inscrevendo…</span>
+                    </>
+                  ) : (
+                    "Inscrever"
+                  )}
+                  {!subscribing && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
                 </Button>
               </form>
             </div>
@@ -146,8 +168,8 @@ export function SiteFooter() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            <Link to="/privacidade" className="hover:text-foreground">Politica de Privacidade</Link>
-            <Link to="/termos" className="hover:text-foreground">Termos</Link>
+            <Link to="/privacidade" className="premium-link">Politica de Privacidade</Link>
+            <Link to="/termos" className="premium-link">Termos</Link>
           </div>
         </div>
       </div>

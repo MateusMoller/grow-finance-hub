@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, BriefcaseBusiness, Building2 } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, Building2, CheckCircle2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { hasAnyInternalRole, hasPortalAccessRole, normalizeRoles } from "@/lib/accessControl";
-import growIcon from "@/assets/grow-icon.png";
+import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
 import financeHeroImage from "@/assets/login-finance-hero.svg";
 import portalHeroImage from "@/assets/login-portal-hero.svg";
 
@@ -27,24 +27,26 @@ const accessOptions: Array<{
   {
     key: "internal",
     title: "App Interno",
-    subtitle: "Operação, tarefas, clientes e gestão da equipe.",
+    subtitle: "Operacao, tarefas, clientes e gestao da equipe.",
     icon: BriefcaseBusiness,
     target: "/app",
     heroImage: financeHeroImage,
     heroAlt: "Painel do app interno com indicadores financeiros e operacionais",
-    visualTag: "Operação interna",
+    visualTag: "Operacao interna",
   },
   {
     key: "client",
     title: "Portal do Cliente",
-    subtitle: "Solicitações, documentos, formulários e atendimento.",
+    subtitle: "Solicitacoes, documentos, formularios e atendimento.",
     icon: Building2,
     target: "/app/portal",
     heroImage: portalHeroImage,
     heroAlt: "Painel do portal do cliente com documentos, checklist e atendimento",
-    visualTag: "Experiência do cliente",
+    visualTag: "Experiencia do cliente",
   },
 ];
+
+const trustNotes = ["Acesso segregado por ambiente", "Permissoes validadas apos login", "Portal e operacao no mesmo ecossistema"];
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -57,7 +59,7 @@ export default function LoginPage() {
 
   const selectedAccess = useMemo(
     () => accessOptions.find((option) => option.key === accessProfile) || accessOptions[0],
-    [accessProfile]
+    [accessProfile],
   );
 
   const handleAccessChange = (nextProfile: AccessProfile) => {
@@ -70,7 +72,7 @@ export default function LoginPage() {
     setAccessProfile(nextProfile);
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     const normalizedEmail = email.trim().toLowerCase();
@@ -86,7 +88,7 @@ export default function LoginPage() {
     if (userError || !userData.user) {
       await signOut();
       setLoading(false);
-      toast.error("Não foi possível validar o acesso apos o login.");
+      toast.error("Nao foi possivel validar o acesso apos o login.");
       return;
     }
 
@@ -98,7 +100,7 @@ export default function LoginPage() {
     setLoading(false);
     if (roleError) {
       await signOut();
-      toast.error("Não foi possível validar suas permissões de acesso.");
+      toast.error("Nao foi possivel validar suas permissoes de acesso.");
       return;
     }
 
@@ -112,14 +114,14 @@ export default function LoginPage() {
       if (!hasPortalAccess) {
         await signOut();
       }
-      toast.error("Este usuário não tem permissão para acessar o App Interno.");
+      toast.error("Este usuario nao tem permissao para acessar o App Interno.");
       navigate(hasPortalAccess ? "/app/portal" : "/app/login", { replace: true });
       return;
     }
 
     if (selectedAccess.key === "client" && !hasPortalAccess) {
       await signOut();
-      toast.error("Este usuário não possui permissão para acessar o Portal do Cliente.");
+      toast.error("Este usuario nao possui permissao para acessar o Portal do Cliente.");
       return;
     }
 
@@ -128,35 +130,45 @@ export default function LoginPage() {
   };
 
   return (
-    <motion.div layout className="executive-shell min-h-screen bg-background lg:flex">
+    <motion.div layout className="institutional-page min-h-screen bg-background lg:flex">
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 250, damping: 30, mass: 0.85 }}
-        className={`flex items-center justify-center px-6 py-10 sm:px-8 lg:min-h-screen lg:w-[46%] lg:px-12 xl:w-[44%] ${
+        className={`flex items-center justify-center px-5 py-8 sm:px-8 lg:min-h-screen lg:w-[46%] lg:px-12 xl:w-[44%] ${
           selectedAccess.key === "client" ? "lg:order-2" : "lg:order-1"
         }`}
       >
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="executive-panel w-full max-w-md space-y-7 p-6 sm:p-8"
+          className="institutional-card w-full max-w-md space-y-7 p-6 sm:p-8"
         >
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg overflow-hidden">
-              <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
-            </div>
-            <span className="font-heading font-bold text-lg">Grow Finance</span>
-          </div>
+          <Link
+            to="/"
+            className="block w-fit rounded-[1.25rem] border border-[#50516f]/10 bg-[#50516f] p-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <img
+              src={growLockupHorizontalDark}
+              alt="Grow Contabilidade"
+              width={196}
+              height={62}
+              className="h-11 w-auto rounded-[0.9rem] object-cover"
+            />
+          </Link>
 
-          <div className="space-y-1.5">
-            <h2 className="font-heading text-2xl font-bold">Entrar</h2>
+          <div className="space-y-2">
+            <span className="institutional-kicker">Entrada segura</span>
+            <h1 className="font-heading text-2xl font-bold">Acesse seu ambiente Grow</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Selecione o destino correto para manter a segregacao entre operacao interna e experiencia do cliente.
+            </p>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-[0.14em]">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Ambiente de entrada
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-muted/35 p-1.5">
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-border/70 bg-muted/35 p-1.5 sm:grid-cols-2">
               {accessOptions.map((option) => {
                 const isActive = accessProfile === option.key;
                 const Icon = option.icon;
@@ -164,8 +176,9 @@ export default function LoginPage() {
                   <button
                     key={option.key}
                     type="button"
+                    aria-pressed={isActive}
                     onClick={() => handleAccessChange(option.key)}
-                    className={`relative overflow-hidden rounded-lg px-3 py-2.5 text-left transition-colors ${
+                    className={`relative overflow-hidden rounded-xl px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -177,7 +190,7 @@ export default function LoginPage() {
                       />
                     )}
                     <div className="relative flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                      <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
                       <span className="text-sm font-semibold">{option.title}</span>
                     </div>
                   </button>
@@ -189,37 +202,43 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-1.5 block">E-mail</label>
+              <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium">E-mail</label>
               <Input
+                id="login-email"
+                name="email"
                 type="email"
-                placeholder="seu@email.com"
+                inputMode="email"
+                autoComplete="email"
+                spellCheck={false}
+                placeholder="voce@empresa.com.br"
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1.5 block">Senha</label>
+              <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium">Senha</label>
               <Input
+                id="login-password"
+                name="password"
                 type="password"
-                placeholder="********"
+                autoComplete="current-password"
+                placeholder="Sua senha"
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
             </div>
-            <Button variant="hero" size="lg" className="w-full gap-2" type="submit" disabled={loading}>
-              {loading ? "Entrando..." : `Entrar em ${selectedAccess.title}`}
-              {!loading && <ArrowRight className="h-4 w-4" />}
+            <Button variant="hero" size="lg" className="w-full gap-2 rounded-full" type="submit" disabled={loading}>
+              {loading ? "Entrando…" : `Entrar em ${selectedAccess.title}`}
+              {!loading && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
             </Button>
           </form>
 
-          <div className="text-sm text-center space-y-2">
-            <p className="text-muted-foreground">
-              <Link to="/" className="text-primary hover:underline">
-                Voltar ao site
-              </Link>
-            </p>
+          <div className="text-center text-sm">
+            <Link to="/" className="text-primary underline-offset-4 hover:underline">
+              Voltar ao site institucional
+            </Link>
           </div>
         </motion.div>
       </motion.div>
@@ -237,6 +256,8 @@ export default function LoginPage() {
             key={selectedAccess.key}
             src={selectedAccess.heroImage}
             alt={selectedAccess.heroAlt}
+            width={1180}
+            height={960}
             className="absolute inset-0 h-full w-full object-cover"
             initial={(dir: number) => ({
               x: dir > 0 ? -120 : 120,
@@ -258,12 +279,12 @@ export default function LoginPage() {
           style={{
             background:
               selectedAccess.key === "client"
-                ? "linear-gradient(270deg, rgba(10,22,47,0.52) 0%, rgba(12,24,50,0.26) 44%, rgba(16,26,51,0.54) 100%)"
-                : "linear-gradient(270deg, rgba(13,20,42,0.5) 0%, rgba(16,28,56,0.2) 46%, rgba(13,20,42,0.56) 100%)",
+                ? "linear-gradient(270deg, rgba(10,22,47,0.72) 0%, rgba(12,24,50,0.32) 44%, rgba(16,26,51,0.72) 100%)"
+                : "linear-gradient(270deg, rgba(13,20,42,0.7) 0%, rgba(16,28,56,0.28) 46%, rgba(13,20,42,0.74) 100%)",
           }}
         />
 
-        <div className="absolute left-8 top-8 z-10">
+        <div className="absolute inset-x-8 top-8 z-10 flex items-center justify-between gap-4">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={`tag-${selectedAccess.key}`}
@@ -276,6 +297,23 @@ export default function LoginPage() {
               {selectedAccess.visualTag}
             </motion.div>
           </AnimatePresence>
+          <Link to="/" className="rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium text-white/90 backdrop-blur-sm transition-colors hover:bg-white/20">
+            Site institucional
+          </Link>
+        </div>
+
+        <div className="absolute bottom-8 left-8 right-8 z-10 max-w-xl rounded-[1.75rem] border border-white/14 bg-white/10 p-6 text-white shadow-2xl backdrop-blur-md">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/64">Acesso com contexto</p>
+          <h2 className="mt-3 font-heading text-3xl font-semibold">{selectedAccess.title}</h2>
+          <p className="mt-3 text-sm leading-relaxed text-white/72">{selectedAccess.subtitle}</p>
+          <div className="mt-5 grid gap-2">
+            {trustNotes.map((note) => (
+              <p key={note} className="flex items-center gap-2 text-sm text-white/86">
+                <CheckCircle2 className="h-4 w-4 text-grow-gold" aria-hidden="true" />
+                {note}
+              </p>
+            ))}
+          </div>
         </div>
       </motion.div>
     </motion.div>

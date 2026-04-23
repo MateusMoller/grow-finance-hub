@@ -2054,64 +2054,29 @@ export default function ClientDetailPage() {
     <AppLayout>
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
 
-      <div className="space-y-6 max-w-6xl">
+      <div className="space-y-6 max-w-5xl">
         {/* Header */}
-        <section className="executive-hero rounded-[1.8rem] px-5 py-5 text-white md:px-7 md:py-6">
-          <div className="flex flex-col gap-5">
-            <div className="flex items-start gap-4">
-              <Button
-                variant="hero-outline"
-                size="icon"
-                onClick={() => navigate("/app/clientes")}
-                className="shrink-0 border-white/20 bg-white/10 text-white hover:bg-white hover:text-primary"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
-                <Building2 className="h-7 w-7 text-white" />
-              </div>
-              <div className="flex-1">
-                <span className="inline-flex rounded-full border border-white/14 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/72">
-                  Workspace do cliente
-                </span>
-                <h1 className="mt-3 font-heading text-2xl font-bold md:text-3xl">{client.name}</h1>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {client.cnpj && <span className="text-sm text-white/68">{client.cnpj}</span>}
-                  {client.sector && <span className="text-sm text-white/68">{client.sector}</span>}
-                  {client.regime && <span className="text-sm text-white/68">{client.regime}</span>}
-                </div>
-              </div>
-              <div>
-                <Badge variant="outline" className={`text-xs border-0 ${statusColors[client.status || ""] || "bg-muted"}`}>
-                  {client.status}
-                </Badge>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Documentos</p>
-                <p className="mt-2 text-2xl font-semibold">{files.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Perfis de atividade</p>
-                <p className="mt-2 text-2xl font-semibold">{selectedBusinessProfiles.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Obrigações no mês</p>
-                <p className="mt-2 text-2xl font-semibold">{obligationsWithMonthStatus}</p>
-              </div>
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Pendências portal</p>
-                <p className="mt-2 text-2xl font-semibold">{portalTasks.length}</p>
-              </div>
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/app/clientes")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Building2 className="h-6 w-6 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="font-heading text-xl font-bold">{client.name}</h1>
+            <div className="flex items-center gap-2 mt-0.5">
+              {client.cnpj && <span className="text-sm text-muted-foreground">{client.cnpj}</span>}
+              <Badge variant="outline" className={`text-xs border-0 ${statusColors[client.status || ""] || "bg-muted"}`}>
+                {client.status}
+              </Badge>
             </div>
           </div>
-        </section>
+        </div>
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 rounded-[1.25rem] border border-border/80 bg-card/90 p-1 sm:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
             <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>

@@ -64,6 +64,8 @@
     --shadow-md: 0 4px 12px -2px hsl(232 17% 20% / 0.08);
     --shadow-lg: 0 12px 32px -4px hsl(232 17% 20% / 0.12);
     --shadow-glow: 0 0 40px -8px hsl(232 17% 33% / 0.25);
+    --shadow-institutional: 0 22px 60px -34px hsl(232 24% 22% / 0.48);
+    --shadow-institutional-soft: 0 16px 42px -32px hsl(232 24% 22% / 0.42);
   }
 
   .dark {
@@ -107,6 +109,10 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   * {
     @apply border-border;
   }
@@ -120,6 +126,30 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
+    text-wrap: balance;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    touch-action: manipulation;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -229,5 +259,121 @@
     color: hsl(257 86% 71%);
     border-color: hsl(257 86% 71% / 0.25);
     background: hsl(257 86% 71% / 0.12);
+  }
+
+  .institutional-page {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(circle at 12% 0%, hsl(43 96% 56% / 0.11), transparent 28rem),
+      radial-gradient(circle at 88% 12%, hsl(232 17% 33% / 0.11), transparent 26rem),
+      linear-gradient(180deg, hsl(240 20% 97%) 0%, hsl(240 18% 95%) 46%, hsl(240 16% 93%) 100%);
+  }
+
+  .institutional-page::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(hsl(232 17% 33% / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(232 17% 33% / 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(to bottom, black 0%, transparent 68%);
+  }
+
+  .institutional-hero {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(232 17% 33% / 0.12);
+    border-radius: clamp(1.75rem, 3vw, 2.6rem);
+    background:
+      linear-gradient(135deg, hsl(0 0% 100% / 0.95) 0%, hsl(240 24% 97% / 0.92) 48%, hsl(232 26% 94% / 0.94) 100%);
+    box-shadow: var(--shadow-institutional);
+  }
+
+  .institutional-card {
+    border: 1px solid hsl(var(--border) / 0.92);
+    border-radius: 1.5rem;
+    background:
+      linear-gradient(180deg, hsl(0 0% 100% / 0.96) 0%, hsl(240 24% 98% / 0.92) 100%);
+    box-shadow: var(--shadow-institutional-soft);
+  }
+
+  .institutional-card-muted {
+    border: 1px solid hsl(var(--border) / 0.86);
+    border-radius: 1.25rem;
+    background: hsl(0 0% 100% / 0.62);
+    backdrop-filter: blur(14px);
+  }
+
+  .institutional-kicker {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid hsl(43 96% 56% / 0.32);
+    background: hsl(43 96% 56% / 0.12);
+    padding: 0.4rem 0.85rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(232 17% 28%);
+  }
+
+  .brand-watermark {
+    pointer-events: none;
+    position: absolute;
+    opacity: 0.07;
+    mix-blend-mode: multiply;
+  }
+
+  .premium-link {
+    color: hsl(var(--muted-foreground));
+    transition-property: color, background-color, border-color, transform;
+    transition-duration: 180ms;
+  }
+
+  .premium-link:hover {
+    color: hsl(var(--foreground));
+  }
+
+  .dark .institutional-page {
+    background:
+      radial-gradient(circle at 10% 0%, hsl(43 96% 56% / 0.08), transparent 28rem),
+      radial-gradient(circle at 86% 10%, hsl(257 86% 71% / 0.12), transparent 28rem),
+      linear-gradient(180deg, hsl(223 70% 10%) 0%, hsl(223 58% 9%) 100%);
+  }
+
+  .dark .institutional-page::before {
+    background-image:
+      linear-gradient(hsl(224 36% 92% / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(224 36% 92% / 0.045) 1px, transparent 1px);
+  }
+
+  .dark .institutional-hero,
+  .dark .institutional-card {
+    border-color: hsl(223 33% 24% / 0.9);
+    background:
+      linear-gradient(145deg, hsl(223 52% 13% / 0.96) 0%, hsl(223 48% 11% / 0.96) 52%, hsl(223 44% 15% / 0.94) 100%);
+  }
+
+  .dark .institutional-card-muted {
+    border-color: hsl(223 33% 24% / 0.9);
+    background: hsl(223 44% 14% / 0.72);
+  }
+
+  .dark .institutional-kicker {
+    color: hsl(43 96% 72%);
+    border-color: hsl(43 96% 56% / 0.22);
+    background: hsl(43 96% 56% / 0.09);
+  }
+
+  .dark .brand-watermark {
+    opacity: 0.05;
+    mix-blend-mode: screen;
   }
 }
