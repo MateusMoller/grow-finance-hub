@@ -148,6 +148,53 @@
     border: 1px solid hsl(240 12% 90% / 0.5);
   }
 
+  .hover-lift-soft {
+    transition:
+      transform 220ms ease,
+      box-shadow 220ms ease,
+      border-color 220ms ease,
+      background-color 220ms ease;
+  }
+
+  .hover-lift-soft:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 34px -18px hsl(var(--foreground) / 0.18);
+  }
+
+  .surface-sheen {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .surface-sheen::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    background:
+      linear-gradient(120deg, transparent 20%, hsl(var(--primary) / 0.12) 45%, transparent 70%);
+    opacity: 0;
+    transform: translateX(-35%);
+    transition:
+      opacity 260ms ease,
+      transform 360ms ease;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .surface-sheen:hover::after {
+    opacity: 1;
+    transform: translateX(28%);
+  }
+
+  .mesh-dot {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: radial-gradient(circle, hsl(var(--primary) / 0.22) 0%, transparent 72%);
+    filter: blur(1px);
+  }
+
   .dark .glass {
     background: hsl(223 56% 12% / 0.82);
     border: 1px solid hsl(223 35% 24% / 0.7);

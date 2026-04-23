@@ -150,12 +150,18 @@ export default function AboutPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   asChild
-                  className="w-full rounded-full border border-white/35 px-5 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                  className="group w-full rounded-full border border-white/35 px-5 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                 >
-                  <Link to="/#contato">Solicitar avaliação gratuita</Link>
+                  <Link to="/#contato">
+                    Solicitar avaliação gratuita
+                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  </Link>
                 </Button>
-                <Button asChild variant="outline" className="w-full rounded-full px-5 sm:w-auto">
-                  <Link to="/contato">Falar com especialista</Link>
+                <Button asChild variant="outline" className="group w-full rounded-full px-5 sm:w-auto">
+                  <Link to="/contato">
+                    Falar com especialista
+                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  </Link>
                 </Button>
               </div>
             </motion.div>
@@ -240,8 +246,10 @@ export default function AboutPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.2 }}
                 transition={{ duration: 0.35, delay: index * 0.05 }}
-                className="rounded-2xl border border-border bg-card p-4 dark:border-[#223058] dark:bg-[#0a1734]"
+                className="hover-lift-soft surface-sheen relative rounded-2xl border border-border bg-card p-4 dark:border-[#223058] dark:bg-[#0a1734]"
               >
+                <span className="mesh-dot right-3 top-2 h-14 w-14" />
+                <div className="mb-3 h-1.5 w-10 rounded-full bg-primary/20" />
                 <p className="text-2xl font-bold text-foreground">{metric.value}</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{metric.label}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
@@ -268,11 +276,17 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
+                  className="hover-lift-soft surface-sheen group min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
-                  <value.icon className="h-5 w-5 text-primary" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 transition-transform duration-300 group-hover:scale-105">
+                    <value.icon className="h-5 w-5 text-primary" />
+                  </div>
                   <h3 className="mt-3 font-heading text-lg font-semibold">{value.title}</h3>
                   <p className="mt-2 text-sm text-muted-foreground">{value.description}</p>
+                  <div className="mt-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary/70">
+                    <span className="h-px flex-1 bg-primary/20" />
+                    Grow
+                  </div>
                 </motion.article>
               ))}
             </div>
@@ -293,11 +307,22 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
+                  className="hover-lift-soft surface-sheen group min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
-                  <service.icon className="h-5 w-5 text-primary" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
+                      <service.icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80 transition-transform duration-200 group-hover:-translate-y-0.5">
+                      Grow
+                    </span>
+                  </div>
                   <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
                   <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
+                  <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary">
+                    <span>Saiba mais</span>
+                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  </div>
                 </motion.article>
               ))}
             </div>
@@ -353,8 +378,13 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
+                  className="hover-lift-soft surface-sheen min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
+                  <div className="mb-4 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-primary/40" />
+                    <span className="h-2 w-2 rounded-full bg-primary/65" />
+                    <span className="h-2 w-2 rounded-full bg-primary" />
+                  </div>
                   <p className="text-sm text-muted-foreground">"{testimonial.text}"</p>
                   <div className="mt-4">
                     <p className="text-sm font-semibold">{testimonial.name}</p>
