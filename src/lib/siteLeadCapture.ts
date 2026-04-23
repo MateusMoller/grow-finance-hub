@@ -1,6 +1,7 @@
 ﻿import { supabase } from "@/integrations/supabase/client";
 
 export const SITE_LEAD_TAG = "captação via site";
+const NORMALIZED_SITE_LEAD_TAG = "captacao via site";
 
 const normalizeText = (value: string) =>
   value
@@ -11,7 +12,7 @@ const normalizeText = (value: string) =>
 
 export const isSiteLeadSource = (value: string | null | undefined) => {
   const normalized = normalizeText(value || "");
-  return normalized.includes("captação via site");
+  return normalized.includes(NORMALIZED_SITE_LEAD_TAG);
 };
 
 interface CaptureSiteLeadInput {

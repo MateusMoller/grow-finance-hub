@@ -1,6 +1,6 @@
 import { SiteLayout } from "@/components/site/SiteLayout";
+import { SiteLeadForm } from "@/components/site/SiteLeadForm";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -20,9 +20,6 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { captureSiteLead } from "@/lib/siteLeadCapture";
 import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
 import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 import growStationery from "@/assets/brand/grow-stationery.jpg";
@@ -108,47 +105,6 @@ const fadeIn = {
 };
 
 export default function AboutPage() {
-  const [sending, setSending] = useState(false);
-  const [leadForm, setLeadForm] = useState({
-    fullName: "",
-    companyName: "",
-    email: "",
-  });
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const fullName = leadForm.fullName.trim();
-    const email = leadForm.email.trim();
-
-    if (!fullName || !email) {
-      toast.error("Preencha nome e e-mail para continuar.");
-      return;
-    }
-
-    setSending(true);
-
-    const { error } = await captureSiteLead({
-      fullName,
-      companyName: leadForm.companyName.trim(),
-      email,
-      originPage: "about",
-    });
-
-    setSending(false);
-
-    if (error) {
-      toast.error(`Nao foi possivel enviar sua solicitacao: ${error.message}`);
-      return;
-    }
-
-    setLeadForm({
-      fullName: "",
-      companyName: "",
-      email: "",
-    });
-    toast.success("Recebemos sua solicitacao. Vamos retornar em breve.");
-  };
-
   return (
     <SiteLayout>
       <div className="institutional-page text-foreground transition-colors">
@@ -363,60 +319,24 @@ export default function AboutPage() {
               </Accordion>
             </motion.article>
 
-            <motion.form
+            <motion.div
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              onSubmit={handleSubmit}
-              className="institutional-card space-y-4 p-6"
             >
-              <span className="institutional-kicker">Comece agora</span>
-              <h2 className="font-heading text-2xl font-semibold">Solicite uma avaliacao gratuita</h2>
-              <div>
-                <label htmlFor="about-lead-name" className="mb-1.5 block text-sm font-medium">Nome completo</label>
-                <Input
-                  id="about-lead-name"
-                  name="full_name"
-                  autoComplete="name"
-                  placeholder="Seu nome completo"
-                  required
-                  value={leadForm.fullName}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, fullName: event.target.value }))}
-                  className="rounded-full"
-                />
-              </div>
-              <div>
-                <label htmlFor="about-lead-company" className="mb-1.5 block text-sm font-medium">Empresa</label>
-                <Input
-                  id="about-lead-company"
-                  name="company_name"
-                  autoComplete="organization"
-                  placeholder="Nome da empresa"
-                  value={leadForm.companyName}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, companyName: event.target.value }))}
-                  className="rounded-full"
-                />
-              </div>
-              <div>
-                <label htmlFor="about-lead-email" className="mb-1.5 block text-sm font-medium">E-mail</label>
-                <Input
-                  id="about-lead-email"
-                  name="email"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  spellCheck={false}
-                  placeholder="voce@empresa.com.br"
-                  required
-                  value={leadForm.email}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
-                  className="rounded-full"
-                />
-              </div>
-              <Button type="submit" className="w-full rounded-full" disabled={sending}>
-                {sending ? "Enviando…" : "Enviar solicitacao"}
-                {!sending && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
-              </Button>
-            </motion.form>
+              <SiteLeadForm
+                formId="about-lead"
+                originPage="about"
+                submitLabel="Enviar solicitacao"
+                successMessage="Recebemos sua solicitacao. Vamos retornar em breve."
+                className="institutional-card space-y-4 p-6"
+                intro={
+                  <>
+                    <span className="institutional-kicker">Comece agora</span>
+                    <h2 className="font-heading text-2xl font-semibold">Solicite uma avaliacao gratuita</h2>
+                  </>
+                }
+              />
+            </motion.div>
           </div>
         </section>
       </div>

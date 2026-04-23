@@ -4,7 +4,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { subscribeToNewsletter } from "@/lib/newsletter";
+import { normalizeNewsletterEmail, subscribeToNewsletter } from "@/lib/newsletter";
 import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
 import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 
@@ -15,30 +15,34 @@ export function SiteFooter() {
   const handleSubscribe = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeNewsletterEmail(email);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       toast.error("Informe um e-mail valido para assinar a newsletter.");
       return;
     }
 
     setSubscribing(true);
-    const { error } = await subscribeToNewsletter({
-      email: normalizedEmail,
-      source: "site_footer",
-    });
-    setSubscribing(false);
 
-    if (error) {
-      toast.error(`Nao foi possivel assinar a newsletter: ${error.message}`);
-      return;
+    try {
+      const { error } = await subscribeToNewsletter({
+        email: normalizedEmail,
+        source: "site_footer",
+      });
+
+      if (error) {
+        toast.error(`Nao foi possivel assinar a newsletter: ${error.message}`);
+        return;
+      }
+
+      setEmail("");
+      toast.success("Pronto! Voce agora recebe as proximas newsletters da Grow.");
+    } finally {
+      setSubscribing(false);
     }
-
-    setEmail("");
-    toast.success("Pronto! Voce agora recebe as proximas newsletters da Grow.");
   };
 
   return (
-    <footer className="relative overflow-hidden border-t border-border bg-[#eef0f4] pb-16 dark:bg-[#031029] md:pb-0">
+    <footer className="relative overflow-hidden border-t border-white/10 bg-[#050508] pb-16 text-white md:pb-0">
       <img
         src={growMonogramVertical}
         alt=""
@@ -68,9 +72,9 @@ export function SiteFooter() {
             </p>
             <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               <span>Compliance</span>
-              <span>•</span>
+              <span>-</span>
               <span>Clareza</span>
-              <span>•</span>
+              <span>-</span>
               <span>Decisao</span>
             </div>
           </div>
@@ -129,7 +133,7 @@ export function SiteFooter() {
                   placeholder="voce@empresa.com.br"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="h-10 bg-white dark:border-[#28355f] dark:bg-[#0a1734]"
+                  className="h-10 border-white/15 bg-white/[0.08] text-white placeholder:text-white/50"
                 />
                 <Button
                   type="submit"

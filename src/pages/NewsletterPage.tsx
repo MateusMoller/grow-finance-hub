@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { CalendarDays, Loader2, Newspaper } from "lucide-react";
 import { motion } from "framer-motion";
@@ -41,14 +42,14 @@ const parseNewsletter = (row: NewsletterRow): PublishedNewsletter => ({
 });
 
 export default function NewsletterPage() {
-  const [loading, setLoading] = useState(true);
-  const [newsletters, setNewsletters] = useState<PublishedNewsletter[]>([]);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadNewsletters = async () => {
-      setLoading(true);
-
+  const {
+    data: newsletters = [],
+    error,
+    isLoading,
+  } = useQuery({
+    queryKey: ["published-newsletters"],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("newsletters")
         .select("id, title, slug, excerpt, content, published_at, created_at")
@@ -56,20 +57,23 @@ export default function NewsletterPage() {
         .order("published_at", { ascending: false })
         .order("created_at", { ascending: false });
 
-      setLoading(false);
-
       if (error) {
-        toast.error(`Nao foi possivel carregar a newsletter: ${error.message}`);
-        return;
+        throw error;
       }
 
-      const parsed = (data || []).map((item) => parseNewsletter(item as NewsletterRow));
-      setNewsletters(parsed);
-      setActiveSlug((current) => current || parsed[0]?.slug || null);
-    };
+      return (data || []).map((item) => parseNewsletter(item as NewsletterRow));
+    },
+  });
 
-    void loadNewsletters();
-  }, []);
+  useEffect(() => {
+    if (error) {
+      toast.error(`Nao foi possivel carregar a newsletter: ${error.message}`);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    setActiveSlug((current) => current || newsletters[0]?.slug || null);
+  }, [newsletters]);
 
   const activeNewsletter = useMemo(
     () => newsletters.find((item) => item.slug === activeSlug) || newsletters[0] || null,
@@ -98,7 +102,7 @@ export default function NewsletterPage() {
             </div>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <div className="institutional-card flex items-center justify-center gap-3 py-20" aria-live="polite">
               <Loader2 className="h-7 w-7 animate-spin text-primary" aria-hidden="true" />
               <span className="text-sm text-muted-foreground">Carregando newsletters…</span>

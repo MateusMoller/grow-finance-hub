@@ -45,11 +45,11 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/60 bg-background/82 shadow-sm backdrop-blur-xl dark:bg-[#061330]/90">
+    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-white/10 bg-[#050508]/72 shadow-[0_18px_60px_-48px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
       <div className="container flex h-[60px] items-center justify-between sm:h-20">
         <Link
           to="/"
-          className="flex min-w-0 items-center rounded-2xl border border-border/70 bg-card/78 px-2.5 py-1.5 shadow-sm transition-colors hover:border-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex min-w-0 items-center rounded-2xl border border-white/10 bg-white/[0.04] px-2.5 py-1.5 shadow-sm transition-colors hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <img
             src={growLockupHorizontalDark}
@@ -60,15 +60,18 @@ export function SiteHeader() {
           />
         </Link>
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Navegacao institucional">
+        <nav
+          className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] lg:flex"
+          aria-label="Navegacao institucional"
+        >
           {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
               className={`rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isNavActive(location.pathname, location.hash, link.to)
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-card hover:text-foreground"
+                  ? "bg-white/12 text-white shadow-sm"
+                  : "text-white/68 hover:bg-white/8 hover:text-white"
               }`}
             >
               {link.label}
@@ -82,7 +85,7 @@ export function SiteHeader() {
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-full border-border/80 bg-background/85"
+              className="h-10 w-10 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10"
               onClick={toggleTheme}
               aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
             >
@@ -92,17 +95,17 @@ export function SiteHeader() {
             <span className="h-9 w-9 rounded-full border border-border/80 bg-background" />
           )}
 
-          <Button asChild variant="ghost" size="sm" className="rounded-full">
+          <Button asChild variant="ghost" size="sm" className="rounded-full text-white/80 hover:bg-white/8 hover:text-white">
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button asChild size="sm" className="rounded-full px-5">
+          <Button asChild size="sm" className="rounded-full bg-white px-5 text-primary hover:bg-white/90">
             <Link to="/#contato">Agende uma Avaliacao</Link>
           </Button>
         </div>
 
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border/80 bg-background shadow-sm transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] text-white shadow-sm transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:hidden"
           onClick={() => setOpen((prev) => !prev)}
           aria-label="Abrir menu"
           aria-expanded={open}
@@ -116,27 +119,27 @@ export function SiteHeader() {
         <SheetContent
           id="mobile-site-menu"
           side="left"
-          className="w-[calc(100%-1rem)] max-w-sm border-r border-border bg-background p-0 lg:hidden"
+          className="w-[calc(100%-1rem)] max-w-sm border-r border-white/10 bg-[#050508] p-0 text-white lg:hidden"
         >
-          <SheetHeader className="border-b border-border px-4 py-4 text-left">
+          <SheetHeader className="border-b border-white/10 px-4 py-4 text-left">
             <SheetTitle className="text-base">Navegacao Grow</SheetTitle>
           </SheetHeader>
 
           <div className="h-full overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            <div className="mb-4 rounded-2xl border bg-card p-3 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso rapido</p>
+            <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.05] p-3 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/60">Acesso rapido</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Link
                   to="/#contato"
                   onClick={() => setOpen(false)}
-                  className="rounded-lg border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   Agendar avaliacao
                 </Link>
                 <Link
                   to="/newsletter"
                   onClick={() => setOpen(false)}
-                  className="rounded-lg border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   Ver newsletter
                 </Link>
@@ -151,8 +154,8 @@ export function SiteHeader() {
                   onClick={() => setOpen(false)}
                   className={`rounded-xl px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     isNavActive(location.pathname, location.hash, link.to)
-                      ? "bg-primary/10 text-primary"
-                      : "text-foreground hover:bg-muted"
+                      ? "bg-white/10 text-white"
+                      : "text-white/74 hover:bg-white/8 hover:text-white"
                   }`}
                 >
                   {link.label}
@@ -164,7 +167,7 @@ export function SiteHeader() {
               {isDark ? "Usar modo claro" : "Usar modo escuro"}
             </Button>
 
-            <div className="mt-4 grid gap-2 border-t border-border pt-4">
+            <div className="mt-4 grid gap-2 border-t border-white/10 pt-4">
               <Button asChild variant="outline" className="w-full">
                 <Link to="/portal" onClick={() => setOpen(false)}>
                   Portal do Cliente

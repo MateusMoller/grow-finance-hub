@@ -43,8 +43,6 @@ export default function ContactPage() {
       return;
     }
 
-    setLoading(true);
-
     const payload = {
       fullName,
       companyName: contactForm.companyName.trim(),
@@ -54,30 +52,33 @@ export default function ContactPage() {
       originPage: "contact",
     };
 
-    const { error } = await captureSiteLead(payload);
+    setLoading(true);
 
-    if (error) {
+    try {
+      const { error } = await captureSiteLead(payload);
+
+      if (error) {
+        toast.error(`Nao foi possivel enviar a mensagem: ${error.message}`);
+        return;
+      }
+
+      const { error: emailError } = await sendSiteContactEmail(payload);
+
+      if (emailError) {
+        toast.warning("Recebemos sua mensagem, mas o aviso por e-mail falhou. Nossa equipe vai revisar no CRM.");
+      }
+
+      setContactForm({
+        fullName: "",
+        companyName: "",
+        email: "",
+        phone: "",
+        message: "",
+      });
+      toast.success("Mensagem enviada com sucesso! Entraremos em contato em breve.");
+    } finally {
       setLoading(false);
-      toast.error(`Nao foi possivel enviar a mensagem: ${error.message}`);
-      return;
     }
-
-    const { error: emailError } = await sendSiteContactEmail(payload);
-
-    setLoading(false);
-
-    if (emailError) {
-      toast.warning("Recebemos sua mensagem, mas o aviso por e-mail falhou. Nossa equipe vai revisar no CRM.");
-    }
-
-    setContactForm({
-      fullName: "",
-      companyName: "",
-      email: "",
-      phone: "",
-      message: "",
-    });
-    toast.success("Mensagem enviada com sucesso! Entraremos em contato em breve.");
   };
 
   return (
