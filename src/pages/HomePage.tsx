@@ -16,8 +16,6 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
-import growStationery from "@/assets/brand/grow-stationery.jpg";
 
 const trustLogos = ["Grow", "Fiscal Pro", "DP Smart", "Ledger", "Compliance", "Advisory"];
 
@@ -193,13 +191,10 @@ export default function HomePage() {
                 ))}
               </div>
               <div className="relative min-h-[360px]">
-                <img
-                  src={growStationery}
-                  alt="Aplicacao da identidade Grow em materiais institucionais"
-                  width={980}
-                  height={604}
-                  loading="lazy"
-                  className="absolute right-0 top-4 h-72 w-[80%] rounded-2xl border border-white/[0.18] object-cover shadow-2xl"
+                <div
+                  role="img"
+                  aria-label="Equipe de consultoria revisando indicadores financeiros"
+                  className="generic-office-visual absolute right-0 top-4 h-72 w-[80%] rounded-2xl border border-[#806589]/20 shadow-2xl"
                 />
                 <div className="absolute bottom-8 left-4 rounded-2xl bg-primary px-10 py-5 text-center font-heading text-xl font-bold text-white shadow-xl">
                   12+ anos<br />de solidez
@@ -300,7 +295,11 @@ export default function HomePage() {
             <div className="grid gap-6 lg:grid-cols-3">
               {insights.map((insight) => (
                 <article key={insight.title} className="institutional-card overflow-hidden">
-                  <div className="h-44 bg-cover bg-center" style={{ backgroundImage: `url(${growStationery})` }} />
+                  <div
+                    role="img"
+                    aria-label="Resumo visual de relatorios e indicadores financeiros"
+                    className="generic-insight-visual h-44"
+                  />
                   <div className="p-5">
                     <p className="text-xs text-white/[0.54]">{insight.date}</p>
                     <h3 className="mt-3 font-heading text-xl font-semibold text-white">{insight.title}</h3>
@@ -317,13 +316,13 @@ export default function HomePage() {
         <section id="contato" className="grow-gradient-cta py-20 md:py-28">
           <div className="container grid gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
             <motion.div {...fadeIn} className="text-center lg:text-left">
-              <img
-                src={growLockupHorizontalDark}
-                alt="Grow Contabilidade"
-                width={220}
-                height={70}
-                className="mx-auto mb-8 h-14 w-auto rounded-2xl object-cover lg:mx-0"
-              />
+              <Link
+                to="/"
+                aria-label="Grow Contabilidade"
+                className="site-wordmark mx-auto mb-8 w-fit rounded-2xl border border-[#806589]/20 bg-[#020126]/80 px-4 py-3 font-heading text-2xl font-bold lg:mx-0"
+              >
+                Grow
+              </Link>
               <h2 className="font-heading text-4xl font-bold leading-tight text-white sm:text-5xl">
                 Vamos simplificar sua contabilidade?
               </h2>

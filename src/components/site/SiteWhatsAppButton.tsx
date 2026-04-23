@@ -14,13 +14,13 @@ export function SiteWhatsAppButton() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Falar com a Grow no WhatsApp"
-      className="group fixed bottom-24 right-4 z-50 inline-flex items-center gap-2 rounded-full border border-[#25D366]/30 bg-[#050508]/92 px-2.5 py-2 text-white shadow-[0_18px_46px_-26px_rgba(0,0,0,0.9)] backdrop-blur transition-[transform,box-shadow,border-color,background-color] hover:-translate-y-0.5 hover:border-[#25D366]/55 hover:bg-[#07140d]/95 hover:shadow-[0_24px_54px_-24px_rgba(0,0,0,0.92)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2 sm:bottom-24 sm:right-6 md:bottom-6"
+      className="group fixed bottom-24 right-4 z-50 inline-flex items-center gap-2 rounded-full border border-[#806589]/30 bg-[#01000D]/92 px-2.5 py-2 text-[#806589] shadow-[0_18px_46px_-26px_rgba(1,0,13,0.9)] backdrop-blur transition-[transform,box-shadow,border-color,background-color] hover:-translate-y-0.5 hover:border-[#806589]/55 hover:bg-[#020126]/95 hover:shadow-[0_24px_54px_-24px_rgba(1,0,13,0.92)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4D4489] focus-visible:ring-offset-2 sm:bottom-24 sm:right-6 md:bottom-6"
       title="Falar com especialista"
     >
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366]/20 text-[#25D366]">
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#4D4489]/30 text-[#806589]">
         <MessageCircle className="h-4 w-4" aria-hidden="true" />
       </span>
-      <span className="hidden pr-1 text-xs font-medium tracking-[0.01em] text-white/70 transition-colors group-hover:text-white sm:inline">
+      <span className="hidden pr-1 text-xs font-medium tracking-[0.01em] text-[#806589]/70 transition-colors group-hover:text-[#806589] sm:inline">
         Falar com especialista
       </span>
     </a>

@@ -7,7 +7,6 @@ import { Mail, MapPin, Phone, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead, sendSiteContactEmail } from "@/lib/siteLeadCapture";
-import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 
 const contactItems = [
   { icon: Mail, label: "E-mail", value: "contato@contabilidadegrow.com.br", href: "mailto:contato@contabilidadegrow.com.br" },
@@ -86,13 +85,9 @@ export default function ContactPage() {
       <div className="institutional-page text-foreground">
         <section className="container py-10 sm:py-14 md:py-16">
           <div className="institutional-hero relative grid gap-8 p-5 sm:p-7 lg:grid-cols-[0.9fr_1.1fr] lg:p-9">
-            <img
-              src={growMonogramVertical}
-              alt=""
+            <div
               aria-hidden="true"
-              width={420}
-              height={620}
-              className="brand-watermark -left-24 bottom-0 hidden h-[30rem] w-auto lg:block"
+              className="brand-watermark -left-24 bottom-0 hidden h-[30rem] w-[19rem] rounded-[4rem] border border-[#806589]/15 bg-[#4D4489]/20 lg:block"
             />
             <motion.div {...fadeIn} className="relative z-10">
               <span className="institutional-kicker">Contato</span>

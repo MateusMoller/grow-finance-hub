@@ -262,15 +262,25 @@
   }
 
   .institutional-page {
+    --gf-mauve: #806589;
+    --gf-violet: #64518C;
+    --gf-primary: #4D4489;
+    --gf-navy: #020126;
+    --gf-black: #01000D;
+    --primary: 247 33% 40%;
+    --primary-foreground: 286 15% 47%;
+    --ring: 247 33% 40%;
+    --grow-gold: 286 15% 47%;
+    --grow-gold-foreground: 242 93% 3%;
     position: relative;
     isolation: isolate;
     min-height: 100vh;
-    color: hsl(0 0% 96%);
+    color: var(--gf-mauve);
     background:
-      radial-gradient(circle at 15% -4rem, hsl(var(--grow-slate) / 0.95), transparent 19rem),
-      radial-gradient(circle at 76% 0, hsl(var(--grow-gold) / 0.34), transparent 22rem),
-      radial-gradient(circle at 58% 14rem, hsl(var(--grow-surface) / 0.7), transparent 24rem),
-      linear-gradient(180deg, hsl(230 42% 3%) 0%, hsl(232 35% 2%) 42%, hsl(230 38% 3%) 100%);
+      radial-gradient(circle at 15% -4rem, rgb(77 68 137 / 0.95), transparent 19rem),
+      radial-gradient(circle at 76% 0, rgb(128 101 137 / 0.42), transparent 22rem),
+      radial-gradient(circle at 58% 14rem, rgb(100 81 140 / 0.6), transparent 24rem),
+      linear-gradient(180deg, var(--gf-navy) 0%, var(--gf-black) 44%, var(--gf-navy) 100%);
   }
 
   .institutional-page::before {
@@ -280,8 +290,8 @@
     z-index: -1;
     pointer-events: none;
     background-image:
-      radial-gradient(circle, hsl(0 0% 100% / 0.18) 1px, transparent 1px),
-      radial-gradient(circle at 100% 20%, transparent 0 8rem, hsl(0 0% 100% / 0.1) 8.05rem 8.12rem, transparent 8.2rem 9.5rem, hsl(0 0% 100% / 0.07) 9.55rem 9.62rem, transparent 9.7rem);
+      radial-gradient(circle, rgb(128 101 137 / 0.28) 1px, transparent 1px),
+      radial-gradient(circle at 100% 20%, transparent 0 8rem, rgb(128 101 137 / 0.2) 8.05rem 8.12rem, transparent 8.2rem 9.5rem, rgb(100 81 140 / 0.16) 9.55rem 9.62rem, transparent 9.7rem);
     background-position:
       left 8rem top 26rem,
       right -5rem top 33rem;
@@ -289,35 +299,35 @@
       18px 18px,
       30rem 30rem;
     background-repeat: no-repeat;
-    mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #01000D 0%, #01000D 75%, transparent 100%);
   }
 
   .institutional-hero {
     position: relative;
     overflow: hidden;
-    border: 1px solid hsl(0 0% 100% / 0.1);
+    border: 1px solid rgb(128 101 137 / 0.18);
     border-radius: clamp(1.5rem, 2.4vw, 2.2rem);
     background:
-      radial-gradient(circle at 80% 0%, hsl(var(--grow-gold) / 0.22), transparent 18rem),
-      radial-gradient(circle at 18% 20%, hsl(var(--grow-slate) / 0.58), transparent 20rem),
-      linear-gradient(135deg, hsl(230 38% 3% / 0.98) 0%, hsl(232 38% 4% / 0.97) 50%, hsl(230 42% 3% / 0.98) 100%);
-    box-shadow: 0 28px 90px -50px hsl(var(--grow-slate) / 0.9);
+      radial-gradient(circle at 80% 0%, rgb(128 101 137 / 0.26), transparent 18rem),
+      radial-gradient(circle at 18% 20%, rgb(77 68 137 / 0.62), transparent 20rem),
+      linear-gradient(135deg, rgb(1 0 13 / 0.98) 0%, rgb(2 1 38 / 0.97) 50%, rgb(1 0 13 / 0.98) 100%);
+    box-shadow: 0 28px 90px -50px rgb(77 68 137 / 0.9);
   }
 
   .institutional-card {
-    border: 1px solid hsl(0 0% 100% / 0.1);
+    border: 1px solid rgb(128 101 137 / 0.18);
     border-radius: 1.5rem;
     background:
-      radial-gradient(circle at 12% 0%, hsl(var(--grow-slate) / 0.18), transparent 14rem),
-      linear-gradient(135deg, hsl(268 42% 9% / 0.88) 0%, hsl(250 42% 7% / 0.92) 54%, hsl(235 40% 6% / 0.92) 100%);
-    box-shadow: 0 18px 60px -42px hsl(var(--grow-slate) / 0.85);
+      radial-gradient(circle at 12% 0%, rgb(77 68 137 / 0.22), transparent 14rem),
+      linear-gradient(135deg, rgb(77 68 137 / 0.28) 0%, rgb(2 1 38 / 0.92) 54%, rgb(1 0 13 / 0.94) 100%);
+    box-shadow: 0 18px 60px -42px rgb(77 68 137 / 0.85);
   }
 
   .institutional-card-muted {
-    border: 1px solid hsl(0 0% 100% / 0.1);
+    border: 1px solid rgb(128 101 137 / 0.18);
     border-radius: 1.25rem;
     background:
-      linear-gradient(135deg, hsl(268 45% 12% / 0.72), hsl(242 45% 8% / 0.76));
+      linear-gradient(135deg, rgb(77 68 137 / 0.36), rgb(2 1 38 / 0.78));
     backdrop-filter: blur(14px);
   }
 
@@ -327,31 +337,31 @@
     align-items: center;
     gap: 0.5rem;
     border-radius: 999px;
-    border: 1px solid hsl(var(--grow-gold) / 0.34);
-    background: hsl(var(--grow-gold) / 0.12);
+    border: 1px solid rgb(128 101 137 / 0.34);
+    background: rgb(77 68 137 / 0.24);
     padding: 0.4rem 0.85rem;
     font-size: 0.7rem;
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: hsl(var(--grow-gold));
+    color: var(--gf-mauve);
   }
 
   .brand-watermark {
     pointer-events: none;
     position: absolute;
-    opacity: 0.07;
-    mix-blend-mode: multiply;
+    opacity: 0.28;
+    mix-blend-mode: screen;
   }
 
   .premium-link {
-    color: hsl(0 0% 78%);
+    color: var(--gf-mauve);
     transition-property: color, background-color, border-color, transform;
     transition-duration: 180ms;
   }
 
   .premium-link:hover {
-    color: hsl(0 0% 100%);
+    color: var(--gf-violet);
   }
 
   .grow-dark-section {
@@ -362,61 +372,155 @@
   .grow-orbit {
     position: absolute;
     pointer-events: none;
-    border: 1px solid hsl(0 0% 100% / 0.12);
+    border: 1px solid rgb(128 101 137 / 0.24);
     border-radius: 999px;
   }
 
   .grow-finance-card {
-    border: 1px solid hsl(0 0% 100% / 0.12);
+    border: 1px solid rgb(128 101 137 / 0.24);
     border-radius: 1.4rem;
     background:
-      radial-gradient(circle at 18% 0%, hsl(var(--grow-gold) / 0.18), transparent 11rem),
-      linear-gradient(135deg, hsl(291 72% 30% / 0.52), hsl(253 64% 15% / 0.86) 45%, hsl(230 46% 8% / 0.92));
-    box-shadow: 0 22px 70px -35px hsl(var(--grow-slate) / 0.95);
+      radial-gradient(circle at 18% 0%, rgb(128 101 137 / 0.22), transparent 11rem),
+      linear-gradient(135deg, rgb(128 101 137 / 0.48), rgb(77 68 137 / 0.86) 45%, rgb(2 1 38 / 0.92));
+    box-shadow: 0 22px 70px -35px rgb(77 68 137 / 0.95);
     backdrop-filter: blur(18px);
   }
 
   .grow-logo-strip {
-    border-block: 1px solid hsl(0 0% 100% / 0.06);
+    border-block: 1px solid rgb(128 101 137 / 0.16);
     background:
-      linear-gradient(90deg, transparent, hsl(var(--grow-slate) / 0.24), transparent),
-      hsl(260 60% 8% / 0.72);
+      linear-gradient(90deg, transparent, rgb(77 68 137 / 0.28), transparent),
+      rgb(2 1 38 / 0.72);
   }
 
   .grow-gradient-cta {
     background:
-      radial-gradient(circle at 70% 0%, hsl(var(--grow-gold) / 0.34), transparent 20rem),
-      radial-gradient(circle at 40% 0%, hsl(var(--grow-slate) / 0.95), transparent 25rem),
-      linear-gradient(180deg, hsl(232 40% 4%) 0%, hsl(230 42% 3%) 100%);
+      radial-gradient(circle at 70% 0%, rgb(128 101 137 / 0.34), transparent 20rem),
+      radial-gradient(circle at 40% 0%, rgb(77 68 137 / 0.95), transparent 25rem),
+      linear-gradient(180deg, var(--gf-navy) 0%, var(--gf-black) 100%);
   }
 
   .institutional-page .text-foreground,
   .institutional-page .text-card-foreground {
-    color: hsl(0 0% 96%);
+    color: var(--gf-mauve);
+  }
+
+  .institutional-page .text-white {
+    color: var(--gf-mauve);
+  }
+
+  .institutional-page .bg-white {
+    background-color: var(--gf-mauve);
+  }
+
+  .institutional-page .border-white {
+    border-color: rgb(128 101 137 / 0.24);
+  }
+
+  .institutional-page .hover\:bg-white\/90:hover {
+    background-color: rgb(128 101 137 / 0.9);
+  }
+
+  .institutional-page .hover\:bg-white\/10:hover {
+    background-color: rgb(128 101 137 / 0.1);
+  }
+
+  .institutional-page .hover\:text-white:hover {
+    color: var(--gf-mauve);
+  }
+
+  .institutional-page .to-white {
+    --tw-gradient-to: #806589 var(--tw-gradient-to-position);
   }
 
   .institutional-page .text-muted-foreground {
-    color: hsl(0 0% 72%);
+    color: var(--gf-violet);
   }
 
   .institutional-page .bg-background {
-    background-color: hsl(230 42% 4%);
+    background-color: var(--gf-navy);
   }
 
   .institutional-page .bg-card {
-    background-color: hsl(260 46% 9% / 0.88);
+    background-color: rgb(77 68 137 / 0.24);
   }
 
   .institutional-page input,
   .institutional-page textarea {
-    border-color: hsl(0 0% 100% / 0.14);
-    background: hsl(0 0% 100% / 0.08);
-    color: hsl(0 0% 96%);
+    border-color: rgb(128 101 137 / 0.24);
+    background: rgb(128 101 137 / 0.1);
+    color: var(--gf-mauve);
   }
 
   .institutional-page input::placeholder,
   .institutional-page textarea::placeholder {
-    color: hsl(0 0% 70%);
+    color: rgb(128 101 137 / 0.72);
+  }
+
+  .site-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: #806589;
+    letter-spacing: -0.03em;
+  }
+
+  .site-wordmark::before {
+    content: "";
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 0.75rem;
+    background:
+      linear-gradient(135deg, #806589 0%, #4D4489 55%, #020126 100%);
+    box-shadow: 0 0 32px rgb(77 68 137 / 0.42);
+  }
+
+  .generic-office-visual,
+  .generic-insight-visual,
+  .generic-login-visual {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 26% 16%, rgb(128 101 137 / 0.42), transparent 8rem),
+      linear-gradient(135deg, #4D4489 0%, #020126 58%, #01000D 100%);
+  }
+
+  .generic-office-visual::before,
+  .generic-insight-visual::before,
+  .generic-login-visual::before {
+    content: "";
+    position: absolute;
+    inset: 16%;
+    border: 1px solid rgb(128 101 137 / 0.26);
+    border-radius: 1.2rem;
+    background:
+      linear-gradient(90deg, transparent 0 20%, rgb(128 101 137 / 0.18) 20% 22%, transparent 22% 44%, rgb(128 101 137 / 0.16) 44% 46%, transparent 46%),
+      linear-gradient(180deg, rgb(128 101 137 / 0.18), rgb(100 81 140 / 0.1));
+  }
+
+  .generic-office-visual::after,
+  .generic-insight-visual::after,
+  .generic-login-visual::after {
+    content: "";
+    position: absolute;
+    right: 14%;
+    bottom: 16%;
+    width: 36%;
+    height: 28%;
+    border-radius: 999px 999px 0 0;
+    background:
+      linear-gradient(180deg, #806589 0%, #64518C 45%, #4D4489 100%);
+    opacity: 0.74;
+  }
+
+  .generic-insight-visual::before {
+    inset: 20% 14%;
+    border-radius: 999px;
+  }
+
+  .generic-login-visual::before {
+    inset: 14%;
+    border-radius: 2rem;
   }
 
   .dark .brand-watermark {

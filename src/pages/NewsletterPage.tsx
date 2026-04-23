@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 
 type NewsletterRow = Tables<"newsletters">;
 
@@ -85,13 +84,9 @@ export default function NewsletterPage() {
       <div className="institutional-page text-foreground">
         <section className="container max-w-6xl space-y-6 py-10 sm:space-y-8 sm:py-14 md:py-16">
           <div className="institutional-hero relative overflow-hidden p-5 sm:p-7 md:p-9">
-            <img
-              src={growMonogramVertical}
-              alt=""
+            <div
               aria-hidden="true"
-              width={420}
-              height={620}
-              className="brand-watermark -right-20 -top-28 hidden h-[32rem] w-auto lg:block"
+              className="brand-watermark -right-20 -top-28 hidden h-[32rem] w-[20rem] rounded-[4rem] border border-[#806589]/15 bg-[#4D4489]/20 lg:block"
             />
             <div className="relative z-10 max-w-3xl space-y-3">
               <span className="institutional-kicker">Conteudo Grow</span>

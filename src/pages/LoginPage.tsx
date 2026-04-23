@@ -8,9 +8,6 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { hasAnyInternalRole, hasPortalAccessRole, normalizeRoles } from "@/lib/accessControl";
-import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
-import financeHeroImage from "@/assets/login-finance-hero.svg";
-import portalHeroImage from "@/assets/login-portal-hero.svg";
 
 type AccessProfile = "internal" | "client";
 
@@ -20,8 +17,6 @@ const accessOptions: Array<{
   subtitle: string;
   icon: typeof BriefcaseBusiness;
   target: string;
-  heroImage: string;
-  heroAlt: string;
   visualTag: string;
 }> = [
   {
@@ -30,8 +25,6 @@ const accessOptions: Array<{
     subtitle: "Operacao, tarefas, clientes e gestao da equipe.",
     icon: BriefcaseBusiness,
     target: "/app",
-    heroImage: financeHeroImage,
-    heroAlt: "Painel do app interno com indicadores financeiros e operacionais",
     visualTag: "Operacao interna",
   },
   {
@@ -40,8 +33,6 @@ const accessOptions: Array<{
     subtitle: "Solicitacoes, documentos, formularios e atendimento.",
     icon: Building2,
     target: "/app/portal",
-    heroImage: portalHeroImage,
-    heroAlt: "Painel do portal do cliente com documentos, checklist e atendimento",
     visualTag: "Experiencia do cliente",
   },
 ];
@@ -145,15 +136,10 @@ export default function LoginPage() {
         >
           <Link
             to="/"
-            className="block w-fit rounded-[1.25rem] border border-[#50516f]/10 bg-[#50516f] p-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="Grow Contabilidade"
+            className="site-wordmark w-fit rounded-[1.25rem] border border-[#806589]/20 bg-[#020126] p-3 font-heading text-2xl font-bold shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            <img
-              src={growLockupHorizontalDark}
-              alt="Grow Contabilidade"
-              width={196}
-              height={62}
-              className="h-11 w-auto rounded-[0.9rem] object-cover"
-            />
+            Grow
           </Link>
 
           <div className="space-y-2">
@@ -246,19 +232,21 @@ export default function LoginPage() {
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 250, damping: 30, mass: 0.85 }}
-        className={`relative hidden min-h-screen overflow-hidden bg-slate-900 lg:block lg:w-[54%] xl:w-[56%] ${
+        className={`relative hidden min-h-screen overflow-hidden bg-[#01000D] lg:block lg:w-[54%] xl:w-[56%] ${
           selectedAccess.key === "client" ? "lg:order-1" : "lg:order-2"
         }`}
       >
         <AnimatePresence mode="sync" initial={false} custom={direction}>
-          <motion.img
+          <motion.div
             custom={direction}
             key={selectedAccess.key}
-            src={selectedAccess.heroImage}
-            alt={selectedAccess.heroAlt}
-            width={1180}
-            height={960}
-            className="absolute inset-0 h-full w-full object-cover"
+            role="img"
+            aria-label={
+              selectedAccess.key === "client"
+                ? "Ilustracao generica de portal do cliente com documentos e atendimento"
+                : "Ilustracao generica de painel operacional com indicadores financeiros"
+            }
+            className="generic-login-visual absolute inset-0 h-full w-full"
             initial={(dir: number) => ({
               x: dir > 0 ? -120 : 120,
             })}
@@ -279,8 +267,8 @@ export default function LoginPage() {
           style={{
             background:
               selectedAccess.key === "client"
-                ? "linear-gradient(270deg, rgba(10,22,47,0.72) 0%, rgba(12,24,50,0.32) 44%, rgba(16,26,51,0.72) 100%)"
-                : "linear-gradient(270deg, rgba(13,20,42,0.7) 0%, rgba(16,28,56,0.28) 46%, rgba(13,20,42,0.74) 100%)",
+                ? "linear-gradient(270deg, rgb(1 0 13 / 0.72) 0%, rgb(77 68 137 / 0.32) 44%, rgb(2 1 38 / 0.72) 100%)"
+                : "linear-gradient(270deg, rgb(2 1 38 / 0.7) 0%, rgb(77 68 137 / 0.28) 46%, rgb(1 0 13 / 0.74) 100%)",
           }}
         />
 
@@ -292,24 +280,24 @@ export default function LoginPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.98 }}
               transition={{ duration: 0.36, ease: "easeOut" }}
-              className="rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium tracking-wide text-white/90 backdrop-blur-sm"
+              className="rounded-full border border-[#806589]/20 bg-[#806589]/10 px-4 py-1.5 text-xs font-medium tracking-wide text-[#806589] backdrop-blur-sm"
             >
               {selectedAccess.visualTag}
             </motion.div>
           </AnimatePresence>
-          <Link to="/" className="rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium text-white/90 backdrop-blur-sm transition-colors hover:bg-white/20">
+          <Link to="/" className="rounded-full border border-[#806589]/20 bg-[#806589]/10 px-4 py-1.5 text-xs font-medium text-[#806589] backdrop-blur-sm transition-colors hover:bg-[#806589]/20">
             Site institucional
           </Link>
         </div>
 
-        <div className="absolute bottom-8 left-8 right-8 z-10 max-w-xl rounded-[1.75rem] border border-white/14 bg-white/10 p-6 text-white shadow-2xl backdrop-blur-md">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/64">Acesso com contexto</p>
+        <div className="absolute bottom-8 left-8 right-8 z-10 max-w-xl rounded-[1.75rem] border border-[#806589]/20 bg-[#020126]/70 p-6 text-[#806589] shadow-2xl backdrop-blur-md">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64518C]">Acesso com contexto</p>
           <h2 className="mt-3 font-heading text-3xl font-semibold">{selectedAccess.title}</h2>
-          <p className="mt-3 text-sm leading-relaxed text-white/72">{selectedAccess.subtitle}</p>
+          <p className="mt-3 text-sm leading-relaxed text-[#806589]/72">{selectedAccess.subtitle}</p>
           <div className="mt-5 grid gap-2">
             {trustNotes.map((note) => (
-              <p key={note} className="flex items-center gap-2 text-sm text-white/86">
-                <CheckCircle2 className="h-4 w-4 text-grow-gold" aria-hidden="true" />
+              <p key={note} className="flex items-center gap-2 text-sm text-[#806589]/85">
+                <CheckCircle2 className="h-4 w-4 text-[#806589]" aria-hidden="true" />
                 {note}
               </p>
             ))}

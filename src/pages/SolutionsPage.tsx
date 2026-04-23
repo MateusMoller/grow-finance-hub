@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, BarChart3, Briefcase, Calculator, CheckCircle2, FileText, PieChart, Users } from "lucide-react";
-import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 
 const solutions = [
   {
@@ -57,13 +56,9 @@ export default function SolutionsPage() {
       <div className="institutional-page text-foreground">
         <section className="container py-10 sm:py-14 md:py-16">
           <motion.div {...fadeIn} className="institutional-hero relative overflow-hidden p-5 sm:p-7 md:p-9">
-            <img
-              src={growMonogramVertical}
-              alt=""
+            <div
               aria-hidden="true"
-              width={420}
-              height={620}
-              className="brand-watermark -right-16 -top-28 hidden h-[32rem] w-auto lg:block"
+              className="brand-watermark -right-16 -top-28 hidden h-[32rem] w-[20rem] rounded-[4rem] border border-[#806589]/15 bg-[#4D4489]/20 lg:block"
             />
             <div className="relative z-10 max-w-3xl">
               <span className="institutional-kicker">Solucoes Grow</span>

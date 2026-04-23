@@ -5,8 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { normalizeNewsletterEmail, subscribeToNewsletter } from "@/lib/newsletter";
-import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
-import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
 
 export function SiteFooter() {
   const [email, setEmail] = useState("");
@@ -42,35 +40,25 @@ export function SiteFooter() {
   };
 
   return (
-    <footer className="relative overflow-hidden border-t border-white/10 bg-[#050508] pb-16 text-white md:pb-0">
-      <img
-        src={growMonogramVertical}
-        alt=""
+    <footer className="relative overflow-hidden border-t border-[#806589]/15 bg-[#01000D] pb-16 text-[#806589] md:pb-0">
+      <div
         aria-hidden="true"
-        width={360}
-        height={520}
-        loading="lazy"
-        className="brand-watermark -right-20 top-8 hidden h-[28rem] w-auto md:block"
+        className="brand-watermark -right-20 top-8 hidden h-[28rem] w-[18rem] rounded-[4rem] border border-[#806589]/15 bg-[#4D4489]/20 md:block"
       />
       <div className="container relative py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="institutional-card relative overflow-hidden space-y-4 p-5 lg:col-span-2">
             <Link
               to="/"
-              className="block w-fit rounded-[1.35rem] border border-[#50516f]/10 bg-[#50516f] p-2.5 shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Grow Contabilidade"
+              className="site-wordmark w-fit rounded-[1.35rem] border border-[#806589]/20 bg-[#020126] p-3 font-heading text-2xl font-bold shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4D4489] focus-visible:ring-offset-2"
             >
-              <img
-                src={growLockupHorizontalDark}
-                alt="Grow Contabilidade"
-                width={220}
-                height={70}
-                className="h-12 w-auto rounded-[0.95rem] object-cover sm:h-14"
-              />
+              Grow
             </Link>
-            <p className="max-w-sm text-sm leading-relaxed text-white/[0.65]">
+            <p className="max-w-sm text-sm leading-relaxed text-[#806589]/70">
               Contabilidade consultiva, proximidade e tecnologia para empresas que precisam crescer com clareza e solidez.
             </p>
-            <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/[0.55]">
+            <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64518C]">
               <span>Compliance</span>
               <span>-</span>
               <span>Clareza</span>
@@ -80,8 +68,8 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">Servicos</h4>
-            <ul className="mt-3 space-y-2 text-sm text-white/[0.65]">
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-[#806589]">Servicos</h4>
+            <ul className="mt-3 space-y-2 text-sm text-[#806589]/70">
               <li><Link to="/solucoes" className="premium-link">Contabilidade Consultiva</Link></li>
               <li><Link to="/solucoes" className="premium-link">Assessoria Fiscal</Link></li>
               <li><Link to="/solucoes" className="premium-link">Departamento Pessoal</Link></li>
@@ -90,8 +78,8 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">Institucional</h4>
-            <ul className="mt-3 space-y-2 text-sm text-white/[0.65]">
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-[#806589]">Institucional</h4>
+            <ul className="mt-3 space-y-2 text-sm text-[#806589]/70">
               <li><Link to="/" className="premium-link">Sobre a Grow</Link></li>
               <li><Link to="/#clientes" className="premium-link">Clientes</Link></li>
               <li><Link to="/newsletter" className="premium-link">Newsletter</Link></li>
@@ -102,8 +90,8 @@ export function SiteFooter() {
 
           <div className="space-y-4">
             <div>
-              <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">Contato</h4>
-              <ul className="mt-3 space-y-2 text-sm text-white/[0.65]">
+              <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-[#806589]">Contato</h4>
+              <ul className="mt-3 space-y-2 text-sm text-[#806589]/70">
                 <li>Rua Julio de Castilhos, 2579 - Sl 212 - Centro, Taquara - RS</li>
                 <li><a href="tel:+5551995325592" className="premium-link">Telefone: (51) 99532-5592</a></li>
                 <li><a href="mailto:contato@contabilidadegrow.com.br" className="premium-link">contato@contabilidadegrow.com.br</a></li>
@@ -120,7 +108,7 @@ export function SiteFooter() {
               </ul>
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Assine nossa newsletter</p>
+              <p className="text-sm font-medium text-[#806589]">Assine nossa newsletter</p>
               <form onSubmit={handleSubscribe} className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <label htmlFor="footer-newsletter-email" className="sr-only">E-mail para newsletter</label>
                 <Input
@@ -133,7 +121,7 @@ export function SiteFooter() {
                   placeholder="voce@empresa.com.br"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="h-10 border-white/[0.15] bg-white/[0.08] text-white placeholder:text-white/50"
+                  className="h-10 border-[#806589]/20 bg-[#806589]/10 text-[#806589] placeholder:text-[#64518C]"
                 />
                 <Button
                   type="submit"
@@ -156,7 +144,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-5 text-xs text-white/[0.55] md:mt-10 md:flex-row md:items-center md:justify-between">
+        <div className="mt-8 flex flex-col gap-3 border-t border-[#806589]/15 pt-5 text-xs text-[#64518C] md:mt-10 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p>(c) {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
             <p>
@@ -165,7 +153,7 @@ export function SiteFooter() {
                 href="https://www.linkedin.com/in/mateus-henrique-moller/"
                 target="_blank"
                 rel="noreferrer"
-                className="text-white/70 transition-colors hover:text-white hover:underline underline-offset-2"
+                className="text-[#806589]/70 transition-colors hover:text-[#806589] hover:underline underline-offset-2"
               >
                 Mateus Henrique Moller
               </a>.

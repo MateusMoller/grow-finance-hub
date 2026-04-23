@@ -20,9 +20,6 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import growLockupHorizontalDark from "@/assets/brand/grow-lockup-horizontal-dark.png";
-import growMonogramVertical from "@/assets/brand/grow-monogram-vertical.png";
-import growStationery from "@/assets/brand/grow-stationery.jpg";
 
 const metrics = [
   { value: "+12", label: "Anos de mercado", detail: "Experiencia solida em contabilidade consultiva" },
@@ -110,13 +107,9 @@ export default function AboutPage() {
       <div className="institutional-page text-foreground transition-colors">
         <section id="institucional" className="container py-8 sm:py-10 md:py-14">
           <div className="institutional-hero grid gap-8 p-5 sm:p-7 lg:grid-cols-[1.15fr_0.85fr] lg:p-9">
-            <img
-              src={growMonogramVertical}
-              alt=""
+            <div
               aria-hidden="true"
-              width={420}
-              height={620}
-              className="brand-watermark -right-20 -top-24 hidden h-[34rem] w-auto lg:block"
+              className="brand-watermark -right-20 -top-24 hidden h-[34rem] w-[21rem] rounded-[4rem] border border-[#806589]/15 bg-[#4D4489]/20 lg:block"
             />
             <motion.div {...fadeIn} className="relative z-10 space-y-6">
               <span className="institutional-kicker">Grow Contabilidade</span>
@@ -140,14 +133,12 @@ export default function AboutPage() {
             </motion.div>
 
             <motion.aside {...fadeIn} transition={{ duration: 0.45, delay: 0.1 }} className="relative z-10 institutional-card p-5">
-              <div className="rounded-[1.35rem] border border-border/70 bg-[#50516f] p-3 shadow-sm">
-                <img
-                  src={growLockupHorizontalDark}
-                  alt="Identidade visual Grow Contabilidade"
-                  width={780}
-                  height={248}
-                  className="w-full rounded-[1rem] object-cover"
-                />
+              <div
+                role="img"
+                aria-label="Painel generico de apresentacao institucional contabil"
+                className="generic-insight-visual flex min-h-48 items-end rounded-[1.35rem] border border-[#806589]/20 p-6 shadow-sm"
+              >
+                <span className="site-wordmark font-heading text-3xl font-bold">Grow</span>
               </div>
               <h2 className="mt-5 font-heading text-lg font-semibold">Painel institucional</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -205,15 +196,13 @@ export default function AboutPage() {
                 ))}
               </div>
             </motion.article>
-            <motion.article {...fadeIn} transition={{ duration: 0.45, delay: 0.1 }} className="institutional-card overflow-hidden">
-              <img
-                src={growStationery}
-                alt="Aplicacao da identidade Grow em papelaria"
-                width={980}
-                height={604}
-                loading="lazy"
-                className="h-full min-h-[420px] w-full object-cover"
-              />
+            <motion.article
+              {...fadeIn}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              role="img"
+              aria-label="Consultoria contabil analisando documentos e indicadores financeiros"
+              className="generic-office-visual institutional-card min-h-[420px] overflow-hidden"
+            >
             </motion.article>
           </div>
         </section>
