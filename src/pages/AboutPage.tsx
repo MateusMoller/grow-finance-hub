@@ -169,65 +169,101 @@ export default function AboutPage() {
             <motion.aside
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="relative min-h-[340px] overflow-hidden rounded-[32px] px-2 py-3"
+              className="relative min-h-[380px] overflow-hidden rounded-[32px] px-2 py-3"
             >
-              <div className="pointer-events-none absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/12 blur-3xl" />
-              <div className="pointer-events-none absolute right-10 top-10 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
-
               <motion.div
-                className="absolute left-1/2 top-1/2 h-[250px] w-[250px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/15"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 24, repeat: Infinity, ease: "linear" }}
-              >
-                <div className="absolute -top-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full bg-primary/80 shadow-[0_0_24px_rgba(99,102,241,0.35)]" />
-                <div className="absolute left-4 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-primary/45" />
-                <div className="absolute bottom-8 right-8 h-4 w-4 rounded-full bg-primary/60" />
-              </motion.div>
-
-              <motion.div
-                className="absolute left-1/2 top-1/2 h-[170px] w-[170px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-border/60 dark:border-[#2a3760]"
-                animate={{ rotate: -360 }}
-                transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
+                className="pointer-events-none absolute inset-y-8 left-1/2 w-[2px] -translate-x-1/2 rounded-full bg-gradient-to-b from-transparent via-primary/50 to-transparent"
+                animate={{ opacity: [0.45, 0.9, 0.45], scaleY: [0.96, 1.04, 0.96] }}
+                transition={{ duration: 4.6, repeat: Infinity, ease: "easeInOut" }}
               />
 
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/12 blur-3xl" />
+              <div className="pointer-events-none absolute left-4 top-5 text-[84px] font-black leading-none tracking-[-0.08em] text-primary/8 dark:text-white/5 md:text-[110px]">
+                GROW
+              </div>
+              <div className="pointer-events-none absolute -right-5 bottom-0 text-[64px] font-black leading-none tracking-[-0.08em] text-primary/8 dark:text-white/5 md:text-[92px]">
+                FLOW
+              </div>
+
               <motion.div
-                animate={{ y: [0, -10, 0] }}
-                transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute left-6 top-6 max-w-[240px] rounded-full border border-border/70 bg-background/85 px-4 py-3 shadow-sm backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/85"
+                animate={{ rotate: [-10, -6, -10], y: [0, -8, 0] }}
+                transition={{ duration: 6.2, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute left-5 top-7 max-w-[210px] rounded-[28px] border border-border/70 bg-background/90 px-4 py-4 shadow-md backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/90"
               >
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/12">
                     <BarChart3 className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Painel institucional</p>
-                    <p className="text-sm text-foreground">Proposta de valor clara e consultiva.</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Painel vivo</p>
+                    <p className="text-sm font-medium text-foreground">Estratégia em movimento, não em caixa.</p>
                   </div>
                 </div>
               </motion.div>
 
+              <motion.div
+                animate={{ y: [0, -12, 0], rotate: [8, 11, 8] }}
+                transition={{ duration: 6.8, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+                className="absolute right-5 top-12 rounded-[30px] border border-primary/20 bg-primary/10 px-4 py-3 shadow-sm backdrop-blur"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Clareza</p>
+                <p className="mt-1 text-sm font-medium text-foreground">Menos ruído operacional</p>
+              </motion.div>
+
+              <motion.div
+                animate={{ scale: [1, 1.04, 1], rotate: [45, 50, 45] }}
+                transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute left-1/2 top-1/2 h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 rounded-[42px] border border-primary/20 bg-gradient-to-br from-background/95 via-background/72 to-primary/10 p-5 shadow-[0_24px_60px_-30px_rgba(38,52,89,0.45)] backdrop-blur dark:border-[#34406f] dark:from-[#08142f]/95 dark:via-[#0a1734]/80 dark:to-primary/20"
+              >
+                <div className="flex h-full flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+                      Grow
+                    </span>
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Direção consultiva
+                    </p>
+                    <p className="mt-2 font-heading text-2xl font-bold leading-none text-foreground">
+                      Dados viram
+                      <span className="block text-primary">decisão</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-primary" />
+                    acompanhamento recorrente
+                  </div>
+                </div>
+              </motion.div>
+
+              <div className="pointer-events-none absolute left-[22%] top-[31%] h-px w-28 rotate-[28deg] bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
+              <div className="pointer-events-none absolute right-[16%] top-[57%] h-px w-24 -rotate-[34deg] bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
+              <div className="pointer-events-none absolute bottom-[27%] left-[34%] h-px w-24 rotate-[11deg] bg-gradient-to-r from-transparent via-primary/35 to-transparent" />
+
               {[
                 {
                   item: "Consultoria contábil, fiscal e financeira integrada",
-                  className: "right-2 top-14 md:right-6",
+                  className: "right-2 top-24 rotate-[6deg] md:right-8",
                   delay: 0,
                 },
                 {
                   item: "Acompanhamento mensal com relatórios gerenciais",
-                  className: "left-10 bottom-24 md:left-16",
-                  delay: 0.6,
+                  className: "left-3 bottom-20 -rotate-[8deg] md:left-10",
+                  delay: 0.7,
                 },
                 {
                   item: "Suporte estratégico para tomada de decisão",
-                  className: "bottom-6 right-6 md:right-10",
-                  delay: 1.1,
+                  className: "bottom-8 right-6 rotate-[4deg] md:right-14",
+                  delay: 1.2,
                 },
               ].map(({ item, className, delay }) => (
                 <motion.div
                   key={item}
-                  className={`absolute max-w-[270px] rounded-full border border-border/70 bg-background/90 px-4 py-3 shadow-sm backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/88 ${className}`}
-                  animate={{ y: [0, -8, 0] }}
-                  transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut", delay }}
+                  className={`absolute max-w-[270px] rounded-[24px] border border-border/70 bg-background/90 px-4 py-3 shadow-md backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/88 ${className}`}
+                  animate={{ y: [0, -10, 0], rotate: [0, 1.5, 0] }}
+                  transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut", delay }}
                 >
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
@@ -235,6 +271,12 @@ export default function AboutPage() {
                   </div>
                 </motion.div>
               ))}
+
+              <motion.div
+                animate={{ x: [0, 12, 0], opacity: [0.42, 0.82, 0.42] }}
+                transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
+                className="pointer-events-none absolute bottom-14 left-1/2 h-[2px] w-36 -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-primary/75 to-transparent"
+              />
             </motion.aside>
           </div>
 
