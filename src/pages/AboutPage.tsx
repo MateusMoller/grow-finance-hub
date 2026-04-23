@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock, Eye, FileText, Heart, Shield, Target, TrendingUp, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -96,6 +96,17 @@ export default function AboutPage() {
     companyName: "",
     email: "",
   });
+  const illustrationPointerX = useMotionValue(0);
+  const illustrationPointerY = useMotionValue(0);
+  const smoothPointerX = useSpring(illustrationPointerX, { stiffness: 120, damping: 22, mass: 0.7 });
+  const smoothPointerY = useSpring(illustrationPointerY, { stiffness: 120, damping: 22, mass: 0.7 });
+  const sculptureX = useTransform(smoothPointerX, [-40, 40], [-18, 18]);
+  const sculptureY = useTransform(smoothPointerY, [-40, 40], [-14, 14]);
+  const haloX = useTransform(smoothPointerX, [-40, 40], [-28, 28]);
+  const haloY = useTransform(smoothPointerY, [-40, 40], [-18, 18]);
+  const illustrationRotate = useTransform(smoothPointerX, [-40, 40], [-8, 8]);
+  const ribbonShift = useTransform(smoothPointerX, [-40, 40], [-12, 12]);
+  const ribbonLift = useTransform(smoothPointerY, [-40, 40], [-10, 10]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,6 +142,20 @@ export default function AboutPage() {
     toast.success("Recebemos sua solicitação. Vamos retornar em breve.");
   };
 
+  const handleIllustrationMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const offsetX = ((event.clientX - bounds.left) / bounds.width - 0.5) * 80;
+    const offsetY = ((event.clientY - bounds.top) / bounds.height - 0.5) * 80;
+
+    illustrationPointerX.set(offsetX);
+    illustrationPointerY.set(offsetY);
+  };
+
+  const handleIllustrationLeave = () => {
+    illustrationPointerX.set(0);
+    illustrationPointerY.set(0);
+  };
+
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
@@ -158,26 +183,23 @@ export default function AboutPage() {
                   <span className="block pl-[0.08em] text-primary">QUE PUXA</span>
                   <span className="block sm:pl-[0.35em]">SEU NEGÓCIO</span>
                   <span className="block text-[0.42em] font-semibold uppercase tracking-[0.24em] text-muted-foreground sm:pl-[1.6em]">
-                    para fora do operacional automático
+                    onde a rotina ganha asas
                   </span>
                 </h1>
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+              <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
                 <p className="max-w-xl text-base leading-8 text-muted-foreground">
                   A Grow organiza fiscal, contábil, financeiro e pessoas com uma leitura mais afiada do negócio.
                   Não é só suporte técnico. É estrutura para decidir, corrigir rota e crescer sem operar no escuro.
                 </p>
-                <motion.div
-                  animate={{ y: [0, -8, 0], rotate: [-4, -1, -4] }}
-                  transition={{ duration: 6.4, repeat: Infinity, ease: "easeInOut" }}
-                  className="w-fit rounded-[28px] border border-primary/15 bg-primary/10 px-5 py-4 shadow-sm"
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Leitura Grow</p>
-                  <p className="mt-2 max-w-[200px] text-sm font-medium leading-6 text-foreground">
-                    Clareza operacional com presença consultiva e menos aparência de escritório tradicional.
+                <div className="space-y-2 text-right">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/70">Leitura Grow</p>
+                  <p className="text-sm leading-7 text-foreground">
+                    uma presença mais viva,
+                    <span className="ml-2 text-primary">menos protocolo</span>
                   </p>
-                </motion.div>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -198,150 +220,172 @@ export default function AboutPage() {
                 </Button>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-[1.05fr_0.95fr_0.95fr]">
-                {[
-                  {
-                    label: "Estrutura viva",
-                    text: "Rotina contábil, fiscal e financeira tratada como frente estratégica.",
-                    className: "sm:-rotate-[5deg]",
-                  },
-                  {
-                    label: "Leitura mensal",
-                    text: "Indicadores e contexto para reduzir achismo na tomada de decisão.",
-                    className: "sm:translate-y-6",
-                  },
-                  {
-                    label: "Presença próxima",
-                    text: "Acompanhamento que evita urgência crônica e desorganização recorrente.",
-                    className: "sm:rotate-[4deg]",
-                  },
-                ].map((item, index) => (
-                  <motion.div
-                    key={item.label}
-                    initial={{ opacity: 0, y: 18 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.2 }}
-                    transition={{ duration: 0.38, delay: index * 0.07 }}
-                    className={`hover-lift-soft surface-sheen rounded-[26px] border border-border bg-card px-5 py-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734] ${item.className}`}
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{item.label}</p>
-                    <p className="mt-3 text-sm leading-7 text-foreground">{item.text}</p>
-                  </motion.div>
-                ))}
+              <div className="grid gap-4 pt-2 sm:grid-cols-[0.28fr_1fr] sm:items-start">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/70">
+                  Três vetores
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {[
+                    {
+                      label: "Estrutura viva",
+                      text: "Rotina contábil, fiscal e financeira tratada como frente estratégica.",
+                    },
+                    {
+                      label: "Leitura mensal",
+                      text: "Indicadores e contexto para reduzir achismo na tomada de decisão.",
+                    },
+                    {
+                      label: "Presença próxima",
+                      text: "Acompanhamento que evita urgência crônica e desorganização recorrente.",
+                    },
+                  ].map((item, index) => (
+                    <motion.div
+                      key={item.label}
+                      initial={{ opacity: 0, y: 18 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, amount: 0.2 }}
+                      transition={{ duration: 0.38, delay: index * 0.07 }}
+                      className="relative pl-5"
+                    >
+                      <span className="absolute left-0 top-1 h-10 w-px bg-gradient-to-b from-primary/70 to-transparent" />
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{item.label}</p>
+                      <p className="mt-3 text-sm leading-7 text-foreground">{item.text}</p>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             </motion.div>
 
             <motion.aside
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="relative min-h-[430px] overflow-hidden rounded-[38px] px-2 py-3 lg:mt-6"
+              onMouseMove={handleIllustrationMove}
+              onMouseLeave={handleIllustrationLeave}
+              className="relative min-h-[460px] overflow-hidden rounded-[38px] px-2 py-3 lg:mt-6"
             >
-              <motion.div
-                className="pointer-events-none absolute inset-y-8 left-1/2 w-[2px] -translate-x-1/2 rounded-full bg-gradient-to-b from-transparent via-primary/50 to-transparent"
-                animate={{ opacity: [0.45, 0.9, 0.45], scaleY: [0.96, 1.04, 0.96] }}
-                transition={{ duration: 4.6, repeat: Infinity, ease: "easeInOut" }}
-              />
-
-              <div className="pointer-events-none absolute left-1/2 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/12 blur-3xl" />
-              <div className="pointer-events-none absolute left-4 top-5 text-[84px] font-black leading-none tracking-[-0.08em] text-primary/8 dark:text-white/5 md:text-[110px]">
-                GROW
-              </div>
-              <div className="pointer-events-none absolute -right-5 bottom-0 text-[64px] font-black leading-none tracking-[-0.08em] text-primary/8 dark:text-white/5 md:text-[92px]">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(82,98,140,0.18),transparent_26%),radial-gradient(circle_at_76%_24%,rgba(82,98,140,0.12),transparent_22%),radial-gradient(circle_at_52%_58%,rgba(82,98,140,0.12),transparent_34%)]" />
+              <div className="pointer-events-none absolute left-5 top-4 text-[88px] font-black leading-none tracking-[-0.08em] text-primary/7 dark:text-white/5 md:text-[118px]">
                 FLOW
               </div>
+              <div className="pointer-events-none absolute bottom-1 right-2 text-[72px] font-black leading-none tracking-[-0.08em] text-primary/7 dark:text-white/5 md:text-[96px]">
+                AIR
+              </div>
 
               <motion.div
-                animate={{ rotate: [-10, -6, -10], y: [0, -8, 0] }}
-                transition={{ duration: 6.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute left-5 top-7 max-w-[210px] rounded-[28px] border border-border/70 bg-background/90 px-4 py-4 shadow-md backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/90"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/12">
-                    <BarChart3 className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Painel vivo</p>
-                    <p className="text-sm font-medium text-foreground">Estratégia em movimento, não em caixa.</p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                animate={{ y: [0, -12, 0], rotate: [8, 11, 8] }}
-                transition={{ duration: 6.8, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
-                className="absolute right-5 top-12 rounded-[30px] border border-primary/20 bg-primary/10 px-4 py-3 shadow-sm backdrop-blur"
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Clareza</p>
-                <p className="mt-1 text-sm font-medium text-foreground">Menos ruído operacional</p>
-              </motion.div>
-
-              <motion.div
-                animate={{ scale: [1, 1.04, 1], rotate: [45, 50, 45] }}
-                transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute left-1/2 top-1/2 h-[205px] w-[205px] -translate-x-1/2 -translate-y-1/2 rounded-[50px] border border-primary/20 bg-gradient-to-br from-background/95 via-background/72 to-primary/10 p-5 shadow-[0_24px_60px_-30px_rgba(38,52,89,0.45)] backdrop-blur dark:border-[#34406f] dark:from-[#08142f]/95 dark:via-[#0a1734]/80 dark:to-primary/20"
-              >
-                <div className="flex h-full flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
-                      Grow
-                    </span>
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                      Direção consultiva
-                    </p>
-                    <p className="mt-2 font-heading text-[1.7rem] font-black leading-none tracking-[-0.05em] text-foreground">
-                      Dados viram
-                      <span className="block text-primary">decisão</span>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <span className="h-2 w-2 rounded-full bg-primary" />
-                    acompanhamento recorrente
-                  </div>
-                </div>
-              </motion.div>
-
-              <div className="pointer-events-none absolute left-[22%] top-[31%] h-px w-28 rotate-[28deg] bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
-              <div className="pointer-events-none absolute right-[16%] top-[57%] h-px w-24 -rotate-[34deg] bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
-              <div className="pointer-events-none absolute bottom-[27%] left-[34%] h-px w-24 rotate-[11deg] bg-gradient-to-r from-transparent via-primary/35 to-transparent" />
-
-              {[
-                {
-                  item: "Consultoria contábil, fiscal e financeira integrada",
-                  className: "right-2 top-24 rotate-[6deg] md:right-8",
-                  delay: 0,
-                },
-                {
-                  item: "Acompanhamento mensal com relatórios gerenciais",
-                  className: "left-2 bottom-24 -rotate-[8deg] md:left-8",
-                  delay: 0.7,
-                },
-                {
-                  item: "Suporte estratégico para tomada de decisão",
-                  className: "bottom-10 right-5 rotate-[4deg] md:right-12",
-                  delay: 1.2,
-                },
-              ].map(({ item, className, delay }) => (
-                <motion.div
-                  key={item}
-                  className={`absolute max-w-[270px] rounded-[24px] border border-border/70 bg-background/90 px-4 py-3 shadow-md backdrop-blur dark:border-[#2a3760] dark:bg-[#091733]/88 ${className}`}
-                  animate={{ y: [0, -10, 0], rotate: [0, 1.5, 0] }}
-                  transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut", delay }}
-                >
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                    <span className="text-sm text-foreground">{item}</span>
-                  </div>
-                </motion.div>
-              ))}
-
-              <motion.div
-                animate={{ x: [0, 12, 0], opacity: [0.42, 0.82, 0.42] }}
-                transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
-                className="pointer-events-none absolute bottom-14 left-1/2 h-[2px] w-36 -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-primary/75 to-transparent"
+                style={{ x: haloX, y: haloY }}
+                className="pointer-events-none absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/12 blur-3xl"
               />
+
+              <motion.div
+                style={{ x: sculptureX, y: sculptureY, rotate: illustrationRotate }}
+                className="absolute inset-0"
+              >
+                <motion.div
+                  animate={{ rotate: [-14, -8, -14], scale: [1, 1.04, 1] }}
+                  transition={{ duration: 8.5, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute left-[18%] top-[16%] h-[280px] w-[190px] rounded-[44%_56%_52%_48%/40%_38%_62%_60%] border border-primary/18 bg-gradient-to-br from-primary/16 via-background/20 to-transparent shadow-[0_28px_70px_-36px_rgba(37,47,81,0.35)] backdrop-blur-[6px]"
+                />
+                <motion.div
+                  animate={{ rotate: [22, 16, 22], scaleY: [1, 1.08, 1] }}
+                  transition={{ duration: 7.8, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute left-[34%] top-[20%] h-[245px] w-[160px] border border-primary/22 bg-gradient-to-b from-primary/20 via-background/10 to-transparent [clip-path:polygon(50%_0%,100%_34%,78%_100%,14%_84%,0%_28%)]"
+                />
+                <motion.div
+                  animate={{ rotate: [-28, -18, -28], scale: [1, 1.05, 1] }}
+                  transition={{ duration: 6.9, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute left-[49%] top-[44%] h-[150px] w-[122px] rounded-[42%_58%_60%_40%/46%_36%_64%_54%] bg-primary/20 blur-[2px]"
+                />
+                <motion.div
+                  animate={{ y: [0, -18, 0], x: [0, 10, 0] }}
+                  transition={{ duration: 5.6, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute left-[12%] top-[68%] h-24 w-24 rounded-full border border-primary/20 bg-gradient-to-br from-background/60 to-primary/10 backdrop-blur"
+                />
+                <motion.div
+                  animate={{ y: [0, 14, 0], x: [0, -8, 0] }}
+                  transition={{ duration: 6.1, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                  className="absolute right-[13%] top-[18%] h-16 w-16 rounded-full bg-primary/18 blur-sm"
+                />
+              </motion.div>
+
+              <motion.svg
+                style={{ x: ribbonShift, y: ribbonLift }}
+                viewBox="0 0 420 420"
+                className="pointer-events-none absolute inset-0 h-full w-full"
+              >
+                <motion.path
+                  d="M28 156 C 88 94, 170 86, 256 132 S 382 186, 392 108"
+                  stroke="hsl(var(--primary) / 0.42)"
+                  strokeWidth="1.5"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray="5 10"
+                  animate={{ pathLength: [0.82, 1, 0.82], opacity: [0.35, 0.9, 0.35] }}
+                  transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <motion.path
+                  d="M54 300 C 144 250, 202 212, 254 240 S 350 310, 396 250"
+                  stroke="hsl(var(--primary) / 0.28)"
+                  strokeWidth="1.5"
+                  fill="none"
+                  strokeLinecap="round"
+                  animate={{ pathLength: [0.7, 1, 0.7], opacity: [0.18, 0.65, 0.18] }}
+                  transition={{ duration: 6.4, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+                />
+                <motion.path
+                  d="M108 58 C 188 118, 246 184, 206 338"
+                  stroke="hsl(var(--foreground) / 0.12)"
+                  strokeWidth="1"
+                  fill="none"
+                  strokeLinecap="round"
+                  animate={{ opacity: [0.16, 0.4, 0.16] }}
+                  transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <motion.circle
+                  cx="392"
+                  cy="108"
+                  r="6"
+                  fill="hsl(var(--primary))"
+                  animate={{ cx: [392, 368, 392], cy: [108, 126, 108] }}
+                  transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <motion.circle
+                  cx="54"
+                  cy="300"
+                  r="5"
+                  fill="hsl(var(--primary) / 0.7)"
+                  animate={{ cx: [54, 72, 54], cy: [300, 286, 300] }}
+                  transition={{ duration: 4.9, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
+                />
+              </motion.svg>
+
+              <motion.div
+                animate={{ x: [0, 8, 0], opacity: [0.5, 0.9, 0.5] }}
+                transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+                className="pointer-events-none absolute left-10 top-10 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/70"
+              >
+                fluxo
+              </motion.div>
+              <motion.div
+                animate={{ x: [0, -10, 0], opacity: [0.4, 0.82, 0.4] }}
+                transition={{ duration: 6.1, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+                className="pointer-events-none absolute right-10 top-24 text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground"
+              >
+                clareza
+              </motion.div>
+              <motion.div
+                animate={{ x: [0, 12, 0], opacity: [0.4, 0.78, 0.4] }}
+                transition={{ duration: 5.7, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
+                className="pointer-events-none absolute bottom-20 left-12 text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground"
+              >
+                presença
+              </motion.div>
+              <motion.div
+                animate={{ x: [0, -8, 0], opacity: [0.45, 0.8, 0.45] }}
+                transition={{ duration: 6.3, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                className="pointer-events-none absolute bottom-14 right-10 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/70"
+              >
+                decisão
+              </motion.div>
             </motion.aside>
           </div>
 
