@@ -19,7 +19,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { getClientSegmentOptions } from "@/lib/clientSegments";
-import { completeLinkedRequestAndFormSubmissions } from "@/lib/requestStatusCascade";
 import { sectorOptions } from "@/components/portal/types";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -151,23 +150,12 @@ const cadastroClientesFields = [
   { name: "cep", label: "CEP" },
   { name: "endereço", label: "Rua / Logradouro" },
   { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
-  { name: "complemento_endereco", label: "Complemento" },
   { name: "bairro", label: "Bairro" },
   { name: "cidade", label: "Cidade" },
   { name: "estado", label: "Estado" },
-  { name: "inscricao_estadual_uf", label: "UF da Inscricao Estadual" },
-  { name: "inscricao_estadual_data", label: "Data da Inscricao Estadual" },
-  { name: "inscricao_municipal_data", label: "Data da Inscricao Municipal" },
   { name: "ddd", label: "DDD" },
   { name: "telefone", label: "Telefone" },
   { name: "whatsapp", label: "WhatsApp" },
-  { name: "website_empresa", label: "Website da Empresa" },
-  { name: "grupo_empresas", label: "Grupo de Empresas" },
-  { name: "apelido_econtinuo", label: "Apelido E-Continuo" },
-  { name: "nire", label: "NIRE" },
-  { name: "outros_identificadores", label: "Outros Identificadores" },
-  { name: "empresa_ativa", label: "Empresa Ativa?" },
-  { name: "empresa_isenta", label: "Empresa Isenta?" },
 ];
 const cadastroFiscalFields = [
   { name: "regime_icms", label: "Regime ICMS" },
@@ -199,13 +187,6 @@ const cadastroDpFields = [
   { name: "clinica_parceira", label: "Clinica parceira" },
   { name: "possui_decimo_terceiro", label: "Possui 13o?" },
 ];
-const cadastroDpDependentYesFieldNames = [
-  "possui_fgts",
-  "possui_adiantamento_salarial",
-  "envia_relatorio_ferias",
-  "possui_decimo_terceiro",
-] as const;
-
 const cadastroDpSindicatoFields = [
   { name: "sindicato_nome", label: "Nome do Sindicato" },
   { name: "sindicato_cnpj", label: "CNPJ do Sindicato" },
@@ -215,9 +196,9 @@ const cadastroDpSindicatoFields = [
   { name: "sindicato_observacoes", label: "Observacoes do Sindicato" },
 ];
 const cadastroDpSindicatoFieldNames = new Set(cadastroDpSindicatoFields.map((field) => field.name));
-const cadastroContábilFields = [
+const cadastroContabilFields = [
   { name: "obrigacao_contabil", label: "Obrigação Contábil" },
-  { name: "envia_extratos_bancarios", label: "Envia Extratos Bancários" },
+  { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
   { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
   { name: "controle_financeiro", label: "Controle Financeiro" },
   { name: "sistema_financeiro", label: "Sistema Financeiro" },
@@ -237,16 +218,16 @@ const cadastroObrigacoesFields = [
   { name: "ecd", label: "ECD" },
   { name: "ecf", label: "ECF" },
 ];
-const cadastroHonoráriosFields = [
+const cadastroHonorariosFields = [
   { name: "plano", label: "Plano" },
   { name: "valor_mensal", label: "Valor Mensal (R$)" },
   { name: "forma_pagamento", label: "Forma de Pagamento" },
   { name: "vencimento", label: "Vencimento" },
-  { name: "situacao", label: "Situação" },
+  { name: "situacao", label: "Situacao" },
 ];
 const cadastroDocumentosFields = [
   { name: "contrato", label: "Contrato" },
-  { name: "procuracao", label: "Procuração" },
+  { name: "procuracao", label: "Procuracao" },
   { name: "certificado_digital", label: "Certificado Digital" },
   { name: "contrato_social", label: "Contrato Social" },
   { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
@@ -256,7 +237,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
   contabilidade: {
     fields: contabilidadeFields,
     icon: Calculator,
-    label: "Contábilidade",
+    label: "Contabilidade",
     color: "text-primary",
     mode: "monthly",
     description: "Indicadores mensais para relatório gerencial financeiro e contábil.",
@@ -305,7 +286,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     description: "Informações cadastrais do setor Departamento Pessoal conforme planilha.",
   },
   cadastro_contabil: {
-    fields: cadastroContábilFields,
+    fields: cadastroContabilFields,
     icon: Calculator,
     label: "Setor Contábil",
     color: "text-primary",
@@ -321,9 +302,9 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     description: "Obrigações acessorias cadastradas por cliente conforme planilha.",
   },
   cadastro_honorarios: {
-    fields: cadastroHonoráriosFields,
+    fields: cadastroHonorariosFields,
     icon: FileText,
-    label: "Honorários",
+    label: "Honorarios",
     color: "text-cyan-700",
     mode: "cadastral",
     description: "Dados cadastrais de plano e cobranca de honorarios conforme planilha.",
@@ -390,14 +371,9 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
     data_abertura: { type: "date" },
     cep: { type: "cep" },
     estado: { type: "state" },
-    inscricao_estadual_uf: { type: "state" },
-    inscricao_estadual_data: { type: "date" },
-    inscricao_municipal_data: { type: "date" },
     ddd: { type: "integer", min: 0, max: 999 },
     telefone: { type: "phone" },
     whatsapp: { type: "phone" },
-    empresa_ativa: yesNoRule,
-    empresa_isenta: yesNoRule,
   },
   cadastro_fiscal: {
     contribuinte_icms: yesNoRule,
@@ -588,15 +564,6 @@ const lookupCepAddress = async (cepDigits: string): Promise<CepLookupAddress> =>
     `Não foi possível consultar o CEP agora. Falhas: ${attempts.join(" | ")}`,
   );
 };
-const normalizeFieldValueForInput = (rule: FieldValidationRule | undefined, value: string) => {
-  if (!rule) return value;
-
-  if (rule.type === "yesNo") return normalizeYesNoValue(value);
-  if (rule.type === "state") return value.toUpperCase();
-  if (rule.type === "cep") return formatCepValue(value);
-
-  return value;
-};
 
 const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value: string) => {
   const trimmed = value.trim();
@@ -675,9 +642,9 @@ type GeneralInfoCadastralFieldName = (typeof generalInfoCadastralFields)[number]
 const getCategoryFieldEntryKey = (category: ClientCategoryKey, fieldName: string) => `${category}__${fieldName}`;
 
 const clientBusinessProfileOptions = [
-  { key: "comercio", label: "Com\u00e9rcio" },
-  { key: "industria", label: "Ind\u00fastria" },
-  { key: "prestador_servicos", label: "Prestador de Servi\u00e7os" },
+  { key: "comércio", label: "Comércio" },
+  { key: "industria", label: "Industria" },
+  { key: "prestador_servicos", label: "Prestador de Serviços" },
 ] as const;
 
 type ClientBusinessProfileKey = (typeof clientBusinessProfileOptions)[number]["key"];
@@ -691,25 +658,19 @@ const normalizeProfileToken = (value: string) =>
     .replace(/\s+/g, "_");
 
 const clientBusinessProfileLabelByKey: Record<ClientBusinessProfileKey, string> = {
-  comercio: "Com\u00e9rcio",
-  industria: "Ind\u00fastria",
-  prestador_servicos: "Prestador de Servi\u00e7os",
+  comércio: "Comércio",
+  industria: "Industria",
+  prestador_servicos: "Prestador de Serviços",
 };
 
 const clientBusinessProfileKeyByToken: Record<string, ClientBusinessProfileKey> = {
-  comercio: "comercio",
-  "com\u00e9rcio": "comercio",
-  "com\u00c3\u00a9rcio": "comercio",
+  comércio: "comércio",
   industria: "industria",
-  "ind\u00fastria": "industria",
-  "ind\u00c3\u00bastria": "industria",
   prestador_de_servicos: "prestador_servicos",
   prestador_servicos: "prestador_servicos",
   "prestador_de_servico": "prestador_servicos",
   "prestador_servico": "prestador_servicos",
-  servicos: "prestador_servicos",
-  "servi\u00e7os": "prestador_servicos",
-  "servi\u00c3\u00a7os": "prestador_servicos",
+  serviços: "prestador_servicos",
 };
 
 const parseBusinessProfilesValue = (rawValue: string | undefined) => {
@@ -830,11 +791,11 @@ const parsePartnersEntry = (rawValue: string | undefined): ClientPartnerForm[] =
 
 const validatePartnerFieldValue = (field: ClientPartnerField, value: string) => {
   const trimmed = value.trim();
-  if (!trimmed) return "Campo obrigatório.";
+  if (!trimmed) return "Campo obrigatorio.";
 
   if (field === "ownershipPercent") {
     const numeric = parseNumericValue(trimmed);
-    if (numeric === null) return "Informe um percentual válido.";
+    if (numeric === null) return "Informe um percentual valido.";
     if (numeric <= 0 || numeric > 100) return "Informe um percentual entre 0,01 e 100.";
     return null;
   }
@@ -1089,7 +1050,7 @@ export default function ClientDetailPage() {
     setPortalTasks((tasksRes.data || []) as ClientPortalTaskRow[]);
 
     if (tasksRes.error) {
-      toast.error("Não foi possível carregar as pendências do cliente.");
+      toast.error("Não foi possível carregar as pendencias do cliente.");
     }
 
     if (normalizedClient.portal_user_id) {
@@ -1137,38 +1098,15 @@ export default function ClientDetailPage() {
   const handleDataFieldChange = (category: ClientCategoryKey, fieldName: string, value: string) => {
     const key = getCategoryFieldEntryKey(category, fieldName);
     const rule = getFieldRule(category, fieldName);
-    const normalizedValue = normalizeFieldValueForInput(rule, value);
+    const normalizedValue = normalizeFieldValueForSave(rule, value);
 
-    const updates: Array<{ key: string; fieldName: string; value: string }> = [
-      { key, fieldName, value: normalizedValue },
-    ];
+    setDataEntries((prev) => ({ ...prev, [key]: normalizedValue }));
 
-    if (category === "cadastro_departamento_pessoal" && fieldName === "possui_funcionarios" && normalizedValue === "sim") {
-      for (const dependentFieldName of cadastroDpDependentYesFieldNames) {
-        updates.push({
-          key: getCategoryFieldEntryKey(category, dependentFieldName),
-          fieldName: dependentFieldName,
-          value: "sim",
-        });
-      }
-    }
-
-    setDataEntries((prev) => {
-      const next = { ...prev };
-      for (const update of updates) {
-        next[update.key] = update.value;
-      }
-      return next;
-    });
-
+    const error = validateFieldValue(rule, normalizedValue);
     setDataFieldErrors((prev) => {
       const next = { ...prev };
-      for (const update of updates) {
-        const updateRule = getFieldRule(category, update.fieldName);
-        const error = validateFieldValue(updateRule, update.value);
-        if (error) next[update.key] = error;
-        else delete next[update.key];
-      }
+      if (error) next[key] = error;
+      else delete next[key];
       return next;
     });
   };
@@ -1516,12 +1454,12 @@ export default function ClientDetailPage() {
     if (!id || !user?.id) return;
 
     if (!client?.portal_user_id || !portalAccessEnabled) {
-      toast.error("Libere o acesso ao portal deste cliente antes de criar pendências.");
+      toast.error("Libere o acesso ao portal deste cliente antes de criar pendencias.");
       return;
     }
 
     if (!portalTaskDraft.title.trim()) {
-      toast.error("Informe o titulo da pendência.");
+      toast.error("Informe o titulo da pendencia.");
       return;
     }
 
@@ -1543,7 +1481,7 @@ export default function ClientDetailPage() {
     setCreatingPortalTask(false);
 
     if (error) {
-      toast.error("Não foi possível criar a pendência.");
+      toast.error("Não foi possível criar a pendencia.");
       return;
     }
 
@@ -1553,34 +1491,21 @@ export default function ClientDetailPage() {
   };
 
   const handlePortalTaskStatusChange = async (taskId: string, status: PortalTaskStatus) => {
-    const targetTask = portalTasks.find((task) => task.id === taskId) || null;
-
     setUpdatingPortalTaskId(taskId);
     const { error } = await supabase.from("client_portal_tasks").update({ status }).eq("id", taskId);
     setUpdatingPortalTaskId(null);
 
     if (error) {
-      toast.error("Não foi possível atualizar o status da pendência.");
+      toast.error("Não foi possível atualizar o status da pendencia.");
       return;
     }
 
     setPortalTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status } : task)));
-
-    if (status === "completed" && targetTask?.request_id) {
-      const cascadeResult = await completeLinkedRequestAndFormSubmissions(targetTask.request_id);
-      if (cascadeResult.errors.length > 0) {
-        toast.warning(`Pendencia concluida, mas houve falha na cascata: ${cascadeResult.errors.join(" | ")}`);
-        return;
-      }
-      toast.success("Pendencia concluida e itens vinculados finalizados.");
-      return;
-    }
-
-    toast.success("Status da pendência atualizado.");
+    toast.success("Status da pendencia atualizado.");
   };
 
   const handleDeletePortalTask = async (taskId: string) => {
-    const confirmed = window.confirm("Deseja excluir esta pendência?");
+    const confirmed = window.confirm("Deseja excluir esta pendencia?");
     if (!confirmed) return;
 
     setDeletingPortalTaskId(taskId);
@@ -1588,7 +1513,7 @@ export default function ClientDetailPage() {
     setDeletingPortalTaskId(null);
 
     if (error) {
-      toast.error("Não foi possível excluir a pendência.");
+      toast.error("Não foi possível excluir a pendencia.");
       return;
     }
 
@@ -1736,7 +1661,7 @@ export default function ClientDetailPage() {
   };
 
   const formatBytes = (bytes: number | null) => {
-    if (!bytes) return "-";
+    if (!bytes) return "–";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -1835,7 +1760,7 @@ export default function ClientDetailPage() {
             >
               <option value="">-</option>
               <option value="sim">Sim</option>
-              <option value="nao">Não</option>
+              <option value="nao">Nao</option>
             </select>
           ) : (
             <Input
@@ -1871,7 +1796,7 @@ export default function ClientDetailPage() {
             <div className="space-y-1">
               <h4 className="text-sm font-medium">Informacoes do Sindicato</h4>
               <p className="text-xs text-muted-foreground">
-                Dados de contato e identificação do sindicato relacionado ao cliente.
+                Dados de contato e identificacao do sindicato relacionado ao cliente.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1885,7 +1810,7 @@ export default function ClientDetailPage() {
               <div className="space-y-1">
                 <h4 className="text-sm font-medium">Socios</h4>
                 <p className="text-xs text-muted-foreground">
-                  Cadastre os sócios com participação, pro-labore e senha GOV para relatórios.
+                  Cadastre os socios com participacao, pro-labore e senha GOV para relatórios.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={handleAddPartner}>
@@ -1934,7 +1859,7 @@ export default function ClientDetailPage() {
                           {nameError && <p className="text-[11px] text-destructive">{nameError}</p>}
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Participação (%)</Label>
+                          <Label className="text-xs">Participacao (%)</Label>
                           <Input
                             value={partner.ownershipPercent}
                             onChange={(event) => handlePartnerFieldChange(partner.id, "ownershipPercent", event.target.value)}
@@ -2081,7 +2006,7 @@ export default function ClientDetailPage() {
             <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
             <TabsTrigger value="obrigações">Obrigações</TabsTrigger>
-            <TabsTrigger value="pendências">Pendências</TabsTrigger>
+            <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
           </TabsList>
 
           {/* General Info */}
@@ -2118,7 +2043,7 @@ export default function ClientDetailPage() {
                   </select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="text-xs">Classificação de Atividade</Label>
+                  <Label className="text-xs">Classificacao de Atividade</Label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
                     {clientBusinessProfileOptions.map((profile) => (
                       <label key={profile.key} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -2250,7 +2175,7 @@ export default function ClientDetailPage() {
                     readOnly
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    O endereço completo será salvo automaticamente a partir dos campos acima.
+                    O endereço completo sera salvo automaticamente a partir dos campos acima.
                   </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -2262,7 +2187,7 @@ export default function ClientDetailPage() {
                     <div>
                       <p className="text-sm font-medium">Acesso ao portal do cliente</p>
                       <p className="text-xs text-muted-foreground">
-                        Gerencie a liberação de login do cliente no portal.
+                        Gerencie a liberacao de login do cliente no portal.
                       </p>
                       <p className="text-xs mt-1">
                         Status atual:{" "}
@@ -2312,7 +2237,7 @@ export default function ClientDetailPage() {
                   )}
                   {!canManageCashflowAccess && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Apenas usuários admin podem alterar esta liberação.
+                      Apenas usuário admin pode alterar esta liberacao.
                     </p>
                   )}
                 </div>
@@ -2404,7 +2329,7 @@ export default function ClientDetailPage() {
                     <ClipboardList className="h-4 w-4" /> Obrigações da empresa
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Exibe todas as obrigações cadastradas para este cliente e a situação no mês selecionado.
+                    Exibe todas as obrigações cadastradas para este cliente e a situacao no mes selecionado.
                   </p>
                 </div>
 
@@ -2422,7 +2347,7 @@ export default function ClientDetailPage() {
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   <p>Total de obrigações cadastradas: <span className="font-medium">{groupedClientObligations.length}</span></p>
-                  <p>Com situação no mês: <span className="font-medium">{obligationsWithMonthStatus}</span></p>
+                  <p>Com situacao no mes: <span className="font-medium">{obligationsWithMonthStatus}</span></p>
                   <p>Mes filtrado: <span className="font-medium">{obligationMonthFilter}</span></p>
                 </div>
               </div>
@@ -2456,7 +2381,7 @@ export default function ClientDetailPage() {
 
                       {group.rowsForMonth.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Sem registro desta obrigação no mês selecionado.
+                          Sem registro desta obrigação no mes selecionado.
                         </p>
                       ) : (
                         <div className="space-y-2">
@@ -2506,25 +2431,25 @@ export default function ClientDetailPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="pendências" className="space-y-4">
+          <TabsContent value="pendencias" className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <h3 className="font-semibold flex items-center gap-2">
-                <ClipboardList className="h-4 w-4" /> Pendências do cliente
+                <ClipboardList className="h-4 w-4" /> Pendencias do cliente
               </h3>
 
               {(!client?.portal_user_id || !portalAccessEnabled) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
-                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendências sejam exibidas para ele.
+                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendencias sejam exibidas para ele.
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label className="text-xs">Título da pendência</Label>
+                  <Label className="text-xs">Titulo da pendencia</Label>
                   <Input
                     value={portalTaskDraft.title}
                     onChange={(event) => setPortalTaskDraft((prev) => ({ ...prev, title: event.target.value }))}
-                    placeholder="Ex.: Enviar extrato bancário do mês"
+                    placeholder="Ex.: Enviar extrato bancario do mes"
                   />
                 </div>
 
@@ -2589,22 +2514,22 @@ export default function ClientDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={() => void handleCreatePortalTask()} disabled={creatingPortalTask}>
                   {creatingPortalTask ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Criar pendência
+                  Criar pendencia
                 </Button>
                 <Button type="button" variant="outline" onClick={resetPortalTaskDraft} disabled={creatingPortalTask}>
                   Limpar campos
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  A pendência aparece no portal do cliente em "Pendências" e na visao geral.
+                  A pendencia aparece no portal do cliente em "Pendencias" e na visao geral.
                 </p>
               </div>
             </div>
 
             <div className="rounded-xl border bg-card p-6 space-y-4">
-              <h3 className="font-semibold">Pendências cadastradas</h3>
+              <h3 className="font-semibold">Pendencias cadastradas</h3>
 
               {portalTasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma pendência cadastrada para este cliente.</p>
+                <p className="text-sm text-muted-foreground">Nenhuma pendencia cadastrada para este cliente.</p>
               ) : (
                 <div className="space-y-3">
                   {portalTasks.map((task) => {
@@ -2691,5 +2616,4 @@ export default function ClientDetailPage() {
     </AppLayout>
   );
 }
-
 

@@ -376,7 +376,7 @@ export default function NewsletterAdminPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Newsletter</h1>
             <p className="text-sm text-muted-foreground">
-              Crie conteúdos, publique no site e dispare e-mails automaticamente para os assinantes.
+              Crie conteudos, publique no site e dispare e-mails automaticamente para os assinantes.
             </p>
           </div>
           <Button onClick={openCreateDialog} className="gap-2">
@@ -539,7 +539,7 @@ export default function NewsletterAdminPage() {
 
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <Label>Título</Label>
+              <Label>Titulo</Label>
               <Input
                 value={draft.title}
                 onChange={(event) =>

@@ -7,16 +7,6 @@ import { Search, Filter, Building2, Loader2, FolderClosed, FolderOpen, ChevronDo
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { clientSegmentOptions } from "@/lib/clientSegments";
@@ -54,7 +44,6 @@ export default function ClientsPage() {
   const [inactiveFolderOpen, setInactiveFolderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "",
     cnpj: "",
@@ -106,7 +95,7 @@ export default function ClientsPage() {
       .eq("role", "client");
 
     if (rolesError) {
-      toast.error("Não foi possível validar permissões atuais do portal.");
+      toast.error("Não foi possível validar permissoes atuais do portal.");
       return;
     }
 
@@ -114,7 +103,7 @@ export default function ClientsPage() {
     const missingRoleIds = deduplicatedIds.filter((userId) => !alreadyAllowed.has(userId));
 
     if (missingRoleIds.length === 0) {
-      if (notifySuccess) toast.success("Todos os clientes já possuem permissão do portal.");
+      if (notifySuccess) toast.success("Todos os clientes ja possuem permissão do portal.");
       return;
     }
 
@@ -147,7 +136,6 @@ export default function ClientsPage() {
   const isInactiveClient = (client: Client) => String(client.status || "").trim().toLowerCase() === "inativo";
   const activeClients = filtered.filter((client) => !isInactiveClient(client));
   const inactiveClients = filtered.filter(isInactiveClient);
-  const portalEnabledCount = clients.filter((client) => Boolean(client.portal_user_id)).length;
 
   const handleSyncFromAcessorias = async () => {
     if (!canCreateClients) {
@@ -161,7 +149,7 @@ export default function ClientsPage() {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session?.access_token) {
-      toast.error("Sessão expirada. Entre novamente para sincronizar com o Acessorias.");
+      toast.error("Sessao expirada. Entre novamente para sincronizar com o Acessorias.");
       return;
     }
 
@@ -170,8 +158,7 @@ export default function ClientsPage() {
       body: {
         action: "sync_companies",
         sync_grow_clients: true,
-        restrict_to_acessorias: false,
-        allow_client_inactivation: false,
+        restrict_to_acessorias: true,
         access_token: session.access_token,
       },
       headers: {
@@ -203,10 +190,9 @@ export default function ClientsPage() {
     const updated = Number(payload.clients_updated || 0);
     const linked = Number(payload.auto_linked || 0);
     const inactivated = Number(payload.clients_inactivated || 0);
-    const cadastralSynced = Number(payload.cadastro_clientes_fields_synced || 0);
 
     toast.success(
-      `Sincronização concluída em modo seguro: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${cadastralSynced} campos cadastrais atualizados${inactivated > 0 ? `, ${inactivated} inativadas` : ""}.`,
+      `Sincronização concluída: ${synced} empresas, ${created} criadas, ${updated} atualizadas, ${linked} vinculadas, ${inactivated} inativadas.`,
     );
     void loadClients();
   };
@@ -217,45 +203,15 @@ export default function ClientsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-5 max-w-7xl">
-        <section className="executive-hero rounded-[1.75rem] px-5 py-5 text-white md:px-7 md:py-6">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div className="space-y-3">
-              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
-                Workspace de clientes
-              </span>
-              <div>
-                <h1 className="font-heading text-2xl font-bold md:text-3xl">Clientes</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/72">
-                  Centralize cadastro, portal, sincronização e histórico do cliente em uma visão mais executiva e escaneável.
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[460px]">
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Base total</p>
-                <p className="mt-2 text-2xl font-semibold">{clients.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Ativos</p>
-                <p className="mt-2 text-2xl font-semibold">{clients.filter((client) => !isInactiveClient(client)).length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/56">Portal liberado</p>
-                <p className="mt-2 text-2xl font-semibold">{portalEnabledCount}</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="executive-panel flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+      <div className="space-y-4 max-w-7xl">
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-foreground">Base operacional</p>
-            <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados e prontos para consulta detalhada.</p>
+            <h1 className="font-heading text-2xl font-bold">Clientes</h1>
+            <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados</p>
           </div>
           {canCreateClients && (
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setSyncConfirmOpen(true)} disabled={syncingAcessorias}>
+              <Button size="sm" onClick={() => void handleSyncFromAcessorias()} disabled={syncingAcessorias}>
                 {syncingAcessorias ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                 {syncingAcessorias ? "Sincronizando..." : "Sincronizar com Acessorias"}
               </Button>
@@ -263,11 +219,11 @@ export default function ClientsPage() {
           )}
         </div>
 
-        <div className="executive-surface flex flex-col gap-3 rounded-[1.35rem] p-4 md:flex-row">
+        <div className="flex gap-2">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              className="pl-9 bg-background/80"
+              className="pl-9"
               placeholder="Buscar por nome ou CNPJ..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -283,7 +239,7 @@ export default function ClientsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="executive-panel overflow-hidden">
+          <div className="rounded-xl border bg-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -397,29 +353,6 @@ export default function ClientsPage() {
           </div>
         )}
       </div>
-
-      <AlertDialog open={syncConfirmOpen} onOpenChange={setSyncConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar sincronização de clientes</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta sincronização está em modo seguro e não pode inativar clientes automaticamente.
-              Deseja continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setSyncConfirmOpen(false);
-                void handleSyncFromAcessorias();
-              }}
-            >
-              Confirmar sincronização
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">

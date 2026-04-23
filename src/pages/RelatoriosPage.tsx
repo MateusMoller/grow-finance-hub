@@ -1,5 +1,6 @@
 
 import { AppLayout } from "@/components/app/AppLayout";
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -31,8 +32,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Switch } from "@/components/ui/switch";
 
 type ReportDatasetId = "clientes" | "leads_crm" | "tarefas" | "equipe";
 type ExportFormat = "csv" | "xlsx";
@@ -91,6 +93,11 @@ interface ReportDatasetDefinition {
   defaultColumns: string[];
 }
 
+interface AutomaticReportCard {
+  datasetId: ReportDatasetId;
+  count: number;
+  stats: Array<{ label: string; value: string }>;
+}
 
 interface SavedReportConfig {
   id: string;
@@ -98,6 +105,7 @@ interface SavedReportConfig {
   datasetId: ReportDatasetId;
   columnKeys: string[];
   format: ExportFormat;
+  autoGenerate: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,6 +122,7 @@ const roleOrder = [
 ] as const;
 
 const rolePriority = new Map(roleOrder.map((role, index) => [role, index]));
+const doneTaskStatuses = new Set(["done", "archived", "concluído", "concluída", "completed", "fechado"]);
 
 const normalizeText = (value: string) =>
   value
@@ -192,6 +201,11 @@ const pickPrimaryRole = (roles: string[]) => {
   return sorted[0];
 };
 
+const isTaskDone = (status: string) => {
+  const normalized = normalizeText(status || "");
+  return doneTaskStatuses.has(normalized);
+};
+
 const taskStatusLabel = (status: string) => {
   const normalized = normalizeText(status || "");
   if (normalized === "todo") return "A fazer";
@@ -264,7 +278,7 @@ interface ClientPartnerReportEntry {
 }
 
 const monthlyClientDataCategoryLabel: Record<MonthlyClientDataCategory, string> = {
-  contabilidade: "Contábilidade",
+  contabilidade: "Contabilidade",
   fiscal: "Fiscal",
   dp: "Dept. Pessoal",
 };
@@ -275,7 +289,7 @@ const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, stri
   cadastro_departamento_pessoal: "Setor DP",
   cadastro_contabil: "Setor Contábil",
   cadastro_obrigacoes: "Obrigações",
-  cadastro_honorarios: "Honorários",
+  cadastro_honorarios: "Honorarios",
   cadastro_documentos: "Documentos",
 };
 
@@ -333,24 +347,13 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "cep", label: "CEP" },
     { name: "endereço", label: "Rua / Logradouro" },
     { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
-    { name: "complemento_endereco", label: "Complemento" },
     { name: "bairro", label: "Bairro" },
     { name: "perfil_atuacao", label: "Classificação de Atividade" },
     { name: "cidade", label: "Cidade" },
     { name: "estado", label: "Estado" },
-    { name: "inscricao_estadual_uf", label: "UF da Inscricao Estadual" },
-    { name: "inscricao_estadual_data", label: "Data da Inscricao Estadual" },
-    { name: "inscricao_municipal_data", label: "Data da Inscricao Municipal" },
     { name: "ddd", label: "DDD" },
     { name: "telefone", label: "Telefone" },
     { name: "whatsapp", label: "WhatsApp" },
-    { name: "website_empresa", label: "Website da Empresa" },
-    { name: "grupo_empresas", label: "Grupo de Empresas" },
-    { name: "apelido_econtinuo", label: "Apelido E-Continuo" },
-    { name: "nire", label: "NIRE" },
-    { name: "outros_identificadores", label: "Outros Identificadores" },
-    { name: "empresa_ativa", label: "Empresa Ativa?" },
-    { name: "empresa_isenta", label: "Empresa Isenta?" },
   ],
   cadastro_fiscal: [
     { name: "regime_icms", label: "Regime ICMS" },
@@ -390,7 +393,7 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
   ],
   cadastro_contabil: [
     { name: "obrigacao_contabil", label: "Obrigação Contábil" },
-    { name: "envia_extratos_bancarios", label: "Envia Extratos Bancários" },
+    { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
     { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
     { name: "controle_financeiro", label: "Controle Financeiro" },
     { name: "sistema_financeiro", label: "Sistema Financeiro" },
@@ -415,11 +418,11 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "valor_mensal", label: "Valor Mensal (R$)" },
     { name: "forma_pagamento", label: "Forma de Pagamento" },
     { name: "vencimento", label: "Vencimento" },
-    { name: "situacao", label: "Situação" },
+    { name: "situacao", label: "Situacao" },
   ],
   cadastro_documentos: [
     { name: "contrato", label: "Contrato" },
-    { name: "procuracao", label: "Procuração" },
+    { name: "procuracao", label: "Procuracao" },
     { name: "certificado_digital", label: "Certificado Digital" },
     { name: "contrato_social", label: "Contrato Social" },
     { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
@@ -472,7 +475,7 @@ const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
   const totalProLabore = partners.reduce((sum, partner) => sum + partner.pro_labore, 0);
   const withGovPassword = partners.filter((partner) => Boolean(partner.senha_gov)).length;
   const govPasswordStatus =
-    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Não";
+    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Nao";
   const ownershipByPartner = partners
     .map((partner) => {
       const partnerName = partner.nome || "Sócio sem nome";
@@ -607,7 +610,7 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
     icon: ClipboardList,
     colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
     columns: [
-      { key: "titulo", label: "Título" },
+      { key: "titulo", label: "Titulo" },
       { key: "cliente", label: "Cliente" },
       { key: "responsavel", label: "Responsavel" },
       { key: "setor", label: "Setor" },
@@ -732,6 +735,7 @@ const mapSavedReportRow = (row: SavedReportRow): SavedReportConfig | null => {
     datasetId,
     columnKeys,
     format: row.format === "csv" ? "csv" : "xlsx",
+    autoGenerate: Boolean(row.auto_generate),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -739,8 +743,8 @@ const mapSavedReportRow = (row: SavedReportRow): SavedReportConfig | null => {
 
 export default function RelatoriosPage() {
   const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const autoGeneratedReportIdsRef = useRef<Set<string>>(new Set());
   const clientDataReportPeriod = normalizeCompetence(selectedCompetence) || getCurrentCompetence();
 
   const [loading, setLoading] = useState(true);
@@ -759,8 +763,8 @@ export default function RelatoriosPage() {
   const [savedReports, setSavedReports] = useState<SavedReportConfig[]>([]);
   const [savedReportName, setSavedReportName] = useState("");
   const [savedReportFormat, setSavedReportFormat] = useState<ExportFormat>("xlsx");
+  const [savedReportAutoGenerate, setSavedReportAutoGenerate] = useState(false);
   const [editingSavedReportId, setEditingSavedReportId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"construtor" | "salvos">("construtor");
   const skipDatasetResetRef = useRef(false);
 
   const loadReportData = useCallback(async () => {
@@ -897,6 +901,7 @@ export default function RelatoriosPage() {
 
   useEffect(() => {
     void loadSavedReports();
+    autoGeneratedReportIdsRef.current = new Set();
   }, [loadSavedReports]);
 
   useEffect(() => {
@@ -1036,6 +1041,60 @@ export default function RelatoriosPage() {
     [clientDataByClientId, clientDataReportPeriod, filteredClients, filteredLeads, filteredTasks, filteredTeam],
   );
 
+  const automaticCards = useMemo<AutomaticReportCard[]>(() => {
+    const activeClients = filteredClients.filter((client) => normalizeText(client.status || "") === "ativo").length;
+    const clientsWithContact = filteredClients.filter((client) => Boolean(client.contact || client.email)).length;
+
+    const leadsFromSite = filteredLeads.filter((lead) => normalizeText(lead.source_tag || "").includes("site")).length;
+    const leadsIn30Days = filteredLeads.filter((lead) => {
+      const createdAt = new Date(lead.created_at).getTime();
+      if (Number.isNaN(createdAt)) return false;
+      const now = Date.now();
+      const last30DaysMs = 30 * 24 * 60 * 60 * 1000;
+      return now - createdAt <= last30DaysMs;
+    }).length;
+
+    const doneTasks = filteredTasks.filter((task) => isTaskDone(task.status)).length;
+    const openTasks = filteredTasks.length - doneTasks;
+
+    const teamWithRole = filteredTeam.filter((member) => normalizeText(member.role) !== "sem papel").length;
+    const teamWithoutRole = filteredTeam.length - teamWithRole;
+
+    return [
+      {
+        datasetId: "clientes",
+        count: rowsByDataset.clientes.length,
+        stats: [
+          { label: "Ativos", value: String(activeClients) },
+          { label: "Com contato", value: String(clientsWithContact) },
+        ],
+      },
+      {
+        datasetId: "leads_crm",
+        count: rowsByDataset.leads_crm.length,
+        stats: [
+          { label: "Ultimos 30 dias", value: String(leadsIn30Days) },
+          { label: "Origem site", value: String(leadsFromSite) },
+        ],
+      },
+      {
+        datasetId: "tarefas",
+        count: rowsByDataset.tarefas.length,
+        stats: [
+          { label: "Concluídas", value: String(doneTasks) },
+          { label: "Em aberto", value: String(openTasks) },
+        ],
+      },
+      {
+        datasetId: "equipe",
+        count: rowsByDataset.equipe.length,
+        stats: [
+          { label: "Com papel", value: String(teamWithRole) },
+          { label: "Sem papel", value: String(teamWithoutRole) },
+        ],
+      },
+    ];
+  }, [filteredClients, filteredLeads, filteredTasks, filteredTeam, rowsByDataset]);
 
   const activeFilterBadges = useMemo(() => {
     const items: string[] = [];
@@ -1231,6 +1290,7 @@ export default function RelatoriosPage() {
       (report) => report.datasetId === customDatasetId && normalizeText(report.name) === normalizedName,
     );
     const isEditing = Boolean(editingSavedReportId);
+    const editingTarget = isEditing ? savedReports.find((report) => report.id === editingSavedReportId) : null;
 
     const payload = {
       user_id: user.id,
@@ -1238,7 +1298,7 @@ export default function RelatoriosPage() {
       dataset_id: customDatasetId,
       column_keys: sanitizedColumns,
       format: savedReportFormat,
-      auto_generate: false,
+      auto_generate: savedReportAutoGenerate,
       updated_at: now,
     };
 
@@ -1252,7 +1312,7 @@ export default function RelatoriosPage() {
 
     if (error) {
       if (error.code === "23505") {
-        toast.error("Já existe um relatório salvo com este nome nesta categoria.");
+        toast.error("Ja existe um relatório salvo com este nome nesta categoria.");
         return;
       }
       toast.error(`Falha ao salvar relatório: ${error.message}`);
@@ -1266,17 +1326,27 @@ export default function RelatoriosPage() {
       return;
     }
 
+    if (savedReportAutoGenerate) {
+      autoGeneratedReportIdsRef.current.add(mapped.id);
+    } else {
+      autoGeneratedReportIdsRef.current.delete(mapped.id);
+    }
+
     setSavedReports((current) => {
       const filtered = current.filter((report) => report.id !== mapped.id);
       return [mapped, ...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     });
 
     setEditingSavedReportId(mapped.id);
+    if (isEditing && editingTarget?.id && editingTarget.id !== mapped.id) {
+      autoGeneratedReportIdsRef.current.delete(editingTarget.id);
+    }
     toast.success(isEditing ? "Relatório atualizado com sucesso." : existing ? "Relatório salvo atualizado." : "Relatório salvo com sucesso.");
   }, [
     customDatasetId,
     editingSavedReportId,
     loadSavedReports,
+    savedReportAutoGenerate,
     savedReportFormat,
     savedReportName,
     savedReports,
@@ -1291,6 +1361,7 @@ export default function RelatoriosPage() {
     setSelectedColumns(report.columnKeys);
     setSavedReportName(report.name);
     setSavedReportFormat(report.format);
+    setSavedReportAutoGenerate(report.autoGenerate);
     setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
     toast.success("Configuração do relatório carregada.");
@@ -1302,11 +1373,19 @@ export default function RelatoriosPage() {
     setSelectedColumns(report.columnKeys);
     setSavedReportName(report.name);
     setSavedReportFormat(report.format);
+    setSavedReportAutoGenerate(report.autoGenerate);
     setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
     setEditingSavedReportId(report.id);
-    setActiveView("construtor");
     toast.success("Relatório carregado em modo de edicao.");
+  };
+
+  const handleCancelEditingSavedReport = () => {
+    setEditingSavedReportId(null);
+    setSavedReportName("");
+    setSavedReportFormat("xlsx");
+    setSavedReportAutoGenerate(false);
+    toast.success("Edicao de relatório cancelada.");
   };
 
   const handleDeleteSavedReport = useCallback(async (reportId: string, reportName: string) => {
@@ -1330,16 +1409,18 @@ export default function RelatoriosPage() {
     }
 
     setSavedReports((current) => current.filter((report) => report.id !== reportId));
+    autoGeneratedReportIdsRef.current.delete(reportId);
     if (editingSavedReportId === reportId) {
       setEditingSavedReportId(null);
       setSavedReportName("");
       setSavedReportFormat("xlsx");
+      setSavedReportAutoGenerate(false);
     }
     toast.success("Relatório salvo removido.");
   }, [editingSavedReportId, user?.id]);
 
   const handleRunSavedReport = useCallback(
-    async (report: SavedReportConfig, scope: "manual" | "interno" = "manual") => {
+    async (report: SavedReportConfig, scope: "manual" | "automático" = "manual") => {
       await handleExport(
         report.datasetId,
         report.columnKeys,
@@ -1351,20 +1432,26 @@ export default function RelatoriosPage() {
   );
 
   useEffect(() => {
-    const savedId = searchParams.get("saved");
-    if (!savedId || loadingSavedReports) return;
+    if (loading || loadingSavedReports || savedReports.length === 0) return;
+    const pendingAutoReports = savedReports.filter(
+      (report) => report.autoGenerate && !autoGeneratedReportIdsRef.current.has(report.id),
+    );
+    if (pendingAutoReports.length === 0) return;
 
-    const targetReport = savedReports.find((report) => report.id === savedId);
-    if (!targetReport) return;
+    let cancelled = false;
+    const runAutoReports = async () => {
+      for (const report of pendingAutoReports) {
+        if (cancelled) return;
+        autoGeneratedReportIdsRef.current.add(report.id);
+        await handleRunSavedReport(report, "automático");
+      }
+    };
 
-    handleLoadSavedReport(targetReport);
-    setActiveView("construtor");
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("saved");
-      return next;
-    }, { replace: true });
-  }, [handleLoadSavedReport, loadingSavedReports, savedReports, searchParams, setSearchParams]);
+    void runAutoReports();
+    return () => {
+      cancelled = true;
+    };
+  }, [handleRunSavedReport, loading, loadingSavedReports, savedReports]);
 
   const customRows = rowsByDataset[customDatasetId];
   const customPreviewRows = customRows.slice(0, 10);
@@ -1376,7 +1463,7 @@ export default function RelatoriosPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Relatórios</h1>
             <p className="text-sm text-muted-foreground">
-              Construa relatórios personalizados e exporte nos formatos CSV ou XLSX.
+              Relatórios automaticos com dados do banco e construtor personalizado.
             </p>
             {lastUpdatedAt && (
               <p className="text-xs text-muted-foreground mt-1">Atualizado em {formatDateTime(lastUpdatedAt)}</p>
@@ -1398,33 +1485,114 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        <section className="space-y-4">
-          <div className="rounded-xl border bg-card p-2 inline-flex items-center gap-2">
-            <Button
-              type="button"
-              variant={activeView === "construtor" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveView("construtor")}
-            >
-              Construtor
-            </Button>
-            <Button
-              type="button"
-              variant={activeView === "salvos" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveView("salvos")}
-            >
-              Relatórios salvos
-            </Button>
-          </div>
-          {activeView === "construtor" ? (
-            <>
-          <div className="rounded-xl border bg-card p-4 space-y-4">
+        <Tabs defaultValue="automaticos" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="automaticos">Relatórios automaticos</TabsTrigger>
+            <TabsTrigger value="personalizado">Gerar relatório personalizado</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="automaticos" className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {automaticCards.map((card, index) => {
+                const definition = reportDefinitions[card.datasetId];
+                const Icon = definition.icon;
+
+                return (
+                  <motion.div
+                    key={card.datasetId}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="rounded-xl border bg-card p-5 space-y-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={`h-10 w-10 rounded-lg ${definition.colorClass} flex items-center justify-center`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline">{card.count} registros</Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="font-medium">{definition.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">{definition.description}</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {card.stats.map((stat) => (
+                        <div key={`${card.datasetId}-${stat.label}`} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">{stat.label}</span>
+                          <span className="font-medium">{stat.value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() =>
+                          void handleExport(
+                            card.datasetId,
+                            reportDefinitions[card.datasetId].defaultColumns,
+                            "csv",
+                            "automático",
+                          )
+                        }
+                      >
+                        <Download className="h-4 w-4" />
+                        CSV
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-2"
+                        onClick={() =>
+                          void handleExport(
+                            card.datasetId,
+                            reportDefinitions[card.datasetId].defaultColumns,
+                            "xlsx",
+                            "automático",
+                          )
+                        }
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        XLSX
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-xl border bg-card">
+              <div className="p-4 border-b flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-heading font-semibold">Resumo rapido</h2>
+                <span className="text-xs text-muted-foreground">
+                  Totais carregados:{" "}
+                  {Object.values(rowsByDataset)
+                    .reduce((sum, rows) => sum + rows.length, 0)
+                    .toLocaleString("pt-BR")}{" "}
+                  registros
+                </span>
+              </div>
+              <div className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+                {Object.values(reportDefinitions).map((definition) => (
+                  <div key={definition.id} className="rounded-lg border p-3">
+                    <p className="font-medium">{definition.name}</p>
+                    <p className="text-2xl font-bold mt-1">{rowsByDataset[definition.id].length}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="personalizado" className="space-y-4">
+            <div className="rounded-xl border bg-card p-4 space-y-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="font-heading font-semibold">Gerar relatório</h2>
                   <p className="text-xs text-muted-foreground">
-                    Escolha o módulo, selecione as colunas e exporte seu modelo customizado.
+                    Escolha o modulo, selecione as colunas e exporte seu modelo customizado.
                   </p>
                 </div>
                 <div className="w-full lg:w-[280px]">
@@ -1445,6 +1613,14 @@ export default function RelatoriosPage() {
 
               <div className="rounded-lg border p-3 space-y-3">
                 <p className="text-sm font-medium">Salvar relatório para gerar depois</p>
+                {editingSavedReportId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs">
+                    <span className="text-primary font-medium">Modo edicao ativo para relatório salvo.</span>
+                    <Button type="button" size="sm" variant="ghost" className="h-7" onClick={handleCancelEditingSavedReport}>
+                      Cancelar edicao
+                    </Button>
+                  </div>
+                )}
                 <div className="grid gap-3 lg:grid-cols-[1fr_200px_auto]">
                   <Input
                     placeholder="Nome do relatório salvo"
@@ -1462,8 +1638,14 @@ export default function RelatoriosPage() {
                   </Select>
                   <Button type="button" className="gap-2" onClick={() => void handleSaveCurrentReport()}>
                     <Save className="h-4 w-4" />
-                    Salvar relatório
+                    {editingSavedReportId ? "Atualizar relatório" : "Salvar relatório"}
                   </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={savedReportAutoGenerate} onCheckedChange={setSavedReportAutoGenerate} />
+                  <p className="text-sm text-muted-foreground">
+                    Gerar automaticamente ao abrir esta pagina na proxima vez.
+                  </p>
                 </div>
               </div>
 
@@ -1623,6 +1805,76 @@ export default function RelatoriosPage() {
                 </Button>
               </div>
 
+              <div className="rounded-lg border p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Relatórios salvos</p>
+                  <Badge variant="outline">{savedReports.length}</Badge>
+                </div>
+                {loadingSavedReports ? (
+                  <p className="text-sm text-muted-foreground">Carregando relatórios salvos...</p>
+                ) : savedReports.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum relatório salvo ainda. Monte o relatório e clique em salvar.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-auto pr-1">
+                    {savedReports.map((report) => {
+                      const definition = reportDefinitions[report.datasetId];
+                      return (
+                        <div key={report.id} className="rounded-md border p-2.5">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium">{report.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {definition.name} · {report.columnKeys.length} colunas · {report.format.toUpperCase()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {report.autoGenerate && <Badge variant="secondary">Auto</Badge>}
+                              <Badge variant="outline">{formatDateTime(report.updatedAt)}</Badge>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => handleLoadSavedReport(report)}>
+                              Carregar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => handleStartEditingSavedReport(report)}
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => void handleRunSavedReport(report)}
+                            >
+                              <PlayCircle className="h-3.5 w-3.5" />
+                              Gerar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1.5 text-destructive hover:text-destructive"
+                              onClick={() => void handleDeleteSavedReport(report.id, report.name)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Excluir
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="rounded-xl border bg-card">
@@ -1677,77 +1929,8 @@ export default function RelatoriosPage() {
                 </div>
               )}
             </div>
-            </>
-          ) : (
-            <div className="rounded-xl border bg-card p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">Relatórios salvos</p>
-                <Badge variant="outline">{savedReports.length}</Badge>
-              </div>
-              {loadingSavedReports ? (
-                <p className="text-sm text-muted-foreground">Carregando relatórios salvos...</p>
-              ) : savedReports.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Nenhum relatório salvo ainda. Monte o relatório e clique em salvar.
-                </p>
-              ) : (
-                <div className="space-y-2 max-h-[32rem] overflow-auto pr-1">
-                  {savedReports.map((report) => {
-                    const definition = reportDefinitions[report.datasetId];
-                    return (
-                      <div key={report.id} className="rounded-md border p-2.5">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-medium">{report.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {definition.name} · {report.columnKeys.length} colunas · {report.format.toUpperCase()}
-                            </p>
-                          </div>
-                          <Badge variant="outline">{formatDateTime(report.updatedAt)}</Badge>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => handleLoadSavedReport(report)}>
-                            Carregar
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                            onClick={() => handleStartEditingSavedReport(report)}
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            Editar
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                            onClick={() => void handleRunSavedReport(report, "interno")}
-                          >
-                            <PlayCircle className="h-3.5 w-3.5" />
-                            Gerar
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="gap-1.5 text-destructive hover:text-destructive"
-                            onClick={() => void handleDeleteSavedReport(report.id, report.name)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Excluir
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
@@ -1761,4 +1944,3 @@ function FilterBadgeLabel({ text }: { text: string }) {
     </span>
   );
 }
-

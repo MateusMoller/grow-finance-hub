@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useLocation } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -42,7 +41,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
-import { completeLinkedRequestAndFormSubmissions } from "@/lib/requestStatusCascade";
 import { toast } from "sonner";
 
 type RequestStatus = Database["public"]["Enums"]["request_status"];
@@ -159,7 +157,7 @@ const taskStatusOptions: TaskStatus[] = ["pending_client", "in_analysis", "compl
 const submissionStatusOptions = ["pending", "in_review", "completed"];
 
 const sectorOptions = [
-  "Contábil",
+  "Contabil",
   "Fiscal",
   "Departamento Pessoal",
   "Financeiro",
@@ -205,18 +203,8 @@ const parseSubmissionEntries = (data: Json): Array<{ key: string; value: string 
   });
 };
 
-const buildSubmissionDeepLinkPath = (submissionId: string) =>
-  `/app/solicitacoes?tab=forms&submission=${encodeURIComponent(submissionId)}`;
-
-const buildSubmissionDeepLink = (submissionId: string) => {
-  const path = buildSubmissionDeepLinkPath(submissionId);
-  if (typeof window === "undefined") return path;
-  return `${window.location.origin}${path}`;
-};
-
 export default function SolicitacoesPage() {
   const { user, role } = useAuth();
-  const location = useLocation();
 
   const [activeTab, setActiveTab] = useState<PortalTab>("requests");
 
@@ -372,7 +360,7 @@ export default function SolicitacoesPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast.error("Erro ao carregar pendências do portal.");
+      toast.error("Erro ao carregar pendencias do portal.");
       setLoadingTasks(false);
       return;
     }
@@ -473,35 +461,6 @@ export default function SolicitacoesPage() {
     () => submissions.find((submission) => submission.id === selectedSubmissionId) || null,
     [selectedSubmissionId, submissions]
   );
-
-  const submissionByRequestId = useMemo(() => {
-    const map = new Map<string, FormSubmissionView>();
-    submissions.forEach((submission) => {
-      if (!submission.request_id || map.has(submission.request_id)) return;
-      map.set(submission.request_id, submission);
-    });
-    return map;
-  }, [submissions]);
-
-  const selectedRequestSubmission = useMemo(() => {
-    if (!selectedRequestId) return null;
-    return submissionByRequestId.get(selectedRequestId) || null;
-  }, [selectedRequestId, submissionByRequestId]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const tab = params.get("tab");
-    const submissionId = params.get("submission");
-
-    if (tab === "forms" || submissionId) {
-      setActiveTab("forms");
-    }
-
-    if (submissionId) {
-      setSelectedSubmissionId(submissionId);
-      setSubmissionSheetOpen(true);
-    }
-  }, [location.search]);
 
   useEffect(() => {
     setSubmissionNotes(selectedSubmission?.notes || "");
@@ -614,7 +573,7 @@ export default function SolicitacoesPage() {
 
   const openTaskDialogForRequest = (request: EnrichedClientRequest) => {
     if (!request.client?.id) {
-      toast.error("Esta solicitação não possui cliente vinculado para criar pendência.");
+      toast.error("Esta solicitação não possui cliente vinculado para criar pendencia.");
       return;
     }
 
@@ -639,11 +598,11 @@ export default function SolicitacoesPage() {
   const handleCreateTask = async () => {
     if (!user) return;
     if (!taskDraft.clientId) {
-      toast.error("Selecione o cliente da pendência.");
+      toast.error("Selecione o cliente da pendencia.");
       return;
     }
     if (!taskDraft.title.trim()) {
-      toast.error("Informe o titulo da pendência.");
+      toast.error("Informe o titulo da pendencia.");
       return;
     }
 
@@ -662,7 +621,7 @@ export default function SolicitacoesPage() {
     setCreatingTask(false);
 
     if (error) {
-      toast.error("Erro ao criar pendência do portal.");
+      toast.error("Erro ao criar pendencia do portal.");
       return;
     }
 
@@ -680,49 +639,17 @@ export default function SolicitacoesPage() {
     setChangingTaskId(null);
 
     if (error) {
-      toast.error("Não foi possível atualizar o status da pendência.");
+      toast.error("Não foi possível atualizar o status da pendencia.");
       return;
-    }
-
-    let cascadeErrors: string[] = [];
-    if (status === "completed" && task.request_id) {
-      const cascadeResult = await completeLinkedRequestAndFormSubmissions(task.request_id);
-      cascadeErrors = cascadeResult.errors;
-
-      setRequests((previous) =>
-        previous.map((request) =>
-          request.id === task.request_id
-            ? { ...request, status: "completed", waitingSide: deriveWaitingSide("completed", request.lastMessage) }
-            : request
-        )
-      );
-
-      setSubmissions((previous) =>
-        previous.map((submission) =>
-          submission.request_id === task.request_id ? { ...submission, status: "completed" } : submission
-        )
-      );
     }
 
     setTasks((previous) =>
       previous.map((item) => (item.id === task.id ? { ...item, status } : item))
     );
-
-    if (cascadeErrors.length > 0) {
-      toast.warning(`Pendencia concluida, mas houve falha na cascata: ${cascadeErrors.join(" | ")}`);
-      return;
-    }
-
-    if (status === "completed" && task.request_id) {
-      toast.success("Pendencia concluida e itens vinculados finalizados.");
-      return;
-    }
-
-    toast.success("Status da pendência atualizado.");
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    const confirmed = window.confirm("Deseja excluir esta pendência do portal?");
+    const confirmed = window.confirm("Deseja excluir esta pendencia do portal?");
     if (!confirmed) return;
 
     setDeletingTaskId(taskId);
@@ -730,7 +657,7 @@ export default function SolicitacoesPage() {
     setDeletingTaskId(null);
 
     if (error) {
-      toast.error("Erro ao excluir pendência.");
+      toast.error("Erro ao excluir pendencia.");
       return;
     }
 
@@ -847,24 +774,9 @@ export default function SolicitacoesPage() {
     toast.success("Observacoes atualizadas.");
   };
 
-  const openSubmissionSheetById = (submissionId: string) => {
-    setActiveTab("forms");
-    setSelectedSubmissionId(submissionId);
-    setSubmissionSheetOpen(true);
-  };
-
   const openSubmissionSheet = (submission: FormSubmissionView) => {
-    openSubmissionSheetById(submission.id);
-  };
-
-  const handleCopySubmissionLink = async (submissionId: string) => {
-    const deepLink = buildSubmissionDeepLink(submissionId);
-    try {
-      await navigator.clipboard.writeText(deepLink);
-      toast.success("Link do formulário copiado.");
-    } catch {
-      toast.error("Não foi possível copiar o link do formulário.");
-    }
+    setSelectedSubmissionId(submission.id);
+    setSubmissionSheetOpen(true);
   };
 
   return (
@@ -873,7 +785,7 @@ export default function SolicitacoesPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold">Central de atendimento do portal</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Tudo que o cliente envia ou acompanha no portal está centralizado aqui com fluxo operacional real.
+            Tudo que o cliente envia ou acompanha no portal esta centralizado aqui com fluxo operacional real.
           </p>
           {role && <p className="text-xs text-muted-foreground mt-1">Perfil interno: {role}</p>}
         </motion.div>
@@ -881,8 +793,8 @@ export default function SolicitacoesPage() {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
           <TabsList className="flex flex-wrap h-auto">
             <TabsTrigger value="requests">Solicitações e chat</TabsTrigger>
-            <TabsTrigger value="tasks">Pendências do portal</TabsTrigger>
-            <TabsTrigger value="forms">Formulários recebidos</TabsTrigger>
+            <TabsTrigger value="tasks">Pendencias do portal</TabsTrigger>
+            <TabsTrigger value="forms">Formularios recebidos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="requests" className="space-y-4">
@@ -997,7 +909,7 @@ export default function SolicitacoesPage() {
                           {request.documents.length} documento(s)
                         </Badge>
                         <Badge variant="outline" className="text-[10px]">
-                          Última interação:{" "}
+                          Ultima interacao:{" "}
                           {request.lastMessage
                             ? new Date(request.lastMessage.created_at).toLocaleDateString("pt-BR")
                             : "sem mensagens"}
@@ -1013,7 +925,7 @@ export default function SolicitacoesPage() {
           <TabsContent value="tasks" className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               {[
-                { label: "Pendências totais", value: taskStats.total, icon: MessageSquare },
+                { label: "Pendencias totais", value: taskStats.total, icon: MessageSquare },
                 { label: "Aguardando cliente", value: taskStats.pendingClient, icon: Clock, color: "text-amber-600" },
                 { label: "Em análise", value: taskStats.inAnalysis, icon: AlertCircle, color: "text-blue-600" },
                 { label: "Concluídas", value: taskStats.completed, icon: ShieldCheck, color: "text-primary" },
@@ -1037,7 +949,7 @@ export default function SolicitacoesPage() {
                     <Search className="h-4 w-4 text-muted-foreground" />
                     <input
                       className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                      placeholder="Buscar pendência por cliente, titulo ou solicitação..."
+                      placeholder="Buscar pendencia por cliente, titulo ou solicitação..."
                       value={taskSearch}
                       onChange={(event) => setTaskSearch(event.target.value)}
                     />
@@ -1080,7 +992,7 @@ export default function SolicitacoesPage() {
                     disabled={loadingClients}
                   >
                     <Plus className="h-4 w-4" />
-                    Nova pendência para cliente
+                    Nova pendencia para cliente
                   </Button>
                 </div>
               </CardContent>
@@ -1094,7 +1006,7 @@ export default function SolicitacoesPage() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="font-medium">Nenhuma pendência encontrada.</p>
+                  <p className="font-medium">Nenhuma pendencia encontrada.</p>
                 </CardContent>
               </Card>
             ) : (
@@ -1334,29 +1246,8 @@ export default function SolicitacoesPage() {
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => openTaskDialogForRequest(selectedRequest)}>
                         <Plus className="h-3.5 w-3.5 mr-1" />
-                        Criar pendência para cliente
+                        Criar pendencia para cliente
                       </Button>
-                      {selectedRequestSubmission && (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openSubmissionSheetById(selectedRequestSubmission.id)}
-                          >
-                            <FileText className="h-3.5 w-3.5 mr-1" />
-                            Abrir formulario vinculado
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void handleCopySubmissionLink(selectedRequestSubmission.id)}
-                          >
-                            Copiar link da tela
-                          </Button>
-                        </>
-                      )}
                     </div>
 
                     <Card>
@@ -1431,7 +1322,7 @@ export default function SolicitacoesPage() {
                     </div>
 
                     <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                      <p className="text-xs font-medium mb-1">Última interação</p>
+                      <p className="text-xs font-medium mb-1">Ultima interacao</p>
                       {selectedRequest.lastMessage ? (
                         <>
                           <p className="text-muted-foreground">
@@ -1511,9 +1402,9 @@ export default function SolicitacoesPage() {
         <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Nova pendência do portal</DialogTitle>
+              <DialogTitle>Nova pendencia do portal</DialogTitle>
               <DialogDescription>
-                Esta pendência aparecera para o cliente na aba de pendências e na visao geral.
+                Esta pendencia aparecera para o cliente na aba de pendencias e na visao geral.
               </DialogDescription>
             </DialogHeader>
 
@@ -1555,7 +1446,7 @@ export default function SolicitacoesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Não vincular</SelectItem>
+                      <SelectItem value="none">Nao vincular</SelectItem>
                       {requestOptionsForTaskClient.map((request) => (
                         <SelectItem key={request.id} value={request.id}>
                           {request.title}
@@ -1567,11 +1458,11 @@ export default function SolicitacoesPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Título</label>
+                <label className="text-sm font-medium">Titulo</label>
                 <Input
                   value={taskDraft.title}
                   onChange={(event) => setTaskDraft((previous) => ({ ...previous, title: event.target.value }))}
-                  placeholder="Ex.: Enviar extrato bancário do mês"
+                  placeholder="Ex: Enviar extrato bancario do mes"
                 />
               </div>
 
@@ -1659,7 +1550,7 @@ export default function SolicitacoesPage() {
                 Cancelar
               </Button>
               <Button type="button" onClick={() => void handleCreateTask()} disabled={creatingTask}>
-                {creatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publicar pendência"}
+                {creatingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publicar pendencia"}
               </Button>
             </DialogFooter>
           </DialogContent>

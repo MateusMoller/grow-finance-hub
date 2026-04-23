@@ -1,21 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { motion } from "framer-motion";
-import { Loader2, Pencil, Plus, Search, ShieldAlert, Trash2, UserCog, Users } from "lucide-react";
+import { Loader2, Plus, Search, ShieldAlert, UserCog, Users } from "lucide-react";
 
 import { AppLayout } from "@/components/app/AppLayout";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +29,7 @@ const roleOptions = [
   { value: "commercial", label: "Comercial" },
   { value: "departamento_pessoal", label: "Departamento Pessoal" },
   { value: "fiscal", label: "Fiscal" },
-  { value: "contabil", label: "Contábil" },
+  { value: "contabil", label: "Contabil" },
   { value: "partner", label: "Parceiro" },
 ] as const;
 
@@ -57,10 +47,8 @@ const roleColorMap: Record<string, string> = {
   partner: "bg-orange-100 text-orange-700 dark:bg-orange-900/20",
 };
 
-const internalRoleValues = new Set(roleOptions.map((option) => option.value));
-
 export default function UsuariosPage() {
-  const { role, user } = useAuth();
+  const { role } = useAuth();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -72,15 +60,6 @@ export default function UsuariosPage() {
     password: "",
     role: "employee",
   });
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<AdminUserRow | null>(null);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [editForm, setEditForm] = useState({
-    displayName: "",
-    role: "employee",
-  });
-  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const isAdmin = role === "admin";
 
@@ -91,21 +70,6 @@ export default function UsuariosPage() {
       password: "",
       role: "employee",
     });
-  };
-
-  const extractFunctionErrorMessage = async (error: unknown) => {
-    if (!(error instanceof FunctionsHttpError)) return null;
-
-    try {
-      const errorResponse = await error.context.json();
-      if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
-        return String(errorResponse.error);
-      }
-    } catch {
-      // ignore parsing errors and fallback to generic message
-    }
-
-    return null;
   };
 
   const loadUsers = useCallback(async () => {
@@ -125,11 +89,7 @@ export default function UsuariosPage() {
       return;
     }
 
-    const normalizedRows = ((data || []) as AdminUserRow[]).filter((row) =>
-      row.role ? internalRoleValues.has(row.role) : false,
-    );
-
-    setUsers(normalizedRows);
+    setUsers((data || []) as AdminUserRow[]);
   }, [isAdmin]);
 
   useEffect(() => {
@@ -147,7 +107,7 @@ export default function UsuariosPage() {
       .maybeSingle();
 
     if (clientError) {
-      toast.error("Não foi possível validar o usuário existente para promoção de perfil.");
+      toast.error("Não foi possível validar o usuário existente para promocao de perfil.");
       return false;
     }
 
@@ -184,7 +144,7 @@ export default function UsuariosPage() {
       .eq("portal_user_id", portalUserId);
 
     if (removeClientRecordError) {
-      toast.error("Não foi possível remover o vínculo de cliente do usuário promovido.");
+      toast.error("Não foi possível remover o vinculo de cliente do usuário promovido.");
       return false;
     }
 
@@ -209,7 +169,7 @@ export default function UsuariosPage() {
 
   const handleCreateUser = async () => {
     if (!isAdmin) {
-      toast.error("Apenas administradores podem cadastrar usuários.");
+      toast.error("Apenas admin pode cadastrar usuários.");
       return;
     }
 
@@ -242,7 +202,18 @@ export default function UsuariosPage() {
     setCreating(false);
 
     if (error) {
-      const detailedErrorMessage = await extractFunctionErrorMessage(error);
+      let detailedErrorMessage: string | null = null;
+
+      if (error instanceof FunctionsHttpError) {
+        try {
+          const errorResponse = await error.context.json();
+          if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
+            detailedErrorMessage = String(errorResponse.error);
+          }
+        } catch {
+          // ignore parsing errors and fallback to generic message
+        }
+      }
 
       const normalizedMessage = (detailedErrorMessage || error.message || "").toLowerCase();
       const shouldTryPromotion =
@@ -278,85 +249,6 @@ export default function UsuariosPage() {
     void loadUsers();
   };
 
-  const openEditDialog = (userRow: AdminUserRow) => {
-    setEditingUser(userRow);
-    setEditForm({
-      displayName: userRow.display_name?.trim() || "",
-      role: userRow.role || "employee",
-    });
-    setEditOpen(true);
-  };
-
-  const handleSaveUserEdit = async () => {
-    if (!isAdmin || !editingUser) {
-      toast.error("Apenas administradores podem editar usuários.");
-      return;
-    }
-
-    if (!editForm.displayName.trim()) {
-      toast.error("Informe o nome do usuário.");
-      return;
-    }
-
-    if (!editForm.role.trim()) {
-      toast.error("Selecione um perfil.");
-      return;
-    }
-
-    setSavingEdit(true);
-    const { error } = await supabase.functions.invoke("manage-team-user", {
-      body: {
-        action: "update",
-        userId: editingUser.user_id,
-        displayName: editForm.displayName,
-        role: editForm.role,
-      },
-    });
-    setSavingEdit(false);
-
-    if (error) {
-      const detailedErrorMessage = await extractFunctionErrorMessage(error);
-      toast.error(detailedErrorMessage || error.message || "Não foi possível atualizar usuário.");
-      return;
-    }
-
-    toast.success("Usuário atualizado com sucesso.");
-    setEditOpen(false);
-    setEditingUser(null);
-    void loadUsers();
-  };
-
-  const handleDeleteUser = async () => {
-    if (!isAdmin || !deleteTarget) {
-      toast.error("Apenas administradores podem excluir usuários.");
-      return;
-    }
-
-    if (deleteTarget.user_id === user?.id) {
-      toast.error("Não é permitido excluir o próprio usuário.");
-      return;
-    }
-
-    setDeleting(true);
-    const { error } = await supabase.functions.invoke("manage-team-user", {
-      body: {
-        action: "delete",
-        userId: deleteTarget.user_id,
-      },
-    });
-    setDeleting(false);
-
-    if (error) {
-      const detailedErrorMessage = await extractFunctionErrorMessage(error);
-      toast.error(detailedErrorMessage || error.message || "Não foi possível excluir usuário.");
-      return;
-    }
-
-    toast.success("Usuário excluído com sucesso.");
-    setDeleteTarget(null);
-    void loadUsers();
-  };
-
   if (!isAdmin) {
     return (
       <AppLayout>
@@ -383,7 +275,7 @@ export default function UsuariosPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
             <p className="text-sm text-muted-foreground">
-              Cadastre novos usuários internos e gerencie permissões da equipe.
+              Cadastre novos usuários internos e gerencie permissoes da equipe.
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>
@@ -436,14 +328,12 @@ export default function UsuariosPage() {
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden md:table-cell">E-mail</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Perfil</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden lg:table-cell">Criado em</th>
-                    <th className="p-4 text-right text-xs font-semibold text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {filteredUsers.map((userRow, index) => {
                     const label = roleLabelMap.get(userRow.role || "") || "Sem perfil";
                     const badgeClass = roleColorMap[userRow.role || ""] || "bg-muted text-foreground";
-                    const isOwnUser = userRow.user_id === user?.id;
 
                     return (
                       <motion.tr
@@ -477,34 +367,12 @@ export default function UsuariosPage() {
                         <td className="p-4 text-sm text-muted-foreground hidden lg:table-cell">
                           {new Date(userRow.created_at).toLocaleDateString("pt-BR")}
                         </td>
-                        <td className="p-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5"
-                              onClick={() => openEditDialog(userRow)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" /> Editar
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5 text-destructive hover:text-destructive"
-                              onClick={() => setDeleteTarget(userRow)}
-                              disabled={isOwnUser}
-                              title={isOwnUser ? "Não é permitido excluir seu próprio usuário." : undefined}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Excluir
-                            </Button>
-                          </div>
-                        </td>
                       </motion.tr>
                     );
                   })}
                   {filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-14 text-center text-sm text-muted-foreground">
+                      <td colSpan={4} className="py-14 text-center text-sm text-muted-foreground">
                         <div className="inline-flex flex-col items-center gap-2">
                           <Users className="h-6 w-6" />
                           Nenhum usuário encontrado para esse filtro.
@@ -523,9 +391,6 @@ export default function UsuariosPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Adicionar usuário</DialogTitle>
-            <DialogDescription>
-              Preencha os dados para criar um novo usuário interno.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -546,7 +411,7 @@ export default function UsuariosPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Senha temporária *</Label>
+              <Label>Senha temporaria *</Label>
               <Input
                 type="password"
                 placeholder="Mínimo 6 caracteres"
@@ -580,97 +445,6 @@ export default function UsuariosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Dialog
-        open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open);
-          if (!open) setEditingUser(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar usuário</DialogTitle>
-            <DialogDescription>
-              Atualize nome e permissão do usuário selecionado.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome completo *</Label>
-              <Input
-                placeholder="Nome do colaborador"
-                value={editForm.displayName}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, displayName: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>E-mail</Label>
-              <Input value={editingUser?.email || ""} disabled />
-            </div>
-            <div className="space-y-2">
-              <Label>Permissão *</Label>
-              <select
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
-                value={editForm.role}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value }))}
-              >
-                {roleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={savingEdit}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveUserEdit} disabled={savingEdit}>
-              {savingEdit ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {savingEdit ? "Salvando..." : "Salvar alterações"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
-        open={Boolean(deleteTarget)}
-        onOpenChange={(open) => {
-          if (!open && !deleting) {
-            setDeleteTarget(null);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir usuário</AlertDialogTitle>
-            <AlertDialogDescription>
-              Essa ação irá remover o acesso de{" "}
-              <span className="font-semibold text-foreground">
-                {deleteTarget?.display_name?.trim() || deleteTarget?.email || "este usuário"}
-              </span>{" "}
-              permanentemente. Essa ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                void handleDeleteUser();
-              }}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {deleting ? "Excluindo..." : "Confirmar exclusão"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppLayout>
   );
 }
-

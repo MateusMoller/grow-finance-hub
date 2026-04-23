@@ -1,95 +1,83 @@
-import { SiteLayout } from "@/components/site/SiteLayout";
-import { SiteLeadForm } from "@/components/site/SiteLeadForm";
+﻿import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  Award,
-  BarChart3,
-  Briefcase,
-  Building2,
-  CheckCircle2,
-  Clock,
-  Eye,
-  FileText,
-  Heart,
-  Shield,
-  Target,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock, Eye, FileText, Heart, Shield, Target, TrendingUp, Users } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { captureSiteLead } from "@/lib/siteLeadCapture";
 
 const metrics = [
-  { value: "+12", label: "Anos de mercado", detail: "Experiencia solida em contabilidade consultiva" },
-  { value: "98%", label: "Satisfacao dos clientes", detail: "Relacionamentos duradouros e atendimento proximo" },
-  { value: "120+", label: "Empresas atendidas", detail: "Operacao ativa em varios segmentos" },
-  { value: "100%", label: "Conformidade", detail: "Processos com foco em precisao e seguranca" },
+  { value: "+12", label: "Anos de mercado", detail: "Experiência sólida em contabilidade consultiva" },
+  { value: "98%", label: "Satisfação dos clientes", detail: "Relacionamentos duradouros e atendimento próximo" },
+  { value: "120+", label: "Empresas atendidas", detail: "Operação ativa em vários segmentos" },
+  { value: "100%", label: "Conformidade", detail: "Processos com foco em precisão e segurança" },
 ];
 
 const values = [
-  { icon: Target, title: "Foco em resultados", description: "Cada acao orientada por metas claras de crescimento e eficiencia." },
-  { icon: Eye, title: "Visao estrategica", description: "Transformamos dados em direcao para decisoes de curto e longo prazo." },
-  { icon: Heart, title: "Atendimento humano", description: "Acompanhamento proximo para entender o contexto real de cada empresa." },
-  { icon: Award, title: "Excelencia tecnica", description: "Equipe especializada e processos padronizados com alta confiabilidade." },
+  { icon: Target, title: "Foco em resultados", description: "Cada ação orientada por metas claras de crescimento e eficiência." },
+  { icon: Eye, title: "Visão estratégica", description: "Transformamos dados em direção para decisões de curto e longo prazo." },
+  { icon: Heart, title: "Atendimento humano", description: "Acompanhamento próximo para entender o contexto real de cada empresa." },
+  { icon: Award, title: "Excelencia técnica", description: "Equipe especializada e processos padronizados com alta confiabilidade." },
 ];
 
 const services = [
-  { icon: BarChart3, title: "Contabilidade consultiva", description: "Fechamentos, balancos e indicadores com orientacao para decisoes gerenciais." },
-  { icon: Shield, title: "Assessoria fiscal", description: "Planejamento tributario e revisoes periodicas para reduzir risco fiscal." },
-  { icon: Users, title: "Departamento pessoal", description: "Rotinas trabalhistas, folha, admissoes e suporte continuo ao RH." },
-  { icon: Building2, title: "Abertura e regularizacao", description: "Constituicao de empresa, alteracoes contratuais e regularizacoes completas." },
-  { icon: Briefcase, title: "Suporte ao empresario", description: "Consultoria para planejamento, estrutura financeira e crescimento sustentavel." },
-  { icon: FileText, title: "Relatorios gerenciais", description: "Painel mensal com leitura executiva para acompanhamento de performance." },
+  { icon: BarChart3, title: "Contabilidade consultiva", description: "Fechamentos, balanços e indicadores com orientação para decisões gerenciais." },
+  { icon: Shield, title: "Assessoria fiscal", description: "Planejamento tributário e revisões periódicas para reduzir risco fiscal." },
+  { icon: Users, title: "Departamento pessoal", description: "Rotinas trabalhistas, folha, admissões e suporte contínuo ao RH." },
+  { icon: Building2, title: "Abertura e regularização", description: "Constituição de empresa, alterações contratuais e regularizações completas." },
+  { icon: Briefcase, title: "Suporte ao empresário", description: "Consultoria para planejamento, estrutura financeira e crescimento sustentável." },
+  { icon: FileText, title: "Relatórios gerenciais", description: "Painel mensal com leitura executiva para acompanhamento de performance." },
 ];
 
 const differentials = [
   "Atendimento por especialistas com agenda de acompanhamento.",
   "Rotina de prevencao de riscos fiscais e trabalhistas.",
-  "Indicadores objetivos para apoiar decisao do empresario.",
-  "Comunicacao clara, prazos definidos e processos rastreaveis.",
+  "Indicadores objetivos para apoiar decisão do empresário.",
+  "Comunicação clara, prazos definidos e processos rastreaveis.",
 ];
 
 const journey = [
-  { icon: CheckCircle2, title: "Diagnostico inicial", description: "Mapeamento das prioridades contabeis, fiscais e financeiras." },
+  { icon: CheckCircle2, title: "Diagnóstico inicial", description: "Mapeamento das prioridades contábeis, fiscais e financeiras." },
   { icon: Clock, title: "Plano de 90 dias", description: "Roadmap com entregas, prazos e responsabilidades definidas." },
-  { icon: TrendingUp, title: "Evolucao mensal", description: "Monitoramento de indicadores e ajustes continuos na operacao." },
+  { icon: TrendingUp, title: "Evolução mensal", description: "Monitoramento de indicadores e ajustes contínuos na operação." },
 ];
 
 const testimonials = [
   {
     name: "Lucas Moreira",
     role: "CEO, TechNova",
-    text: "Com a Grow, nossa gestao financeira ficou clara. Hoje decidimos com base em relatorios consistentes.",
+    text: "Com a Grow, nossa gestão financeira ficou clara. Hoje decidimos com base em relatórios consistentes.",
   },
   {
     name: "Mariana Ribeiro",
     role: "Fundadora, Casa Verde",
-    text: "Atendimento muito proximo e pratico. Conseguimos regularizar pendencias e organizar o crescimento.",
+    text: "Atendimento muito próximo e prático. Conseguimos regularizar pendências e organizar o crescimento.",
   },
   {
     name: "Rafael Alves",
     role: "Diretor Financeiro, BlueLine",
-    text: "A consultoria estrategica da Grow virou parte da nossa rotina de tomada de decisao.",
+    text: "A consultoria estratégica da Grow virou parte da nossa rotina de tomada de decisão.",
   },
 ];
 
 const faqItems = [
   {
-    question: "Como funciona o inicio da parceria com a Grow?",
-    answer: "Iniciamos com um diagnostico completo da operacao, definimos prioridades e montamos um plano de acao com entregas e prazos claros.",
+    question: "Como funciona o início da parceria com a Grow?",
+    answer: "Iniciamos com um diagnóstico completo da operação, definimos prioridades e montamos um plano de ação com entregas e prazos claros.",
   },
   {
-    question: "A Grow atende apenas empresas de um segmento especifico?",
-    answer: "Nao. Atendemos comercio, servicos, tecnologia, saude, construcao, profissionais liberais e outras estruturas empresariais.",
+    question: "A Grow atende apenas empresas de um segmento específico?",
+    answer: "Não. Atendemos comércio, serviços, tecnologia, saúde, construção, profissionais liberais e outras estruturas empresariais.",
   },
   {
-    question: "Com que frequencia recebo relatorios e orientacoes?",
-    answer: "Acompanhamento mensal com relatorios gerenciais, alem de suporte continuo para demandas pontuais do dia a dia.",
+    question: "Com que frequência recebo relatórios e orientações?",
+    answer: "Acompanhamento mensal com relatórios gerenciais, além de suporte contínuo para demandas pontuais do dia a dia.",
   },
   {
-    question: "Posso contratar apenas parte dos servicos?",
+    question: "Posso contratar apenas parte dos serviços?",
     answer: "Sim. Montamos uma jornada sob medida, com escopo modular para sua fase atual de crescimento.",
   },
 ];
@@ -102,29 +90,69 @@ const fadeIn = {
 };
 
 export default function AboutPage() {
+  const [sending, setSending] = useState(false);
+  const [leadForm, setLeadForm] = useState({
+    fullName: "",
+    companyName: "",
+    email: "",
+  });
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const fullName = leadForm.fullName.trim();
+    const email = leadForm.email.trim();
+
+    if (!fullName || !email) {
+      toast.error("Preencha nome e e-mail para contínuar.");
+      return;
+    }
+
+    setSending(true);
+
+    const { error } = await captureSiteLead({
+      fullName,
+      companyName: leadForm.companyName.trim(),
+      email,
+      originPage: "about",
+    });
+
+    setSending(false);
+
+    if (error) {
+      toast.error(`Não foi possível enviar sua solicitação: ${error.message}`);
+      return;
+    }
+
+    setLeadForm({
+      fullName: "",
+      companyName: "",
+      email: "",
+    });
+    toast.success("Recebemos sua solicitação. Vamos retornar em breve.");
+  };
+
   return (
     <SiteLayout>
-      <div className="institutional-page text-foreground transition-colors">
-        <section id="institucional" className="container py-8 sm:py-10 md:py-14">
-          <div className="institutional-hero grid gap-8 p-5 sm:p-7 lg:grid-cols-[1.15fr_0.85fr] lg:p-9">
-            <div
-              aria-hidden="true"
-              className="brand-watermark -right-20 -top-24 hidden h-[34rem] w-[21rem] rounded-[4rem] border border-[#806589]/15 bg-[#4D4489]/20 lg:block"
-            />
-            <motion.div {...fadeIn} className="relative z-10 space-y-6">
-              <span className="institutional-kicker">Grow Contabilidade</span>
+      <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
+        <section id="institucional" className="border-b border-border/60 py-10 dark:border-[#243054] sm:py-12 md:py-16">
+          <div className="container grid gap-8 sm:gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
+            <motion.div {...fadeIn} className="space-y-6">
+              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                Grow Contabilidade - Institucional
+              </span>
               <h1 className="font-heading text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
-                Mais do que contabilidade: uma operacao consultiva para crescimento seguro.
+                Mais do que contabilidade, construímos estratégia para o crescimento do seu negócio
               </h1>
               <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
-                A Grow une consultoria, tecnologia e atendimento proximo para organizar sua operacao contabil e financeira.
-                Nosso foco e transformar complexidade em clareza, conformidade e crescimento sustentavel.
+                A Grow une consultoria, tecnologia e atendimento proximo para organizar sua operação contabil e financeira.
+                Nosso foco e transformar complexidade em clareza, conformidade e crescimento sustentável.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button asChild className="w-full rounded-full px-5 font-semibold sm:w-auto">
-                  <Link to="/#contato">
-                    Solicitar avaliacao gratuita <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                  </Link>
+                <Button
+                  asChild
+                  className="w-full rounded-full border border-white/35 px-5 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                >
+                  <Link to="/#contato">Solicitar avaliação gratuita</Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full rounded-full px-5 sm:w-auto">
                   <Link to="/contato">Falar com especialista</Link>
@@ -132,26 +160,21 @@ export default function AboutPage() {
               </div>
             </motion.div>
 
-            <motion.aside {...fadeIn} transition={{ duration: 0.45, delay: 0.1 }} className="relative z-10 institutional-card p-5">
-              <div
-                role="img"
-                aria-label="Painel generico de apresentacao institucional contabil"
-                className="generic-insight-visual flex min-h-48 items-end rounded-[1.35rem] border border-[#806589]/20 p-6 shadow-sm"
-              >
-                <span className="site-wordmark font-heading text-3xl font-bold">Grow</span>
-              </div>
-              <h2 className="mt-5 font-heading text-lg font-semibold">Painel institucional</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Proposta de valor organizada para empresas que precisam de contabilidade, controle e decisao.
-              </p>
+            <motion.aside
+              {...fadeIn}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              className="rounded-2xl border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]"
+            >
+              <h2 className="font-heading text-lg font-semibold">Painel institucional</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Panorama da proposta de valor da Grow para empresas em crescimento.</p>
               <div className="mt-5 space-y-3">
                 {[
-                  "Consultoria contabil, fiscal e financeira integrada",
-                  "Acompanhamento mensal com relatorios gerenciais",
-                  "Suporte estrategico para tomada de decisao",
+                  "Consultoria contábil, fiscal e financeira integrada",
+                  "Acompanhamento mensal com relatórios gerenciais",
+                  "Suporte estratégico para tomada de decisão",
                 ].map((item) => (
-                  <div key={item} className="flex items-start gap-2 rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" aria-hidden="true" />
+                  <div key={item} className="flex items-start gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 dark:border-[#2a3760] dark:bg-[#0d1a38]">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
                     <span className="text-sm text-foreground">{item}</span>
                   </div>
                 ))}
@@ -159,7 +182,7 @@ export default function AboutPage() {
             </motion.aside>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="container mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {metrics.map((metric, index) => (
               <motion.div
                 key={metric.label}
@@ -167,54 +190,52 @@ export default function AboutPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.2 }}
                 transition={{ duration: 0.35, delay: index * 0.05 }}
-                className="institutional-card-muted p-4"
+                className="rounded-2xl border border-border bg-card p-4 dark:border-[#223058] dark:bg-[#0a1734]"
               >
-                <p className="font-heading text-2xl font-bold tabular-nums text-foreground">{metric.value}</p>
+                <p className="text-2xl font-bold text-foreground">{metric.value}</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">{metric.label}</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{metric.detail}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
               </motion.div>
             ))}
           </div>
         </section>
 
-        <section className="py-10 md:py-14">
-          <div className="container grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <motion.article {...fadeIn} className="institutional-card p-6">
-              <span className="institutional-kicker">Quem somos</span>
-              <h2 className="mt-4 font-heading text-2xl font-semibold sm:text-3xl">Uma consultoria contabil com ritmo de operacao moderna.</h2>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                Atuamos lado a lado com o empresario para transformar dados em decisao e decisao em resultado. A experiencia
-                combina padronizacao, rastreabilidade e comunicacao simples.
+        <section className="py-12 md:py-16">
+          <div className="container">
+            <motion.div {...fadeIn} className="mb-6">
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Quem somos</h2>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                Somos uma consultoria contabil com abordagem proativa. Atuamos lado a lado com o empresário para transformar
+                dados em decisao e decisao em resultado.
               </p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {values.map((value) => (
-                  <div key={value.title} className="institutional-card-muted p-4">
-                    <value.icon className="h-5 w-5 text-primary" aria-hidden="true" />
-                    <h3 className="mt-3 font-heading text-base font-semibold">{value.title}</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">{value.description}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.article>
-            <motion.article
-              {...fadeIn}
-              transition={{ duration: 0.45, delay: 0.1 }}
-              role="img"
-              aria-label="Consultoria contabil analisando documentos e indicadores financeiros"
-              className="generic-office-visual institutional-card min-h-[420px] overflow-hidden"
-            >
-            </motion.article>
+            </motion.div>
+
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-4">
+              {values.map((value, index) => (
+                <motion.article
+                  key={value.title}
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.35, delay: index * 0.05 }}
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
+                >
+                  <value.icon className="h-5 w-5 text-primary" />
+                  <h3 className="mt-3 font-heading text-lg font-semibold">{value.title}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">{value.description}</p>
+                </motion.article>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section id="servicos" className="py-10 md:py-14">
+        <section id="serviços" className="py-12 md:py-16">
           <div className="container">
-            <motion.div {...fadeIn} className="mb-6 max-w-3xl">
-              <span className="institutional-kicker">Servicos</span>
-              <h2 className="mt-4 font-heading text-2xl font-semibold sm:text-3xl">Competencias conectadas por uma unica experiencia.</h2>
+            <motion.div {...fadeIn} className="mb-6">
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
             </motion.div>
 
-            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:snap-none md:grid-cols-2 md:gap-4 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-3">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-3">
               {services.map((service, index) => (
                 <motion.article
                   key={service.title}
@@ -222,9 +243,9 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="institutional-card min-w-[84%] snap-start p-5 sm:min-w-[72%] md:min-w-0"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
-                  <service.icon className="h-5 w-5 text-primary" aria-hidden="true" />
+                  <service.icon className="h-5 w-5 text-primary" />
                   <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
                   <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
                 </motion.article>
@@ -233,30 +254,32 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="diferenciais" className="py-10 md:py-14">
+        <section id="diferenciais" className="py-12 md:py-16">
           <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <motion.article {...fadeIn} className="institutional-card p-6">
-              <span className="institutional-kicker">Diferenciais</span>
-              <h2 className="mt-4 font-heading text-2xl font-semibold">O que muda na rotina do cliente</h2>
+            <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
+              <h2 className="font-heading text-2xl font-semibold">Diferenciais Grow</h2>
               <div className="mt-4 space-y-3">
                 {differentials.map((item) => (
                   <div key={item} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" aria-hidden="true" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
                     <span className="text-foreground">{item}</span>
                   </div>
                 ))}
               </div>
             </motion.article>
 
-            <motion.article {...fadeIn} transition={{ duration: 0.45, delay: 0.1 }} className="institutional-card p-6">
-              <span className="institutional-kicker">Como trabalhamos</span>
+            <motion.article
+              {...fadeIn}
+              transition={{ duration: 0.45, delay: 0.1 }}
+              className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]"
+            >
+              <h2 className="font-heading text-2xl font-semibold">Como trabalhamos</h2>
               <div className="mt-4 space-y-3">
-                {journey.map((step, index) => (
-                  <div key={step.title} className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                {journey.map((step) => (
+                  <div key={step.title} className="rounded-lg border border-border/70 bg-muted/20 p-3 dark:border-[#2a3760] dark:bg-[#0d1a38]">
                     <div className="flex items-center gap-2 text-sm font-semibold">
-                      <step.icon className="h-4 w-4 text-primary" aria-hidden="true" />
+                      <step.icon className="h-4 w-4 text-primary" />
                       <span>{step.title}</span>
-                      <span className="ml-auto text-xs tabular-nums text-muted-foreground">0{index + 1}</span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{step.description}</p>
                   </div>
@@ -266,14 +289,13 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="clientes" className="py-10 md:py-14">
+        <section id="clientes" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
-              <span className="institutional-kicker">Clientes e depoimentos</span>
-              <h2 className="mt-4 font-heading text-2xl font-semibold sm:text-3xl">Sinal de confianca com linguagem simples.</h2>
+              <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Clientes e depoimentos</h2>
             </motion.div>
 
-            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:snap-none md:grid-cols-3 md:gap-4 md:overflow-visible md:px-0 md:pb-0">
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-3">
               {testimonials.map((testimonial, index) => (
                 <motion.article
                   key={testimonial.name}
@@ -281,10 +303,10 @@ export default function AboutPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="institutional-card min-w-[84%] snap-start p-5 sm:min-w-[72%] md:min-w-0"
+                  className="min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
                 >
-                  <p className="text-sm leading-relaxed text-muted-foreground">"{testimonial.text}"</p>
-                  <div className="mt-4 border-t border-border pt-4">
+                  <p className="text-sm text-muted-foreground">"{testimonial.text}"</p>
+                  <div className="mt-4">
                     <p className="text-sm font-semibold">{testimonial.name}</p>
                     <p className="text-xs text-muted-foreground">{testimonial.role}</p>
                   </div>
@@ -294,9 +316,9 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="py-10 md:py-14">
+        <section className="py-12 md:py-16">
           <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <motion.article {...fadeIn} className="institutional-card p-6">
+            <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
               <h2 className="font-heading text-2xl font-semibold">Perguntas frequentes</h2>
               <Accordion type="single" collapsible className="mt-3">
                 {faqItems.map((faq, index) => (
@@ -308,24 +330,86 @@ export default function AboutPage() {
               </Accordion>
             </motion.article>
 
-            <motion.div
+            <motion.article
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
+              className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]"
             >
-              <SiteLeadForm
-                formId="about-lead"
-                originPage="about"
-                submitLabel="Enviar solicitacao"
-                successMessage="Recebemos sua solicitacao. Vamos retornar em breve."
-                className="institutional-card space-y-4 p-6"
-                intro={
-                  <>
-                    <span className="institutional-kicker">Comece agora</span>
-                    <h2 className="font-heading text-2xl font-semibold">Solicite uma avaliacao gratuita</h2>
-                  </>
-                }
-              />
-            </motion.div>
+              <h2 className="font-heading text-2xl font-semibold">Por que escolher a Grow?</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Porque nossa proposta combina técnica, proximidade e inteligencia de gestão. Nao entregamos apenas obrigações,
+                entregamos direcao para o seu negócio.
+              </p>
+              <div className="mt-4 space-y-2 text-sm">
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Equipe dedicada por cliente</p>
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Entrega mensal com leitura executiva</p>
+                <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" />Suporte contínuo para decisao</p>
+              </div>
+            </motion.article>
+          </div>
+        </section>
+
+        <section id="contato" className="py-12 md:py-16">
+          <div className="container">
+            <div className="rounded-2xl bg-primary p-5 text-primary-foreground dark:border dark:border-[#2a3760] dark:bg-[#0d1938] dark:text-[#e9eeff] sm:p-6 md:p-10">
+              <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+                <motion.div {...fadeIn}>
+                  <h2 className="font-heading text-2xl font-semibold leading-tight sm:text-3xl">
+                    Pronto para tornar sua gestão mais clara e estratégica?
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm text-primary-foreground/85 dark:text-[#bcc7ea]">
+                    Fale com a Grow e receba um plano inicial para organizar processos, reduzir riscos e evoluir com previsibilidade.
+                  </p>
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                    <Button
+                      asChild
+                      className="w-full rounded-full border border-white/35 px-5 text-sm font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                    >
+                      <Link to="/contato">Solicitar avaliação gratuita</Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full rounded-full border-white bg-white px-5 text-sm text-[#1f2a4d] hover:bg-white/90 hover:text-[#1f2a4d] sm:w-auto dark:border-white dark:bg-white dark:text-[#1f2a4d] dark:hover:bg-white/90 dark:hover:text-[#1f2a4d]">
+                      <Link to="/contato">Falar com consultor</Link>
+                    </Button>
+                  </div>
+                </motion.div>
+
+                <motion.form
+                  {...fadeIn}
+                  transition={{ duration: 0.45, delay: 0.1 }}
+                  onSubmit={handleSubmit}
+                  className="rounded-2xl bg-white p-5 text-foreground dark:border dark:border-[#2b3861] dark:bg-[#08142f] dark:text-[#e9eeff]"
+                >
+                  <div className="space-y-3">
+                    <Input
+                      placeholder="Nome completo"
+                      required
+                      value={leadForm.fullName}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                    <Input
+                      placeholder="Empresa"
+                      value={leadForm.companyName}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, companyName: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                    <Input
+                      type="email"
+                      placeholder="E-mail"
+                      required
+                      value={leadForm.email}
+                      onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
+                      className="rounded-full dark:border-[#2a3760] dark:bg-[#0a1735]"
+                    />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground dark:text-[#9ca8cf]">Garantimos confidencialidade e segurança dos seus dados.</p>
+                  <Button type="submit" className="mt-4 w-full rounded-full dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]" disabled={sending}>
+                    {sending ? "Enviando..." : "Enviar solicitação"}
+                    {!sending && <ArrowRight className="h-4 w-4" />}
+                  </Button>
+                </motion.form>
+              </div>
+            </div>
           </div>
         </section>
       </div>

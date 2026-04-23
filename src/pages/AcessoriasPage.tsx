@@ -444,8 +444,8 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     >();
 
     for (const item of uploads) {
-      const companyName = String(item.company_name || item.client_name || "Empresa não identificada").trim();
-      const safeCompanyName = companyName || "Empresa não identificada";
+      const companyName = String(item.company_name || item.client_name || "Empresa nao identificada").trim();
+      const safeCompanyName = companyName || "Empresa nao identificada";
       const companyKey = String(item.acessorias_company_id || item.client_id || safeCompanyName);
       const current = companyMap.get(companyKey) || { name: safeCompanyName, items: [] };
       current.items.push(item);
@@ -456,7 +456,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     for (const [companyKey, companyValue] of companyMap.entries()) {
       const obligationMap = new Map<string, AcessoriasUpload[]>();
       for (const item of companyValue.items) {
-        const obligationName = String(item.obligation_name || "Obrigação não informada").trim() || "Obrigação não informada";
+        const obligationName = String(item.obligation_name || "Obrigacao nao informada").trim() || "Obrigacao nao informada";
         const obligationKey = `${companyKey}:${obligationName.toLowerCase()}`;
         const currentItems = obligationMap.get(obligationKey) || [];
         currentItems.push(item);
@@ -471,7 +471,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
           return {
             key: obligationKey,
-            name: String(first?.obligation_name || "Obrigação não informada"),
+            name: String(first?.obligation_name || "Obrigacao nao informada"),
             items: [...items].sort((left, right) =>
               String(right.uploaded_at || "").localeCompare(String(left.uploaded_at || "")),
             ),
@@ -512,7 +512,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
     const accessToken = session?.access_token;
     if (!accessToken) {
-      throw new Error("Sessão expirada. Entre novamente para acessar o módulo Acessorias.");
+      throw new Error("Sessao expirada. Entre novamente para acessar o módulo Acessorias.");
     }
 
     const invokeOnce = async (token: string) =>
@@ -638,17 +638,14 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         clients_created: number;
         clients_updated: number;
         clients_inactivated: number;
-        cadastro_clientes_fields_synced: number;
-        cadastro_honorarios_fields_synced: number;
       }>({
         action: "sync_companies",
         sync_grow_clients: true,
-        restrict_to_acessorias: false,
-        allow_client_inactivation: false,
+        restrict_to_acessorias: true,
       });
       if (!silent) {
         toast.success(
-          `Empresas sincronizadas em modo seguro: ${result.synced || 0}. Clientes criados: ${result.clients_created || 0}. Atualizados: ${result.clients_updated || 0}. Vinculos automaticos: ${result.auto_linked || 0}. Campos cadastrais atualizados: ${result.cadastro_clientes_fields_synced || 0}.`,
+          `Empresas sincronizadas: ${result.synced || 0}. Clientes criados: ${result.clients_created || 0}. Atualizados: ${result.clients_updated || 0}. Vinculos automaticos: ${result.auto_linked || 0}. Inativados: ${result.clients_inactivated || 0}.`,
         );
       }
       if (refreshAfter) {
@@ -870,7 +867,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         toast.success(remoteSync.message || "Obrigação atualizada no Grow e no Acessorias.");
       } else if (remoteSync?.attempted && !remoteSync.ok) {
         toast.success("Obrigação atualizada no Grow. Sincronização remota em processamento.");
-        toast.error(remoteSync.message || "Não foi possível confirmar atualização no Acessorias.");
+        toast.error(remoteSync.message || "Não foi possível confirmar atualizacao no Acessorias.");
       } else {
         toast.success("Obrigação atualizada no Grow.");
       }
@@ -907,23 +904,23 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
     const clientName = client?.name || "cliente";
     const contactName = client?.contact || clientName;
     const obligationName = row.obligationName?.trim() || "documento";
-    const competence = normalizePreflightCompetence(row.competence || "") || row.competence || "não informada";
+    const competence = normalizePreflightCompetence(row.competence || "") || row.competence || "nao informada";
     const description = row.description?.trim();
     const sentStatusMessage =
       row.sendStatus === "sent"
-        ? "O arquivo já foi enviado no e-Continuo pela equipe da Grow."
-        : "O arquivo está em conferência para envio no e-Continuo pela equipe da Grow.";
+        ? "O arquivo ja foi enviado no e-Continuo pela equipe da Grow."
+        : "O arquivo esta em conferencia para envio no e-Continuo pela equipe da Grow.";
 
     return [
-      `Olá, ${contactName}!`,
+      `Ola, ${contactName}!`,
       sentStatusMessage,
       `Cliente: ${clientName}`,
       `Arquivo: ${row.fileName}`,
-      `Obrigação: ${obligationName}`,
+      `Obrigacao: ${obligationName}`,
       `Competencia: ${competence}`,
-      description ? `Descrição: ${description}` : null,
+      description ? `Descricao: ${description}` : null,
       "",
-      "Em caso de dúvidas, responda por aqui.",
+      "Em caso de duvidas, responda por aqui.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -939,7 +936,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
 
     const whatsappNumber = normalizeWhatsappNumber(row.whatsappNumber);
     if (!whatsappNumber) {
-      toast.error("Número de WhatsApp não encontrado para este cliente.");
+      toast.error("Numero de WhatsApp nao encontrado para este cliente.");
       return;
     }
 
@@ -1265,27 +1262,23 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
   return (
     <AppLayout>
       <div className="space-y-5 max-w-7xl">
-        <section className="executive-hero rounded-[1.8rem] px-5 py-5 text-white md:px-7 md:py-6">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div className="max-w-2xl">
-            <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-white/75">
-              Operação integrada
-            </span>
-            <h1 className="mt-3 font-heading text-2xl font-bold md:text-3xl">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="font-heading text-2xl font-bold">
               {isObrigacoesModule ? "Módulo Obrigações" : "Módulo E-continuo"}
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-white/72">
+            <p className="text-sm text-muted-foreground">
               {isObrigacoesModule
                 ? "Controle das obrigações acessorias com sincronização e acompanhamento por cliente."
                 : "Envio de arquivos para o e-Continuo com histórico operacional por cliente."}
             </p>
           </div>
           <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center">
-            <div className="min-h-10 inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/8 px-3 py-2 text-xs text-white/78">
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground min-h-10 inline-flex items-center gap-2">
               {syncingCompanies || syncingObligations ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               ) : (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
               )}
               <span>
                 {isObrigacoesModule
@@ -1298,10 +1291,9 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             {isObrigacoesModule && (
               <Button
                 type="button"
-                variant="hero-outline"
+                variant="outline"
                 onClick={() => void handleManualSync()}
                 disabled={syncingCompanies || syncingObligations || !hasConfiguration}
-                className="border-white/20 bg-white/10 text-white hover:bg-white hover:text-primary"
               >
                 {syncingCompanies || syncingObligations ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1312,8 +1304,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
               </Button>
             )}
           </div>
-          </div>
-        </section>
+        </div>
 
         {!hasConfiguration && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -1324,7 +1315,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {metrics.map((metric) => (
             <motion.div key={metric.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-              <Card className="executive-stat">
+              <Card>
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">{metric.label}</p>
@@ -1550,7 +1541,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">Envio rapido com pré-conferência</CardTitle>
                     <CardDescription>
-                      Arraste e solte um ou mais arquivos para leitura automática. Antes do envio, revise cliente, competência e obrigação.
+                      Arraste e solte um ou mais arquivos para leitura automatica. Antes do envio, revise cliente, competência e obrigação.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1943,7 +1934,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             </span>
             <span className="inline-flex items-center gap-1">
               <Pencil className="h-3.5 w-3.5 text-primary" />
-              Integração de obrigações com Kanban desativada temporariamente.
+              Integracao de obrigações com Kanban desativada temporariamente.
             </span>
           </CardContent>
         </Card>
@@ -1953,7 +1944,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
             <DialogHeader>
               <DialogTitle>Editar obrigação</DialogTitle>
               <DialogDescription>
-                Atualize os dados da obrigação para esta empresa. A alteração é salva no Grow e enviada ao Acessorias.
+                Atualize os dados da obrigação para esta empresa. A alteracao e salva no Grow e enviada ao Acessorias.
               </DialogDescription>
             </DialogHeader>
 
@@ -2038,7 +2029,7 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
               </Button>
               <Button onClick={() => void handleUpdateObligation()} disabled={savingObligation}>
                 {savingObligation ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Salvar alterações
+                Salvar alteracoes
               </Button>
             </DialogFooter>
           </DialogContent>

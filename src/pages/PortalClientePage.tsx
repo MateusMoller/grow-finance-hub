@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
@@ -409,13 +409,13 @@ export default function PortalClientePage() {
           const insertedTaskId = eventType === "INSERT" ? String((payload.new as { id?: string })?.id || "") : "";
 
           if (eventType === "INSERT" && insertedTaskId && !knownPortalTaskIdsRef.current.has(insertedTaskId)) {
-            toast.success("Nova pendência recebida da equipe.");
+            toast.success("Nova pendencia recebida da equipe.");
           }
 
           if (eventType === "UPDATE") {
             const nextStatus = String((payload.new as { status?: string })?.status || "");
             if (nextStatus === "completed") {
-              toast.success("Uma pendência foi concluída pela equipe.");
+              toast.success("Uma pendencia foi concluída pela equipe.");
             }
           }
 
@@ -556,7 +556,7 @@ export default function PortalClientePage() {
         .map((request) => ({
           id: `analysis-${request.id}`,
           title: request.title,
-          description: "Nossa equipe está analisando essa demanda.",
+          description: "Nossa equipe está analisando esta demanda.",
           dueDate: request.updated_at,
           sector: request.sector,
           requestId: request.id,
@@ -1015,7 +1015,7 @@ export default function PortalClientePage() {
 
     if (signInError) {
       setChangingPortalPassword(false);
-      toast.error("Senha atual inválida.");
+      toast.error("Senha atual invalida.");
       return;
     }
 
@@ -1063,7 +1063,7 @@ export default function PortalClientePage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Se o problema persistir, peça ao administrador para validar e liberar o acesso no cadastro do cliente.
+              Se o problema persistir, peca ao administrador para validar e liberar o acesso no cadastro do cliente.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1156,7 +1156,7 @@ export default function PortalClientePage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Pendências do cliente</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Visualize o que depende da sua ação, o que está em análise e o que já foi concluído.
+                  Visualize o que depende da sua acao, o que esta em análise e o que ja foi concluído.
                 </p>
               </CardHeader>
             </Card>
@@ -1278,7 +1278,7 @@ export default function PortalClientePage() {
                   <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                   <p className="font-medium">Nenhum envio do e-continuo encontrado.</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Assim que houver envios, eles serão listados automaticamente aqui.
+                    Assim que houver envios, eles serao listados automaticamente aqui.
                   </p>
                 </CardContent>
               </Card>
@@ -1510,7 +1510,7 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">4. Acompanhe o controle de caixa (quando liberado)</p>
                       <p className="text-sm text-muted-foreground">
-                        Se o admin liberar este módulo, você pode registrar entradas e saídas e acompanhar os indicadores de caixa.
+                        Se o admin liberar este modulo, voce pode registrar entradas e saidas e acompanhar os indicadores de caixa.
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("cashflow")}>
@@ -1739,7 +1739,7 @@ export default function PortalClientePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Título</label>
+                <label className="text-sm font-medium">Titulo</label>
                 <Input
                   value={newRequestTitle}
                   onChange={(event) => setNewRequestTitle(event.target.value)}
@@ -1863,7 +1863,7 @@ export default function PortalClientePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Não vincular agora</SelectItem>
+                  <SelectItem value="none">Nao vincular agora</SelectItem>
                   {requests.map((request) => (
                     <SelectItem key={request.id} value={request.id}>
                       {request.title}
@@ -1951,8 +1951,8 @@ export default function PortalClientePage() {
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
                         <span>Aberta em {new Date(selectedRequest.created_at).toLocaleDateString("pt-BR")}</span>
-                        <span>Última atualização em {new Date(selectedRequest.updated_at).toLocaleDateString("pt-BR")}</span>
-                        <span>Última interação: {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "sem mensagens"}</span>
+                        <span>Ultima atualizacao em {new Date(selectedRequest.updated_at).toLocaleDateString("pt-BR")}</span>
+                        <span>Ultima interacao: {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "sem mensagens"}</span>
                       </div>
                       {selectedRequest.admin_notes && (
                         <div className="rounded-lg border bg-muted/40 p-3">

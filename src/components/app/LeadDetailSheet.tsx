@@ -188,7 +188,7 @@ export function LeadDetailSheet({
             </h3>
             {historyEntries.length === 0 ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                Nenhuma alteração registrada.
+                Nenhuma alteracao registrada.
               </div>
             ) : (
               <div className="space-y-2">

@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 
 const products = [
-  { name: "Contábilidade Completa", description: "Contábilidade, fiscal e departamento pessoal", price: "A partir de R$ 890/mês", clients: 142, icon: FileText, popular: true },
+  { name: "Contabilidade Completa", description: "Contabilidade, fiscal e departamento pessoal", price: "A partir de R$ 890/mês", clients: 142, icon: FileText, popular: true },
   { name: "BPO Financeiro", description: "Gestão financeira terceirizada completa", price: "A partir de R$ 1.200/mês", clients: 67, icon: DollarSign, popular: true },
   { name: "Consultoria Financeira", description: "Consultoria estratégica para crescimento", price: "A partir de R$ 2.500/mês", clients: 28, icon: TrendingUp, popular: false },
   { name: "Departamento Pessoal", description: "Gestão completa de folha e obrigações", price: "A partir de R$ 490/mês", clients: 98, icon: Users, popular: false },

@@ -434,7 +434,7 @@ export function KanbanTaskDetailSheet({
                   {requestInfo && (
                     <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
                       <div className="flex items-center gap-1">
-                        <FileText className="h-3.5 w-3.5" /> Título: {requestInfo.title}
+                        <FileText className="h-3.5 w-3.5" /> Titulo: {requestInfo.title}
                       </div>
                       <div>Categoria: {requestInfo.category}</div>
                       <div>Setor solicitado: {requestInfo.sector}</div>
@@ -447,7 +447,7 @@ export function KanbanTaskDetailSheet({
             <TabsContent value="histórico" className="space-y-3">
               {historyEntries.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Nenhuma alteração registrada para esta tarefa.
+                  Nenhuma alteracao registrada para esta tarefa.
                 </div>
               ) : (
                 historyEntries.map((entry) => (

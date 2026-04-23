@@ -277,7 +277,7 @@ export default function ProcessosPage() {
 
   const handleUpload = async () => {
     if (!user) {
-      toast.error("Sessão inválida. Entre novamente no sistema.");
+      toast.error("Sessao invalida. Entre novamente no sistema.");
       return;
     }
 

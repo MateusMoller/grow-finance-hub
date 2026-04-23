@@ -1,4 +1,4 @@
-﻿import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import {
@@ -65,20 +65,20 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
   const base = [
     { title: "Dashboard", url: "/app" },
     { title: "Kanban", url: "/app/kanban" },
-    { title: "CalendÃ¡rio", url: "/app/calendario" },
+    { title: "Calendario", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
-    { title: "FormulÃ¡rios", url: "/app/formularios" },
+    { title: "Formularios", url: "/app/formulários" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
-    { title: "RelatÃ³rios", url: "/app/relatorios" },
-    { title: "ObrigaÃ§Ãµes", url: "/app/obrigacoes" },
+    { title: "Relatórios", url: "/app/relatorios" },
+    { title: "Obrigações", url: "/app/obrigacoes" },
     { title: "E-continuo", url: "/app/econtinuo" },
-    { title: "NotificaÃ§Ãµes", url: "/app/notificacoes" },
-    { title: "UsuÃ¡rios", url: "/app/usuarios" },
+    { title: "Notificacoes", url: "/app/notificacoes" },
+    { title: "Usuários", url: "/app/usuarios" },
     { title: "Sugestoes", url: "/app/sugestoes" },
-    { title: "ConfiguraÃ§Ãµes", url: "/app/configuracoes" },
+    { title: "Configuracoes", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
   ];
 
@@ -92,7 +92,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
       item.url === "/app/tarefas" ||
       item.url === "/app/clientes" ||
       item.url === "/app/solicitacoes" ||
-      item.url === "/app/formularios" ||
+      item.url === "/app/formulários" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
       item.url === "/app/obrigacoes" ||
@@ -110,7 +110,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     item.url === "/app/tarefas" ||
     item.url === "/app/clientes" ||
     item.url === "/app/solicitacoes" ||
-    item.url === "/app/formularios" ||
+    item.url === "/app/formulários" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
     item.url === "/app/obrigacoes" ||
@@ -138,7 +138,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     markAsRead,
     markAllAsRead,
     notificationSignal,
-    latestRealtimeNotifications,
   } = usePriorityNotifications();
 
   const navigate = useNavigate();
@@ -155,8 +154,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const notificationTargetPath = `${import.meta.env.BASE_URL || "/"}app/notificacoes`;
-  const notificationIconUrl = `${import.meta.env.BASE_URL || "/"}icons/icon-192.png`;
 
   const playNotificationSound = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -210,63 +207,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     });
   }, [notificationSignal, playNotificationSound]);
 
-  const showDesktopNotification = useCallback(async (title: string, description: string, tag: string) => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-
-    let permission = Notification.permission;
-    if (permission === "default") {
-      try {
-        permission = await Notification.requestPermission();
-      } catch {
-        return;
-      }
-    }
-
-    if (permission !== "granted") return;
-
-    try {
-      if ("serviceWorker" in navigator) {
-        const registration = await navigator.serviceWorker.getRegistration();
-        if (registration) {
-          await registration.showNotification(title, {
-            body: description,
-            icon: notificationIconUrl,
-            badge: notificationIconUrl,
-            tag,
-            renotify: true,
-            data: { url: notificationTargetPath },
-          });
-          return;
-        }
-      }
-
-      const desktopNotification = new Notification(title, {
-        body: description,
-        icon: notificationIconUrl,
-        tag,
-      });
-
-      desktopNotification.onclick = () => {
-        window.focus();
-        window.location.href = notificationTargetPath;
-      };
-    } catch {
-      // Se o navegador bloquear a exibicao, segue silenciosamente.
-    }
-  }, [notificationIconUrl, notificationTargetPath]);
-
-  useEffect(() => {
-    if (latestRealtimeNotifications.length === 0) return;
-
-    latestRealtimeNotifications.slice(0, 3).forEach((notification) => {
-      void showDesktopNotification(
-        notification.title,
-        notification.description,
-        `grow-live-${notification.id}`,
-      );
-    });
-  }, [latestRealtimeNotifications, showDesktopNotification]);
-
   useEffect(() => {
     return () => {
       if (!audioContextRef.current) return;
@@ -301,14 +241,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="executive-shell min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-20 border-b border-border/70 bg-background/88 px-3 py-3 backdrop-blur-xl md:px-5 shrink-0">
-            <div className="flex items-center justify-between gap-3">
+          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <SidebarTrigger />
-              <div className="hidden md:flex items-center gap-2 rounded-2xl border border-border/80 bg-card/90 px-3 py-2 shadow-sm">
+              <div className="hidden md:flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
                   className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-44 lg:w-56"
@@ -347,8 +286,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>NotificaÃ§Ãµes</span>
-                    <span className="text-xs text-muted-foreground">{unreadCount} nÃ£o lidas</span>
+                    <span>Notificacoes</span>
+                    <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <div className="max-h-72 overflow-y-auto">
@@ -413,16 +352,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(14rem,calc(100vw-1rem))]">
-                  <DropdownMenuLabel className="truncate">{user?.email || "UsuÃ¡rio"}</DropdownMenuLabel>
+                  <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
                     <UserRound className="h-4 w-4 mr-2" /> Meu perfil
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <Settings className="h-4 w-4 mr-2" /> ConfiguraÃ§Ãµes
+                    <Settings className="h-4 w-4 mr-2" /> Configuracoes
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    <Bell className="h-4 w-4 mr-2" /> NotificaÃ§Ãµes
+                    <Bell className="h-4 w-4 mr-2" /> Notificacoes
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -434,19 +373,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            </div>
-
           </header>
 
-          <main className="flex-1 overflow-auto bg-transparent p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
+          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
             {children}
           </main>
 
-          <footer className="border-t border-border/70 bg-background/80 px-4 py-3 text-center text-xs text-muted-foreground backdrop-blur mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
+          <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
             Grow Finance Hub - Area interna
           </footer>
 
-          <div className="fixed bottom-0 left-0 right-0 border-t border-border/80 bg-background/95 backdrop-blur md:hidden z-30">
+          <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
             <div
               className="grid grid-cols-3 px-1 pb-[calc(env(safe-area-inset-bottom)+0.125rem)]"
               style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.125rem)" }}
@@ -483,7 +420,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="sm:max-w-md max-h-[85svh]">
           <DialogHeader>
-            <DialogTitle>Busca rÃ¡pida</DialogTitle>
+            <DialogTitle>Busca rápida</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <input
@@ -536,7 +473,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">CompetÃªncia</label>
+              <label className="text-sm font-medium">Competência</label>
               <select
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 value={selectedCompetence || ""}
@@ -562,7 +499,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 Aplicar
               </Button>
             </div>
-            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opÃ§Ãµes...</p>}
+            {loadingOptions && <p className="text-xs text-muted-foreground">Atualizando opções...</p>}
           </div>
         </SheetContent>
       </Sheet>

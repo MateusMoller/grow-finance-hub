@@ -1,4 +1,4 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+﻿import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -407,10 +407,10 @@ export function TaskDetailSheet({
           <Separator />
 
           <div>
-            <h3 className="text-sm font-semibold mb-3">Histórico de alterações</h3>
+            <h3 className="text-sm font-semibold mb-3">Histórico de alteracoes</h3>
             {historyEntries.length === 0 ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                Nenhuma alteração registrada.
+                Nenhuma alteracao registrada.
               </div>
             ) : (
               <div className="space-y-2">
@@ -439,7 +439,7 @@ export function TaskDetailSheet({
                   onEditTask(task.id);
                   return;
                 }
-                toast.info("Edição direta desta tela ainda não está disponível.");
+                toast.info("Edicao direta desta tela ainda não esta disponível.");
               }}
             >
               <Edit className="h-3.5 w-3.5" /> Editar
