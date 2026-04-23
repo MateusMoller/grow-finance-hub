@@ -67,10 +67,10 @@ export function SiteFooter() {
                 className="h-12 w-auto rounded-[0.95rem] object-cover sm:h-14"
               />
             </Link>
-            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+            <p className="max-w-sm text-sm leading-relaxed text-white/[0.65]">
               Contabilidade consultiva, proximidade e tecnologia para empresas que precisam crescer com clareza e solidez.
             </p>
-            <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/[0.55]">
               <span>Compliance</span>
               <span>-</span>
               <span>Clareza</span>
@@ -80,8 +80,8 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Servicos</h4>
-            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">Servicos</h4>
+            <ul className="mt-3 space-y-2 text-sm text-white/[0.65]">
               <li><Link to="/solucoes" className="premium-link">Contabilidade Consultiva</Link></li>
               <li><Link to="/solucoes" className="premium-link">Assessoria Fiscal</Link></li>
               <li><Link to="/solucoes" className="premium-link">Departamento Pessoal</Link></li>
@@ -90,8 +90,8 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Institucional</h4>
-            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">Institucional</h4>
+            <ul className="mt-3 space-y-2 text-sm text-white/[0.65]">
               <li><Link to="/" className="premium-link">Sobre a Grow</Link></li>
               <li><Link to="/#clientes" className="premium-link">Clientes</Link></li>
               <li><Link to="/newsletter" className="premium-link">Newsletter</Link></li>
@@ -102,8 +102,8 @@ export function SiteFooter() {
 
           <div className="space-y-4">
             <div>
-              <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Contato</h4>
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">Contato</h4>
+              <ul className="mt-3 space-y-2 text-sm text-white/[0.65]">
                 <li>Rua Julio de Castilhos, 2579 - Sl 212 - Centro, Taquara - RS</li>
                 <li><a href="tel:+5551995325592" className="premium-link">Telefone: (51) 99532-5592</a></li>
                 <li><a href="mailto:contato@contabilidadegrow.com.br" className="premium-link">contato@contabilidadegrow.com.br</a></li>
@@ -120,7 +120,7 @@ export function SiteFooter() {
               </ul>
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">Assine nossa newsletter</p>
+              <p className="text-sm font-medium text-white">Assine nossa newsletter</p>
               <form onSubmit={handleSubscribe} className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <label htmlFor="footer-newsletter-email" className="sr-only">E-mail para newsletter</label>
                 <Input
@@ -133,7 +133,7 @@ export function SiteFooter() {
                   placeholder="voce@empresa.com.br"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="h-10 border-white/15 bg-white/[0.08] text-white placeholder:text-white/50"
+                  className="h-10 border-white/[0.15] bg-white/[0.08] text-white placeholder:text-white/50"
                 />
                 <Button
                   type="submit"
@@ -156,7 +156,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 border-t border-border pt-5 text-xs text-muted-foreground md:mt-10 md:flex-row md:items-center md:justify-between">
+        <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-5 text-xs text-white/[0.55] md:mt-10 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <p>(c) {new Date().getFullYear()} Grow Contabilidade. Todos os direitos reservados.</p>
             <p>
@@ -165,7 +165,7 @@ export function SiteFooter() {
                 href="https://www.linkedin.com/in/mateus-henrique-moller/"
                 target="_blank"
                 rel="noreferrer"
-                className="text-muted-foreground/90 transition-colors hover:text-foreground hover:underline underline-offset-2"
+                className="text-white/70 transition-colors hover:text-white hover:underline underline-offset-2"
               >
                 Mateus Henrique Moller
               </a>.

@@ -70,8 +70,8 @@ export function SiteHeader() {
               to={link.to}
               className={`rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isNavActive(location.pathname, location.hash, link.to)
-                  ? "bg-white/12 text-white shadow-sm"
-                  : "text-white/68 hover:bg-white/8 hover:text-white"
+                  ? "bg-white/[0.12] text-white shadow-sm"
+                  : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white"
               }`}
             >
               {link.label}
@@ -85,7 +85,7 @@ export function SiteHeader() {
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-full border-white/15 bg-white/[0.04] text-white hover:bg-white/10"
+              className="h-10 w-10 rounded-full border-white/[0.15] bg-white/[0.04] text-white hover:bg-white/10"
               onClick={toggleTheme}
               aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
             >
@@ -95,7 +95,7 @@ export function SiteHeader() {
             <span className="h-9 w-9 rounded-full border border-border/80 bg-background" />
           )}
 
-          <Button asChild variant="ghost" size="sm" className="rounded-full text-white/80 hover:bg-white/8 hover:text-white">
+          <Button asChild variant="ghost" size="sm" className="rounded-full text-white/80 hover:bg-white/[0.08] hover:text-white">
             <Link to="/login">Entrar</Link>
           </Button>
           <Button asChild size="sm" className="rounded-full bg-white px-5 text-primary hover:bg-white/90">
@@ -105,7 +105,7 @@ export function SiteHeader() {
 
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] text-white shadow-sm transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.15] bg-white/[0.05] text-white shadow-sm transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:hidden"
           onClick={() => setOpen((prev) => !prev)}
           aria-label="Abrir menu"
           aria-expanded={open}
@@ -155,7 +155,7 @@ export function SiteHeader() {
                   className={`rounded-xl px-3 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     isNavActive(location.pathname, location.hash, link.to)
                       ? "bg-white/10 text-white"
-                      : "text-white/74 hover:bg-white/8 hover:text-white"
+                      : "text-white/[0.74] hover:bg-white/[0.08] hover:text-white"
                   }`}
                 >
                   {link.label}
@@ -163,22 +163,27 @@ export function SiteHeader() {
               ))}
             </div>
 
-            <Button type="button" variant="outline" className="mt-4 w-full" onClick={toggleTheme}>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full rounded-full border-white/[0.15] bg-white/[0.04] text-white hover:bg-white/10 hover:text-white"
+              onClick={toggleTheme}
+            >
               {isDark ? "Usar modo claro" : "Usar modo escuro"}
             </Button>
 
             <div className="mt-4 grid gap-2 border-t border-white/10 pt-4">
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="w-full rounded-full border-white/[0.15] bg-white/[0.04] text-white hover:bg-white/10 hover:text-white">
                 <Link to="/portal" onClick={() => setOpen(false)}>
                   Portal do Cliente
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="w-full rounded-full border-white/[0.15] bg-white/[0.04] text-white hover:bg-white/10 hover:text-white">
                 <Link to="/login" onClick={() => setOpen(false)}>
                   Entrar
                 </Link>
               </Button>
-              <Button asChild className="w-full">
+              <Button asChild className="w-full rounded-full bg-white text-primary hover:bg-white/90">
                 <Link to="/#contato" onClick={() => setOpen(false)}>
                   Agende uma Avaliacao
                 </Link>

@@ -46,7 +46,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <SiteFooter />
       <SiteWhatsAppButton />
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#050508]/95 text-white shadow-[0_-18px_50px_-34px_rgba(0,0,0,0.95)] backdrop-blur md:hidden">
         <div
           className="grid grid-cols-4 px-2 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] pt-1"
           style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.25rem)" }}
@@ -58,11 +58,11 @@ export function SiteLayout({ children }: { children: ReactNode }) {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                  "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  isActive ? "bg-white/[0.08] text-grow-gold" : "text-white/60 hover:bg-white/[0.05] hover:text-white",
                 )}
               >
-                <item.icon className={cn("h-4 w-4", isActive && "text-primary")} />
+                <item.icon className={cn("h-4 w-4", isActive && "text-grow-gold")} aria-hidden="true" />
                 <span>{item.label}</span>
               </Link>
             );

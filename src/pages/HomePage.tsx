@@ -93,7 +93,7 @@ export default function HomePage() {
                 <h1 className="font-heading text-4xl font-bold leading-[0.98] tracking-tight text-white sm:text-5xl md:text-6xl xl:text-7xl">
                   Contabilidade clara e confiavel para empresas em crescimento
                 </h1>
-                <p className="max-w-xl text-base leading-relaxed text-white/74 sm:text-lg">
+                <p className="max-w-xl text-base leading-relaxed text-white/[0.74] sm:text-lg">
                   Organizamos rotinas contabeis, fiscais e financeiras para voce crescer com controle, previsibilidade e menos ruido operacional.
                 </p>
               </div>
@@ -101,7 +101,7 @@ export default function HomePage() {
                 <Button asChild size="lg" className="rounded-full bg-white px-9 text-primary hover:bg-white/90">
                   <Link to="/#contato">Comecar agora</Link>
                 </Button>
-                <Button asChild size="lg" variant="outline" className="rounded-full border-white/24 bg-transparent px-9 text-white hover:bg-white/10 hover:text-white">
+                <Button asChild size="lg" variant="outline" className="rounded-full border-white/[0.24] bg-transparent px-9 text-white hover:bg-white/10 hover:text-white">
                   <Link to="/solucoes">Ver servicos</Link>
                 </Button>
               </div>
@@ -111,23 +111,23 @@ export default function HomePage() {
               <div className="grow-finance-card absolute right-4 top-3 w-[min(92%,31rem)] rotate-[14deg] p-6 text-white">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm text-white/64">Organizacao fiscal</p>
+                    <p className="text-sm text-white/[0.64]">Organizacao fiscal</p>
                     <p className="mt-2 font-heading text-3xl font-bold tabular-nums">96,8%</p>
                   </div>
                   <span className="rounded-full bg-grow-gold px-3 py-1 text-xs font-bold text-grow-gold-foreground">Grow</span>
                 </div>
                 <div className="mt-8 flex gap-3">
                   <span className="rounded-full bg-white px-8 py-2 text-sm font-semibold text-primary">Revisar</span>
-                  <span className="rounded-full border border-white/24 px-8 py-2 text-sm text-white/84">Relatorio</span>
+                  <span className="rounded-full border border-white/[0.24] px-8 py-2 text-sm text-white/[0.84]">Relatorio</span>
                 </div>
               </div>
               <div className="grow-finance-card absolute bottom-4 left-2 w-[min(94%,32rem)] -rotate-[12deg] p-6 text-white">
-                <p className="text-sm text-white/64">Indicadores mensais</p>
+                <p className="text-sm text-white/[0.64]">Indicadores mensais</p>
                 <p className="mt-2 font-heading text-4xl font-bold tabular-nums">+24,5%</p>
-                <div className="mt-8 h-2 overflow-hidden rounded-full bg-white/12">
+                <div className="mt-8 h-2 overflow-hidden rounded-full bg-white/[0.12]">
                   <div className="h-full w-[72%] rounded-full bg-gradient-to-r from-grow-gold to-white" />
                 </div>
-                <div className="mt-4 flex justify-between text-xs text-white/64">
+                <div className="mt-4 flex justify-between text-xs text-white/[0.64]">
                   <span>Meta</span>
                   <span>Em evolucao</span>
                 </div>
@@ -137,7 +137,7 @@ export default function HomePage() {
         </section>
 
         <section className="grow-logo-strip py-8">
-          <div className="container grid grid-cols-2 gap-6 text-center text-sm font-semibold uppercase tracking-[0.18em] text-white/58 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="container grid grid-cols-2 gap-6 text-center text-sm font-semibold uppercase tracking-[0.18em] text-white/[0.58] sm:grid-cols-3 lg:grid-cols-6">
             {trustLogos.map((logo) => (
               <span key={logo}>{logo}</span>
             ))}
@@ -148,7 +148,7 @@ export default function HomePage() {
           <div className="container">
             <motion.div {...fadeIn} className="mx-auto mb-10 max-w-3xl text-center">
               <h2 className="font-heading text-3xl font-bold text-white sm:text-4xl">Tudo que sua operacao financeira precisa</h2>
-              <p className="mt-4 text-white/68">Da rotina contabil ao acompanhamento consultivo, a Grow entrega um ecossistema completo.</p>
+              <p className="mt-4 text-white/[0.68]">Da rotina contabil ao acompanhamento consultivo, a Grow entrega um ecossistema completo.</p>
             </motion.div>
             <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-2">
               {services.map((service, index) => (
@@ -164,7 +164,7 @@ export default function HomePage() {
                     <service.icon className="h-11 w-11" aria-hidden="true" />
                   </div>
                   <h3 className="font-heading text-2xl font-semibold text-white">{service.title}</h3>
-                  <p className="mt-3 min-h-14 text-sm leading-relaxed text-white/64">{service.description}</p>
+                  <p className="mt-3 min-h-14 text-sm leading-relaxed text-white/[0.64]">{service.description}</p>
                   <Button asChild size="sm" className="mt-6 rounded-full bg-gradient-to-r from-primary to-grow-gold px-8 text-white">
                     <Link to="/solucoes">Saiba mais</Link>
                   </Button>
@@ -178,7 +178,7 @@ export default function HomePage() {
           <div className="container">
             <motion.div {...fadeIn} className="mx-auto mb-12 max-w-3xl text-center">
               <h2 className="font-heading text-3xl font-bold text-white sm:text-4xl">Por que empresas escolhem a Grow</h2>
-              <p className="mt-4 text-white/68">A experiencia foi pensada para transmitir controle, clareza e solidez desde o primeiro contato.</p>
+              <p className="mt-4 text-white/[0.68]">A experiencia foi pensada para transmitir controle, clareza e solidez desde o primeiro contato.</p>
             </motion.div>
             <div className="grid items-center gap-10 lg:grid-cols-[0.95fr_1.05fr]">
               <div className="space-y-6">
@@ -187,7 +187,7 @@ export default function HomePage() {
                     <CheckCircle2 className="mt-1 h-6 w-6 shrink-0 text-grow-gold" aria-hidden="true" />
                     <div>
                       <h3 className="font-heading text-xl font-semibold text-white">{item.title}</h3>
-                      <p className="mt-1 text-white/64">{item.description}</p>
+                      <p className="mt-1 text-white/[0.64]">{item.description}</p>
                     </div>
                   </div>
                 ))}
@@ -199,7 +199,7 @@ export default function HomePage() {
                   width={980}
                   height={604}
                   loading="lazy"
-                  className="absolute right-0 top-4 h-72 w-[80%] rounded-2xl border border-white/18 object-cover shadow-2xl"
+                  className="absolute right-0 top-4 h-72 w-[80%] rounded-2xl border border-white/[0.18] object-cover shadow-2xl"
                 />
                 <div className="absolute bottom-8 left-4 rounded-2xl bg-primary px-10 py-5 text-center font-heading text-xl font-bold text-white shadow-xl">
                   12+ anos<br />de solidez
@@ -213,7 +213,7 @@ export default function HomePage() {
           <div className="container">
             <motion.div {...fadeIn} className="mx-auto mb-12 max-w-3xl text-center">
               <h2 className="font-heading text-3xl font-bold text-white sm:text-4xl">Nosso processo simplificado</h2>
-              <p className="mt-4 text-white/68">Uma entrada consultiva, objetiva e sem semanas de confusao operacional.</p>
+              <p className="mt-4 text-white/[0.68]">Uma entrada consultiva, objetiva e sem semanas de confusao operacional.</p>
             </motion.div>
             <div className="grid gap-7 md:grid-cols-4">
               {journey.map((item, index) => (
@@ -223,7 +223,7 @@ export default function HomePage() {
                   </div>
                   <item.icon className="mx-auto mt-5 h-5 w-5 text-grow-gold" aria-hidden="true" />
                   <h3 className="mt-3 font-heading text-xl font-semibold text-white">{item.title}</h3>
-                  <p className="mx-auto mt-2 max-w-[15rem] text-sm text-white/62">{item.description}</p>
+                  <p className="mx-auto mt-2 max-w-[15rem] text-sm text-white/[0.62]">{item.description}</p>
                 </div>
               ))}
             </div>
@@ -234,7 +234,7 @@ export default function HomePage() {
           <div className="container">
             <motion.div {...fadeIn} className="mx-auto mb-10 max-w-3xl text-center">
               <h2 className="font-heading text-3xl font-bold text-white sm:text-4xl">Planos transparentes para cada fase</h2>
-              <p className="mt-4 text-white/68">A proposta e desenhada conforme o tamanho, rotina e necessidade da empresa.</p>
+              <p className="mt-4 text-white/[0.68]">A proposta e desenhada conforme o tamanho, rotina e necessidade da empresa.</p>
             </motion.div>
             <div className="grid gap-6 lg:grid-cols-3">
               {plans.map((plan) => (
@@ -244,8 +244,8 @@ export default function HomePage() {
                   </div>
                   <h3 className="text-center font-heading text-xl font-semibold text-white">{plan.title}</h3>
                   <p className="mt-3 text-center font-heading text-4xl font-bold text-white">{plan.price}</p>
-                  <p className="mx-auto mt-3 max-w-xs text-center text-sm text-white/64">{plan.description}</p>
-                  <ul className="mt-8 flex-1 space-y-4 text-sm text-white/74">
+                  <p className="mx-auto mt-3 max-w-xs text-center text-sm text-white/[0.64]">{plan.description}</p>
+                  <ul className="mt-8 flex-1 space-y-4 text-sm text-white/[0.74]">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-center gap-3">
                         <CheckCircle2 className="h-4 w-4 text-grow-gold" aria-hidden="true" />
@@ -276,7 +276,7 @@ export default function HomePage() {
                     </div>
                     <div>
                       <p className="font-heading font-semibold text-white">{testimonial.name}</p>
-                      <p className="text-xs text-white/54">{testimonial.role}</p>
+                      <p className="text-xs text-white/[0.54]">{testimonial.role}</p>
                     </div>
                   </div>
                   <p className="mt-5 text-sm leading-relaxed text-white/70">"{testimonial.text}"</p>
@@ -295,14 +295,14 @@ export default function HomePage() {
           <div className="container">
             <motion.div {...fadeIn} className="mx-auto mb-10 max-w-3xl text-center">
               <h2 className="font-heading text-3xl font-bold text-white sm:text-4xl">Insights financeiros</h2>
-              <p className="mt-4 text-white/68">Conteudo pratico para empresarios que querem decidir melhor.</p>
+              <p className="mt-4 text-white/[0.68]">Conteudo pratico para empresarios que querem decidir melhor.</p>
             </motion.div>
             <div className="grid gap-6 lg:grid-cols-3">
               {insights.map((insight) => (
                 <article key={insight.title} className="institutional-card overflow-hidden">
                   <div className="h-44 bg-cover bg-center" style={{ backgroundImage: `url(${growStationery})` }} />
                   <div className="p-5">
-                    <p className="text-xs text-white/54">{insight.date}</p>
+                    <p className="text-xs text-white/[0.54]">{insight.date}</p>
                     <h3 className="mt-3 font-heading text-xl font-semibold text-white">{insight.title}</h3>
                     <Link to="/newsletter" className="mt-5 inline-flex text-sm font-semibold text-grow-gold hover:text-white">
                       Ler artigo
@@ -327,14 +327,14 @@ export default function HomePage() {
               <h2 className="font-heading text-4xl font-bold leading-tight text-white sm:text-5xl">
                 Vamos simplificar sua contabilidade?
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-white/72 lg:mx-0">
+              <p className="mx-auto mt-4 max-w-2xl text-white/[0.72] lg:mx-0">
                 Agende uma avaliacao gratuita e veja como a Grow pode organizar sua rotina com clareza e estrategia.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
                 <Button asChild size="lg" className="rounded-full bg-white px-9 text-primary hover:bg-white/90">
                   <Link to="/contato">Falar com especialista</Link>
                 </Button>
-                <Button asChild size="lg" variant="outline" className="rounded-full border-white/24 bg-transparent px-9 text-white hover:bg-white/10 hover:text-white">
+                <Button asChild size="lg" variant="outline" className="rounded-full border-white/[0.24] bg-transparent px-9 text-white hover:bg-white/10 hover:text-white">
                   <Link to="/solucoes">Conhecer servicos</Link>
                 </Button>
               </div>
@@ -347,7 +347,7 @@ export default function HomePage() {
                 submitLabel="Solicitar avaliacao gratuita"
                 successMessage="Solicitacao enviada com sucesso. Nossa equipe entrara em contato em breve."
                 className="institutional-card space-y-4 p-6"
-                intro={<p className="text-sm text-white/64">Preencha os dados para nossa equipe entrar em contato.</p>}
+                intro={<p className="text-sm text-white/[0.64]">Preencha os dados para nossa equipe entrar em contato.</p>}
               />
             </motion.div>
           </div>
