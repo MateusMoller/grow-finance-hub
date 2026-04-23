@@ -135,41 +135,106 @@ export default function AboutPage() {
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
         <section id="institucional" className="border-b border-border/60 py-10 dark:border-[#243054] sm:py-12 md:py-16">
-          <div className="container grid gap-8 sm:gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-start">
-            <motion.div {...fadeIn} className="space-y-6">
-              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                Grow Contabilidade - Institucional
-              </span>
-              <h1 className="font-heading text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
-                Mais do que contabilidade, construímos estratégia para o crescimento do seu negócio
-              </h1>
-              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
-                A Grow une consultoria, tecnologia e atendimento proximo para organizar sua operação contabil e financeira.
-                Nosso foco e transformar complexidade em clareza, conformidade e crescimento sustentável.
-              </p>
+          <div className="container grid gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
+            <motion.div {...fadeIn} className="relative space-y-7 pt-2">
+              <div className="pointer-events-none absolute -left-8 top-10 hidden h-32 w-32 rounded-full border border-primary/15 lg:block" />
+              <div className="pointer-events-none absolute left-16 top-28 hidden h-px w-24 rotate-[28deg] bg-gradient-to-r from-transparent via-primary/40 to-transparent lg:block" />
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+                  Grow Contabilidade
+                </span>
+                <div className="max-w-[220px] border-l border-primary/20 pl-4 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                  operação, visão e direção em uma estrutura menos previsível
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="overflow-hidden">
+                  <p className="text-[13px] font-semibold uppercase tracking-[0.28em] text-primary/70">Institucional</p>
+                </div>
+                <h1 className="max-w-4xl font-heading text-[2.9rem] font-black leading-[0.94] tracking-[-0.06em] sm:text-[4.3rem] lg:text-[5.5rem]">
+                  <span className="block">CONTABILIDADE</span>
+                  <span className="block pl-[0.08em] text-primary">QUE PUXA</span>
+                  <span className="block sm:pl-[0.35em]">SEU NEGÓCIO</span>
+                  <span className="block text-[0.42em] font-semibold uppercase tracking-[0.24em] text-muted-foreground sm:pl-[1.6em]">
+                    para fora do operacional automático
+                  </span>
+                </h1>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+                <p className="max-w-xl text-base leading-8 text-muted-foreground">
+                  A Grow organiza fiscal, contábil, financeiro e pessoas com uma leitura mais afiada do negócio.
+                  Não é só suporte técnico. É estrutura para decidir, corrigir rota e crescer sem operar no escuro.
+                </p>
+                <motion.div
+                  animate={{ y: [0, -8, 0], rotate: [-4, -1, -4] }}
+                  transition={{ duration: 6.4, repeat: Infinity, ease: "easeInOut" }}
+                  className="w-fit rounded-[28px] border border-primary/15 bg-primary/10 px-5 py-4 shadow-sm"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Leitura Grow</p>
+                  <p className="mt-2 max-w-[200px] text-sm font-medium leading-6 text-foreground">
+                    Clareza operacional com presença consultiva e menos aparência de escritório tradicional.
+                  </p>
+                </motion.div>
+              </div>
+
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   asChild
-                  className="group w-full rounded-full border border-white/35 px-5 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
+                  className="group h-12 w-full rounded-full border border-white/35 px-6 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                 >
                   <Link to="/#contato">
                     Solicitar avaliação gratuita
                     <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="group w-full rounded-full px-5 sm:w-auto">
+                <Button asChild variant="outline" className="group h-12 w-full rounded-full px-6 sm:w-auto">
                   <Link to="/contato">
                     Falar com especialista
                     <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                   </Link>
                 </Button>
               </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1.05fr_0.95fr_0.95fr]">
+                {[
+                  {
+                    label: "Estrutura viva",
+                    text: "Rotina contábil, fiscal e financeira tratada como frente estratégica.",
+                    className: "sm:-rotate-[5deg]",
+                  },
+                  {
+                    label: "Leitura mensal",
+                    text: "Indicadores e contexto para reduzir achismo na tomada de decisão.",
+                    className: "sm:translate-y-6",
+                  },
+                  {
+                    label: "Presença próxima",
+                    text: "Acompanhamento que evita urgência crônica e desorganização recorrente.",
+                    className: "sm:rotate-[4deg]",
+                  },
+                ].map((item, index) => (
+                  <motion.div
+                    key={item.label}
+                    initial={{ opacity: 0, y: 18 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.2 }}
+                    transition={{ duration: 0.38, delay: index * 0.07 }}
+                    className={`hover-lift-soft surface-sheen rounded-[26px] border border-border bg-card px-5 py-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734] ${item.className}`}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{item.label}</p>
+                    <p className="mt-3 text-sm leading-7 text-foreground">{item.text}</p>
+                  </motion.div>
+                ))}
+              </div>
             </motion.div>
 
             <motion.aside
               {...fadeIn}
               transition={{ duration: 0.45, delay: 0.1 }}
-              className="relative min-h-[380px] overflow-hidden rounded-[32px] px-2 py-3"
+              className="relative min-h-[430px] overflow-hidden rounded-[38px] px-2 py-3 lg:mt-6"
             >
               <motion.div
                 className="pointer-events-none absolute inset-y-8 left-1/2 w-[2px] -translate-x-1/2 rounded-full bg-gradient-to-b from-transparent via-primary/50 to-transparent"
@@ -213,7 +278,7 @@ export default function AboutPage() {
               <motion.div
                 animate={{ scale: [1, 1.04, 1], rotate: [45, 50, 45] }}
                 transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute left-1/2 top-1/2 h-[180px] w-[180px] -translate-x-1/2 -translate-y-1/2 rounded-[42px] border border-primary/20 bg-gradient-to-br from-background/95 via-background/72 to-primary/10 p-5 shadow-[0_24px_60px_-30px_rgba(38,52,89,0.45)] backdrop-blur dark:border-[#34406f] dark:from-[#08142f]/95 dark:via-[#0a1734]/80 dark:to-primary/20"
+                className="absolute left-1/2 top-1/2 h-[205px] w-[205px] -translate-x-1/2 -translate-y-1/2 rounded-[50px] border border-primary/20 bg-gradient-to-br from-background/95 via-background/72 to-primary/10 p-5 shadow-[0_24px_60px_-30px_rgba(38,52,89,0.45)] backdrop-blur dark:border-[#34406f] dark:from-[#08142f]/95 dark:via-[#0a1734]/80 dark:to-primary/20"
               >
                 <div className="flex h-full flex-col justify-between">
                   <div className="flex items-center justify-between">
@@ -226,7 +291,7 @@ export default function AboutPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                       Direção consultiva
                     </p>
-                    <p className="mt-2 font-heading text-2xl font-bold leading-none text-foreground">
+                    <p className="mt-2 font-heading text-[1.7rem] font-black leading-none tracking-[-0.05em] text-foreground">
                       Dados viram
                       <span className="block text-primary">decisão</span>
                     </p>
@@ -250,12 +315,12 @@ export default function AboutPage() {
                 },
                 {
                   item: "Acompanhamento mensal com relatórios gerenciais",
-                  className: "left-3 bottom-20 -rotate-[8deg] md:left-10",
+                  className: "left-2 bottom-24 -rotate-[8deg] md:left-8",
                   delay: 0.7,
                 },
                 {
                   item: "Suporte estratégico para tomada de decisão",
-                  className: "bottom-8 right-6 rotate-[4deg] md:right-14",
+                  className: "bottom-10 right-5 rotate-[4deg] md:right-12",
                   delay: 1.2,
                 },
               ].map(({ item, className, delay }) => (
