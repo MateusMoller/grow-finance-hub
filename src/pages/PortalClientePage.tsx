@@ -20,8 +20,6 @@ import {
 import { RequestChat } from "@/components/app/RequestChat";
 import { ClientPortalCashflow } from "@/components/portal/ClientPortalCashflow";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
-import { ClientPortalPendingList } from "@/components/portal/ClientPortalPendingList";
-import { ClientPortalSupport } from "@/components/portal/ClientPortalSupport";
 import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
 import {
   documentCategories,
@@ -138,6 +136,8 @@ const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
   requestId: task.request_id,
 });
 
+type PortalRequestEntryMode = "freeform" | "forms" | "support";
+
 export default function PortalClientePage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -158,6 +158,7 @@ export default function PortalClientePage() {
 
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("all");
+  const [requestEntryMode, setRequestEntryMode] = useState<PortalRequestEntryMode>("freeform");
 
   const [newRequestOpen, setNewRequestOpen] = useState(false);
   const [newRequestType, setNewRequestType] = useState(portalRequestTemplates[0].key);
@@ -182,7 +183,6 @@ export default function PortalClientePage() {
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [submittingForm, setSubmittingForm] = useState(false);
 
-  const [selectedSupportRequestId, setSelectedSupportRequestId] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -531,84 +531,6 @@ export default function PortalClientePage() {
     ];
   }, [documents, pendingNow.length, portalTasks, requests]);
 
-  const pendingGroups = useMemo(() => {
-    const documentsAwaiting = portalTasks
-      .filter((task) => task.type === "document" && task.status === "pending_client")
-      .map(toActionFromTask);
-
-    const requestReturnTasks = portalTasks
-      .filter((task) => task.type === "request_return" && task.status === "pending_client")
-      .map(toActionFromTask);
-
-    const requestReturnFromChat = requestsAwaitingClient.map((request) => ({
-      id: `awaiting-${request.id}`,
-      title: request.title,
-      description: "Solicitação aguardando seu retorno para seguir no fluxo.",
-      dueDate: request.updated_at,
-      sector: request.sector,
-      requestId: request.id,
-    }));
-
-    const analysisItems = [
-      ...portalTasks.filter((task) => task.status === "in_analysis").map(toActionFromTask),
-      ...requests
-        .filter((request) => request.status === "in_progress")
-        .map((request) => ({
-          id: `analysis-${request.id}`,
-          title: request.title,
-          description: "Nossa equipe está analisando esta demanda.",
-          dueDate: request.updated_at,
-          sector: request.sector,
-          requestId: request.id,
-        })),
-    ];
-
-    const completedItems = [
-      ...portalTasks.filter((task) => task.status === "completed").map(toActionFromTask),
-      ...requests
-        .filter((request) => request.status === "completed")
-        .map((request) => ({
-          id: `completed-${request.id}`,
-          title: request.title,
-          description: "Finalizado pela equipe Grow.",
-          dueDate: request.updated_at,
-          sector: request.sector,
-          requestId: request.id,
-        })),
-    ];
-
-    return [
-      {
-        key: "documents",
-        title: "Documentos aguardados",
-        emptyText: "Não há documentos pendentes neste momento.",
-        items: documentsAwaiting,
-        icon: "document" as const,
-      },
-      {
-        key: "awaiting-client",
-        title: "Solicitações aguardando seu retorno",
-        emptyText: "Nenhuma solicitação aguardando retorno do cliente.",
-        items: [...requestReturnTasks, ...requestReturnFromChat],
-        icon: "request" as const,
-      },
-      {
-        key: "analysis",
-        title: "Itens em análise",
-        emptyText: "Sem itens em análise agora.",
-        items: analysisItems,
-        icon: "analysis" as const,
-      },
-      {
-        key: "completed",
-        title: "Itens concluídos",
-        emptyText: "Ainda não há itens concluídos para exibir.",
-        items: completedItems,
-        icon: "done" as const,
-      },
-    ];
-  }, [portalTasks, requests, requestsAwaitingClient]);
-
   const filteredRequests = useMemo(() => {
     const term = requestSearch.trim().toLowerCase();
     return requests.filter((request) => {
@@ -639,7 +561,21 @@ export default function PortalClientePage() {
     if (requestFilesInputRef.current) requestFilesInputRef.current.value = "";
   };
 
-  const openNewRequestDialog = (preset?: { sector?: string; title?: string; description?: string }) => {
+  const openRequestsHub = (mode: PortalRequestEntryMode = "freeform") => {
+    setActiveTab("requests");
+    setRequestEntryMode(mode);
+
+    if (mode !== "forms") {
+      setSelectedFormTemplate(null);
+      setFormValues({});
+    }
+  };
+
+  const openNewRequestDialog = (
+    preset?: { sector?: string; title?: string; description?: string },
+    mode: PortalRequestEntryMode = "freeform",
+  ) => {
+    openRequestsHub(mode);
     setNewRequestOpen(true);
     if (preset?.sector) {
       const match =
@@ -743,6 +679,7 @@ export default function PortalClientePage() {
     }
 
     setActiveTab("requests");
+    setRequestEntryMode("freeform");
     await fetchPortalData();
   };
 
@@ -836,6 +773,7 @@ export default function PortalClientePage() {
   };
 
   const openFormTemplate = (template: PortalFormTemplate) => {
+    openRequestsHub("forms");
     setSelectedFormTemplate(template);
     setFormValues({});
   };
@@ -907,6 +845,7 @@ export default function PortalClientePage() {
     setSelectedFormTemplate(null);
     setFormValues({});
     setActiveTab("requests");
+    setRequestEntryMode("forms");
     await fetchPortalData();
   };
 
@@ -1146,27 +1085,210 @@ export default function PortalClientePage() {
               recentUpdates={recentUpdates}
               onNewRequest={() => openNewRequestDialog()}
               onUploadDocument={() => setUploadDialogOpen(true)}
-              onOpenForms={() => setActiveTab("forms")}
-              onOpenSupport={() => setActiveTab("support")}
+              onOpenForms={() => openRequestsHub("forms")}
+              onOpenSupport={() => openRequestsHub("support")}
             />
-          </TabsContent>
-
-          <TabsContent value="pending" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Pendências do cliente</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Visualize o que depende da sua acao, o que esta em análise e o que ja foi concluído.
-                </p>
-              </CardHeader>
-            </Card>
-            <ClientPortalPendingList loading={loadingData} groups={pendingGroups} />
           </TabsContent>
 
           <TabsContent value="requests" className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Solicitações</CardTitle>
+                <CardTitle className="text-base">Central de solicitações</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Todo pedido do portal entra por este mesmo fluxo, seja livre, por setor ou por formulário estruturado.
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-4">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+                  <div
+                    className={`rounded-xl border bg-background p-4 transition-colors ${
+                      requestEntryMode === "freeform" ? "border-primary/40 bg-primary/5" : ""
+                    }`}
+                  >
+                    <p className="text-sm font-medium">Solicitação livre</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Para qualquer demanda nova com título, descrição, arquivos e setor responsável.
+                    </p>
+                    <Button className="mt-4 gap-2" onClick={() => openNewRequestDialog()}>
+                      <MessageSquare className="h-4 w-4" />
+                      Abrir solicitação
+                    </Button>
+                  </div>
+
+                  <div
+                    className={`rounded-xl border bg-background p-4 transition-colors ${
+                      requestEntryMode === "support" ? "border-primary/40 bg-primary/5" : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Atendimento por setor</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Quando quiser direcionar o pedido mais rápido, escolha o setor e siga pelo mesmo fluxo de solicitações.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {supportSectors.map((sector) => (
+                        <Button
+                          key={sector}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="bg-card"
+                          onClick={() =>
+                            openNewRequestDialog({
+                              sector,
+                              title: `Atendimento ${sector}`,
+                              description: "Explique aqui sua necessidade para que a equipe possa agir rapidamente.",
+                            }, "support")
+                          }
+                        >
+                          {sector}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-xl border bg-background p-4 transition-colors ${
+                    requestEntryMode === "forms" ? "border-primary/40 bg-primary/5" : ""
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Formulários vinculados às solicitações</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Os formulários publicados pela equipe também entram na mesma fila de solicitações do portal.
+                      </p>
+                    </div>
+                    {selectedFormTemplate ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedFormTemplate(null);
+                          setFormValues({});
+                        }}
+                      >
+                        Fechar formulário
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {selectedFormTemplate ? (
+                    <div className="mt-5 rounded-xl border bg-card p-5">
+                      <div className="flex items-start gap-3">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setSelectedFormTemplate(null);
+                            setFormValues({});
+                          }}
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                        </Button>
+                        <div>
+                          <h3 className="font-semibold">{selectedFormTemplate.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {selectedFormTemplate.description || "Sem descrição"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-4">
+                        {selectedFormTemplate.fields.map((field) => (
+                          <div key={field.name} className="space-y-1.5">
+                            <label className="text-sm font-medium">
+                              {field.label}
+                              {field.required && <span className="ml-1 text-destructive">*</span>}
+                            </label>
+                            {field.type === "select" ? (
+                              <Select value={formValues[field.name] || ""} onValueChange={(value) => handleFormValueChange(field.name, value)}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(field.options || []).map((option) => (
+                                    <SelectItem key={option} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : field.type === "textarea" ? (
+                              <Textarea
+                                rows={4}
+                                value={formValues[field.name] || ""}
+                                onChange={(event) => handleFormValueChange(field.name, event.target.value)}
+                                placeholder={field.placeholder}
+                              />
+                            ) : (
+                              <Input
+                                type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
+                                value={formValues[field.name] || ""}
+                                onChange={(event) => handleFormValueChange(field.name, event.target.value)}
+                                placeholder={field.placeholder}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-5 flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedFormTemplate(null);
+                            setFormValues({});
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button type="button" onClick={() => void handleSubmitPortalForm()} disabled={submittingForm}>
+                          {submittingForm ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar formulário"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : publishedForms.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-dashed bg-card/40 p-6 text-center">
+                      <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                      <p className="font-medium">Nenhum formulário publicado no momento.</p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {publishedForms.map((template) => (
+                        <button
+                          type="button"
+                          key={template.id}
+                          className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/30"
+                          onClick={() => openFormTemplate(template)}
+                        >
+                          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <FileText className="h-4 w-4" />
+                          </div>
+                          <p className="font-medium">{template.title}</p>
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {template.description || "Sem descrição"}
+                          </p>
+                          <p className="mt-2 text-xs text-muted-foreground">{template.fields.length} campo(s)</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Histórico de solicitações</CardTitle>
               </CardHeader>
               <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
                 <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
@@ -1335,122 +1457,6 @@ export default function PortalClientePage() {
             />
           </TabsContent>
 
-          <TabsContent value="forms" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Formulários do portal</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Preencha e envie. O conteúdo vai para o time interno junto da solicitação.
-                </p>
-              </CardHeader>
-            </Card>
-
-            {selectedFormTemplate ? (
-              <Card>
-                <CardContent className="p-6 space-y-4 max-w-3xl">
-                  <div className="flex items-start gap-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => {
-                        setSelectedFormTemplate(null);
-                        setFormValues({});
-                      }}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <div>
-                      <h3 className="font-semibold">{selectedFormTemplate.title}</h3>
-                      <p className="text-sm text-muted-foreground">{selectedFormTemplate.description || "Sem descrição"}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {selectedFormTemplate.fields.map((field) => (
-                      <div key={field.name} className="space-y-1.5">
-                        <label className="text-sm font-medium">
-                          {field.label}
-                          {field.required && <span className="text-destructive ml-1">*</span>}
-                        </label>
-                        {field.type === "select" ? (
-                          <Select value={formValues[field.name] || ""} onValueChange={(value) => handleFormValueChange(field.name, value)}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(field.options || []).map((option) => (
-                                <SelectItem key={option} value={option}>
-                                  {option}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : field.type === "textarea" ? (
-                          <Textarea
-                            rows={4}
-                            value={formValues[field.name] || ""}
-                            onChange={(event) => handleFormValueChange(field.name, event.target.value)}
-                            placeholder={field.placeholder}
-                          />
-                        ) : (
-                          <Input
-                            type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
-                            value={formValues[field.name] || ""}
-                            onChange={(event) => handleFormValueChange(field.name, event.target.value)}
-                            placeholder={field.placeholder}
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedFormTemplate(null);
-                        setFormValues({});
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="button" onClick={() => void handleSubmitPortalForm()} disabled={submittingForm}>
-                      {submittingForm ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar formulário"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : publishedForms.length === 0 ? (
-              <Card>
-                <CardContent className="p-10 text-center">
-                  <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                  <p className="font-medium">Nenhum formulário publicado no momento.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {publishedForms.map((template) => (
-                  <button
-                    type="button"
-                    key={template.id}
-                    className="text-left rounded-xl border bg-card p-4 transition-colors hover:bg-muted/30"
-                    onClick={() => openFormTemplate(template)}
-                  >
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-3">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <p className="font-medium">{template.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{template.description || "Sem descrição"}</p>
-                    <p className="text-xs text-muted-foreground mt-2">{template.fields.length} campo(s)</p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
           <TabsContent value="manual" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
@@ -1499,8 +1505,8 @@ export default function PortalClientePage() {
                         Os formulários publicados pela equipe ficam centralizados para envio rápido e organizado.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("forms")}>
-                      Ir para formulários
+                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("forms")}>
+                      Ir para central de solicitações
                     </Button>
                   </div>
                 </div>
@@ -1522,13 +1528,13 @@ export default function PortalClientePage() {
                 <div className="rounded-lg border bg-card p-4 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium">5. Converse com a equipe</p>
+                      <p className="font-medium">5. Fale com a equipe pelo mesmo fluxo</p>
                       <p className="text-sm text-muted-foreground">
-                        Use o atendimento para tirar dúvidas e registrar assuntos que precisam de acompanhamento.
+                        Demandas por setor e acompanhamentos também nascem dentro da central de solicitações.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("support")}>
-                      Ir para atendimento
+                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("support")}>
+                      Ir para solicitações
                     </Button>
                   </div>
                 </div>
@@ -1542,7 +1548,7 @@ export default function PortalClientePage() {
               <CardContent className="pt-0 space-y-2 text-sm text-muted-foreground">
                 <p>• Mantenha títulos objetivos nas solicitações para facilitar o retorno da equipe.</p>
                 <p>• Sempre que possível, vincule documentos a uma solicitação específica.</p>
-                <p>• A aba Pendências mostra o que está aguardando sua ação imediata.</p>
+                <p>• O painel geral resume o que está aguardando sua ação imediata.</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1662,7 +1668,7 @@ export default function PortalClientePage() {
                           sector: "Geral",
                           title: "Solicitação de suporte de acesso ao portal",
                           description: "Preciso de suporte com acesso e seguranca no portal do cliente.",
-                        })
+                        }, "support")
                       }
                     >
                       Abrir solicitação de suporte
@@ -1673,23 +1679,6 @@ export default function PortalClientePage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="support" className="space-y-4">
-            <ClientPortalSupport
-              requests={requests}
-              messages={messages}
-              selectedRequestId={selectedSupportRequestId}
-              statusConfig={statusConfig}
-              sectors={supportSectors}
-              onOpenRequestWithSector={(sector) => {
-                openNewRequestDialog({
-                  sector,
-                  title: `Atendimento ${sector}`,
-                  description: "Explique aqui sua necessidade para que a equipe possa agir rapidamente.",
-                });
-              }}
-              onSelectRequest={setSelectedSupportRequestId}
-            />
-          </TabsContent>
               </Tabs>
             </div>
           </main>
