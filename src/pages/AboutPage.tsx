@@ -54,7 +54,7 @@ const services = [
     visualAccent: "Visão de margem",
     visualCaption: "Leitura estratégica dos indicadores que puxam resultado.",
     imagePath: "/images/services/contabilidade-consultiva.png",
-    imageAlt: "Ilustração editorial de relatórios financeiros, gráficos e leitura estratégica de indicadores contábeis.",
+    imageAlt: "Ilustração lúdica de relatórios, gráficos e leitura de indicadores para contabilidade consultiva.",
   },
   {
     icon: Shield,
@@ -72,8 +72,8 @@ const services = [
     ],
     visualAccent: "Risco sob controle",
     visualCaption: "Camadas de revisão para proteger decisão e operação.",
-    imagePath: undefined,
-    imageAlt: "",
+    imagePath: "/images/services/assessoria-fiscal.png",
+    imageAlt: "Ilustração lúdica de documentos fiscais, escudo e elementos de conformidade tributária.",
   },
   {
     icon: Users,
@@ -91,8 +91,8 @@ const services = [
     ],
     visualAccent: "Ritmo do time",
     visualCaption: "Fluxos trabalhistas com mais cadência e menos improviso.",
-    imagePath: undefined,
-    imageAlt: "",
+    imagePath: "/images/services/departamento-pessoal.png",
+    imageAlt: "Ilustração lúdica de perfis, calendário e rotinas de departamento pessoal.",
   },
   {
     icon: Building2,
@@ -110,8 +110,8 @@ const services = [
     ],
     visualAccent: "Estrutura pronta",
     visualCaption: "Mapeamento documental para colocar a operação em ordem.",
-    imagePath: undefined,
-    imageAlt: "",
+    imagePath: "/images/services/abertura-regularizacao.png",
+    imageAlt: "Ilustração lúdica de documentos, checklist e estruturação para abertura e regularização empresarial.",
   },
   {
     icon: Briefcase,
@@ -129,8 +129,8 @@ const services = [
     ],
     visualAccent: "Decisão assistida",
     visualCaption: "Mais clareza executiva para cada próximo passo do negócio.",
-    imagePath: undefined,
-    imageAlt: "",
+    imagePath: "/images/services/suporte-empresario.png",
+    imageAlt: "Ilustração lúdica de mesa executiva, caminhos de decisão e apoio estratégico ao empresário.",
   },
   {
     icon: FileText,
@@ -148,8 +148,8 @@ const services = [
     ],
     visualAccent: "Painel mensal",
     visualCaption: "Resumo executivo para acompanhar evolução sem operar no escuro.",
-    imagePath: undefined,
-    imageAlt: "",
+    imagePath: "/images/services/relatorios-gerenciais.png",
+    imageAlt: "Ilustração lúdica de painéis, relatórios e acompanhamento de desempenho gerencial.",
   },
 ];
 
@@ -552,7 +552,7 @@ export default function AboutPage() {
                         </div>
                       </div>
 
-                      <div className="relative min-h-[320px] overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] shadow-[0_18px_50px_-28px_rgba(34,48,88,0.32)] dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
+                      <div className="relative isolate min-h-[320px] overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] shadow-[0_18px_50px_-28px_rgba(34,48,88,0.32)] dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
                         {activeService.imagePath ? (
                           <>
                             <img
@@ -561,10 +561,11 @@ export default function AboutPage() {
                               loading="lazy"
                               width={1600}
                               height={1200}
-                              className="h-full w-full object-cover"
+                              className="absolute inset-0 h-full w-full object-cover object-center"
                             />
                             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,20,36,0.08)_0%,rgba(18,20,36,0.52)_100%)]" />
-                            <div className="absolute inset-x-0 bottom-0 p-5">
+                            <div className="relative z-10 flex min-h-[320px] items-end">
+                              <div className="w-full p-5">
                               <div className="rounded-[24px] border border-white/18 bg-[rgba(12,14,28,0.44)] p-4 backdrop-blur-md">
                                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">
                                   {activeService.visualAccent}
@@ -572,6 +573,7 @@ export default function AboutPage() {
                                 <p className="mt-3 text-sm leading-6 text-white/92">
                                   {activeService.visualCaption}
                                 </p>
+                              </div>
                               </div>
                             </div>
                           </>
