@@ -316,7 +316,7 @@ export default function AboutPage() {
                 <motion.div
                   animate={{ rotate: [-14, -8, -14], scale: [1, 1.04, 1] }}
                   transition={{ duration: 8.5, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute left-[18%] top-[16%] h-[280px] w-[190px] rounded-[44%_56%_52%_48%/40%_38%_62%_60%] border border-primary/18 bg-gradient-to-br from-primary/16 via-background/20 to-transparent shadow-[0_28px_70px_-36px_rgba(37,47,81,0.35)] backdrop-blur-[6px]"
+                  className="absolute bottom-[4%] left-[10%] h-[280px] w-[190px] rounded-[44%_56%_52%_48%/40%_38%_62%_60%] border border-primary/18 bg-gradient-to-br from-primary/16 via-background/20 to-transparent shadow-[0_28px_70px_-36px_rgba(37,47,81,0.35)] backdrop-blur-[6px]"
                 />
                 <motion.div
                   animate={{ rotate: [22, 16, 22], scaleY: [1, 1.08, 1] }}
