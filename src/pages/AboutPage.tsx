@@ -37,12 +37,66 @@ const values = [
 ] as const;
 
 const services = [
-  { icon: BarChart3, title: "Contabilidade consultiva", description: "Fechamentos, balanços e indicadores com orientação para decisões gerenciais." },
-  { icon: Shield, title: "Assessoria fiscal", description: "Planejamento tributário e revisões periódicas para reduzir risco fiscal." },
-  { icon: Users, title: "Departamento pessoal", description: "Rotinas trabalhistas, folha, admissões e suporte contínuo ao RH." },
-  { icon: Building2, title: "Abertura e regularização", description: "Constituição de empresa, alterações contratuais e regularizações completas." },
-  { icon: Briefcase, title: "Suporte ao empresário", description: "Consultoria para planejamento, estrutura financeira e crescimento sustentável." },
-  { icon: FileText, title: "Relatórios gerenciais", description: "Painel mensal com leitura executiva para acompanhamento de performance." },
+  {
+    icon: BarChart3,
+    title: "Contabilidade consultiva",
+    description: "Fechamentos, balanços e indicadores com orientação para decisões gerenciais.",
+    teaser: "Números deixam de ser histórico e passam a orientar próximos movimentos.",
+    detail:
+      "Fechamos, lemos e traduzimos os dados da operação para que margem, caixa e evolução do negócio fiquem mais claros para o empresário.",
+    visualAccent: "Visão de margem",
+    visualCaption: "Leitura estratégica dos indicadores que puxam resultado.",
+  },
+  {
+    icon: Shield,
+    title: "Assessoria fiscal",
+    description: "Planejamento tributário e revisões periódicas para reduzir risco fiscal.",
+    teaser: "Mais controle tributário para a empresa crescer sem sustos evitáveis.",
+    detail:
+      "Revisamos enquadramento, rotinas e obrigações para reduzir exposição fiscal e manter a operação com mais segurança e previsibilidade.",
+    visualAccent: "Risco sob controle",
+    visualCaption: "Camadas de revisão para proteger decisão e operação.",
+  },
+  {
+    icon: Users,
+    title: "Departamento pessoal",
+    description: "Rotinas trabalhistas, folha, admissões e suporte contínuo ao RH.",
+    teaser: "A rotina de pessoas fica organizada antes de virar urgência.",
+    detail:
+      "Estruturamos folha, admissões, desligamentos e suporte ao RH com leitura prática para que o time opere com menos ruído trabalhista.",
+    visualAccent: "Ritmo do time",
+    visualCaption: "Fluxos trabalhistas com mais cadência e menos improviso.",
+  },
+  {
+    icon: Building2,
+    title: "Abertura e regularização",
+    description: "Constituição de empresa, alterações contratuais e regularizações completas.",
+    teaser: "A empresa nasce ou se ajusta com rota jurídica e fiscal mais limpa.",
+    detail:
+      "Cuidamos da formalização, das alterações contratuais e das regularizações para evitar travas burocráticas no crescimento da empresa.",
+    visualAccent: "Estrutura pronta",
+    visualCaption: "Mapeamento documental para colocar a operação em ordem.",
+  },
+  {
+    icon: Briefcase,
+    title: "Suporte ao empresário",
+    description: "Consultoria para planejamento, estrutura financeira e crescimento sustentável.",
+    teaser: "O empresário ganha apoio para decidir com mais repertório e clareza.",
+    detail:
+      "Acompanhamos decisões relevantes com leitura financeira, contábil e operacional para sustentar crescimento sem perder direção.",
+    visualAccent: "Decisão assistida",
+    visualCaption: "Mais clareza executiva para cada próximo passo do negócio.",
+  },
+  {
+    icon: FileText,
+    title: "Relatórios gerenciais",
+    description: "Painel mensal com leitura executiva para acompanhamento de performance.",
+    teaser: "Relatórios deixam de ser arquivo e passam a virar conversa de gestão.",
+    detail:
+      "Entregamos leituras mensais objetivas para acompanhar desempenho, corrigir rota e manter o negócio perto das metas mais importantes.",
+    visualAccent: "Painel mensal",
+    visualCaption: "Resumo executivo para acompanhar evolução sem operar no escuro.",
+  },
 ];
 
 const differentials = [
@@ -446,32 +500,110 @@ export default function AboutPage() {
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
             </motion.div>
 
-            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-3">
-              {services.map((service, index) => (
+            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-10 xl:mx-0 xl:grid xl:gap-5 xl:overflow-visible xl:px-0 xl:pb-20 xl:snap-none xl:grid-cols-3">
+              {services.map((service, index) => {
+                const expandsLeft = index % 3 === 2;
+
+                return (
                 <motion.article
                   key={service.title}
                   initial={{ opacity: 0, y: 14 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.35, delay: index * 0.04 }}
-                  className="hover-lift-soft surface-sheen group min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
+                  tabIndex={0}
+                  className="service-hover-card group relative min-w-[84%] snap-start focus-visible:outline-none sm:min-w-[72%] xl:min-w-0"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
-                      <service.icon className="h-5 w-5 text-primary" />
+                  <div className="hover-lift-soft surface-sheen relative min-h-[248px] rounded-[28px] border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
+                        <service.icon className="h-5 w-5 text-primary" />
+                      </div>
+                      <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80 transition-transform duration-200 group-hover:-translate-y-0.5">
+                        Grow
+                      </span>
                     </div>
-                    <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80 transition-transform duration-200 group-hover:-translate-y-0.5">
-                      Grow
-                    </span>
+                    <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
+                    <div className="mt-5 flex items-center gap-2 text-sm font-medium text-primary">
+                      <span>Abra o card</span>
+                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 group-focus-visible:translate-x-1" />
+                    </div>
                   </div>
-                  <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
-                  <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary">
-                    <span>Saiba mais</span>
-                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+
+                  <div
+                    className={[
+                      "service-hover-panel hidden xl:grid xl:grid-cols-[minmax(0,1fr)_220px] xl:gap-6",
+                      expandsLeft ? "xl:right-0 xl:left-auto" : "xl:left-0",
+                    ].join(" ")}
+                  >
+                    <div className="flex min-h-[288px] flex-col justify-between rounded-[30px] border border-primary/20 bg-card/96 p-6 backdrop-blur-sm dark:border-[#2b3861] dark:bg-[#08142f]/96">
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="rounded-full border border-primary/15 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/80">
+                            Grow
+                          </span>
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                            {service.visualAccent}
+                          </span>
+                        </div>
+                        <div className="mt-5 flex items-start gap-4">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] bg-primary/10">
+                            <service.icon className="h-6 w-6 text-primary" />
+                          </div>
+                          <div className="space-y-3">
+                            <h3 className="font-heading text-[1.65rem] font-semibold leading-tight text-foreground">
+                              {service.title}
+                            </h3>
+                            <p className="max-w-xl text-base leading-7 text-foreground/88 dark:text-[#dfe6ff]">
+                              {service.teaser}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground">
+                          {service.detail}
+                        </p>
+                      </div>
+
+                      <div className="mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary/75">
+                        <span className="h-px flex-1 bg-primary/20" />
+                        Passe o cursor para explorar
+                      </div>
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] p-5 dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
+                      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)]" />
+                      <div className="relative flex h-full flex-col justify-between">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/70">
+                            Ilustração contextual
+                          </p>
+                          <p className="mt-2 max-w-[12rem] text-sm leading-6 text-muted-foreground">
+                            {service.visualCaption}
+                          </p>
+                        </div>
+
+                        <div className="relative mt-6 h-[160px] rounded-[28px] border border-primary/14 bg-white/70 p-4 shadow-[0_18px_50px_-28px_rgba(34,48,88,0.4)] dark:bg-white/5">
+                          <div className="absolute left-4 top-4 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">
+                            {service.visualAccent}
+                          </div>
+                          <div className="absolute -right-4 bottom-3 h-24 w-24 rounded-full bg-primary/15 blur-2xl" />
+                          <div className="absolute left-5 top-14 h-[84px] w-[84px] rounded-[30px] border border-primary/14 bg-gradient-to-br from-primary/18 via-white/40 to-transparent dark:via-white/5" />
+                          <div className="absolute right-5 top-12 flex h-[92px] w-[92px] items-center justify-center rounded-[32px] border border-primary/14 bg-background/85 shadow-sm dark:bg-[#0c1836]">
+                            <service.icon className="h-10 w-10 text-primary" />
+                          </div>
+                          <div className="absolute bottom-5 left-5 right-5 space-y-2">
+                            <div className="h-2.5 w-[74%] rounded-full bg-primary/16" />
+                            <div className="h-2.5 w-[52%] rounded-full bg-primary/10" />
+                            <div className="h-2.5 w-[66%] rounded-full bg-primary/12" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </motion.article>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
