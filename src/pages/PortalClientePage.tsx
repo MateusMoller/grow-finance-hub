@@ -2,7 +2,6 @@
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
-  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Clock,
@@ -24,9 +23,7 @@ import { PortalClienteSidebar, type PortalTab } from "@/components/portal/Portal
 import {
   documentCategories,
   parsePortalFields,
-  portalRequestTemplates,
   sectorOptions,
-  supportSectors,
   type NewPortalCashflowEntryPayload,
   type PortalActionItem,
   type PortalCashflowEntry,
@@ -34,6 +31,7 @@ import {
   type PortalClientProfile,
   type PortalClientRequest,
   type PortalClientTask,
+  type PortalFormField,
   type PortalFormTemplate,
   type PortalRequestMessage,
   type RequestStatus,
@@ -52,7 +50,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -119,6 +116,356 @@ const normalizeLooseToken = (value: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+type PortalGuidedField = PortalFormField;
+
+interface PortalGuidedReason {
+  key: string;
+  label: string;
+  sector: string;
+  description: string;
+  defaultTitle: string;
+  templateKeywords?: string[];
+  fields: PortalGuidedField[];
+}
+
+const DEFAULT_REQUEST_SECTOR = sectorOptions.includes("Geral") ? "Geral" : sectorOptions[0];
+
+const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
+  departamento_pessoal: [
+    {
+      key: "folha_pagamento",
+      label: "Folha de pagamento",
+      sector: "Departamento Pessoal",
+      description: "Use quando precisar tratar fechamento, conferencia ou ajustes da folha.",
+      defaultTitle: "Folha de pagamento",
+      fields: [
+        { name: "competencia", label: "Competencia", type: "text", required: true, placeholder: "Ex.: 04/2026" },
+        {
+          name: "solicitacao_folha",
+          label: "O que precisa nesta folha",
+          type: "select",
+          required: true,
+          options: ["Conferencia", "Inclusao de variaveis", "Ajuste", "Envio de informacoes"],
+        },
+        {
+          name: "observacao_folha",
+          label: "Ponto principal",
+          type: "textarea",
+          placeholder: "Informe os eventos, colaboradores ou pontos que precisam de atencao.",
+        },
+      ],
+    },
+    {
+      key: "admissao",
+      label: "Admissao",
+      sector: "Departamento Pessoal",
+      description: "Fluxo para admissao de colaborador com dados iniciais e documentacao.",
+      defaultTitle: "Admissao de colaborador",
+      templateKeywords: ["admissao", "admissão"],
+      fields: [
+        { name: "nome_colaborador", label: "Nome do colaborador", type: "text", required: true },
+        { name: "data_inicio", label: "Data de inicio", type: "date", required: true },
+        { name: "cargo", label: "Cargo", type: "text", required: true },
+        { name: "salario", label: "Salario", type: "text", placeholder: "Ex.: R$ 2.500,00" },
+      ],
+    },
+    {
+      key: "demissao",
+      label: "Demissao",
+      sector: "Departamento Pessoal",
+      description: "Fluxo para desligamento com dados base para calculo rescisorio.",
+      defaultTitle: "Demissao de colaborador",
+      templateKeywords: ["demissao", "demissão", "rescisao", "rescisão"],
+      fields: [
+        { name: "nome_desligamento", label: "Nome do colaborador", type: "text", required: true },
+        { name: "data_desligamento", label: "Data do desligamento", type: "date", required: true },
+        {
+          name: "tipo_aviso",
+          label: "Tipo de aviso",
+          type: "select",
+          required: true,
+          options: ["Trabalhado", "Indenizado", "Sem aviso"],
+        },
+        { name: "motivo_desligamento", label: "Motivo", type: "text", placeholder: "Ex.: Pedido do colaborador" },
+      ],
+    },
+    {
+      key: "ferias",
+      label: "Ferias",
+      sector: "Departamento Pessoal",
+      description: "Solicite programacao, alteracao ou conferencia de ferias.",
+      defaultTitle: "Solicitacao de ferias",
+      fields: [
+        { name: "colaborador_ferias", label: "Colaborador", type: "text", required: true },
+        { name: "inicio_ferias", label: "Inicio das ferias", type: "date", required: true },
+        { name: "dias_ferias", label: "Quantidade de dias", type: "text", required: true, placeholder: "Ex.: 30" },
+        { name: "observacao_ferias", label: "Observacoes", type: "textarea", placeholder: "Divisao de periodos, abono, urgencia, etc." },
+      ],
+    },
+    {
+      key: "beneficios",
+      label: "Beneficios e pro-labore",
+      sector: "Departamento Pessoal",
+      description: "Centralize ajustes relacionados a beneficios, pro-labore e rotinas recorrentes do time.",
+      defaultTitle: "Ajuste de beneficios ou pro-labore",
+      fields: [
+        {
+          name: "tipo_beneficio",
+          label: "Assunto principal",
+          type: "select",
+          required: true,
+          options: ["Beneficios", "Pro-labore", "Vale transporte", "Vale refeicao", "Outro"],
+        },
+        { name: "pessoas_envolvidas", label: "Colaboradores ou socios envolvidos", type: "textarea", required: true },
+      ],
+    },
+  ],
+  fiscal: [
+    {
+      key: "guias_impostos",
+      label: "Guias e impostos",
+      sector: "Fiscal",
+      description: "Para duvidas, revisoes e regularizacoes ligadas a impostos e obrigacoes fiscais.",
+      defaultTitle: "Guias e impostos",
+      fields: [
+        { name: "competencia_fiscal", label: "Competencia", type: "text", placeholder: "Ex.: 04/2026" },
+        {
+          name: "tipo_demanda_fiscal",
+          label: "Tipo de demanda",
+          type: "select",
+          required: true,
+          options: ["Apuracao", "Guia em atraso", "Reenvio de guia", "Regularizacao", "Duvida fiscal"],
+        },
+        { name: "detalhe_fiscal", label: "Detalhe da solicitacao", type: "textarea", required: true },
+      ],
+    },
+    {
+      key: "nota_fiscal",
+      label: "Notas fiscais",
+      sector: "Fiscal",
+      description: "Use para emissao, cancelamento, correcao ou duvidas sobre notas fiscais.",
+      defaultTitle: "Solicitacao sobre nota fiscal",
+      fields: [
+        {
+          name: "tipo_nota",
+          label: "Assunto da nota",
+          type: "select",
+          required: true,
+          options: ["Emissao", "Cancelamento", "Carta de correcao", "Tributacao", "Outro"],
+        },
+        { name: "numero_nota", label: "Numero da nota (se houver)", type: "text" },
+        { name: "detalhe_nota", label: "Contexto", type: "textarea", required: true },
+      ],
+    },
+    {
+      key: "certidao_fiscal",
+      label: "Certidoes e regularidade",
+      sector: "Fiscal",
+      description: "Solicite certidoes, conferencias de regularidade ou apoio em pendencias fiscais.",
+      defaultTitle: "Certidoes e regularidade fiscal",
+      fields: [
+        {
+          name: "tipo_certidao",
+          label: "Necessidade",
+          type: "select",
+          required: true,
+          options: ["Emissao de certidao", "Consulta de pendencia", "Regularizacao", "Outro"],
+        },
+        { name: "uso_certidao", label: "Finalidade", type: "text", placeholder: "Ex.: licitacao, banco, cadastro" },
+      ],
+    },
+  ],
+  contabil: [
+    {
+      key: "fechamento_contabil",
+      label: "Fechamento contabil",
+      sector: "Contabil",
+      description: "Use para fechamento mensal, ajustes contabilisticos e alinhamentos de lancamentos.",
+      defaultTitle: "Fechamento contabil",
+      fields: [
+        { name: "competencia_contabil", label: "Competencia", type: "text", required: true },
+        {
+          name: "tipo_rotina_contabil",
+          label: "Etapa",
+          type: "select",
+          required: true,
+          options: ["Fechamento", "Ajuste de lancamentos", "Balancete", "DRE", "Outro"],
+        },
+        { name: "detalhe_contabil", label: "Detalhe", type: "textarea", required: true },
+      ],
+    },
+    {
+      key: "balancete_relatorio",
+      label: "Balancete e relatorios",
+      sector: "Contabil",
+      description: "Solicite demonstracoes, relatorios ou leituras contabeis especificas.",
+      defaultTitle: "Balancete ou relatorio contabil",
+      fields: [
+        {
+          name: "tipo_relatorio_contabil",
+          label: "Relatorio desejado",
+          type: "select",
+          required: true,
+          options: ["Balancete", "DRE", "Razao", "Livro diario", "Outro"],
+        },
+        { name: "periodo_contabil", label: "Periodo", type: "text", placeholder: "Ex.: Jan a Mar/2026" },
+      ],
+    },
+  ],
+  financeiro: [
+    {
+      key: "controle_caixa",
+      label: "Controle de caixa",
+      sector: "Financeiro",
+      description: "Solicite liberacao, apoio ou ajustes no modulo de caixa do portal.",
+      defaultTitle: "Controle de caixa no portal",
+      fields: [
+        {
+          name: "tipo_caixa",
+          label: "O que voce precisa",
+          type: "select",
+          required: true,
+          options: ["Liberacao do modulo", "Ajuste de configuracao", "Suporte de uso", "Conferencia de lancamentos"],
+        },
+        { name: "periodo_caixa", label: "Periodo ou referencia", type: "text", placeholder: "Opcional" },
+      ],
+    },
+    {
+      key: "conciliacao_financeira",
+      label: "Conciliacao financeira",
+      sector: "Financeiro",
+      description: "Use para alinhar extratos, lancamentos e divergencias financeiras.",
+      defaultTitle: "Conciliacao financeira",
+      fields: [
+        { name: "conta_conciliacao", label: "Conta ou banco", type: "text", required: true },
+        { name: "periodo_conciliacao", label: "Periodo", type: "text", required: true },
+        { name: "detalhe_conciliacao", label: "Divergencia ou necessidade", type: "textarea", required: true },
+      ],
+    },
+  ],
+  societario: [
+    {
+      key: "alteracao_contratual",
+      label: "Alteracao contratual",
+      sector: "Societario",
+      description: "Fluxo para alteracoes societarias, cadastrais e de quadro societario.",
+      defaultTitle: "Alteracao contratual",
+      fields: [
+        {
+          name: "tipo_alteracao",
+          label: "Tipo de alteracao",
+          type: "select",
+          required: true,
+          options: ["Endereco", "Atividade", "Capital social", "Entrada/Saida de socio", "Outro"],
+        },
+        { name: "resumo_alteracao", label: "Resumo do pedido", type: "textarea", required: true },
+      ],
+    },
+    {
+      key: "certificado_licenca",
+      label: "Certificado, licenca ou cadastro",
+      sector: "Societario",
+      description: "Use para certificados digitais, licencas e cadastros ligados a regularidade da empresa.",
+      defaultTitle: "Certificado, licenca ou cadastro",
+      fields: [
+        {
+          name: "tipo_documento_societario",
+          label: "Assunto",
+          type: "select",
+          required: true,
+          options: ["Certificado digital", "Licenca", "Inscricao", "Cadastro", "Outro"],
+        },
+        { name: "detalhe_societario", label: "Detalhe", type: "textarea", required: true },
+      ],
+    },
+  ],
+  comercial: [
+    {
+      key: "proposta_ou_plano",
+      label: "Proposta, plano ou escopo",
+      sector: "Comercial",
+      description: "Use para falar de proposta comercial, ajuste de escopo ou revisao de plano.",
+      defaultTitle: "Proposta, plano ou escopo",
+      fields: [
+        {
+          name: "assunto_comercial",
+          label: "Assunto",
+          type: "select",
+          required: true,
+          options: ["Nova proposta", "Revisao de plano", "Aditivo de escopo", "Duvida comercial"],
+        },
+        { name: "detalhe_comercial", label: "Contexto", type: "textarea", required: true },
+      ],
+    },
+  ],
+  geral: [
+    {
+      key: "acesso_portal",
+      label: "Acesso ao portal",
+      sector: "Geral",
+      description: "Use para suporte de acesso, permissao, senha ou navegacao no portal.",
+      defaultTitle: "Suporte de acesso ao portal",
+      fields: [
+        {
+          name: "tipo_suporte_portal",
+          label: "Tipo de suporte",
+          type: "select",
+          required: true,
+          options: ["Login", "Senha", "Permissao", "Erro na tela", "Duvida de uso"],
+        },
+        { name: "detalhe_portal", label: "O que aconteceu", type: "textarea", required: true },
+      ],
+    },
+    {
+      key: "atualizacao_cadastral",
+      label: "Atualizacao cadastral",
+      sector: "Geral",
+      description: "Use para atualizar contatos, email, responsaveis e dados basicos do cadastro.",
+      defaultTitle: "Atualizacao cadastral",
+      fields: [
+        { name: "dados_para_atualizar", label: "Quais dados precisam ser atualizados", type: "textarea", required: true },
+      ],
+    },
+    {
+      key: "outro_assunto",
+      label: "Outro assunto",
+      sector: "Geral",
+      description: "Se o pedido nao encaixar nas categorias acima, use este caminho e detalhe o contexto.",
+      defaultTitle: "Solicitacao geral",
+      fields: [
+        {
+          name: "objetivo_solicitacao",
+          label: "Objetivo principal",
+          type: "textarea",
+          required: true,
+          placeholder: "Explique o que precisa e como a equipe pode ajudar.",
+        },
+      ],
+    },
+  ],
+};
+
+const getGuidedReasonsForSector = (sector: string) =>
+  guidedReasonsBySector[normalizeLooseToken(sector)] || guidedReasonsBySector[normalizeLooseToken(DEFAULT_REQUEST_SECTOR)] || [];
+
+const getDefaultReasonKey = (sector: string) => getGuidedReasonsForSector(sector)[0]?.key || "";
+
+const findTemplateForReason = (
+  reason: PortalGuidedReason | null,
+  templates: PortalFormTemplate[],
+) => {
+  if (!reason?.templateKeywords?.length) return null;
+
+  return (
+    templates.find((template) => {
+      const haystack = normalizeLooseToken(
+        [template.title, template.description || "", template.sector].filter(Boolean).join(" ")
+      );
+      return reason.templateKeywords?.some((keyword) => haystack.includes(normalizeLooseToken(keyword)));
+    }) || null
+  );
+};
+
 const isEcontinuoDocument = (document: PortalClientDocument) => {
   const categoryToken = normalizeLooseToken(document.category || "");
   if (categoryToken.includes("e_continuo") || categoryToken.includes("econtinuo")) return true;
@@ -160,14 +507,14 @@ export default function PortalClientePage() {
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("all");
   const [requestEntryMode, setRequestEntryMode] = useState<PortalRequestEntryMode>("freeform");
 
-  const [newRequestOpen, setNewRequestOpen] = useState(false);
-  const [newRequestType, setNewRequestType] = useState(portalRequestTemplates[0].key);
+  const [newRequestSector, setNewRequestSector] = useState(DEFAULT_REQUEST_SECTOR);
+  const [newRequestReasonKey, setNewRequestReasonKey] = useState(getDefaultReasonKey(DEFAULT_REQUEST_SECTOR));
   const [newRequestTitle, setNewRequestTitle] = useState("");
   const [newRequestDescription, setNewRequestDescription] = useState("");
-  const [newRequestSector, setNewRequestSector] = useState(portalRequestTemplates[0].defaultSector);
   const [newRequestFiles, setNewRequestFiles] = useState<File[]>([]);
   const [creatingRequest, setCreatingRequest] = useState(false);
   const requestFilesInputRef = useRef<HTMLInputElement>(null);
+  const requestComposerRef = useRef<HTMLDivElement>(null);
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadCategory, setUploadCategory] = useState(documentCategories[0]);
@@ -181,7 +528,6 @@ export default function PortalClientePage() {
 
   const [selectedFormTemplate, setSelectedFormTemplate] = useState<PortalFormTemplate | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
-  const [submittingForm, setSubmittingForm] = useState(false);
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -547,51 +893,89 @@ export default function PortalClientePage() {
 
   const selectedRequestDocuments = selectedRequest ? documentsByRequest.get(selectedRequest.id) || [] : [];
 
-  const selectedTemplateDefinition = useMemo(
-    () => portalRequestTemplates.find((template) => template.key === newRequestType) || portalRequestTemplates[0],
-    [newRequestType]
+  const availableReasons = useMemo(() => getGuidedReasonsForSector(newRequestSector), [newRequestSector]);
+
+  const selectedRequestReason = useMemo(
+    () => availableReasons.find((reason) => reason.key === newRequestReasonKey) || availableReasons[0] || null,
+    [availableReasons, newRequestReasonKey]
   );
 
+  const autoMatchedTemplate = useMemo(
+    () => findTemplateForReason(selectedRequestReason, publishedForms),
+    [publishedForms, selectedRequestReason]
+  );
+
+  const activeFormTemplate = selectedFormTemplate || autoMatchedTemplate;
+  const activeStructuredFields = activeFormTemplate?.fields.length
+    ? activeFormTemplate.fields
+    : selectedRequestReason?.fields || [];
+
+  useEffect(() => {
+    if (!availableReasons.some((reason) => reason.key === newRequestReasonKey)) {
+      setNewRequestReasonKey(getDefaultReasonKey(newRequestSector));
+    }
+  }, [availableReasons, newRequestReasonKey, newRequestSector]);
+
   const resetNewRequestForm = () => {
-    setNewRequestType(portalRequestTemplates[0].key);
+    setNewRequestSector(DEFAULT_REQUEST_SECTOR);
+    setNewRequestReasonKey(getDefaultReasonKey(DEFAULT_REQUEST_SECTOR));
     setNewRequestTitle("");
     setNewRequestDescription("");
-    setNewRequestSector(portalRequestTemplates[0].defaultSector);
     setNewRequestFiles([]);
+    setSelectedFormTemplate(null);
+    setFormValues({});
     if (requestFilesInputRef.current) requestFilesInputRef.current.value = "";
   };
+
+  const focusRequestComposer = useCallback(() => {
+    window.setTimeout(() => {
+      requestComposerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }, []);
 
   const openRequestsHub = (mode: PortalRequestEntryMode = "freeform") => {
     setActiveTab("requests");
     setRequestEntryMode(mode);
-
-    if (mode !== "forms") {
-      setSelectedFormTemplate(null);
-      setFormValues({});
-    }
+    focusRequestComposer();
   };
 
-  const openNewRequestDialog = (
-    preset?: { sector?: string; title?: string; description?: string },
+  const prepareInlineRequest = (
+    preset?: { sector?: string; reasonKey?: string; title?: string; description?: string },
     mode: PortalRequestEntryMode = "freeform",
   ) => {
     openRequestsHub(mode);
-    setNewRequestOpen(true);
-    if (preset?.sector) {
-      const match =
-        portalRequestTemplates.find((template) => template.defaultSector === preset.sector) ||
-        portalRequestTemplates[portalRequestTemplates.length - 1];
-      setNewRequestType(match.key);
-      setNewRequestSector(preset.sector);
-    }
+    setSelectedFormTemplate(null);
+    setFormValues({});
+
+    const nextSector =
+      preset?.sector && sectorOptions.includes(preset.sector) ? preset.sector : newRequestSector || DEFAULT_REQUEST_SECTOR;
+    const sectorReasons = getGuidedReasonsForSector(nextSector);
+    const nextReasonKey =
+      preset?.reasonKey && sectorReasons.some((reason) => reason.key === preset.reasonKey)
+        ? preset.reasonKey
+        : sectorReasons[0]?.key || "";
+
+    setNewRequestSector(nextSector);
+    setNewRequestReasonKey(nextReasonKey);
     if (preset?.title) setNewRequestTitle(preset.title);
     if (preset?.description) setNewRequestDescription(preset.description);
   };
 
-  const handleRequestTypeChange = (value: string) => {
-    const template = portalRequestTemplates.find((item) => item.key === value);
-    setNewRequestType(value);
-    if (template) setNewRequestSector(template.defaultSector);
+  const handleRequestSectorChange = (value: string) => {
+    setSelectedFormTemplate(null);
+    setFormValues({});
+    setNewRequestSector(value);
+    setNewRequestReasonKey(getDefaultReasonKey(value));
+  };
+
+  const handleRequestReasonChange = (value: string) => {
+    const reason = availableReasons.find((item) => item.key === value);
+    setSelectedFormTemplate(null);
+    setFormValues({});
+    setNewRequestReasonKey(value);
+    if (reason && !newRequestTitle.trim()) {
+      setNewRequestTitle(reason.defaultTitle);
+    }
   };
 
   const handleRequestFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -634,10 +1018,54 @@ export default function PortalClientePage() {
     return { success, failed };
   };
 
+  const buildStructuredLines = (fields: PortalGuidedField[]) =>
+    fields
+      .map((field) => {
+        const value = formValues[field.name]?.trim();
+        if (!value) return null;
+        return `${field.label}: ${value}`;
+      })
+      .filter(Boolean) as string[];
+
+  const buildRequestDescription = () => {
+    const sections: string[] = [];
+
+    if (selectedRequestReason?.description) {
+      sections.push(selectedRequestReason.description);
+    }
+
+    if (activeStructuredFields.length > 0) {
+      const lines = buildStructuredLines(activeStructuredFields);
+      if (lines.length > 0) {
+        sections.push(lines.join("\n"));
+      }
+    }
+
+    if (newRequestDescription.trim()) {
+      sections.push(`Contexto adicional:\n${newRequestDescription.trim()}`);
+    }
+
+    return sections.filter(Boolean).join("\n\n") || null;
+  };
+
   const handleCreateRequest = async () => {
     if (!user) return;
+    if (!newRequestSector) {
+      toast.error("Selecione o setor responsavel.");
+      return;
+    }
+    if (!selectedRequestReason && !selectedFormTemplate) {
+      toast.error("Selecione o motivo da solicitacao.");
+      return;
+    }
     if (!newRequestTitle.trim()) {
       toast.error("Informe o título da solicitação.");
+      return;
+    }
+
+    const missingRequired = activeStructuredFields.find((field) => field.required && !formValues[field.name]?.trim());
+    if (missingRequired) {
+      toast.error(`Preencha o campo obrigatorio: ${missingRequired.label}`);
       return;
     }
 
@@ -647,8 +1075,8 @@ export default function PortalClientePage() {
       .insert({
         user_id: user.id,
         title: newRequestTitle.trim(),
-        description: newRequestDescription.trim() || null,
-        category: newRequestType,
+        description: buildRequestDescription(),
+        category: selectedRequestReason?.label || activeFormTemplate?.title || "Solicitacao",
         sector: newRequestSector,
       })
       .select("id")
@@ -660,14 +1088,30 @@ export default function PortalClientePage() {
       return;
     }
 
+    if (activeFormTemplate) {
+      const { error: submissionError } = await supabase.from("form_submissions").insert({
+        template_id: activeFormTemplate.id,
+        template_title: activeFormTemplate.title,
+        submitted_by: user.id,
+        submitted_by_name: clientProfile?.contact || clientProfile?.name || user.email || null,
+        data: formValues,
+        status: "pending",
+        client_id: clientProfile?.id || null,
+        request_id: createdRequest.id,
+      });
+
+      if (submissionError) {
+        toast.error("A solicitacao foi criada, mas houve falha ao registrar o formulario estruturado.");
+      }
+    }
+
     const uploadResult = await uploadFilesToRequest(
       createdRequest.id,
       newRequestFiles,
-      `Solicitação - ${newRequestType}`
+      `Solicitacao - ${selectedRequestReason?.label || activeFormTemplate?.title || "Geral"}`
     );
 
     setCreatingRequest(false);
-    setNewRequestOpen(false);
     resetNewRequestForm();
 
     if (uploadResult.failed > 0) {
@@ -774,24 +1218,15 @@ export default function PortalClientePage() {
 
   const openFormTemplate = (template: PortalFormTemplate) => {
     openRequestsHub("forms");
+    setNewRequestSector(template.sector);
+    setNewRequestReasonKey(getDefaultReasonKey(template.sector));
+    setNewRequestTitle(template.title);
     setSelectedFormTemplate(template);
     setFormValues({});
   };
 
   const handleFormValueChange = (fieldName: string, value: string) => {
     setFormValues((prev) => ({ ...prev, [fieldName]: value }));
-  };
-
-  const buildFormRequestDescription = (template: PortalFormTemplate) => {
-    const lines = template.fields
-      .map((field) => {
-        const value = formValues[field.name]?.trim();
-        if (!value) return null;
-        return `${field.label}: ${value}`;
-      })
-      .filter(Boolean) as string[];
-
-    return [`Solicitação criada a partir do formulário "${template.title}".`, "", ...lines].join("\n");
   };
 
   const handleSubmitPortalForm = async () => {
@@ -810,8 +1245,8 @@ export default function PortalClientePage() {
       .from("client_requests")
       .insert({
         user_id: user.id,
-        title: `Formulário: ${selectedFormTemplate.title}`,
-        description: buildFormRequestDescription(selectedFormTemplate),
+        title: newRequestTitle.trim() || `Formulario: ${selectedFormTemplate.title}`,
+        description: buildRequestDescription(),
         category: "Formulário",
         sector: selectedFormTemplate.sector,
       })
@@ -1064,7 +1499,7 @@ export default function PortalClientePage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="gap-1.5" onClick={() => openNewRequestDialog()}>
+                    <Button size="sm" className="gap-1.5" onClick={() => openRequestsHub("freeform")}>
                       <MessageSquare className="h-4 w-4" /> Nova solicitação
                     </Button>
                     <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setUploadDialogOpen(true)}>
@@ -1083,7 +1518,7 @@ export default function PortalClientePage() {
               metrics={overviewMetrics}
               pendingNow={pendingNow}
               recentUpdates={recentUpdates}
-              onNewRequest={() => openNewRequestDialog()}
+              onNewRequest={() => openRequestsHub("freeform")}
               onUploadDocument={() => setUploadDialogOpen(true)}
               onOpenForms={() => openRequestsHub("forms")}
               onOpenSupport={() => openRequestsHub("support")}
@@ -1095,193 +1530,292 @@ export default function PortalClientePage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Central de solicitações</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Todo pedido do portal entra por este mesmo fluxo, seja livre, por setor ou por formulário estruturado.
+                  Todo pedido do portal entra por aqui. Escolha o setor, informe o motivo e o formulario se ajusta ao tipo de demanda.
                 </p>
               </CardHeader>
-              <CardContent className="pt-0 space-y-4">
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-                  <div
-                    className={`rounded-xl border bg-background p-4 transition-colors ${
-                      requestEntryMode === "freeform" ? "border-primary/40 bg-primary/5" : ""
-                    }`}
-                  >
-                    <p className="text-sm font-medium">Solicitação livre</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Para qualquer demanda nova com título, descrição, arquivos e setor responsável.
-                    </p>
-                    <Button className="mt-4 gap-2" onClick={() => openNewRequestDialog()}>
-                      <MessageSquare className="h-4 w-4" />
-                      Abrir solicitação
-                    </Button>
-                  </div>
-
-                  <div
-                    className={`rounded-xl border bg-background p-4 transition-colors ${
-                      requestEntryMode === "support" ? "border-primary/40 bg-primary/5" : ""
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">Atendimento por setor</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Quando quiser direcionar o pedido mais rápido, escolha o setor e siga pelo mesmo fluxo de solicitações.
+              <CardContent className="pt-0">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+                  <div ref={requestComposerRef} className="rounded-2xl border bg-background p-4 sm:p-5 space-y-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold">Abrir nova solicitacao</h3>
+                          <Badge variant="secondary">
+                            {requestEntryMode === "support"
+                              ? "atendimento por setor"
+                              : requestEntryMode === "forms"
+                                ? "formulario estruturado"
+                                : "fluxo guiado"}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          O motivo define o contexto e, quando existir formulario pronto, os campos estruturados entram automaticamente.
                         </p>
                       </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {supportSectors.map((sector) => (
-                        <Button
-                          key={sector}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="bg-card"
-                          onClick={() =>
-                            openNewRequestDialog({
-                              sector,
-                              title: `Atendimento ${sector}`,
-                              description: "Explique aqui sua necessidade para que a equipe possa agir rapidamente.",
-                            }, "support")
-                          }
-                        >
-                          {sector}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-xl border bg-background p-4 transition-colors ${
-                    requestEntryMode === "forms" ? "border-primary/40 bg-primary/5" : ""
-                  }`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">Formulários vinculados às solicitações</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Os formulários publicados pela equipe também entram na mesma fila de solicitações do portal.
-                      </p>
-                    </div>
-                    {selectedFormTemplate ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedFormTemplate(null);
-                          setFormValues({});
-                        }}
-                      >
-                        Fechar formulário
+                      <Button type="button" variant="ghost" size="sm" onClick={resetNewRequestForm}>
+                        Limpar
                       </Button>
-                    ) : null}
-                  </div>
+                    </div>
 
-                  {selectedFormTemplate ? (
-                    <div className="mt-5 rounded-xl border bg-card p-5">
-                      <div className="flex items-start gap-3">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setSelectedFormTemplate(null);
-                            setFormValues({});
-                          }}
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                        <div>
-                          <h3 className="font-semibold">{selectedFormTemplate.title}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {selectedFormTemplate.description || "Sem descrição"}
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Setor</label>
+                        <Select value={newRequestSector} onValueChange={handleRequestSectorChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o setor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {sectorOptions.map((sector) => (
+                              <SelectItem key={sector} value={sector}>
+                                {sector}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Motivo da solicitacao</label>
+                        <Select value={selectedRequestReason?.key || ""} onValueChange={handleRequestReasonChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o motivo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableReasons.map((reason) => (
+                              <SelectItem key={reason.key} value={reason.key}>
+                                {reason.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {selectedRequestReason ? (
+                      <div className="rounded-xl border bg-muted/25 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium">{selectedRequestReason.label}</p>
+                          {activeFormTemplate ? (
+                            <Badge variant="outline">
+                              {selectedFormTemplate ? "Formulario selecionado" : "Formulario aplicado automaticamente"}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">{selectedRequestReason.description}</p>
+                        {activeFormTemplate ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Estrutura atual: {activeFormTemplate.title}
                           </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Assunto</label>
+                      <Input
+                        value={newRequestTitle}
+                        onChange={(event) => setNewRequestTitle(event.target.value)}
+                        placeholder={selectedRequestReason?.defaultTitle || "Ex.: Revisao da folha do mes"}
+                      />
+                    </div>
+
+                    {activeStructuredFields.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">Campos da solicitacao</p>
+                            <p className="text-xs text-muted-foreground">
+                              Preencha os dados principais para a equipe receber o pedido de forma objetiva.
+                            </p>
+                          </div>
+                          {selectedFormTemplate ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedFormTemplate(null);
+                                setFormValues({});
+                              }}
+                            >
+                              Voltar ao fluxo guiado
+                            </Button>
+                          ) : null}
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {activeStructuredFields.map((field) => (
+                            <div
+                              key={field.name}
+                              className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
+                            >
+                              <label className="text-sm font-medium">
+                                {field.label}
+                                {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                              </label>
+                              {field.type === "select" ? (
+                                <Select value={formValues[field.name] || ""} onValueChange={(value) => handleFormValueChange(field.name, value)}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(field.options || []).map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {option}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : field.type === "textarea" ? (
+                                <Textarea
+                                  rows={4}
+                                  value={formValues[field.name] || ""}
+                                  onChange={(event) => handleFormValueChange(field.name, event.target.value)}
+                                  placeholder={field.placeholder}
+                                />
+                              ) : (
+                                <Input
+                                  type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
+                                  value={formValues[field.name] || ""}
+                                  onChange={(event) => handleFormValueChange(field.name, event.target.value)}
+                                  placeholder={field.placeholder}
+                                />
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
+                    ) : null}
 
-                      <div className="mt-4 space-y-4">
-                        {selectedFormTemplate.fields.map((field) => (
-                          <div key={field.name} className="space-y-1.5">
-                            <label className="text-sm font-medium">
-                              {field.label}
-                              {field.required && <span className="ml-1 text-destructive">*</span>}
-                            </label>
-                            {field.type === "select" ? (
-                              <Select value={formValues[field.name] || ""} onValueChange={(value) => handleFormValueChange(field.name, value)}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {(field.options || []).map((option) => (
-                                    <SelectItem key={option} value={option}>
-                                      {option}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : field.type === "textarea" ? (
-                              <Textarea
-                                rows={4}
-                                value={formValues[field.name] || ""}
-                                onChange={(event) => handleFormValueChange(field.name, event.target.value)}
-                                placeholder={field.placeholder}
-                              />
-                            ) : (
-                              <Input
-                                type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
-                                value={formValues[field.name] || ""}
-                                onChange={(event) => handleFormValueChange(field.name, event.target.value)}
-                                placeholder={field.placeholder}
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Contexto adicional</label>
+                      <Textarea
+                        rows={5}
+                        value={newRequestDescription}
+                        onChange={(event) => setNewRequestDescription(event.target.value)}
+                        placeholder="Adicione prazo, urgencia, observacoes ou qualquer detalhe que ajude a equipe."
+                      />
+                    </div>
 
-                      <div className="mt-5 flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedFormTemplate(null);
-                            setFormValues({});
-                          }}
-                        >
-                          Cancelar
-                        </Button>
-                        <Button type="button" onClick={() => void handleSubmitPortalForm()} disabled={submittingForm}>
-                          {submittingForm ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar formulário"}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : publishedForms.length === 0 ? (
-                    <div className="mt-4 rounded-xl border border-dashed bg-card/40 p-6 text-center">
-                      <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-                      <p className="font-medium">Nenhum formulário publicado no momento.</p>
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {publishedForms.map((template) => (
-                        <button
-                          type="button"
-                          key={template.id}
-                          className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/30"
-                          onClick={() => openFormTemplate(template)}
-                        >
-                          <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <FileText className="h-4 w-4" />
-                          </div>
-                          <p className="font-medium">{template.title}</p>
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                            {template.description || "Sem descrição"}
+                    <div className="space-y-2 rounded-xl border bg-card p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium">Arquivos no mesmo envio</p>
+                          <p className="text-xs text-muted-foreground">
+                            Anexe documentos que ajudem a equipe a tratar a solicitacao sem retrabalho.
                           </p>
-                          <p className="mt-2 text-xs text-muted-foreground">{template.fields.length} campo(s)</p>
-                        </button>
-                      ))}
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
+                          <Paperclip className="mr-1 h-4 w-4" /> Anexar arquivos
+                        </Button>
+                      </div>
+                      <input
+                        ref={requestFilesInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={handleRequestFileSelection}
+                      />
+                      {newRequestFiles.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Nenhum arquivo selecionado.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {newRequestFiles.map((file, index) => (
+                            <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm">{file.name}</p>
+                                <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                              </div>
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeRequestFile(index)}>
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                      <p className="text-xs text-muted-foreground">
+                        A solicitacao entra no mesmo fluxo do portal e fica visivel no historico logo abaixo.
+                      </p>
+                      <Button type="button" className="gap-2" onClick={() => void handleCreateRequest()} disabled={creatingRequest}>
+                        {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        Enviar solicitacao
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border bg-background p-4">
+                      <p className="text-sm font-medium">Atalhos rapidos</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Entradas prontas para os pedidos mais recorrentes do portal.
+                      </p>
+                      <div className="mt-4 grid grid-cols-1 gap-2">
+                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "admissao", title: "Admissao de colaborador" }, "forms")}>
+                          Admissao
+                        </Button>
+                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "demissao", title: "Demissao de colaborador" }, "forms")}>
+                          Demissao
+                        </Button>
+                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "folha_pagamento", title: "Folha de pagamento" }, "support")}>
+                          Folha de pagamento
+                        </Button>
+                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Geral", reasonKey: "acesso_portal", title: "Suporte de acesso ao portal" }, "support")}>
+                          Acesso ao portal
+                        </Button>
+                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Financeiro", reasonKey: "controle_caixa", title: "Controle de caixa no portal" }, "support")}>
+                          Controle de caixa
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">Formularios publicados</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Se a equipe publicou um formulario especifico, voce pode carregá-lo aqui no mesmo fluxo.
+                          </p>
+                        </div>
+                        <Badge variant="outline">{publishedForms.length}</Badge>
+                      </div>
+
+                      {publishedForms.length === 0 ? (
+                        <div className="mt-4 rounded-xl border border-dashed bg-card/40 p-4 text-center">
+                          <FileText className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
+                          <p className="text-sm font-medium">Nenhum formulario publicado agora.</p>
+                        </div>
+                      ) : (
+                        <div className="mt-4 space-y-2">
+                          {publishedForms.slice(0, 5).map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              className="w-full rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted/30"
+                              onClick={() => openFormTemplate(template)}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-medium">{template.title}</p>
+                                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                    {template.description || "Sem descricao"}
+                                  </p>
+                                </div>
+                                <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                              </div>
+                            </button>
+                          ))}
+                          {publishedForms.length > 5 ? (
+                            <p className="pt-1 text-xs text-muted-foreground">
+                              Existem mais formularios publicados. Os principais atalhos aparecem primeiro.
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1448,10 +1982,11 @@ export default function PortalClientePage() {
               onCreateEntry={handleCreateCashflowEntry}
               onCreateEntriesBatch={handleCreateCashflowEntriesBatch}
               onRequestEnable={() =>
-                openNewRequestDialog({
+                prepareInlineRequest({
                   sector: "Financeiro",
-                  title: "Liberação do controle de caixa no portal",
-                  description: "Solicito a liberação do módulo de controle de caixa para uso no portal do cliente.",
+                  reasonKey: "controle_caixa",
+                  title: "Liberacao do controle de caixa no portal",
+                  description: "Solicito a liberacao do modulo de controle de caixa para uso no portal do cliente.",
                 })
               }
             />
@@ -1474,10 +2009,10 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">1. Abra uma solicitação</p>
                       <p className="text-sm text-muted-foreground">
-                        Use a aba de solicitações para enviar demandas com título, descrição e setor responsável.
+                        Use a aba de solicitacoes para escolher setor, motivo e preencher os campos certos na propria pagina.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("requests")}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("freeform")}>
                       Ir para solicitações
                     </Button>
                   </div>
@@ -1502,7 +2037,7 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">3. Preencha formulários quando solicitado</p>
                       <p className="text-sm text-muted-foreground">
-                        Os formulários publicados pela equipe ficam centralizados para envio rápido e organizado.
+                        Quando existir formulario publicado para o motivo escolhido, ele aparece dentro do mesmo fluxo.
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("forms")}>
@@ -1581,17 +2116,18 @@ export default function PortalClientePage() {
                     <p className="text-xs text-muted-foreground">Email de acesso</p>
                     <p className="text-sm font-medium">{clientProfile?.email?.toLowerCase() || user?.email?.toLowerCase() || "Não informado"}</p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      openNewRequestDialog({
-                        sector: "Geral",
-                        title: "Atualização de dados cadastrais",
-                        description: "Preciso atualizar meus dados no portal do cliente.",
-                      })
-                    }
-                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        prepareInlineRequest({
+                          sector: "Geral",
+                          reasonKey: "atualizacao_cadastral",
+                          title: "Atualizacao de dados cadastrais",
+                          description: "Preciso atualizar meus dados no portal do cliente.",
+                        })
+                      }
+                    >
                     Solicitar atualização cadastral
                   </Button>
                 </CardContent>
@@ -1664,9 +2200,10 @@ export default function PortalClientePage() {
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        openNewRequestDialog({
+                        prepareInlineRequest({
                           sector: "Geral",
-                          title: "Solicitação de suporte de acesso ao portal",
+                          reasonKey: "acesso_portal",
+                          title: "Solicitacao de suporte de acesso ao portal",
                           description: "Preciso de suporte com acesso e seguranca no portal do cliente.",
                         }, "support")
                       }
@@ -1684,133 +2221,6 @@ export default function PortalClientePage() {
           </main>
         </div>
       </div>
-
-      <Dialog
-        open={newRequestOpen}
-        onOpenChange={(open) => {
-          setNewRequestOpen(open);
-          if (!open) resetNewRequestForm();
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nova solicitação</DialogTitle>
-            <DialogDescription>
-              Sua solicitação sera direcionada ao setor responsavel.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Tipo da solicitação</label>
-              <Select value={newRequestType} onValueChange={handleRequestTypeChange}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {portalRequestTemplates.map((template) => (
-                    <SelectItem key={template.key} value={template.key}>
-                      {template.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">{selectedTemplateDefinition.description}</p>
-              <div className="rounded-lg border bg-muted/30 p-2">
-                <p className="text-xs font-medium">Exemplos rapidos:</p>
-                <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
-                  {selectedTemplateDefinition.examples.map((example) => (
-                    <li key={example}>• {example}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Titulo</label>
-                <Input
-                  value={newRequestTitle}
-                  onChange={(event) => setNewRequestTitle(event.target.value)}
-                  placeholder="Ex.: Conferência de impostos do mes"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Setor responsavel</label>
-                <Select value={newRequestSector} onValueChange={setNewRequestSector}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sectorOptions.map((sector) => (
-                      <SelectItem key={sector} value={sector}>
-                        {sector}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Descreva a necessidade</label>
-              <Textarea
-                rows={5}
-                value={newRequestDescription}
-                onChange={(event) => setNewRequestDescription(event.target.value)}
-                placeholder="Descreva o contexto e, se puder, informe prazo ou urgencia."
-              />
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">Arquivos no mesmo envio</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
-                  <Paperclip className="h-4 w-4 mr-1" /> Anexar arquivos
-                </Button>
-              </div>
-              <input
-                ref={requestFilesInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleRequestFileSelection}
-              />
-              {newRequestFiles.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhum arquivo selecionado.</p>
-              ) : (
-                <div className="space-y-2">
-                  {newRequestFiles.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-sm truncate">{file.name}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {(file.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeRequestFile(index)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNewRequestOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" className="gap-2" onClick={() => void handleCreateRequest()} disabled={creatingRequest}>
-              {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Enviar solicitação
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={uploadDialogOpen}
