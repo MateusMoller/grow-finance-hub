@@ -59,6 +59,8 @@
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(240 20% 97%) 100%);
     --gradient-primary: linear-gradient(135deg, hsl(232 17% 33%) 0%, hsl(232 15% 42%) 100%);
     --gradient-gold: linear-gradient(135deg, hsl(43 96% 56%) 0%, hsl(38 90% 48%) 100%);
+    --gradient-hero-impact:
+      linear-gradient(132deg, hsl(224 70% 95%) 0%, hsl(267 48% 91%) 28%, hsl(28 88% 87%) 62%, hsl(205 72% 94%) 100%);
 
     --shadow-sm: 0 1px 2px 0 hsl(232 17% 20% / 0.04);
     --shadow-md: 0 4px 12px -2px hsl(232 17% 20% / 0.08);
@@ -205,6 +207,118 @@
     filter: blur(1px);
   }
 
+  .hero-impact-surface {
+    background:
+      radial-gradient(circle at 16% 18%, rgba(109, 124, 204, 0.18), transparent 18%),
+      radial-gradient(circle at 78% 18%, rgba(255, 191, 130, 0.32), transparent 20%),
+      radial-gradient(circle at 82% 78%, rgba(119, 96, 190, 0.15), transparent 22%),
+      var(--gradient-hero-impact);
+  }
+
+  .hero-impact-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(115deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0) 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0) 45%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .hero-impact-grid {
+    background-image:
+      linear-gradient(to right, rgba(34, 40, 66, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(34, 40, 66, 0.04) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 100%);
+  }
+
+  .hero-impact-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(10px);
+    opacity: 0.82;
+  }
+
+  .hero-impact-orb-a {
+    left: -7rem;
+    top: 14%;
+    height: 18rem;
+    width: 18rem;
+    background: radial-gradient(circle, rgba(90, 104, 180, 0.26) 0%, rgba(90, 104, 180, 0) 72%);
+  }
+
+  .hero-impact-orb-b {
+    right: 7%;
+    top: 12%;
+    height: 14rem;
+    width: 14rem;
+    background: radial-gradient(circle, rgba(255, 175, 110, 0.28) 0%, rgba(255, 175, 110, 0) 72%);
+  }
+
+  .hero-impact-orb-c {
+    bottom: 7%;
+    right: 18%;
+    height: 16rem;
+    width: 16rem;
+    background: radial-gradient(circle, rgba(112, 88, 190, 0.16) 0%, rgba(112, 88, 190, 0) 72%);
+  }
+
+  .hero-impact-line {
+    position: absolute;
+    height: 1px;
+    transform-origin: left center;
+    background: linear-gradient(90deg, transparent, rgba(36, 44, 73, 0.28), transparent);
+    opacity: 0.7;
+  }
+
+  .hero-impact-line-a {
+    left: 12%;
+    top: 34%;
+    width: 32rem;
+    transform: rotate(14deg);
+  }
+
+  .hero-impact-line-b {
+    right: 12%;
+    bottom: 22%;
+    width: 26rem;
+    transform: rotate(-12deg);
+  }
+
+  .hero-impact-chip {
+    border: 1px solid rgba(53, 61, 95, 0.18);
+    background: rgba(255, 255, 255, 0.34);
+    box-shadow: 0 18px 44px -28px rgba(28, 34, 60, 0.24);
+    backdrop-filter: blur(16px);
+  }
+
+  .hero-impact-note {
+    border-left: 1px solid rgba(53, 61, 95, 0.16);
+  }
+
+  .hero-impact-emphasis {
+    color: #444b73;
+  }
+
+  .hero-impact-cta {
+    background: linear-gradient(135deg, #2c3150 0%, #535a87 100%);
+    box-shadow: 0 24px 42px -24px rgba(29, 36, 66, 0.52);
+  }
+
+  .hero-impact-cta:hover {
+    background: linear-gradient(135deg, #262b46 0%, #4a5280 100%);
+  }
+
+  .hero-impact-side-card {
+    border: 1px solid rgba(53, 61, 95, 0.14);
+    background: rgba(255, 255, 255, 0.38);
+    box-shadow: 0 24px 44px -30px rgba(29, 36, 66, 0.28);
+    backdrop-filter: blur(18px);
+  }
+
   .carousel-shell {
     position: relative;
   }
@@ -291,6 +405,39 @@
 
     .flip-card-inner {
       transition-duration: 0ms;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .hero-impact-grid {
+      background-size: 52px 52px;
+    }
+
+    .hero-impact-line-a,
+    .hero-impact-line-b {
+      width: 14rem;
+      opacity: 0.45;
+    }
+
+    .hero-impact-orb-a {
+      left: -5rem;
+      top: 9%;
+      height: 12rem;
+      width: 12rem;
+    }
+
+    .hero-impact-orb-b {
+      right: -1rem;
+      top: 8%;
+      height: 10rem;
+      width: 10rem;
+    }
+
+    .hero-impact-orb-c {
+      bottom: 10%;
+      right: -2rem;
+      height: 12rem;
+      width: 12rem;
     }
   }
 }

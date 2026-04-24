@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock, Eye, FileText, Heart, Shield, Target, TrendingUp, Users } from "lucide-react";
+import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Eye, FileText, Heart, Shield, Target, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
@@ -97,19 +97,6 @@ const services = [
     visualAccent: "Painel mensal",
     visualCaption: "Resumo executivo para acompanhar evolução sem operar no escuro.",
   },
-];
-
-const differentials = [
-  "Atendimento por especialistas com agenda de acompanhamento.",
-  "Rotina de prevencao de riscos fiscais e trabalhistas.",
-  "Indicadores objetivos para apoiar decisão do empresário.",
-  "Comunicação clara, prazos definidos e processos rastreaveis.",
-];
-
-const journey = [
-  { icon: CheckCircle2, title: "Diagnóstico inicial", description: "Mapeamento das prioridades contábeis, fiscais e financeiras." },
-  { icon: Clock, title: "Plano de 90 dias", description: "Roadmap com entregas, prazos e responsabilidades definidas." },
-  { icon: TrendingUp, title: "Evolução mensal", description: "Monitoramento de indicadores e ajustes contínuos na operação." },
 ];
 
 const testimonials = [
@@ -216,47 +203,70 @@ export default function AboutPage() {
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
-        <section id="institucional" className="border-b border-border/60 py-10 dark:border-[#243054] sm:py-12 md:py-16">
-          <div className="container">
-            <motion.div {...fadeIn} className="relative max-w-5xl space-y-7 pt-2">
-              <div className="pointer-events-none absolute -left-8 top-10 hidden h-32 w-32 rounded-full border border-primary/15 lg:block" />
-              <div className="pointer-events-none absolute left-16 top-28 hidden h-px w-24 rotate-[28deg] bg-gradient-to-r from-transparent via-primary/40 to-transparent lg:block" />
+        <section
+          id="institucional"
+          className="hero-impact-surface relative isolate flex min-h-[100svh] items-stretch overflow-hidden border-b border-border/50 dark:border-[#243054]"
+        >
+          <div className="pointer-events-none absolute inset-0">
+            <div className="hero-impact-grid absolute inset-0 opacity-45" />
+            <div className="hero-impact-orb hero-impact-orb-a" />
+            <div className="hero-impact-orb hero-impact-orb-b" />
+            <div className="hero-impact-orb hero-impact-orb-c" />
+            <div className="hero-impact-line hero-impact-line-a" />
+            <div className="hero-impact-line hero-impact-line-b" />
+          </div>
 
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+          <div className="container relative flex min-h-[100svh] flex-col justify-center py-16 pb-14 pt-28 sm:pt-32 lg:py-20 lg:pt-28">
+            <motion.div {...fadeIn} className="relative max-w-6xl space-y-8">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <span className="hero-impact-chip inline-flex w-fit items-center rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-foreground/80">
                   Grow Contabilidade
                 </span>
-                <div className="max-w-[220px] border-l border-primary/20 pl-4 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                  operação, visão e direção em uma estrutura menos previsível
+                <div className="hero-impact-note max-w-[280px] pl-4 text-[11px] font-medium uppercase tracking-[0.26em] text-foreground/60">
+                  operação, visão e direção com uma presença mais marcante logo na primeira dobra
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h1 className="max-w-4xl font-heading text-[2.9rem] font-black leading-[0.94] tracking-[-0.06em] sm:text-[4.3rem] lg:text-[5.5rem]">
-                  <span className="block">CONTABILIDADE</span>
-                  <span className="block pl-[0.08em] text-primary">QUE PUXA</span>
-                  <span className="block sm:pl-[0.35em]">SEU NEGÓCIO</span>
-                  <span className="block text-[0.42em] font-semibold uppercase tracking-[0.24em] text-muted-foreground sm:pl-[1.6em]">
-                    onde a rotina ganha asas
-                  </span>
-                </h1>
-              </div>
+              <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
+                <div className="space-y-6">
+                  <h1 className="max-w-5xl font-heading text-[3.35rem] font-black leading-[0.88] tracking-[-0.075em] text-[#1e2237] sm:text-[5rem] lg:text-[7rem] xl:text-[8rem]">
+                    <span className="block">CONTABILIDADE</span>
+                    <span className="hero-impact-emphasis block pl-[0.04em]">QUE PUXA</span>
+                    <span className="block sm:pl-[0.25em]">SEU NEGÓCIO</span>
+                    <span className="block pt-2 text-[0.25em] font-semibold uppercase tracking-[0.3em] text-[#5e658a] sm:pl-[1.8em]">
+                      onde a rotina ganha asas
+                    </span>
+                  </h1>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button
-                  asChild
-                  className="group h-12 w-full rounded-full border border-white/35 px-6 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
-                >
-                  <Link to="/contato">
-                    Falar com especialista
-                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                  </Link>
-                </Button>
+                  <p className="max-w-2xl text-base leading-8 text-[#434968] sm:text-lg">
+                    A primeira leitura precisa passar mais do que organização. Ela precisa sugerir movimento, direção e confiança
+                    para um novo lead entender, em segundos, que a Grow não entrega apenas rotina.
+                  </p>
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                    <Button
+                      asChild
+                      className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
+                    >
+                      <Link to="/contato">
+                        Falar com especialista
+                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="hidden lg:flex lg:flex-col lg:items-start lg:gap-5 lg:self-end lg:pb-8">
+                  <div className="hero-impact-side-card max-w-[240px] rounded-[30px] p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#51587b]">Primeiro impacto</p>
+                    <p className="mt-4 text-sm leading-7 text-[#353b59]">
+                      Um topo mais imersivo, com outra atmosfera visual, para separar a primeira impressão do restante do site.
+                    </p>
+                  </div>
+                </div>
               </div>
             </motion.div>
-
           </div>
-
         </section>
 
         <section className="py-12 md:py-16">
@@ -322,7 +332,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section id="serviços" className="py-12 md:py-16">
+        <section id="servicos" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>

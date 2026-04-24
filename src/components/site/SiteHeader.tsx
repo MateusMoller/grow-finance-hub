@@ -7,7 +7,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 const navLinks = [
   { label: "Institucional", to: "/" },
   { label: "Servicos", to: "/#servicos" },
-  { label: "Diferenciais", to: "/#diferenciais" },
   { label: "Clientes", to: "/#clientes" },
   { label: "Newsletter", to: "/newsletter" },
   { label: "Contato", to: "/contato" },
@@ -83,7 +82,12 @@ export function SiteHeader() {
             asChild
             variant="outline"
             size="sm"
-            className="h-12 rounded-none border-border/80 bg-background/70 px-6 text-[12px] font-semibold uppercase tracking-[0.14em] backdrop-blur hover:bg-background"
+            className={[
+              "h-12 rounded-none px-6 text-[12px] font-semibold uppercase tracking-[0.14em] backdrop-blur transition-colors",
+              scrolled
+                ? "border-border/80 bg-background/78 hover:bg-background"
+                : "border-white/40 bg-white/35 hover:bg-white/55",
+            ].join(" ")}
           >
             <Link to="/#contato">Fale com a Grow</Link>
           </Button>
@@ -91,7 +95,10 @@ export function SiteHeader() {
             asChild
             variant="ghost"
             size="sm"
-            className="rounded-none px-3 text-[12px] font-semibold uppercase tracking-[0.14em]"
+            className={[
+              "rounded-none px-3 text-[12px] font-semibold uppercase tracking-[0.14em] transition-colors",
+              scrolled ? "" : "hover:bg-white/20",
+            ].join(" ")}
           >
             <Link to="/login">Entrar</Link>
           </Button>
