@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Clock, Eye, FileText, Heart, Shield, Target, TrendingUp, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -159,6 +159,7 @@ const fadeIn = {
 export default function AboutPage() {
   const [sending, setSending] = useState(false);
   const [flippedValues, setFlippedValues] = useState<Record<string, boolean>>({});
+  const [activeServiceTitle, setActiveServiceTitle] = useState<string | null>(null);
   const [leadForm, setLeadForm] = useState({
     fullName: "",
     companyName: "",
@@ -229,6 +230,12 @@ export default function AboutPage() {
       ...current,
       [cardId]: !current[cardId],
     }));
+  };
+
+  const activeService = services.find((service) => service.title === activeServiceTitle) ?? null;
+
+  const toggleServicePanel = (serviceTitle: string) => {
+    setActiveServiceTitle((current) => (current === serviceTitle ? null : serviceTitle));
   };
 
   return (
@@ -500,110 +507,149 @@ export default function AboutPage() {
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
             </motion.div>
 
-            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-10 xl:mx-0 xl:grid xl:gap-5 xl:overflow-visible xl:px-0 xl:pb-20 xl:snap-none xl:grid-cols-3">
-              {services.map((service, index) => {
-                const expandsLeft = index % 3 === 2;
+            <div className="service-expand-shell relative">
+              <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-4 xl:mx-0 xl:grid xl:gap-5 xl:overflow-visible xl:px-0 xl:pb-0 xl:snap-none xl:grid-cols-3">
+                {services.map((service, index) => {
+                  const isActive = activeServiceTitle === service.title;
 
-                return (
-                <motion.article
-                  key={service.title}
-                  initial={{ opacity: 0, y: 14 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{ duration: 0.35, delay: index * 0.04 }}
-                  tabIndex={0}
-                  className="service-hover-card group relative min-w-[84%] snap-start focus-visible:outline-none sm:min-w-[72%] xl:min-w-0"
-                >
-                  <div className="hover-lift-soft surface-sheen relative min-h-[248px] rounded-[28px] border border-border bg-card p-5 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
-                        <service.icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80 transition-transform duration-200 group-hover:-translate-y-0.5">
-                        Grow
-                      </span>
-                    </div>
-                    <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
-                    <div className="mt-5 flex items-center gap-2 text-sm font-medium text-primary">
-                      <span>Abra o card</span>
-                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 group-focus-visible:translate-x-1" />
-                    </div>
-                  </div>
-
-                  <div
-                    className={[
-                      "service-hover-panel hidden xl:grid xl:grid-cols-[minmax(0,1fr)_220px] xl:gap-6",
-                      expandsLeft ? "xl:right-0 xl:left-auto" : "xl:left-0",
-                    ].join(" ")}
-                  >
-                    <div className="flex min-h-[288px] flex-col justify-between rounded-[30px] border border-primary/20 bg-card/96 p-6 backdrop-blur-sm dark:border-[#2b3861] dark:bg-[#08142f]/96">
-                      <div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="rounded-full border border-primary/15 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/80">
-                            Grow
-                          </span>
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                            {service.visualAccent}
-                          </span>
+                  return (
+                    <motion.button
+                      key={service.title}
+                      type="button"
+                      initial={{ opacity: 0, y: 14 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, amount: 0.2 }}
+                      transition={{ duration: 0.35, delay: index * 0.04 }}
+                      onClick={() => toggleServicePanel(service.title)}
+                      aria-expanded={isActive}
+                      className={[
+                        "service-card-button hover-lift-soft surface-sheen group relative min-w-[84%] snap-start rounded-[28px] border border-border bg-card p-5 text-left shadow-sm transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:min-w-[72%] xl:min-w-0",
+                        isActive ? "border-primary/30 shadow-[0_28px_60px_-34px_rgba(34,48,88,0.32)]" : "dark:border-[#223058] dark:bg-[#0a1734]",
+                        isActive ? "dark:border-[#7a62ef]/45 dark:bg-[#0a1734]" : "",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
+                          <service.icon className="h-5 w-5 text-primary" />
                         </div>
-                        <div className="mt-5 flex items-start gap-4">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] bg-primary/10">
-                            <service.icon className="h-6 w-6 text-primary" />
+                        <span className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80">
+                          Grow
+                        </span>
+                      </div>
+                      <h3 className="mt-3 font-heading text-base font-semibold">{service.title}</h3>
+                      <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
+                      <div className="mt-5 flex items-center gap-2 text-sm font-medium text-primary">
+                        <span>{isActive ? "Fechar detalhe" : "Abrir detalhe"}</span>
+                        <ArrowRight
+                          className={[
+                            "h-4 w-4 transition-transform duration-200",
+                            isActive ? "rotate-90" : "group-hover:translate-x-1",
+                          ].join(" ")}
+                        />
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              <AnimatePresence>
+                {activeService && (
+                  <motion.div
+                    key={activeService.title}
+                    initial={{ opacity: 0, y: 18, scale: 0.985 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 12, scale: 0.99 }}
+                    transition={{ duration: 0.28, ease: "easeOut" }}
+                    className="service-expanded-panel mt-5 xl:absolute xl:inset-0 xl:mt-0"
+                  >
+                    <div className="grid min-h-[unset] gap-6 rounded-[32px] border border-primary/20 bg-card p-6 shadow-[0_28px_70px_-34px_rgba(34,48,88,0.3)] dark:border-[#2b3861] dark:bg-[#08142f] xl:h-full xl:grid-cols-[minmax(0,1.2fr)_320px] xl:p-8">
+                      <div className="flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-4">
+                              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] bg-primary/10">
+                                <activeService.icon className="h-6 w-6 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/75">
+                                  Grow
+                                </p>
+                                <h3 className="mt-2 font-heading text-[1.9rem] font-semibold leading-tight text-foreground">
+                                  {activeService.title}
+                                </h3>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setActiveServiceTitle(null)}
+                              className="rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary transition-colors hover:bg-primary/10"
+                            >
+                              Fechar
+                            </button>
                           </div>
-                          <div className="space-y-3">
-                            <h3 className="font-heading text-[1.65rem] font-semibold leading-tight text-foreground">
-                              {service.title}
-                            </h3>
-                            <p className="max-w-xl text-base leading-7 text-foreground/88 dark:text-[#dfe6ff]">
-                              {service.teaser}
+
+                          <p className="mt-6 max-w-2xl text-lg leading-8 text-foreground/88 dark:text-[#dfe6ff]">
+                            {activeService.teaser}
+                          </p>
+                          <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+                            {activeService.detail}
+                          </p>
+                        </div>
+
+                        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-[24px] border border-primary/14 bg-primary/5 p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/75">
+                              Leitura central
+                            </p>
+                            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                              {activeService.visualCaption}
+                            </p>
+                          </div>
+                          <div className="rounded-[24px] border border-primary/14 bg-background/65 p-4 dark:bg-white/5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/75">
+                              Aplicação prática
+                            </p>
+                            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                              Atendimento construído para reduzir ruído operacional e dar mais clareza à decisão.
                             </p>
                           </div>
                         </div>
-                        <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground">
-                          {service.detail}
-                        </p>
                       </div>
 
-                      <div className="mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary/75">
-                        <span className="h-px flex-1 bg-primary/20" />
-                        Passe o cursor para explorar
-                      </div>
-                    </div>
-
-                    <div className="relative overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] p-5 dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
-                      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)]" />
-                      <div className="relative flex h-full flex-col justify-between">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/70">
-                            Ilustração contextual
-                          </p>
-                          <p className="mt-2 max-w-[12rem] text-sm leading-6 text-muted-foreground">
-                            {service.visualCaption}
-                          </p>
-                        </div>
-
-                        <div className="relative mt-6 h-[160px] rounded-[28px] border border-primary/14 bg-white/70 p-4 shadow-[0_18px_50px_-28px_rgba(34,48,88,0.4)] dark:bg-white/5">
-                          <div className="absolute left-4 top-4 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">
-                            {service.visualAccent}
+                      <div className="relative overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] p-5 dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)]" />
+                        <div className="relative flex h-full min-h-[260px] flex-col justify-between">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/70">
+                              Imagem genérica contextual
+                            </p>
+                            <p className="mt-2 max-w-[16rem] text-sm leading-6 text-muted-foreground">
+                              {activeService.visualCaption}
+                            </p>
                           </div>
-                          <div className="absolute -right-4 bottom-3 h-24 w-24 rounded-full bg-primary/15 blur-2xl" />
-                          <div className="absolute left-5 top-14 h-[84px] w-[84px] rounded-[30px] border border-primary/14 bg-gradient-to-br from-primary/18 via-white/40 to-transparent dark:via-white/5" />
-                          <div className="absolute right-5 top-12 flex h-[92px] w-[92px] items-center justify-center rounded-[32px] border border-primary/14 bg-background/85 shadow-sm dark:bg-[#0c1836]">
-                            <service.icon className="h-10 w-10 text-primary" />
-                          </div>
-                          <div className="absolute bottom-5 left-5 right-5 space-y-2">
-                            <div className="h-2.5 w-[74%] rounded-full bg-primary/16" />
-                            <div className="h-2.5 w-[52%] rounded-full bg-primary/10" />
-                            <div className="h-2.5 w-[66%] rounded-full bg-primary/12" />
+
+                          <div className="relative mt-6 h-[210px] rounded-[28px] border border-primary/14 bg-white/70 p-4 shadow-[0_18px_50px_-28px_rgba(34,48,88,0.4)] dark:bg-white/5">
+                            <div className="absolute left-4 top-4 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">
+                              {activeService.visualAccent}
+                            </div>
+                            <div className="absolute -right-5 bottom-4 h-28 w-28 rounded-full bg-primary/15 blur-2xl" />
+                            <div className="absolute left-6 top-16 h-[104px] w-[104px] rounded-[34px] border border-primary/14 bg-gradient-to-br from-primary/18 via-white/40 to-transparent dark:via-white/5" />
+                            <div className="absolute right-6 top-14 flex h-[112px] w-[112px] items-center justify-center rounded-[36px] border border-primary/14 bg-background/85 shadow-sm dark:bg-[#0c1836]">
+                              <activeService.icon className="h-12 w-12 text-primary" />
+                            </div>
+                            <div className="absolute bottom-6 left-6 right-6 space-y-2.5">
+                              <div className="h-2.5 w-[76%] rounded-full bg-primary/16" />
+                              <div className="h-2.5 w-[54%] rounded-full bg-primary/10" />
+                              <div className="h-2.5 w-[68%] rounded-full bg-primary/12" />
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </motion.article>
-                );
-              })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </section>
