@@ -270,6 +270,18 @@ export default function AboutPage() {
                   Continue explorando
                 </div>
                 <div className="hero-discovery-layer relative">
+                  <div className="hero-discovery-cta-wrap mb-5 flex justify-start xl:absolute xl:right-0 xl:top-[-26px] xl:mb-0">
+                    <Button
+                      asChild
+                      className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
+                    >
+                      <Link to="/contato">
+                        Falar com especialista
+                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                      </Link>
+                    </Button>
+                  </div>
+
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {discoveryRail.map((item, index) => (
                       <motion.div
@@ -295,22 +307,10 @@ export default function AboutPage() {
                               {item.description}
                             </span>
                           </span>
-                        </Link>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  <div className="hero-discovery-cta-wrap mt-5 flex justify-start xl:absolute xl:bottom-[-18px] xl:right-0 xl:mt-0">
-                    <Button
-                      asChild
-                      className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
-                    >
-                      <Link to="/contato">
-                        Falar com especialista
-                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                       </Link>
-                    </Button>
-                  </div>
+                    </motion.div>
+                  ))}
+                </div>
                 </div>
               </div>
             </motion.div>

@@ -473,7 +473,7 @@
 
   @media (min-width: 1280px) {
     .hero-discovery-layer {
-      padding-bottom: 2rem;
+      padding-top: 2.25rem;
     }
   }
 }
