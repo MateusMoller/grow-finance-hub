@@ -269,46 +269,48 @@ export default function AboutPage() {
                   <span className="hero-discovery-dot" />
                   Continue explorando
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {discoveryRail.map((item, index) => (
-                    <motion.div
-                      key={item.title}
-                      initial={{ opacity: 0, y: 12 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true, amount: 0.3 }}
-                      transition={{ duration: 0.35, delay: 0.06 + index * 0.04 }}
-                    >
-                      <Link
-                        to={item.to}
-                        className="hero-discovery-card hover-lift-soft surface-sheen flex h-full items-start gap-3 rounded-[24px] p-4"
+                <div className="hero-discovery-layer relative">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {discoveryRail.map((item, index) => (
+                      <motion.div
+                        key={item.title}
+                        initial={{ opacity: 0, y: 12 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, amount: 0.3 }}
+                        transition={{ duration: 0.35, delay: 0.06 + index * 0.04 }}
                       >
-                        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/55 text-primary shadow-[0_12px_24px_-18px_rgba(29,36,66,0.45)]">
-                          <item.icon className="h-4.5 w-4.5" />
-                        </span>
-                        <span className="block min-w-0">
-                          <span className="flex items-center gap-2 font-heading text-[1rem] font-semibold leading-tight text-[#232844]">
-                            {item.title}
-                            <ArrowRight className="h-3.5 w-3.5 text-[#58608b]" />
+                        <Link
+                          to={item.to}
+                          className="hero-discovery-card hover-lift-soft surface-sheen flex h-full items-start gap-3 rounded-[24px] p-4"
+                        >
+                          <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/55 text-primary shadow-[0_12px_24px_-18px_rgba(29,36,66,0.45)]">
+                            <item.icon className="h-4.5 w-4.5" />
                           </span>
-                          <span className="mt-1.5 block text-sm leading-6 text-[#4d5478]">
-                            {item.description}
+                          <span className="block min-w-0">
+                            <span className="flex items-center gap-2 font-heading text-[1rem] font-semibold leading-tight text-[#232844]">
+                              {item.title}
+                              <ArrowRight className="h-3.5 w-3.5 text-[#58608b]" />
+                            </span>
+                            <span className="mt-1.5 block text-sm leading-6 text-[#4d5478]">
+                              {item.description}
+                            </span>
                           </span>
-                        </span>
-                      </Link>
-                    </motion.div>
-                  ))}
-                </div>
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
 
-                <div className="mt-5 flex justify-start xl:justify-end">
-                  <Button
-                    asChild
-                    className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
-                  >
-                    <Link to="/contato">
-                      Falar com especialista
-                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                    </Link>
-                  </Button>
+                  <div className="hero-discovery-cta-wrap mt-5 flex justify-start xl:absolute xl:bottom-[-18px] xl:right-0 xl:mt-0">
+                    <Button
+                      asChild
+                      className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
+                    >
+                      <Link to="/contato">
+                        Falar com especialista
+                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </motion.div>

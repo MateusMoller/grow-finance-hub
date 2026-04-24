@@ -329,10 +329,20 @@
   }
 
   .hero-discovery-card {
+    position: relative;
+    z-index: 1;
     border: 1px solid rgba(53, 61, 95, 0.12);
     background: rgba(255, 255, 255, 0.34);
     box-shadow: 0 20px 42px -28px rgba(29, 36, 66, 0.28);
     backdrop-filter: blur(16px);
+  }
+
+  .hero-discovery-layer {
+    position: relative;
+  }
+
+  .hero-discovery-cta-wrap {
+    z-index: 3;
   }
 
   .carousel-shell {
@@ -458,6 +468,12 @@
 
     .hero-discovery-card {
       background: rgba(255, 255, 255, 0.46);
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .hero-discovery-layer {
+      padding-bottom: 2rem;
     }
   }
 }
