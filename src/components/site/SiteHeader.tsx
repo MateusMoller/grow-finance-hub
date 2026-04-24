@@ -1,10 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, Moon, Sun, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useTheme } from "next-themes";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import growIcon from "@/assets/grow-icon.png";
 
 const navLinks = [
   { label: "Institucional", to: "/" },
@@ -27,14 +25,8 @@ const isNavActive = (pathname: string, hash: string, target: string) => {
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
-  const { resolvedTheme, setTheme } = useTheme();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     setOpen(false);
@@ -51,11 +43,6 @@ export function SiteHeader() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const isDark = resolvedTheme === "dark";
-  const toggleTheme = () => {
-    setTheme(isDark ? "light" : "dark");
-  };
-
   return (
     <header
       className={[
@@ -66,16 +53,13 @@ export function SiteHeader() {
       ].join(" ")}
     >
       <div className="container flex h-[60px] items-center justify-between sm:h-[78px]">
-        <Link to="/" className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-          <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
-          <div className="flex min-w-0 items-end gap-1.5">
-            <span className="max-w-[165px] truncate font-heading text-[15px] font-black uppercase tracking-[-0.04em] text-foreground sm:max-w-none sm:text-[1.7rem]">
-              Grow
-            </span>
-            <span className="mb-1 hidden text-[10px] font-semibold uppercase tracking-[0.26em] text-primary/75 sm:inline">
-              Finance Hub
-            </span>
-          </div>
+        <Link to="/" className="flex min-w-0 items-end gap-1.5">
+          <span className="max-w-[165px] truncate font-heading text-[15px] font-black uppercase tracking-[-0.04em] text-foreground sm:max-w-none sm:text-[1.7rem]">
+            Grow
+          </span>
+          <span className="mb-1 hidden text-[10px] font-semibold uppercase tracking-[0.26em] text-primary/75 sm:inline">
+            Finance Hub
+          </span>
         </Link>
 
         <nav className="hidden lg:flex items-center gap-7">
@@ -95,29 +79,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden lg:flex items-center gap-2.5">
-          {mounted ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-10 w-10 rounded-none border-border/80 bg-background/70 backdrop-blur"
-              onClick={toggleTheme}
-              aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
-            >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-          ) : (
-            <span className="h-10 w-10 border border-border/80 bg-background/70 backdrop-blur" />
-          )}
-
-          <Button
-            asChild
-            variant="ghost"
-            size="sm"
-            className="rounded-none px-3 text-[12px] font-semibold uppercase tracking-[0.14em]"
-          >
-            <Link to="/login">Entrar</Link>
-          </Button>
           <Button
             asChild
             variant="outline"
@@ -125,6 +86,14 @@ export function SiteHeader() {
             className="h-12 rounded-none border-border/80 bg-background/70 px-6 text-[12px] font-semibold uppercase tracking-[0.14em] backdrop-blur hover:bg-background"
           >
             <Link to="/#contato">Fale com a Grow</Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="rounded-none px-3 text-[12px] font-semibold uppercase tracking-[0.14em]"
+          >
+            <Link to="/login">Entrar</Link>
           </Button>
         </div>
 
@@ -186,10 +155,6 @@ export function SiteHeader() {
                 </Link>
               ))}
             </div>
-
-            <Button type="button" variant="outline" className="mt-4 w-full" onClick={toggleTheme}>
-              {isDark ? "Usar modo claro" : "Usar modo escuro"}
-            </Button>
 
             <div className="mt-4 grid gap-2 border-t border-border pt-4">
               <Button asChild variant="outline" className="w-full">

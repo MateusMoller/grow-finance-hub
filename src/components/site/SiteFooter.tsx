@@ -4,7 +4,6 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import growIcon from "@/assets/grow-icon.png";
 import { subscribeToNewsletter } from "@/lib/newsletter";
 
 export function SiteFooter() {
@@ -42,7 +41,6 @@ export function SiteFooter() {
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-3 lg:col-span-2">
             <Link to="/" className="flex items-center gap-3">
-              <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md" />
               <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
             </Link>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
