@@ -136,6 +136,33 @@ const faqItems = [
   },
 ];
 
+const discoveryRail = [
+  {
+    icon: Target,
+    title: "Quem somos",
+    description: "Veja a lógica de trabalho da Grow.",
+    to: "/#quem-somos",
+  },
+  {
+    icon: BarChart3,
+    title: "Serviços",
+    description: "Entenda onde entramos na operação.",
+    to: "/#servicos",
+  },
+  {
+    icon: Users,
+    title: "Clientes",
+    description: "Leia sinais de confiança e recorrência.",
+    to: "/#clientes",
+  },
+  {
+    icon: CheckCircle2,
+    title: "FAQ",
+    description: "Tire dúvidas antes de falar com a equipe.",
+    to: "/#faq",
+  },
+] as const;
+
 const fadeIn = {
   initial: { opacity: 0, y: 18 },
   whileInView: { opacity: 1, y: 0 },
@@ -226,7 +253,7 @@ export default function AboutPage() {
 
               <div className="max-w-5xl">
                 <div className="space-y-6">
-                  <h1 className="max-w-5xl font-heading text-[3.35rem] font-black leading-[0.88] tracking-[-0.075em] text-[#1e2237] sm:text-[5rem] lg:text-[7rem] xl:text-[8rem]">
+                  <h1 className="max-w-5xl font-heading text-[2.95rem] font-black leading-[0.9] tracking-[-0.075em] text-[#1e2237] sm:text-[4.4rem] lg:text-[6.2rem] xl:text-[7.1rem]">
                     <span className="block">CONTABILIDADE</span>
                     <span className="hero-impact-emphasis block pl-[0.04em]">QUE PUXA</span>
                     <span className="block sm:pl-[0.25em]">SEU NEGÓCIO</span>
@@ -248,11 +275,47 @@ export default function AboutPage() {
                   </div>
                 </div>
               </div>
+
+              <div className="pt-3">
+                <div className="mb-4 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#555d84]">
+                  <span className="hero-discovery-dot" />
+                  Continue explorando
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {discoveryRail.map((item, index) => (
+                    <motion.div
+                      key={item.title}
+                      initial={{ opacity: 0, y: 12 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, amount: 0.3 }}
+                      transition={{ duration: 0.35, delay: 0.06 + index * 0.04 }}
+                    >
+                      <Link
+                        to={item.to}
+                        className="hero-discovery-card hover-lift-soft surface-sheen flex h-full items-start gap-3 rounded-[24px] p-4"
+                      >
+                        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/55 text-primary shadow-[0_12px_24px_-18px_rgba(29,36,66,0.45)]">
+                          <item.icon className="h-4.5 w-4.5" />
+                        </span>
+                        <span className="block min-w-0">
+                          <span className="flex items-center gap-2 font-heading text-[1rem] font-semibold leading-tight text-[#232844]">
+                            {item.title}
+                            <ArrowRight className="h-3.5 w-3.5 text-[#58608b]" />
+                          </span>
+                          <span className="mt-1.5 block text-sm leading-6 text-[#4d5478]">
+                            {item.description}
+                          </span>
+                        </span>
+                      </Link>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
             </motion.div>
           </div>
         </section>
 
-        <section className="py-12 md:py-16">
+        <section id="quem-somos" className="py-12 md:py-16">
           <div className="container">
             <motion.div {...fadeIn} className="mb-6">
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Quem somos</h2>
@@ -485,7 +548,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="py-12 md:py-16">
+        <section id="faq" className="py-12 md:py-16">
           <div className="container grid gap-6 lg:grid-cols-[1fr_1fr]">
             <motion.article {...fadeIn} className="rounded-2xl border border-border bg-card p-6 dark:border-[#223058] dark:bg-[#0a1734]">
               <h2 className="font-heading text-2xl font-semibold">Perguntas frequentes</h2>

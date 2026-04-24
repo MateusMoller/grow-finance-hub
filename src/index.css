@@ -305,6 +305,36 @@
     background: linear-gradient(135deg, #262b46 0%, #4a5280 100%);
   }
 
+  @keyframes hero-discovery-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.65;
+    }
+
+    50% {
+      transform: scale(1.18);
+      opacity: 1;
+    }
+  }
+
+  .hero-discovery-dot {
+    height: 0.55rem;
+    width: 0.55rem;
+    flex: 0 0 auto;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 0.35rem rgba(77, 68, 137, 0.12);
+    animation: hero-discovery-pulse 2.4s ease-in-out infinite;
+  }
+
+  .hero-discovery-card {
+    border: 1px solid rgba(53, 61, 95, 0.12);
+    background: rgba(255, 255, 255, 0.34);
+    box-shadow: 0 20px 42px -28px rgba(29, 36, 66, 0.28);
+    backdrop-filter: blur(16px);
+  }
+
   .carousel-shell {
     position: relative;
   }
@@ -424,6 +454,10 @@
       right: -2rem;
       height: 12rem;
       width: 12rem;
+    }
+
+    .hero-discovery-card {
+      background: rgba(255, 255, 255, 0.46);
     }
   }
 }
