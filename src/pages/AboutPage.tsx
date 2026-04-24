@@ -46,11 +46,6 @@ const services = [
       "Fechamos, lemos e traduzimos os dados da operação para que margem, caixa e evolução do negócio fiquem mais claros para o empresário.",
     expandedDescription:
       "A contabilidade consultiva organiza os números da operação para que eles sirvam como base de decisão, e não apenas como registro do passado. A Grow cruza fechamento, margem, despesas, caixa e evolução mensal para transformar dados financeiros em leitura prática de gestão.",
-    deliverables: [
-      "fechamento mensal com leitura executiva dos principais indicadores",
-      "interpretação de margem, caixa e despesas para orientar decisões mais seguras",
-      "comparação de desempenho ao longo do tempo para identificar desvios e oportunidades",
-    ],
     visualAccent: "Visão de margem",
     visualCaption: "Leitura estratégica dos indicadores que puxam resultado.",
     imagePath: "/images/services/contabilidade-consultiva.png",
@@ -65,11 +60,6 @@ const services = [
       "Revisamos enquadramento, rotinas e obrigações para reduzir exposição fiscal e manter a operação com mais segurança e previsibilidade.",
     expandedDescription:
       "A assessoria fiscal da Grow acompanha enquadramento, rotinas e obrigações com olhar preventivo. A ideia é reduzir exposição, evitar inconsistências e manter a empresa em um terreno mais seguro para crescer.",
-    deliverables: [
-      "revisão de enquadramento e rotinas fiscais mais sensíveis",
-      "monitoramento de obrigações para reduzir risco de falhas recorrentes",
-      "apoio consultivo para decisões com impacto tributário",
-    ],
     visualAccent: "Risco sob controle",
     visualCaption: "Camadas de revisão para proteger decisão e operação.",
     imagePath: "/images/services/assessoria-fiscal.png",
@@ -84,11 +74,6 @@ const services = [
       "Estruturamos folha, admissões, desligamentos e suporte ao RH com leitura prática para que o time opere com menos ruído trabalhista.",
     expandedDescription:
       "O departamento pessoal precisa funcionar com precisão e previsibilidade. A Grow ajuda a organizar admissões, folha, desligamentos e demandas recorrentes para reduzir ruído operacional e proteger a empresa em temas trabalhistas.",
-    deliverables: [
-      "cadência mais clara para folha e eventos trabalhistas recorrentes",
-      "suporte para admissões, desligamentos e rotinas do dia a dia",
-      "mais segurança documental e menos improviso na operação de pessoas",
-    ],
     visualAccent: "Ritmo do time",
     visualCaption: "Fluxos trabalhistas com mais cadência e menos improviso.",
     imagePath: "/images/services/departamento-pessoal.png",
@@ -103,11 +88,6 @@ const services = [
       "Cuidamos da formalização, das alterações contratuais e das regularizações para evitar travas burocráticas no crescimento da empresa.",
     expandedDescription:
       "Abrir ou regularizar uma empresa exige sequência correta e leitura documental cuidadosa. A Grow conduz esse processo para evitar pendências que travem operação, expansão ou relacionamento com órgãos e parceiros.",
-    deliverables: [
-      "estruturação do processo de abertura ou regularização conforme a realidade da empresa",
-      "apoio em alterações contratuais e ajustes cadastrais relevantes",
-      "organização documental para reduzir retrabalho e atrasos burocráticos",
-    ],
     visualAccent: "Estrutura pronta",
     visualCaption: "Mapeamento documental para colocar a operação em ordem.",
     imagePath: "/images/services/abertura-regularizacao.png",
@@ -122,11 +102,6 @@ const services = [
       "Acompanhamos decisões relevantes com leitura financeira, contábil e operacional para sustentar crescimento sem perder direção.",
     expandedDescription:
       "O suporte ao empresário aproxima números e contexto de negócio. A Grow entra como apoio de leitura e priorização para que decisões importantes não dependam apenas de percepção ou urgência.",
-    deliverables: [
-      "apoio consultivo em decisões com impacto financeiro e estrutural",
-      "organização de prioridades para crescimento com mais direção",
-      "mais clareza sobre riscos, oportunidades e próximos passos",
-    ],
     visualAccent: "Decisão assistida",
     visualCaption: "Mais clareza executiva para cada próximo passo do negócio.",
     imagePath: "/images/services/suporte-empresario.png",
@@ -141,11 +116,6 @@ const services = [
       "Entregamos leituras mensais objetivas para acompanhar desempenho, corrigir rota e manter o negócio perto das metas mais importantes.",
     expandedDescription:
       "Os relatórios gerenciais da Grow não param na entrega do documento. Eles servem para destacar o que mudou, o que preocupa e onde a empresa precisa concentrar atenção para evoluir com mais controle.",
-    deliverables: [
-      "resumo mensal com leitura objetiva dos dados mais relevantes",
-      "visão comparativa para acompanhar evolução e corrigir rota",
-      "material de gestão pensado para discussão executiva e decisão prática",
-    ],
     visualAccent: "Painel mensal",
     visualCaption: "Resumo executivo para acompanhar evolução sem operar no escuro.",
     imagePath: "/images/services/relatorios-gerenciais.png",
@@ -382,17 +352,6 @@ export default function AboutPage() {
             </motion.div>
 
             <div className="mt-8">
-              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/70">
-                    Diferenciais que sustentam a entrega
-                  </p>
-                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-                    Uma leitura mais clara do jeito que a Grow opera: foco de gestão, visão, proximidade e método.
-                  </p>
-                </div>
-              </div>
-
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {values.map((value, index) => {
                   const cardId = value.title;
@@ -402,8 +361,14 @@ export default function AboutPage() {
                     key={cardId}
                     initial={{ opacity: 0, y: 14 }}
                     whileInView={{ opacity: 1, y: 0 }}
+                    whileHover={{ y: -10, rotate: -0.8, scale: 1.012 }}
                     viewport={{ once: true, amount: 0.2 }}
-                    transition={{ duration: 0.35, delay: (index % values.length) * 0.05 }}
+                    transition={{
+                      opacity: { duration: 0.35, delay: (index % values.length) * 0.05 },
+                      y: { type: "spring", stiffness: 220, damping: 18 },
+                      rotate: { type: "spring", stiffness: 180, damping: 16 },
+                      scale: { type: "spring", stiffness: 210, damping: 18 },
+                    }}
                     className="shrink-0"
                   >
                     <button
@@ -427,9 +392,6 @@ export default function AboutPage() {
                             {value.impact}
                           </span>
                           <span className="relative z-[1] mt-6 block h-px w-full bg-gradient-to-r from-primary/30 via-primary/10 to-transparent" />
-                          <span className="relative z-[1] mt-4 inline-flex items-center rounded-full border border-primary/12 bg-primary/6 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/72">
-                            Clique para ver mais
-                          </span>
                         </span>
 
                         <span className="flip-card-face flip-card-back value-grid-card-face rounded-[30px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
@@ -464,7 +426,7 @@ export default function AboutPage() {
               <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Nossos serviços</h2>
             </motion.div>
 
-            <div className="service-expand-shell relative">
+            <div className={`service-expand-shell relative${activeService ? " has-expanded-service" : ""}`}>
               <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-4 xl:mx-0 xl:grid xl:gap-5 xl:overflow-visible xl:px-0 xl:pb-0 xl:snap-none xl:grid-cols-3">
                 {services.map((service, index) => {
                   const isActive = activeServiceTitle === service.title;
@@ -561,19 +523,6 @@ export default function AboutPage() {
                           </div>
                         </div>
 
-                        <div className="mt-4 rounded-[24px] border border-primary/14 bg-background/70 p-4 dark:bg-white/5">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/75">
-                            O que isso coloca na mesa
-                          </p>
-                          <ul className="mt-3 space-y-3 text-sm leading-7 text-muted-foreground">
-                            {activeService.deliverables.map((deliverable) => (
-                              <li key={deliverable} className="flex items-start gap-2.5">
-                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/75" />
-                                <span>{deliverable}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
                       </div>
 
                       <div className="relative isolate min-h-[280px] overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] shadow-[0_18px_50px_-28px_rgba(34,48,88,0.32)] dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)] xl:h-full xl:min-h-0">
