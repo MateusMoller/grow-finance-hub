@@ -120,6 +120,16 @@
 }
 
 @layer utilities {
+  @keyframes carousel-right {
+    from {
+      transform: translateX(calc(-50% - 0.5rem));
+    }
+
+    to {
+      transform: translateX(0);
+    }
+  }
+
   .text-gradient-primary {
     background: var(--gradient-primary);
     -webkit-background-clip: text;
@@ -195,8 +205,67 @@
     filter: blur(1px);
   }
 
+  .carousel-shell {
+    position: relative;
+  }
+
+  .carousel-shell:hover .carousel-track-right,
+  .carousel-shell:focus-within .carousel-track-right {
+    animation-play-state: paused;
+  }
+
+  .carousel-track-right {
+    animation: carousel-right 28s linear infinite;
+    will-change: transform;
+  }
+
+  .carousel-fade-mask {
+    mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+  }
+
+  .flip-card-button {
+    perspective: 1600px;
+  }
+
+  .flip-card-inner {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .flip-card-button[data-flipped="true"] .flip-card-inner {
+    transform: rotateY(180deg);
+  }
+
+  .flip-card-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  .flip-card-front {
+    transform: rotateY(0deg);
+  }
+
+  .flip-card-back {
+    transform: rotateY(180deg);
+  }
+
   .dark .glass {
     background: hsl(223 56% 12% / 0.82);
     border: 1px solid hsl(223 35% 24% / 0.7);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .carousel-track-right {
+      animation: none;
+      transform: none;
+    }
+
+    .flip-card-inner {
+      transition-duration: 0ms;
+    }
   }
 }

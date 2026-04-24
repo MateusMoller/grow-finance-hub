@@ -9,19 +9,32 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
 
-const metrics = [
-  { value: "+12", label: "Anos de mercado", detail: "Experiência sólida em contabilidade consultiva" },
-  { value: "98%", label: "Satisfação dos clientes", detail: "Relacionamentos duradouros e atendimento próximo" },
-  { value: "120+", label: "Empresas atendidas", detail: "Operação ativa em vários segmentos" },
-  { value: "100%", label: "Conformidade", detail: "Processos com foco em precisão e segurança" },
-];
-
 const values = [
-  { icon: Target, title: "Foco em resultados", description: "Cada ação orientada por metas claras de crescimento e eficiência." },
-  { icon: Eye, title: "Visão estratégica", description: "Transformamos dados em direção para decisões de curto e longo prazo." },
-  { icon: Heart, title: "Atendimento humano", description: "Acompanhamento próximo para entender o contexto real de cada empresa." },
-  { icon: Award, title: "Excelencia técnica", description: "Equipe especializada e processos padronizados com alta confiabilidade." },
-];
+  {
+    icon: Target,
+    title: "Foco em resultados",
+    impact: "Cada número precisa empurrar o negócio para frente.",
+    summary: "Organizamos prioridades e entregas para que a contabilidade ajude a crescer com mais eficiência e menos dispersão.",
+  },
+  {
+    icon: Eye,
+    title: "Visão estratégica",
+    impact: "Dados deixam de ser arquivo e viram direção.",
+    summary: "Traduzimos informações em leitura prática para decisões de curto e longo prazo com mais segurança.",
+  },
+  {
+    icon: Heart,
+    title: "Atendimento humano",
+    impact: "A empresa é atendida como contexto, não como protocolo.",
+    summary: "Acompanhamos de perto a realidade do cliente para responder com clareza, proximidade e rapidez.",
+  },
+  {
+    icon: Award,
+    title: "Excelência técnica",
+    impact: "Método forte para sustentar confiança no dia a dia.",
+    summary: "Equipe especializada, processo padronizado e revisão constante para manter consistência e confiabilidade.",
+  },
+] as const;
 
 const services = [
   { icon: BarChart3, title: "Contabilidade consultiva", description: "Fechamentos, balanços e indicadores com orientação para decisões gerenciais." },
@@ -91,6 +104,7 @@ const fadeIn = {
 
 export default function AboutPage() {
   const [sending, setSending] = useState(false);
+  const [flippedValues, setFlippedValues] = useState<Record<string, boolean>>({});
   const [leadForm, setLeadForm] = useState({
     fullName: "",
     companyName: "",
@@ -156,6 +170,13 @@ export default function AboutPage() {
     illustrationPointerY.set(0);
   };
 
+  const toggleValueCard = (cardId: string) => {
+    setFlippedValues((current) => ({
+      ...current,
+      [cardId]: !current[cardId],
+    }));
+  };
+
   return (
     <SiteLayout>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
@@ -188,71 +209,22 @@ export default function AboutPage() {
                 </h1>
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-                <p className="max-w-xl text-base leading-8 text-muted-foreground">
-                  A Grow organiza fiscal, contábil, financeiro e pessoas com uma leitura mais afiada do negócio.
-                  Não é só suporte técnico. É estrutura para decidir, corrigir rota e crescer sem operar no escuro.
-                </p>
-                <div className="space-y-2 text-right">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/70">Leitura Grow</p>
-                  <p className="text-sm leading-7 text-foreground">
-                    uma presença mais viva,
-                    <span className="ml-2 text-primary">menos protocolo</span>
-                  </p>
-                </div>
-              </div>
-
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   asChild
                   className="group h-12 w-full rounded-full border border-white/35 px-6 font-semibold sm:w-auto dark:bg-[#7a62ef] dark:text-white dark:hover:bg-[#8a73f4]"
                 >
-                  <Link to="/#contato">
-                    Solicitar avaliação gratuita
-                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="group h-12 w-full rounded-full px-6 sm:w-auto">
                   <Link to="/contato">
                     Falar com especialista
                     <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                   </Link>
                 </Button>
-              </div>
-
-              <div className="grid gap-4 pt-2 sm:grid-cols-[0.28fr_1fr] sm:items-start">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/70">
-                  Três vetores
-                </div>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {[
-                    {
-                      label: "Estrutura viva",
-                      text: "Rotina contábil, fiscal e financeira tratada como frente estratégica.",
-                    },
-                    {
-                      label: "Leitura mensal",
-                      text: "Indicadores e contexto para reduzir achismo na tomada de decisão.",
-                    },
-                    {
-                      label: "Presença próxima",
-                      text: "Acompanhamento que evita urgência crônica e desorganização recorrente.",
-                    },
-                  ].map((item, index) => (
-                    <motion.div
-                      key={item.label}
-                      initial={{ opacity: 0, y: 18 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true, amount: 0.2 }}
-                      transition={{ duration: 0.38, delay: index * 0.07 }}
-                      className="relative pl-5"
-                    >
-                      <span className="absolute left-0 top-1 h-10 w-px bg-gradient-to-b from-primary/70 to-transparent" />
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">{item.label}</p>
-                      <p className="mt-3 text-sm leading-7 text-foreground">{item.text}</p>
-                    </motion.div>
-                  ))}
-                </div>
+                <Button asChild variant="outline" className="group h-12 w-full rounded-full px-6 sm:w-auto">
+                  <Link to="/login">
+                    Acessar login
+                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  </Link>
+                </Button>
               </div>
             </motion.div>
 
@@ -265,10 +237,10 @@ export default function AboutPage() {
             >
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(82,98,140,0.18),transparent_26%),radial-gradient(circle_at_76%_24%,rgba(82,98,140,0.12),transparent_22%),radial-gradient(circle_at_52%_58%,rgba(82,98,140,0.12),transparent_34%)]" />
               <div className="pointer-events-none absolute left-5 top-4 text-[88px] font-black leading-none tracking-[-0.08em] text-primary/7 dark:text-white/5 md:text-[118px]">
-                FLOW
+                GROW
               </div>
-              <div className="pointer-events-none absolute bottom-1 right-2 text-[72px] font-black leading-none tracking-[-0.08em] text-primary/7 dark:text-white/5 md:text-[96px]">
-                AIR
+              <div className="pointer-events-none absolute bottom-1 right-2 text-[64px] font-black leading-none tracking-[-0.06em] text-primary/7 dark:text-white/5 md:text-[88px]">
+                Finance
               </div>
 
               <motion.div
@@ -389,24 +361,6 @@ export default function AboutPage() {
             </motion.aside>
           </div>
 
-          <div className="container mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {metrics.map((metric, index) => (
-              <motion.div
-                key={metric.label}
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.35, delay: index * 0.05 }}
-                className="hover-lift-soft surface-sheen relative rounded-2xl border border-border bg-card p-4 dark:border-[#223058] dark:bg-[#0a1734]"
-              >
-                <span className="mesh-dot right-3 top-2 h-14 w-14" />
-                <div className="mb-3 h-1.5 w-10 rounded-full bg-primary/20" />
-                <p className="text-2xl font-bold text-foreground">{metric.value}</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{metric.label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
-              </motion.div>
-            ))}
-          </div>
         </section>
 
         <section className="py-12 md:py-16">
@@ -419,27 +373,69 @@ export default function AboutPage() {
               </p>
             </motion.div>
 
-            <div className="hide-scrollbar mx-[-1rem] flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:gap-4 md:overflow-visible md:px-0 md:pb-0 md:snap-none md:grid-cols-2 xl:grid-cols-4">
-              {values.map((value, index) => (
-                <motion.article
-                  key={value.title}
-                  initial={{ opacity: 0, y: 14 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="hover-lift-soft surface-sheen group min-w-[84%] snap-start rounded-2xl border border-border bg-card p-5 sm:min-w-[72%] md:min-w-0 dark:border-[#223058] dark:bg-[#0a1734]"
-                >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 transition-transform duration-300 group-hover:scale-105">
-                    <value.icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <h3 className="mt-3 font-heading text-lg font-semibold">{value.title}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{value.description}</p>
-                  <div className="mt-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary/70">
-                    <span className="h-px flex-1 bg-primary/20" />
-                    Grow
-                  </div>
-                </motion.article>
-              ))}
+            <div className="carousel-shell carousel-fade-mask mt-8 overflow-hidden pb-2">
+              <div className="carousel-track-right flex w-max gap-4">
+                {[...values, ...values].map((value, index) => {
+                  const cardId = `${value.title}-${index}`;
+
+                  return (
+                  <motion.div
+                    key={cardId}
+                    initial={{ opacity: 0, y: 14 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.2 }}
+                    transition={{ duration: 0.35, delay: (index % values.length) * 0.05 }}
+                    className="shrink-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleValueCard(cardId)}
+                      aria-pressed={flippedValues[cardId] === true}
+                      aria-label={`Virar card ${value.title}`}
+                      className="flip-card-button block h-[270px] w-[280px] text-left sm:w-[320px]"
+                      data-flipped={flippedValues[cardId] === true}
+                    >
+                      <span className="flip-card-inner block h-full w-full">
+                        <span className="flip-card-face flip-card-front rounded-[28px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
+                          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                            <value.icon className="h-5 w-5 text-primary" />
+                          </span>
+                          <span className="mt-6 block text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/75">
+                            Grow
+                          </span>
+                          <span className="mt-3 block font-heading text-2xl font-semibold leading-tight text-foreground">
+                            {value.title}
+                          </span>
+                          <span className="mt-4 block max-w-[240px] text-base leading-7 text-muted-foreground">
+                            {value.impact}
+                          </span>
+                          <span className="mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">
+                            <span className="h-px flex-1 bg-primary/20" />
+                            Clique para virar
+                          </span>
+                        </span>
+
+                        <span className="flip-card-face flip-card-back rounded-[28px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/75">
+                            Resumo
+                          </span>
+                          <span className="mt-4 block font-heading text-2xl font-semibold leading-tight text-foreground">
+                            {value.title}
+                          </span>
+                          <span className="mt-5 block text-sm leading-7 text-muted-foreground">
+                            {value.summary}
+                          </span>
+                          <span className="mt-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">
+                            <span className="h-px flex-1 bg-primary/20" />
+                            Clique para voltar
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  </motion.div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </section>
