@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Heart, Shield, Target, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Eye, FileText, Heart, Shield, Target, Users } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
 
@@ -228,11 +228,6 @@ export default function AboutPage() {
   const [sending, setSending] = useState(false);
   const [flippedValues, setFlippedValues] = useState<Record<string, boolean>>({});
   const [activeServiceTitle, setActiveServiceTitle] = useState<string | null>(null);
-  const [valueRailState, setValueRailState] = useState({
-    canScrollLeft: false,
-    canScrollRight: true,
-  });
-  const valueRailRef = useRef<HTMLDivElement | null>(null);
   const [leadForm, setLeadForm] = useState({
     fullName: "",
     companyName: "",
@@ -279,50 +274,6 @@ export default function AboutPage() {
       [cardId]: !current[cardId],
     }));
   };
-
-  const updateValueRailState = () => {
-    const rail = valueRailRef.current;
-
-    if (!rail) {
-      return;
-    }
-
-    const maxScrollLeft = Math.max(rail.scrollWidth - rail.clientWidth, 0);
-
-    setValueRailState({
-      canScrollLeft: rail.scrollLeft > 8,
-      canScrollRight: rail.scrollLeft < maxScrollLeft - 8,
-    });
-  };
-
-  const scrollValueRail = (direction: "left" | "right") => {
-    const rail = valueRailRef.current;
-
-    if (!rail) {
-      return;
-    }
-
-    const scrollAmount = Math.min(rail.clientWidth * 0.82, 372);
-
-    rail.scrollBy({
-      left: direction === "right" ? scrollAmount : -scrollAmount,
-      behavior: "smooth",
-    });
-  };
-
-  useEffect(() => {
-    updateValueRailState();
-
-    const handleResize = () => {
-      updateValueRailState();
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
 
   const activeService = services.find((service) => service.title === activeServiceTitle) ?? null;
 
@@ -431,37 +382,18 @@ export default function AboutPage() {
             </motion.div>
 
             <div className="mt-8">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/70">
-                  Explore os diferenciais no seu ritmo
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => scrollValueRail("left")}
-                    disabled={!valueRailState.canScrollLeft}
-                    aria-label="Ver cards anteriores"
-                    className="carousel-control-button"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => scrollValueRail("right")}
-                    disabled={!valueRailState.canScrollRight}
-                    aria-label="Ver próximos cards"
-                    className="carousel-control-button"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/70">
+                    Diferenciais que sustentam a entrega
+                  </p>
+                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+                    Uma leitura mais clara do jeito que a Grow opera: foco de gestão, visão, proximidade e método.
+                  </p>
                 </div>
               </div>
 
-              <div
-                ref={valueRailRef}
-                onScroll={updateValueRailState}
-                className="carousel-shell carousel-fade-mask hide-scrollbar flex gap-4 overflow-x-auto scroll-smooth pb-2 pr-2"
-              >
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {values.map((value, index) => {
                   const cardId = value.title;
 
@@ -479,28 +411,41 @@ export default function AboutPage() {
                       onClick={() => toggleValueCard(cardId)}
                       aria-pressed={flippedValues[cardId] === true}
                       aria-label={`Virar card ${value.title}`}
-                      className="flip-card-button block h-[270px] w-[280px] text-left sm:w-[320px]"
+                      className="value-grid-card flip-card-button block h-[292px] w-full text-left"
                       data-flipped={flippedValues[cardId] === true}
                     >
                       <span className="flip-card-inner block h-full w-full">
-                        <span className="flip-card-face flip-card-front rounded-[28px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
-                          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                        <span className="flip-card-face flip-card-front value-grid-card-face rounded-[30px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
+                          <span className="value-grid-card-orb" />
+                          <span className="relative z-[1] flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
                             <value.icon className="h-5 w-5 text-primary" />
                           </span>
-                          <span className="mt-3 block font-heading text-2xl font-semibold leading-tight text-foreground">
+                          <span className="relative z-[1] mt-5 block max-w-[15ch] font-heading text-[2rem] font-semibold leading-[1.02] tracking-[-0.04em] text-foreground">
                             {value.title}
                           </span>
-                          <span className="mt-4 block max-w-[240px] text-base leading-7 text-muted-foreground">
+                          <span className="relative z-[1] mt-4 block max-w-[240px] text-base leading-7 text-muted-foreground">
                             {value.impact}
+                          </span>
+                          <span className="relative z-[1] mt-6 block h-px w-full bg-gradient-to-r from-primary/30 via-primary/10 to-transparent" />
+                          <span className="relative z-[1] mt-4 inline-flex items-center rounded-full border border-primary/12 bg-primary/6 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/72">
+                            Clique para ver mais
                           </span>
                         </span>
 
-                        <span className="flip-card-face flip-card-back rounded-[28px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
-                          <span className="mt-4 block font-heading text-2xl font-semibold leading-tight text-foreground">
+                        <span className="flip-card-face flip-card-back value-grid-card-face rounded-[30px] border border-border bg-card p-6 shadow-sm dark:border-[#223058] dark:bg-[#0a1734]">
+                          <span className="value-grid-card-orb" />
+                          <span className="relative z-[1] inline-flex rounded-full border border-primary/12 bg-primary/7 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/72">
+                            Leitura Grow
+                          </span>
+                          <span className="relative z-[1] mt-5 block font-heading text-2xl font-semibold leading-tight text-foreground">
                             {value.title}
                           </span>
-                          <span className="mt-5 block text-sm leading-7 text-muted-foreground">
+                          <span className="relative z-[1] mt-5 block text-sm leading-7 text-muted-foreground">
                             {value.summary}
+                          </span>
+                          <span className="relative z-[1] mt-6 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary/65">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
+                            Toque novamente para voltar
                           </span>
                         </span>
                       </span>

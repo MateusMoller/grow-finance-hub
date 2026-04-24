@@ -335,49 +335,6 @@
     z-index: 3;
   }
 
-  .carousel-shell {
-    position: relative;
-    overscroll-behavior-x: contain;
-    scroll-padding-inline: 0.25rem;
-  }
-
-  .carousel-fade-mask {
-    mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, black 6%, black 94%, transparent);
-  }
-
-  .carousel-control-button {
-    display: inline-flex;
-    height: 2.5rem;
-    width: 2.5rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9999px;
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--card) / 0.88);
-    color: hsl(var(--foreground) / 0.76);
-    transition:
-      transform 180ms ease,
-      border-color 180ms ease,
-      background-color 180ms ease,
-      color 180ms ease,
-      box-shadow 180ms ease;
-    box-shadow: 0 12px 28px -22px rgba(24, 34, 68, 0.55);
-  }
-
-  .carousel-control-button:hover:not(:disabled) {
-    transform: translateY(-1px);
-    border-color: hsl(var(--primary) / 0.22);
-    background: hsl(var(--primary) / 0.08);
-    color: hsl(var(--primary));
-  }
-
-  .carousel-control-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.42;
-    box-shadow: none;
-  }
-
   .flip-card-button {
     perspective: 1600px;
   }
@@ -405,6 +362,49 @@
 
   .flip-card-back {
     transform: rotateY(180deg);
+  }
+
+  .value-grid-card {
+    position: relative;
+    border-radius: 1.875rem;
+  }
+
+  .value-grid-card:focus-visible {
+    outline: 2px solid hsl(var(--primary) / 0.35);
+    outline-offset: 4px;
+  }
+
+  .value-grid-card-face {
+    overflow: hidden;
+    transition:
+      transform 240ms ease,
+      border-color 240ms ease,
+      box-shadow 240ms ease,
+      background-color 240ms ease;
+    box-shadow:
+      0 24px 50px -34px rgba(25, 34, 64, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  }
+
+  .value-grid-card:hover .value-grid-card-face,
+  .value-grid-card:focus-visible .value-grid-card-face {
+    border-color: hsl(var(--primary) / 0.18);
+    box-shadow:
+      0 30px 60px -34px rgba(25, 34, 64, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .value-grid-card-orb {
+    position: absolute;
+    right: -1.8rem;
+    top: -1.2rem;
+    height: 8.5rem;
+    width: 8.5rem;
+    border-radius: 9999px;
+    background:
+      radial-gradient(circle at 30% 30%, hsl(var(--primary) / 0.16) 0%, hsl(var(--primary) / 0.04) 42%, transparent 74%);
+    filter: blur(2px);
+    pointer-events: none;
   }
 
   .service-expand-shell {
