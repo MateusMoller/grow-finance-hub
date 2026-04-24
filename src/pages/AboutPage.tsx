@@ -261,18 +261,6 @@ export default function AboutPage() {
                       onde a rotina ganha asas
                     </span>
                   </h1>
-
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <Button
-                      asChild
-                      className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
-                    >
-                      <Link to="/contato">
-                        Falar com especialista
-                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                      </Link>
-                    </Button>
-                  </div>
                 </div>
               </div>
 
@@ -309,6 +297,18 @@ export default function AboutPage() {
                       </Link>
                     </motion.div>
                   ))}
+                </div>
+
+                <div className="mt-5 flex justify-start xl:justify-end">
+                  <Button
+                    asChild
+                    className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
+                  >
+                    <Link to="/contato">
+                      Falar com especialista
+                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </motion.div>
