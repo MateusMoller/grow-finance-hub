@@ -8,7 +8,7 @@ import growIcon from "@/assets/grow-icon.png";
 
 const navLinks = [
   { label: "Institucional", to: "/" },
-  { label: "Serviços", to: "/#servicos" },
+  { label: "Servicos", to: "/#servicos" },
   { label: "Diferenciais", to: "/#diferenciais" },
   { label: "Clientes", to: "/#clientes" },
   { label: "Newsletter", to: "/newsletter" },
@@ -28,6 +28,7 @@ const isNavActive = (pathname: string, hash: string, target: string) => {
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const { resolvedTheme, setTheme } = useTheme();
 
@@ -39,30 +40,53 @@ export function SiteHeader() {
     setOpen(false);
   }, [location.pathname, location.hash]);
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 18);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const isDark = resolvedTheme === "dark";
   const toggleTheme = () => {
     setTheme(isDark ? "light" : "dark");
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-[60] border-b border-border/80 bg-white shadow-sm dark:bg-[#061330]">
-      <div className="container flex h-[60px] items-center justify-between sm:h-20">
-        <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
+    <header
+      className={[
+        "fixed left-0 right-0 top-0 z-[60] transition-all duration-300",
+        scrolled
+          ? "bg-white/88 shadow-[0_14px_40px_-24px_rgba(22,30,58,0.35)] backdrop-blur-xl dark:bg-[#061330]/88"
+          : "bg-transparent",
+      ].join(" ")}
+    >
+      <div className="container flex h-[60px] items-center justify-between sm:h-[78px]">
+        <Link to="/" className="flex min-w-0 items-center gap-2.5 sm:gap-3">
           <img src={growIcon} alt="Grow" className="h-8 w-8 rounded-md sm:h-9 sm:w-9" />
-          <span className="max-w-[165px] truncate font-heading text-[15px] font-semibold text-foreground sm:max-w-none sm:text-lg">
-            Grow Contabilidade
-          </span>
+          <div className="flex min-w-0 items-end gap-1.5">
+            <span className="max-w-[165px] truncate font-heading text-[15px] font-black uppercase tracking-[-0.04em] text-foreground sm:max-w-none sm:text-[1.7rem]">
+              Grow
+            </span>
+            <span className="mb-1 hidden text-[10px] font-semibold uppercase tracking-[0.26em] text-primary/75 sm:inline">
+              Finance Hub
+            </span>
+          </div>
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-1">
+        <nav className="hidden lg:flex items-center gap-7">
           {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
-              className={`rounded-full px-4 py-2 text-sm transition-colors ${
+              className={`text-[12px] font-semibold uppercase tracking-[0.16em] transition-colors ${
                 isNavActive(location.pathname, location.hash, link.to)
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {link.label}
@@ -70,32 +94,42 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-2.5">
           {mounted ? (
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-full border-border/80 bg-background"
+              className="h-10 w-10 rounded-none border-border/80 bg-background/70 backdrop-blur"
               onClick={toggleTheme}
               aria-label={isDark ? "Ativar modo claro" : "Ativar modo escuro"}
             >
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           ) : (
-            <span className="h-9 w-9 rounded-full border border-border/80 bg-background" />
+            <span className="h-10 w-10 border border-border/80 bg-background/70 backdrop-blur" />
           )}
 
-          <Button asChild variant="ghost" size="sm" className="rounded-full">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="rounded-none px-3 text-[12px] font-semibold uppercase tracking-[0.14em]"
+          >
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button asChild size="sm" className="rounded-full px-5">
-            <Link to="/#contato">Agende uma Avaliação</Link>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-12 rounded-none border-border/80 bg-background/70 px-6 text-[12px] font-semibold uppercase tracking-[0.14em] backdrop-blur hover:bg-background"
+          >
+            <Link to="/#contato">Fale com a Grow</Link>
           </Button>
         </div>
 
         <button
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/80 bg-background lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/80 bg-background/80 backdrop-blur lg:hidden"
           onClick={() => setOpen((prev) => !prev)}
           aria-label="Abrir menu"
           aria-expanded={open}
@@ -117,14 +151,14 @@ export function SiteHeader() {
 
           <div className="h-full overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <div className="mb-4 rounded-xl border bg-card p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso rápido</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso rapido</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Link
                   to="/#contato"
                   onClick={() => setOpen(false)}
                   className="rounded-lg border bg-background px-3 py-2 text-xs font-medium text-foreground"
                 >
-                  Agendar avaliação
+                  Agendar avaliacao
                 </Link>
                 <Link
                   to="/newsletter"
@@ -153,12 +187,7 @@ export function SiteHeader() {
               ))}
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-4 w-full"
-              onClick={toggleTheme}
-            >
+            <Button type="button" variant="outline" className="mt-4 w-full" onClick={toggleTheme}>
               {isDark ? "Usar modo claro" : "Usar modo escuro"}
             </Button>
 
@@ -175,7 +204,7 @@ export function SiteHeader() {
               </Button>
               <Button asChild className="w-full">
                 <Link to="/#contato" onClick={() => setOpen(false)}>
-                  Agende uma Avaliação
+                  Agende uma avaliacao
                 </Link>
               </Button>
             </div>

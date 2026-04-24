@@ -336,7 +336,7 @@ export default function AboutPage() {
                 <motion.div
                   animate={{ y: [0, 14, 0], x: [0, -8, 0] }}
                   transition={{ duration: 6.1, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                  className="absolute right-[13%] top-[18%] h-16 w-16 rounded-full bg-primary/18 blur-sm"
+                  className="absolute bottom-[14%] right-[10%] h-16 w-16 rounded-full bg-primary/18 blur-sm"
                 />
               </motion.div>
 

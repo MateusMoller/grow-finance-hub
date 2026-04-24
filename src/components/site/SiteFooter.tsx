@@ -48,6 +48,11 @@ export function SiteFooter() {
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
               Parceiro estratégico de empresas que buscam crescimento com organização, compliance e inteligencia.
             </p>
+            <p className="max-w-sm pt-6 text-sm leading-relaxed text-muted-foreground">
+              Rua Julio de Castilhos, 2579 - Sl 212
+              <br />
+              Centro, Taquara - RS
+            </p>
           </div>
 
           <div>
@@ -75,7 +80,6 @@ export function SiteFooter() {
             <div>
               <h4 className="font-heading text-sm font-semibold uppercase tracking-wide text-foreground">Contato</h4>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li>Rua Julio de Castilhos, 2579 - Sl 212 - Centro, Taquara - RS</li>
                 <li>Telefone: (51) 99532-5592</li>
                 <li>E-mail: contato@contabilidadegrow.com.br</li>
                 <li>

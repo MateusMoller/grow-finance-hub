@@ -15,6 +15,8 @@ const AboutPage = lazy(() => import("./pages/AboutPage"));
 const SolutionsPage = lazy(() => import("./pages/SolutionsPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const NewsletterPage = lazy(() => import("./pages/NewsletterPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const KanbanPage = lazy(() => import("./pages/KanbanPage"));
@@ -102,6 +104,8 @@ const App = () => (
                   <Route path="/solucoes" element={<SolutionsPage />} />
                   <Route path="/contato" element={<ContactPage />} />
                   <Route path="/newsletter" element={<NewsletterPage />} />
+                  <Route path="/privacidade" element={<PrivacyPage />} />
+                  <Route path="/termos" element={<TermsPage />} />
                   <Route path="/login" element={<Navigate to="/app/login" replace />} />
                   <Route path="/portal" element={<Navigate to="/app/portal" replace />} />
                   <Route path="/app/login" element={<LoginPage />} />
