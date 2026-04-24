@@ -201,7 +201,7 @@ export default function AboutPage() {
   };
 
   return (
-    <SiteLayout>
+    <SiteLayout headerOverlay>
       <div className="bg-[#f3f3f6] text-foreground transition-colors dark:bg-[#051334]">
         <section
           id="institucional"
@@ -218,16 +218,13 @@ export default function AboutPage() {
 
           <div className="container relative flex min-h-[100svh] flex-col justify-center py-16 pb-14 pt-28 sm:pt-32 lg:py-20 lg:pt-28">
             <motion.div {...fadeIn} className="relative max-w-6xl space-y-8">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <span className="hero-impact-chip inline-flex w-fit items-center rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-foreground/80">
-                  Grow Contabilidade
-                </span>
+              <div className="flex justify-end">
                 <div className="hero-impact-note max-w-[280px] pl-4 text-[11px] font-medium uppercase tracking-[0.26em] text-foreground/60">
                   operação, visão e direção com uma presença mais marcante logo na primeira dobra
                 </div>
               </div>
 
-              <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
+              <div className="max-w-5xl">
                 <div className="space-y-6">
                   <h1 className="max-w-5xl font-heading text-[3.35rem] font-black leading-[0.88] tracking-[-0.075em] text-[#1e2237] sm:text-[5rem] lg:text-[7rem] xl:text-[8rem]">
                     <span className="block">CONTABILIDADE</span>
@@ -237,11 +234,6 @@ export default function AboutPage() {
                       onde a rotina ganha asas
                     </span>
                   </h1>
-
-                  <p className="max-w-2xl text-base leading-8 text-[#434968] sm:text-lg">
-                    A primeira leitura precisa passar mais do que organização. Ela precisa sugerir movimento, direção e confiança
-                    para um novo lead entender, em segundos, que a Grow não entrega apenas rotina.
-                  </p>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Button
@@ -253,15 +245,6 @@ export default function AboutPage() {
                         <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                       </Link>
                     </Button>
-                  </div>
-                </div>
-
-                <div className="hidden lg:flex lg:flex-col lg:items-start lg:gap-5 lg:self-end lg:pb-8">
-                  <div className="hero-impact-side-card max-w-[240px] rounded-[30px] p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#51587b]">Primeiro impacto</p>
-                    <p className="mt-4 text-sm leading-7 text-[#353b59]">
-                      Um topo mais imersivo, com outra atmosfera visual, para separar a primeira impressão do restante do site.
-                    </p>
                   </div>
                 </div>
               </div>

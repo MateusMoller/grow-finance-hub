@@ -13,7 +13,13 @@ const mobileNavItems = [
   { label: "Contato", to: "/contato", icon: Phone },
 ];
 
-export function SiteLayout({ children }: { children: ReactNode }) {
+export function SiteLayout({
+  children,
+  headerOverlay = false,
+}: {
+  children: ReactNode;
+  headerOverlay?: boolean;
+}) {
   const location = useLocation();
 
   useEffect(() => {
@@ -36,7 +42,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col">
       <SiteHeader />
-      <main className="flex-1 pt-16 pb-20 sm:pt-20 md:pb-0">{children}</main>
+      <main className={cn("flex-1 pb-20 md:pb-0", headerOverlay ? "pt-0" : "pt-16 sm:pt-20")}>{children}</main>
       <SiteFooter />
       <SiteWhatsAppButton />
 
