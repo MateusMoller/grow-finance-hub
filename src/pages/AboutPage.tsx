@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, Eye, FileText, Heart, Shield, Target, Users } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Award, BarChart3, Briefcase, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Heart, Shield, Target, Users } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { captureSiteLead } from "@/lib/siteLeadCapture";
 
@@ -228,6 +228,11 @@ export default function AboutPage() {
   const [sending, setSending] = useState(false);
   const [flippedValues, setFlippedValues] = useState<Record<string, boolean>>({});
   const [activeServiceTitle, setActiveServiceTitle] = useState<string | null>(null);
+  const [valueRailState, setValueRailState] = useState({
+    canScrollLeft: false,
+    canScrollRight: true,
+  });
+  const valueRailRef = useRef<HTMLDivElement | null>(null);
   const [leadForm, setLeadForm] = useState({
     fullName: "",
     companyName: "",
@@ -274,6 +279,50 @@ export default function AboutPage() {
       [cardId]: !current[cardId],
     }));
   };
+
+  const updateValueRailState = () => {
+    const rail = valueRailRef.current;
+
+    if (!rail) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(rail.scrollWidth - rail.clientWidth, 0);
+
+    setValueRailState({
+      canScrollLeft: rail.scrollLeft > 8,
+      canScrollRight: rail.scrollLeft < maxScrollLeft - 8,
+    });
+  };
+
+  const scrollValueRail = (direction: "left" | "right") => {
+    const rail = valueRailRef.current;
+
+    if (!rail) {
+      return;
+    }
+
+    const scrollAmount = Math.min(rail.clientWidth * 0.82, 372);
+
+    rail.scrollBy({
+      left: direction === "right" ? scrollAmount : -scrollAmount,
+      behavior: "smooth",
+    });
+  };
+
+  useEffect(() => {
+    updateValueRailState();
+
+    const handleResize = () => {
+      updateValueRailState();
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
 
   const activeService = services.find((service) => service.title === activeServiceTitle) ?? null;
 
@@ -381,10 +430,40 @@ export default function AboutPage() {
               </p>
             </motion.div>
 
-            <div className="carousel-shell carousel-fade-mask mt-8 overflow-hidden pb-2">
-              <div className="carousel-track-right flex w-max gap-4">
-                {[...values, ...values].map((value, index) => {
-                  const cardId = `${value.title}-${index}`;
+            <div className="mt-8">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/70">
+                  Explore os diferenciais no seu ritmo
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => scrollValueRail("left")}
+                    disabled={!valueRailState.canScrollLeft}
+                    aria-label="Ver cards anteriores"
+                    className="carousel-control-button"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollValueRail("right")}
+                    disabled={!valueRailState.canScrollRight}
+                    aria-label="Ver próximos cards"
+                    className="carousel-control-button"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div
+                ref={valueRailRef}
+                onScroll={updateValueRailState}
+                className="carousel-shell carousel-fade-mask hide-scrollbar flex gap-4 overflow-x-auto scroll-smooth pb-2 pr-2"
+              >
+                {values.map((value, index) => {
+                  const cardId = value.title;
 
                   return (
                   <motion.div
@@ -483,7 +562,7 @@ export default function AboutPage() {
                     transition={{ duration: 0.28, ease: "easeOut" }}
                     className="service-expanded-panel mt-5 xl:absolute xl:inset-0 xl:mt-0"
                   >
-                    <div className="grid min-h-[unset] gap-6 rounded-[32px] border border-primary/20 bg-card p-6 shadow-[0_28px_70px_-34px_rgba(34,48,88,0.3)] dark:border-[#2b3861] dark:bg-[#08142f] xl:h-full xl:grid-cols-[minmax(0,1.2fr)_320px] xl:p-8">
+                    <div className="grid min-h-[unset] gap-6 rounded-[32px] border border-primary/20 bg-card p-6 shadow-[0_28px_70px_-34px_rgba(34,48,88,0.3)] dark:border-[#2b3861] dark:bg-[#08142f] xl:h-full xl:grid-cols-[minmax(0,1.18fr)_minmax(260px,0.74fr)] xl:items-stretch xl:p-8">
                       <div className="flex flex-col justify-between">
                         <div>
                           <div className="flex items-start justify-between gap-4">
@@ -552,7 +631,7 @@ export default function AboutPage() {
                         </div>
                       </div>
 
-                      <div className="relative isolate min-h-[320px] overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] shadow-[0_18px_50px_-28px_rgba(34,48,88,0.32)] dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
+                      <div className="relative isolate min-h-[280px] overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] shadow-[0_18px_50px_-28px_rgba(34,48,88,0.32)] dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)] xl:h-full xl:min-h-0">
                         {activeService.imagePath ? (
                           <>
                             <img
@@ -563,32 +642,11 @@ export default function AboutPage() {
                               height={1200}
                               className="absolute inset-0 h-full w-full object-cover object-center"
                             />
-                            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,20,36,0.08)_0%,rgba(18,20,36,0.52)_100%)]" />
-                            <div className="relative z-10 flex min-h-[320px] items-end">
-                              <div className="w-full p-5">
-                              <div className="rounded-[24px] border border-white/18 bg-[rgba(12,14,28,0.44)] p-4 backdrop-blur-md">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">
-                                  {activeService.visualAccent}
-                                </p>
-                                <p className="mt-3 text-sm leading-6 text-white/92">
-                                  {activeService.visualCaption}
-                                </p>
-                              </div>
-                              </div>
-                            </div>
+                            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,20,36,0.03)_0%,rgba(18,20,36,0.18)_100%)]" />
                           </>
                         ) : (
-                          <div className="relative flex h-full min-h-[320px] items-center justify-center bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)]">
-                            <div className="absolute inset-x-0 bottom-0 p-5">
-                              <div className="rounded-[24px] border border-primary/14 bg-background/80 p-4 dark:bg-[#0c1836]/85">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/78">
-                                  {activeService.visualAccent}
-                                </p>
-                                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                                  {activeService.visualCaption}
-                                </p>
-                              </div>
-                            </div>
+                          <div className="relative flex h-full min-h-[280px] items-center justify-center bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)] xl:min-h-0">
+                            <div className="h-full w-full bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(77,68,137,0.08)_100%)]" />
                           </div>
                         )}
                       </div>
