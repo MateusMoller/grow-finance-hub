@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { SiteWordmark } from "./SiteWordmark";
 
 const navLinks = [
   { label: "Institucional", to: "/" },
@@ -52,13 +53,8 @@ export function SiteHeader() {
       ].join(" ")}
     >
       <div className="container flex h-[60px] items-center justify-between sm:h-[78px]">
-        <Link to="/" className="flex min-w-0 items-end gap-1.5">
-          <span className="max-w-[165px] truncate font-heading text-[15px] font-black uppercase tracking-[-0.04em] text-foreground sm:max-w-none sm:text-[1.7rem]">
-            Grow
-          </span>
-          <span className="mb-1 hidden text-[10px] font-semibold uppercase tracking-[0.26em] text-primary/75 sm:inline">
-            Finance Hub
-          </span>
+        <Link to="/" aria-label="Grow" className="flex min-w-0 items-center">
+          <SiteWordmark size="header" className="max-w-none" />
         </Link>
 
         <nav className="hidden lg:flex items-center gap-7">

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { subscribeToNewsletter } from "@/lib/newsletter";
+import { SiteWordmark } from "./SiteWordmark";
 
 export function SiteFooter() {
   const [email, setEmail] = useState("");
@@ -40,8 +41,8 @@ export function SiteFooter() {
       <div className="container py-10 sm:py-14">
         <div className="grid gap-8 sm:gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-3 lg:col-span-2">
-            <Link to="/" className="flex items-center gap-3">
-              <span className="font-heading text-lg font-semibold text-foreground">Grow Contabilidade</span>
+            <Link to="/" aria-label="Grow" className="flex items-center gap-3">
+              <SiteWordmark size="footer" />
             </Link>
             <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
               Parceiro estratégico de empresas que buscam crescimento com organização, compliance e inteligencia.
