@@ -89,11 +89,13 @@ export function SiteHeader() {
           </Button>
           <Button
             asChild
-            variant="ghost"
+            variant="default"
             size="sm"
             className={[
-              "rounded-none px-3 text-[12px] font-semibold uppercase tracking-[0.14em] transition-colors",
-              scrolled ? "" : "hover:bg-white/20",
+              "h-12 rounded-none px-6 text-[12px] font-semibold uppercase tracking-[0.14em] transition-colors",
+              scrolled
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-primary text-primary-foreground hover:bg-primary/92",
             ].join(" ")}
           >
             <Link to="/login">Entrar</Link>

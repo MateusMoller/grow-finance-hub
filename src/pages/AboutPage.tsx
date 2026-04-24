@@ -44,8 +44,17 @@ const services = [
     teaser: "Números deixam de ser histórico e passam a orientar próximos movimentos.",
     detail:
       "Fechamos, lemos e traduzimos os dados da operação para que margem, caixa e evolução do negócio fiquem mais claros para o empresário.",
+    expandedDescription:
+      "A contabilidade consultiva organiza os números da operação para que eles sirvam como base de decisão, e não apenas como registro do passado. A Grow cruza fechamento, margem, despesas, caixa e evolução mensal para transformar dados financeiros em leitura prática de gestão.",
+    deliverables: [
+      "fechamento mensal com leitura executiva dos principais indicadores",
+      "interpretação de margem, caixa e despesas para orientar decisões mais seguras",
+      "comparação de desempenho ao longo do tempo para identificar desvios e oportunidades",
+    ],
     visualAccent: "Visão de margem",
     visualCaption: "Leitura estratégica dos indicadores que puxam resultado.",
+    imagePath: "/images/services/contabilidade-consultiva.png",
+    imageAlt: "Ilustração editorial de relatórios financeiros, gráficos e leitura estratégica de indicadores contábeis.",
   },
   {
     icon: Shield,
@@ -54,8 +63,17 @@ const services = [
     teaser: "Mais controle tributário para a empresa crescer sem sustos evitáveis.",
     detail:
       "Revisamos enquadramento, rotinas e obrigações para reduzir exposição fiscal e manter a operação com mais segurança e previsibilidade.",
+    expandedDescription:
+      "A assessoria fiscal da Grow acompanha enquadramento, rotinas e obrigações com olhar preventivo. A ideia é reduzir exposição, evitar inconsistências e manter a empresa em um terreno mais seguro para crescer.",
+    deliverables: [
+      "revisão de enquadramento e rotinas fiscais mais sensíveis",
+      "monitoramento de obrigações para reduzir risco de falhas recorrentes",
+      "apoio consultivo para decisões com impacto tributário",
+    ],
     visualAccent: "Risco sob controle",
     visualCaption: "Camadas de revisão para proteger decisão e operação.",
+    imagePath: undefined,
+    imageAlt: "",
   },
   {
     icon: Users,
@@ -64,8 +82,17 @@ const services = [
     teaser: "A rotina de pessoas fica organizada antes de virar urgência.",
     detail:
       "Estruturamos folha, admissões, desligamentos e suporte ao RH com leitura prática para que o time opere com menos ruído trabalhista.",
+    expandedDescription:
+      "O departamento pessoal precisa funcionar com precisão e previsibilidade. A Grow ajuda a organizar admissões, folha, desligamentos e demandas recorrentes para reduzir ruído operacional e proteger a empresa em temas trabalhistas.",
+    deliverables: [
+      "cadência mais clara para folha e eventos trabalhistas recorrentes",
+      "suporte para admissões, desligamentos e rotinas do dia a dia",
+      "mais segurança documental e menos improviso na operação de pessoas",
+    ],
     visualAccent: "Ritmo do time",
     visualCaption: "Fluxos trabalhistas com mais cadência e menos improviso.",
+    imagePath: undefined,
+    imageAlt: "",
   },
   {
     icon: Building2,
@@ -74,8 +101,17 @@ const services = [
     teaser: "A empresa nasce ou se ajusta com rota jurídica e fiscal mais limpa.",
     detail:
       "Cuidamos da formalização, das alterações contratuais e das regularizações para evitar travas burocráticas no crescimento da empresa.",
+    expandedDescription:
+      "Abrir ou regularizar uma empresa exige sequência correta e leitura documental cuidadosa. A Grow conduz esse processo para evitar pendências que travem operação, expansão ou relacionamento com órgãos e parceiros.",
+    deliverables: [
+      "estruturação do processo de abertura ou regularização conforme a realidade da empresa",
+      "apoio em alterações contratuais e ajustes cadastrais relevantes",
+      "organização documental para reduzir retrabalho e atrasos burocráticos",
+    ],
     visualAccent: "Estrutura pronta",
     visualCaption: "Mapeamento documental para colocar a operação em ordem.",
+    imagePath: undefined,
+    imageAlt: "",
   },
   {
     icon: Briefcase,
@@ -84,8 +120,17 @@ const services = [
     teaser: "O empresário ganha apoio para decidir com mais repertório e clareza.",
     detail:
       "Acompanhamos decisões relevantes com leitura financeira, contábil e operacional para sustentar crescimento sem perder direção.",
+    expandedDescription:
+      "O suporte ao empresário aproxima números e contexto de negócio. A Grow entra como apoio de leitura e priorização para que decisões importantes não dependam apenas de percepção ou urgência.",
+    deliverables: [
+      "apoio consultivo em decisões com impacto financeiro e estrutural",
+      "organização de prioridades para crescimento com mais direção",
+      "mais clareza sobre riscos, oportunidades e próximos passos",
+    ],
     visualAccent: "Decisão assistida",
     visualCaption: "Mais clareza executiva para cada próximo passo do negócio.",
+    imagePath: undefined,
+    imageAlt: "",
   },
   {
     icon: FileText,
@@ -94,8 +139,17 @@ const services = [
     teaser: "Relatórios deixam de ser arquivo e passam a virar conversa de gestão.",
     detail:
       "Entregamos leituras mensais objetivas para acompanhar desempenho, corrigir rota e manter o negócio perto das metas mais importantes.",
+    expandedDescription:
+      "Os relatórios gerenciais da Grow não param na entrega do documento. Eles servem para destacar o que mudou, o que preocupa e onde a empresa precisa concentrar atenção para evoluir com mais controle.",
+    deliverables: [
+      "resumo mensal com leitura objetiva dos dados mais relevantes",
+      "visão comparativa para acompanhar evolução e corrigir rota",
+      "material de gestão pensado para discussão executiva e decisão prática",
+    ],
     visualAccent: "Painel mensal",
     visualCaption: "Resumo executivo para acompanhar evolução sem operar no escuro.",
+    imagePath: undefined,
+    imageAlt: "",
   },
 ];
 
@@ -459,9 +513,12 @@ export default function AboutPage() {
                           <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
                             {activeService.detail}
                           </p>
+                          <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+                            {activeService.expandedDescription}
+                          </p>
                         </div>
 
-                        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                        <div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                           <div className="rounded-[24px] border border-primary/14 bg-primary/5 p-4">
                             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/75">
                               Leitura central
@@ -479,36 +536,59 @@ export default function AboutPage() {
                             </p>
                           </div>
                         </div>
+
+                        <div className="mt-4 rounded-[24px] border border-primary/14 bg-background/70 p-4 dark:bg-white/5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/75">
+                            O que isso coloca na mesa
+                          </p>
+                          <ul className="mt-3 space-y-3 text-sm leading-7 text-muted-foreground">
+                            {activeService.deliverables.map((deliverable) => (
+                              <li key={deliverable} className="flex items-start gap-2.5">
+                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/75" />
+                                <span>{deliverable}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
 
-                      <div className="relative overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] p-5 dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
-                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)]" />
-                        <div className="relative flex h-full min-h-[260px] flex-col justify-between">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary/70">
-                              Imagem genérica contextual
-                            </p>
-                            <p className="mt-2 max-w-[16rem] text-sm leading-6 text-muted-foreground">
-                              {activeService.visualCaption}
-                            </p>
+                      <div className="relative min-h-[320px] overflow-hidden rounded-[30px] border border-primary/18 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--primary)/0.06)_100%)] shadow-[0_18px_50px_-28px_rgba(34,48,88,0.32)] dark:border-[#2b3861] dark:bg-[linear-gradient(180deg,rgba(10,23,52,0.98)_0%,rgba(122,98,239,0.14)_100%)]">
+                        {activeService.imagePath ? (
+                          <>
+                            <img
+                              src={activeService.imagePath}
+                              alt={activeService.imageAlt}
+                              loading="lazy"
+                              width={1600}
+                              height={1200}
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,20,36,0.08)_0%,rgba(18,20,36,0.52)_100%)]" />
+                            <div className="absolute inset-x-0 bottom-0 p-5">
+                              <div className="rounded-[24px] border border-white/18 bg-[rgba(12,14,28,0.44)] p-4 backdrop-blur-md">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">
+                                  {activeService.visualAccent}
+                                </p>
+                                <p className="mt-3 text-sm leading-6 text-white/92">
+                                  {activeService.visualCaption}
+                                </p>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="relative flex h-full min-h-[320px] items-center justify-center bg-[radial-gradient(circle_at_24%_20%,rgba(82,98,140,0.2),transparent_26%),radial-gradient(circle_at_72%_72%,rgba(82,98,140,0.16),transparent_34%)]">
+                            <div className="absolute inset-x-0 bottom-0 p-5">
+                              <div className="rounded-[24px] border border-primary/14 bg-background/80 p-4 dark:bg-[#0c1836]/85">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/78">
+                                  {activeService.visualAccent}
+                                </p>
+                                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                                  {activeService.visualCaption}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-
-                          <div className="relative mt-6 h-[210px] rounded-[28px] border border-primary/14 bg-white/70 p-4 shadow-[0_18px_50px_-28px_rgba(34,48,88,0.4)] dark:bg-white/5">
-                            <div className="absolute left-4 top-4 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">
-                              {activeService.visualAccent}
-                            </div>
-                            <div className="absolute -right-5 bottom-4 h-28 w-28 rounded-full bg-primary/15 blur-2xl" />
-                            <div className="absolute left-6 top-16 h-[104px] w-[104px] rounded-[34px] border border-primary/14 bg-gradient-to-br from-primary/18 via-white/40 to-transparent dark:via-white/5" />
-                            <div className="absolute right-6 top-14 flex h-[112px] w-[112px] items-center justify-center rounded-[36px] border border-primary/14 bg-background/85 shadow-sm dark:bg-[#0c1836]">
-                              <activeService.icon className="h-12 w-12 text-primary" />
-                            </div>
-                            <div className="absolute bottom-6 left-6 right-6 space-y-2.5">
-                              <div className="h-2.5 w-[76%] rounded-full bg-primary/16" />
-                              <div className="h-2.5 w-[54%] rounded-full bg-primary/10" />
-                              <div className="h-2.5 w-[68%] rounded-full bg-primary/12" />
-                            </div>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </motion.div>

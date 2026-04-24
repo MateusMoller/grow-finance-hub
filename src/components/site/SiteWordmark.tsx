@@ -25,13 +25,6 @@ export function SiteWordmark({ className, size = "header" }: SiteWordmarkProps) 
       >
         Grow
       </span>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "mb-[0.28em] ml-1.5 inline-block rounded-full bg-primary/90 shadow-[0_0_0_4px_rgba(77,68,137,0.08)]",
-          isHeader ? "h-2.5 w-2.5" : "h-2 w-2",
-        )}
-      />
     </span>
   );
 }
