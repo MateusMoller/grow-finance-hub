@@ -51,7 +51,6 @@ export function ProtectedRoute({ children, scope = "authenticated" }: ProtectedR
       "/app/calendario",
       "/app/tarefas",
       "/app/clientes",
-      "/app/solicitacoes",
       "/app/formulários",
       "/app/relatorios",
       "/app/obrigacoes",

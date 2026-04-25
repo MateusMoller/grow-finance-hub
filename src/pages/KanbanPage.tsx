@@ -2,11 +2,9 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { KanbanTaskDetailSheet, type KanbanStatus, type KanbanTaskItem } from "@/components/app/KanbanTaskDetailSheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -14,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
-import { Building2, Check, ChevronsUpDown, ExternalLink, Filter, FolderOpen, ListChecks, Loader2, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, Filter, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -103,25 +101,7 @@ const parseSubtasks = (value: unknown): TaskSubtask[] => {
     .filter((item): item is TaskSubtask => item !== null);
 };
 
-const getOptionalTaskField = (task: KanbanTaskItem, field: string) => {
-  const value = (task as unknown as Record<string, unknown>)[field];
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const isObligationTask = (task: KanbanTaskItem) => {
-  const integrationSource = normalizeText(getOptionalTaskField(task, "integration_source") || "");
-  if (integrationSource === "acessorias_obrigacao_semanal") return true;
-
-  const hasObligationTag = (task.tags || []).some((tag) => normalizeText(tag).includes("obrigac"));
-  if (hasObligationTag) return true;
-
-  const title = normalizeText(task.title || "");
-  return title.startsWith("[obrigação") || title.startsWith("obrigação");
-};
-
-const emptyStatusBuckets = (): Record<KanbanStatus, KanbanTaskItem[]> => ({
+const tasksByStatusTemplate = (): Record<KanbanStatus, KanbanTaskItem[]> => ({
   backlog: [],
   todo: [],
   doing: [],
@@ -150,8 +130,6 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<KanbanTaskItem | null>(null);
   const [savingDetail, setSavingDetail] = useState(false);
-  const [obligationFolderOpen, setObligationFolderOpen] = useState(false);
-  const [obligationFolderStatus, setObligationFolderStatus] = useState<KanbanStatus | null>(null);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropTargetStatus, setDropTargetStatus] = useState<KanbanStatus | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -261,41 +239,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     return true;
   });
 
-  const obligationTasksByStatus = useMemo(() => {
-    const grouped = emptyStatusBuckets();
+  const tasksByStatus = useMemo(() => {
+    const grouped = tasksByStatusTemplate();
     filteredTasks.forEach((task) => {
-      if (!isObligationTask(task)) return;
       grouped[task.status].push(task);
     });
     return grouped;
   }, [filteredTasks]);
-
-  const regularTasksByStatus = useMemo(() => {
-    const grouped = emptyStatusBuckets();
-    filteredTasks.forEach((task) => {
-      if (isObligationTask(task)) return;
-      grouped[task.status].push(task);
-    });
-    return grouped;
-  }, [filteredTasks]);
-
-  const selectedObligationFolderTasks = useMemo(() => {
-    if (!obligationFolderStatus) return [];
-    const tasksByStatus = obligationTasksByStatus[obligationFolderStatus] || [];
-    return [...tasksByStatus].sort((left, right) => {
-      const leftDueDate = left.due_date || "9999-12-31";
-      const rightDueDate = right.due_date || "9999-12-31";
-      if (leftDueDate === rightDueDate) {
-        return left.title.localeCompare(right.title, "pt-BR");
-      }
-      return leftDueDate.localeCompare(rightDueDate);
-    });
-  }, [obligationFolderStatus, obligationTasksByStatus]);
-
-  const selectedObligationFolderLabel = useMemo(
-    () => columns.find((column) => column.id === obligationFolderStatus)?.label || "",
-    [columns, obligationFolderStatus],
-  );
 
   useEffect(() => {
     if (!user?.id || !selectedTask?.id) {
@@ -532,11 +482,6 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     await handleStatusChange(taskId, status);
   };
 
-  const openObligationFolder = (status: KanbanStatus) => {
-    setObligationFolderStatus(status);
-    setObligationFolderOpen(true);
-  };
-
   const content = (
     <>
       <div className="space-y-4">
@@ -573,21 +518,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-4">
             {columns.map((column) => {
-              const columnObligationTasks = obligationTasksByStatus[column.id] || [];
-              const columnRegularTasks = regularTasksByStatus[column.id] || [];
-              const columnTotalTasks = columnObligationTasks.length + columnRegularTasks.length;
-              const companiesTotal = columnObligationTasks.reduce((acc, task) => acc + task.subtasks.length, 0);
-              const companiesDone = columnObligationTasks.reduce(
-                (acc, task) => acc + task.subtasks.filter((subtask) => subtask.done).length,
-                0,
-              );
+              const columnTasks = tasksByStatus[column.id] || [];
 
               return (
                 <div key={column.id} className="min-w-[calc(100vw-2.75rem)] w-[calc(100vw-2.75rem)] shrink-0 sm:min-w-[280px] sm:w-[280px]">
                   <div className="flex items-center gap-2 mb-3">
                     <div className={`h-2 w-2 rounded-full ${column.color}`} />
                     <span className="text-sm font-semibold">{column.label}</span>
-                    <span className="text-xs text-muted-foreground ml-auto">{columnTotalTasks}</span>
+                    <span className="text-xs text-muted-foreground ml-auto">{columnTasks.length}</span>
                   </div>
                   <div
                     onDragOver={(event) => handleColumnDragOver(event, column.id)}
@@ -596,14 +534,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       draggingTaskId && dropTargetStatus === column.id ? "border-primary bg-primary/5" : "border-border/40"
                     }`}
                   >
-                    <ObligationsFolderCard
-                      columnLabel={column.label}
-                      obligationsCount={columnObligationTasks.length}
-                      companiesCount={companiesTotal}
-                      companiesDone={companiesDone}
-                      onOpen={() => openObligationFolder(column.id)}
-                    />
-                    {columnRegularTasks.map((task, index) => (
+                    {columnTasks.map((task, index) => (
                       <KanbanCard
                         key={task.id}
                         task={task}
@@ -620,7 +551,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                         canArchive={isAdmin}
                       />
                     ))}
-                    {columnRegularTasks.length === 0 && columnObligationTasks.length === 0 && (
+                    {columnTasks.length === 0 && (
                       <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
                         Arraste uma tarefa para esta coluna
                       </div>
@@ -643,103 +574,6 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         onSubtaskToggle={handleSubtaskToggle}
         historyEntries={selectedTaskHistory}
       />
-
-      <Dialog open={obligationFolderOpen} onOpenChange={setObligationFolderOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[88vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4" />
-              Pasta de Obrigações - {selectedObligationFolderLabel || "Etapa"}
-            </DialogTitle>
-            <DialogDescription>
-              Veja as obrigações desta etapa, marque as empresas concluídas e mova a obrigação inteira de etapa.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedObligationFolderTasks.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground text-center">
-              Nenhuma obrigação nesta etapa.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {selectedObligationFolderTasks.map((task) => {
-                const doneCount = task.subtasks.filter((subtask) => subtask.done).length;
-                const totalCount = task.subtasks.length;
-                const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
-
-                return (
-                  <div key={task.id} className="rounded-lg border p-4 space-y-3">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold">{task.title}</p>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <Building2 className="h-3.5 w-3.5" />
-                            {totalCount} empresa(s)
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <ListChecks className="h-3.5 w-3.5" />
-                            {doneCount} concluída(s)
-                          </span>
-                          {task.due_date && <span>Vencimento: {new Date(task.due_date).toLocaleDateString("pt-BR")}</span>}
-                        </div>
-                      </div>
-                      <div className="w-full md:w-56 space-y-1">
-                        <Label className="text-xs">Mover obrigação para etapa</Label>
-                        <Select
-                          value={task.status}
-                          onValueChange={(value) =>
-                            void handleStatusChange(task.id, value as KanbanStatus, { undoable: false })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {columns.map((column) => (
-                              <SelectItem key={column.id} value={column.id}>
-                                {column.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <Progress value={progress} className="h-2" />
-                    <p className="text-xs text-muted-foreground">
-                      Progresso: {doneCount}/{totalCount} empresa(s) ({progress}%)
-                    </p>
-
-                    {totalCount === 0 ? (
-                      <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                        Esta obrigação ainda não possui empresas cadastradas como subtarefa.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {task.subtasks.map((subtask, subtaskIndex) => (
-                          <label
-                            key={`${task.id}-${subtask.title}-${subtaskIndex}`}
-                            className="flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={subtask.done}
-                              onCheckedChange={() => handleSubtaskToggle(task.id, subtaskIndex)}
-                            />
-                            <span className={subtask.done ? "line-through text-muted-foreground" : ""}>
-                              {subtask.title}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
@@ -894,41 +728,6 @@ export default function KanbanPage() {
   return <TaskKanbanView />;
 }
 
-function ObligationsFolderCard({
-  columnLabel,
-  obligationsCount,
-  companiesCount,
-  companiesDone,
-  onOpen,
-}: {
-  columnLabel: string;
-  obligationsCount: number;
-  companiesCount: number;
-  companiesDone: number;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-full rounded-lg border bg-muted/20 p-3 text-left transition-colors hover:bg-muted/30"
-    >
-      <div className="flex items-start gap-2">
-        <FolderOpen className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">Obrigações</p>
-          <p className="text-xs text-muted-foreground">
-            Etapa {columnLabel}: {obligationsCount} obrigação(oes)
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Empresas: {companiesDone}/{companiesCount} concluídas
-          </p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
 function KanbanCard({
   task,
   index,
@@ -1023,4 +822,7 @@ function KanbanCard({
     </motion.div>
   );
 }
+
+
+
 

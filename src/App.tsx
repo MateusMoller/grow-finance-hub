@@ -33,7 +33,6 @@ const NewsletterAdminPage = lazy(() => import("./pages/NewsletterAdminPage"));
 const NotificacoesPage = lazy(() => import("./pages/NotificacoesPage"));
 const ConfiguracoesPage = lazy(() => import("./pages/ConfiguracoesPage"));
 const PortalClientePage = lazy(() => import("./pages/PortalClientePage"));
-const SolicitacoesPage = lazy(() => import("./pages/SolicitacoesPage"));
 const ManualPage = lazy(() => import("./pages/ManualPage"));
 const UsuariosPage = lazy(() => import("./pages/UsuariosPage"));
 const SugestoesPage = lazy(() => import("./pages/SugestoesPage"));
@@ -129,7 +128,7 @@ const App = () => (
                   <Route path="/app/acessorias" element={<ProtectedRoute scope="internal"><Navigate to="/app/obrigacoes" replace /></ProtectedRoute>} />
                   <Route path="/app/notificacoes" element={<ProtectedRoute scope="internal"><NotificacoesPage /></ProtectedRoute>} />
                   <Route path="/app/configuracoes" element={<ProtectedRoute scope="internal"><ConfiguracoesPage /></ProtectedRoute>} />
-                  <Route path="/app/solicitacoes" element={<ProtectedRoute scope="internal"><SolicitacoesPage /></ProtectedRoute>} />
+                  <Route path="/app/solicitacoes" element={<ProtectedRoute scope="internal"><Navigate to="/app/tarefas" replace /></ProtectedRoute>} />
                   <Route path="/app/manual" element={<ProtectedRoute scope="internal"><ManualPage /></ProtectedRoute>} />
                   <Route path="/app/usuarios" element={<ProtectedRoute scope="internal"><UsuariosPage /></ProtectedRoute>} />
                   <Route path="/app/sugestoes" element={<ProtectedRoute scope="internal"><SugestoesPage /></ProtectedRoute>} />

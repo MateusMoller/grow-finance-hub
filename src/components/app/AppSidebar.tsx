@@ -8,7 +8,6 @@ import {
   Settings,
   TrendingUp,
   ClipboardList,
-  Headset,
   BookOpenText,
   Newspaper,
   MessagesSquare,
@@ -40,7 +39,6 @@ const mainItems = [
 ];
 
 const operationalItems = [
-  { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
@@ -118,7 +116,6 @@ export function AppSidebar() {
   const visibleOperationalItems = isDepartmentRole
     ? operationalItems.filter(
         (item) =>
-          item.url === "/app/solicitacoes" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
           item.url === "/app/obrigacoes" ||
