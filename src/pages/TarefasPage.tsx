@@ -185,7 +185,11 @@ const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
   return normalized.includes("column") || normalized.includes("permission");
 };
 
-export default function TarefasPage() {
+interface TaskListViewProps {
+  embedded?: boolean;
+}
+
+export function TaskListView({ embedded = false }: TaskListViewProps) {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const location = useLocation();
@@ -544,10 +548,10 @@ export default function TarefasPage() {
     updateTaskCounter(taskId, "attachments", count);
   };
 
-  return (
-    <AppLayout>
+  const content = (
+    <>
       <div className="space-y-6 max-w-7xl">
-        <div className="flex items-center justify-between">
+        {!embedded && <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
             <p className="text-sm text-muted-foreground">Gestão completa de tarefas da equipe</p>
@@ -555,7 +559,7 @@ export default function TarefasPage() {
           <Button className="gap-2" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Nova Tarefa
           </Button>
-        </div>
+        </div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {[
@@ -841,7 +845,17 @@ export default function TarefasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <AppLayout>{content}</AppLayout>;
+}
+
+export default function TarefasPage() {
+  return <TaskListView />;
 }
 

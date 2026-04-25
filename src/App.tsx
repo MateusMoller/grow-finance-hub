@@ -19,11 +19,10 @@ const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
-const KanbanPage = lazy(() => import("./pages/KanbanPage"));
 const CalendarioPage = lazy(() => import("./pages/CalendarioPage"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const ClientDetailPage = lazy(() => import("./pages/ClientDetailPage"));
-const TarefasPage = lazy(() => import("./pages/TarefasPage"));
+const TaskWorkspacePage = lazy(() => import("./pages/TaskWorkspacePage"));
 const FormulariosPage = lazy(() => import("./pages/FormulariosPage"));
 const CRMPage = lazy(() => import("./pages/CRMPage"));
 const ChatInternoPage = lazy(() => import("./pages/ChatInternoPage"));
@@ -112,11 +111,11 @@ const App = () => (
 
                   {/* App Interno - Protegido */}
                   <Route path="/app" element={<ProtectedRoute scope="internal"><DashboardPage /></ProtectedRoute>} />
-                  <Route path="/app/kanban" element={<ProtectedRoute scope="internal"><KanbanPage /></ProtectedRoute>} />
+                  <Route path="/app/kanban" element={<ProtectedRoute scope="internal"><Navigate to="/app/tarefas?view=kanban" replace /></ProtectedRoute>} />
                   <Route path="/app/calendario" element={<ProtectedRoute scope="internal"><CalendarioPage /></ProtectedRoute>} />
                   <Route path="/app/clientes" element={<ProtectedRoute scope="internal"><ClientsPage /></ProtectedRoute>} />
                   <Route path="/app/clientes/:id" element={<ProtectedRoute scope="internal"><ClientDetailPage /></ProtectedRoute>} />
-                  <Route path="/app/tarefas" element={<ProtectedRoute scope="internal"><TarefasPage /></ProtectedRoute>} />
+                  <Route path="/app/tarefas" element={<ProtectedRoute scope="internal"><TaskWorkspacePage /></ProtectedRoute>} />
                   <Route path="/app/formularios" element={<ProtectedRoute scope="internal"><FormulariosPage /></ProtectedRoute>} />
                   <Route path="/app/processos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                   <Route path="/app/documentos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />

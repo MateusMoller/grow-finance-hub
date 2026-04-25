@@ -62,7 +62,7 @@ export function ProtectedRoute({ children, scope = "authenticated" }: ProtectedR
     ];
     const isAllowed = allowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
     if (!isAllowed) {
-      return <Navigate to="/app/kanban" replace />;
+      return <Navigate to="/app/tarefas" replace />;
     }
   }
 

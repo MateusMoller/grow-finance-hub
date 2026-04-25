@@ -64,12 +64,10 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
 
   const base = [
     { title: "Dashboard", url: "/app" },
-    { title: "Kanban", url: "/app/kanban" },
     { title: "Calendario", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Atendimento Portal", url: "/app/solicitacoes" },
-    { title: "Formularios", url: "/app/formulários" },
     { title: "CRM", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatórios", url: "/app/relatorios" },
@@ -87,12 +85,10 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     if (!isDepartmentRole) return withoutUsers;
 
     return withoutUsers.filter((item) =>
-      item.url === "/app/kanban" ||
       item.url === "/app/calendario" ||
       item.url === "/app/tarefas" ||
       item.url === "/app/clientes" ||
       item.url === "/app/solicitacoes" ||
-      item.url === "/app/formulários" ||
       item.url === "/app/chat-interno" ||
       item.url === "/app/relatorios" ||
       item.url === "/app/obrigacoes" ||
@@ -105,12 +101,10 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
   if (!isDepartmentRole) return base;
 
   return base.filter((item) =>
-    item.url === "/app/kanban" ||
     item.url === "/app/calendario" ||
     item.url === "/app/tarefas" ||
     item.url === "/app/clientes" ||
     item.url === "/app/solicitacoes" ||
-    item.url === "/app/formulários" ||
     item.url === "/app/chat-interno" ||
     item.url === "/app/relatorios" ||
     item.url === "/app/obrigacoes" ||

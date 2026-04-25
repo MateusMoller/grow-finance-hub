@@ -16,6 +16,7 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
 import { Building2, Check, ChevronsUpDown, ExternalLink, Filter, FolderOpen, ListChecks, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
@@ -129,9 +130,15 @@ const emptyStatusBuckets = (): Record<KanbanStatus, KanbanTaskItem[]> => ({
   archived: [],
 });
 
-export default function KanbanPage() {
+interface TaskKanbanViewProps {
+  embedded?: boolean;
+}
+
+export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const { user, role } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const location = useLocation();
+  const navigate = useNavigate();
   const isAdmin = role === "admin";
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -182,6 +189,22 @@ export default function KanbanPage() {
     void fetchTasks();
     void fetchClients();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("create") !== "1") return;
+
+    setCreateOpen(true);
+    params.delete("create");
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : "",
+      },
+      { replace: true },
+    );
+  }, [location.pathname, location.search, navigate]);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -514,15 +537,15 @@ export default function KanbanPage() {
     setObligationFolderOpen(true);
   };
 
-  return (
-    <AppLayout>
+  const content = (
+    <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div>
+          {!embedded && <div>
             <h1 className="font-heading text-2xl font-bold">Kanban</h1>
             <p className="text-sm text-muted-foreground">Gestão visual de demandas</p>
-          </div>
-          <div className="flex gap-2">
+          </div>}
+          <div className={`flex gap-2 ${embedded ? "ml-auto" : ""}`}>
             <Select value={sectorFilter} onValueChange={setSectorFilter}>
               <SelectTrigger className="w-52">
                 <Filter className="h-4 w-4 mr-1" />
@@ -537,9 +560,9 @@ export default function KanbanPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
+            {!embedded && <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4 mr-1" /> Nova Tarefa
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -857,8 +880,18 @@ export default function KanbanPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <AppLayout>{content}</AppLayout>;
+}
+
+export default function KanbanPage() {
+  return <TaskKanbanView />;
 }
 
 function ObligationsFolderCard({

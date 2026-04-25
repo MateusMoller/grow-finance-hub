@@ -1,8 +1,6 @@
 import {
   LayoutDashboard,
   Users,
-  FileText,
-  KanbanSquare,
   CalendarDays,
   BarChart3,
   FileSpreadsheet,
@@ -36,7 +34,6 @@ import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
-  { title: "Kanban", url: "/app/kanban", icon: KanbanSquare },
   { title: "Calendario", url: "/app/calendario", icon: CalendarDays },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
   { title: "Clientes", url: "/app/clientes", icon: Users },
@@ -44,7 +41,6 @@ const mainItems = [
 
 const operationalItems = [
   { title: "Atendimento Portal", url: "/app/solicitacoes", icon: Headset },
-  { title: "Formularios", url: "/app/formulários", icon: FileText },
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
@@ -113,7 +109,6 @@ export function AppSidebar() {
 
   const visibleMainItems = isDepartmentRole
     ? mainItems.filter((item) =>
-        item.url === "/app/kanban" ||
         item.url === "/app/calendario" ||
         item.url === "/app/tarefas" ||
         item.url === "/app/clientes",
@@ -124,7 +119,6 @@ export function AppSidebar() {
     ? operationalItems.filter(
         (item) =>
           item.url === "/app/solicitacoes" ||
-          item.url === "/app/formulários" ||
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
           item.url === "/app/obrigacoes" ||
@@ -143,9 +137,8 @@ export function AppSidebar() {
   const mainItemOrder: Record<string, number> = {
     "/app": 0,
     "/app/calendario": 1,
-    "/app/kanban": 2,
-    "/app/tarefas": 3,
-    "/app/clientes": 4,
+    "/app/tarefas": 2,
+    "/app/clientes": 3,
   };
 
   const orderedMainItems = [...visibleMainItems].sort(

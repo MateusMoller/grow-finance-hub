@@ -566,9 +566,9 @@ export default function DashboardPage() {
             <div className="rounded-xl border bg-card">
               <div className="p-5 border-b flex items-center justify-between">
                 <h2 className="font-heading font-semibold">Tarefas recentes</h2>
-                <Link to="/app/kanban" className="text-xs text-primary hover:underline">
-                  Ver no Kanban
-                </Link>
+                  <Link to="/app/tarefas?view=kanban" className="text-xs text-primary hover:underline">
+                    Ver no Kanban
+                  </Link>
               </div>
               <div className="divide-y">
                 {recentTasks.length === 0 ? (
