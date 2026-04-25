@@ -13,7 +13,12 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
   const sculptureRotate = useTransform(smoothPointerX, [-46, 46], [-7, 7]);
   const ribbonShift = useTransform(smoothPointerX, [-46, 46], [-14, 14]);
   const ribbonLift = useTransform(smoothPointerY, [-46, 46], [-10, 10]);
-  const grainShift = useTransform(smoothPointerX, [-46, 46], [-10, 10]);
+  const accentX = useTransform(smoothPointerX, [-46, 46], [-16, 16]);
+  const accentY = useTransform(smoothPointerY, [-46, 46], [-12, 12]);
+  const labelDriftX = useTransform(smoothPointerX, [-46, 46], [-10, 10]);
+  const labelDriftY = useTransform(smoothPointerY, [-46, 46], [-8, 8]);
+  const focusX = useTransform(smoothPointerX, [-46, 46], [-34, 34]);
+  const focusY = useTransform(smoothPointerY, [-46, 46], [-24, 24]);
 
   const handleIllustrationMove = (event: React.MouseEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -35,15 +40,13 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
       onMouseLeave={handleIllustrationLeave}
       className={`relative min-h-[460px] overflow-hidden px-2 py-3 ${className}`.trim()}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_16%,rgba(83,96,145,0.16),transparent_24%),radial-gradient(circle_at_72%_20%,rgba(97,108,170,0.10),transparent_18%),radial-gradient(circle_at_46%_62%,rgba(82,98,140,0.16),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(246,247,252,0.96)_100%)]" />
-      <motion.div
-        style={{ x: grainShift }}
-        className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(to_right,rgba(52,60,95,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(52,60,95,0.03)_1px,transparent_1px)] [background-size:80px_80px] [mask-image:linear-gradient(180deg,black_0%,black_68%,transparent_100%)]"
-      />
-
       <motion.div
         style={{ x: haloX, y: haloY }}
         className="pointer-events-none absolute left-[36%] top-[42%] h-[320px] w-[320px] rounded-full bg-primary/12 blur-3xl"
+      />
+      <motion.div
+        style={{ x: focusX, y: focusY }}
+        className="pointer-events-none absolute left-[52%] top-[44%] h-[180px] w-[180px] rounded-full border border-primary/10 bg-[radial-gradient(circle,rgba(77,68,137,0.08)_0%,rgba(77,68,137,0.02)_36%,transparent_72%)] blur-2xl"
       />
 
       <div className="pointer-events-none absolute left-[9%] top-[8%] text-[90px] font-black leading-none tracking-[-0.09em] text-foreground/90 md:text-[126px]">
@@ -82,6 +85,19 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
         decisao
       </motion.div>
 
+      <motion.div
+        style={{ x: labelDriftX, y: labelDriftY }}
+        className="pointer-events-none absolute right-[20%] top-[30%] rounded-full border border-primary/14 bg-white/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-primary/70 backdrop-blur-md"
+      >
+        leitura viva
+      </motion.div>
+      <motion.div
+        style={{ x: accentX, y: accentY }}
+        className="pointer-events-none absolute left-[20%] bottom-[24%] rounded-full border border-primary/12 bg-white/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-foreground/55 backdrop-blur-md"
+      >
+        ritmo
+      </motion.div>
+
       <motion.div style={{ x: sculptureX, y: sculptureY, rotate: sculptureRotate }} className="absolute inset-0">
         <motion.div
           animate={{ rotate: [-12, -7, -12], scale: [1, 1.04, 1] }}
@@ -112,6 +128,21 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
           animate={{ opacity: [0.08, 0.2, 0.08], rotate: [0, 6, 0] }}
           transition={{ duration: 7.4, repeat: Infinity, ease: "easeInOut" }}
           className="absolute left-[12%] top-[14%] h-[210px] w-[210px] rounded-[36px] border border-primary/10"
+        />
+        <motion.div
+          animate={{ rotate: [0, 18, 0], opacity: [0.08, 0.22, 0.08] }}
+          transition={{ duration: 8.8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute right-[20%] top-[18%] h-[92px] w-[92px] rounded-full border border-primary/10"
+        />
+        <motion.div
+          animate={{ rotate: [0, -14, 0], opacity: [0.06, 0.18, 0.06] }}
+          transition={{ duration: 7.6, repeat: Infinity, ease: "easeInOut", delay: 0.35 }}
+          className="absolute right-[17%] top-[15%] h-[128px] w-[128px] rounded-full border border-primary/8"
+        />
+        <motion.div
+          animate={{ y: [0, -10, 0], opacity: [0.14, 0.34, 0.14] }}
+          transition={{ duration: 5.6, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[56%] top-[26%] h-16 w-px bg-gradient-to-b from-primary/0 via-primary/22 to-primary/0"
         />
       </motion.div>
 
@@ -155,6 +186,33 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
           strokeLinecap="round"
           animate={{ opacity: [0.16, 0.5, 0.16] }}
           transition={{ duration: 4.6, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
+        />
+        <motion.path
+          d="M256 338 C 288 322, 316 310, 340 282"
+          stroke="hsl(var(--foreground) / 0.07)"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ pathLength: [0.6, 1, 0.6], opacity: [0.08, 0.24, 0.08] }}
+          transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut", delay: 0.25 }}
+        />
+        <motion.path
+          d="M92 66 L 132 66"
+          stroke="hsl(var(--foreground) / 0.16)"
+          strokeWidth="1.2"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ opacity: [0.12, 0.3, 0.12] }}
+          transition={{ duration: 4.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.path
+          d="M92 74 L 118 74"
+          stroke="hsl(var(--foreground) / 0.12)"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ opacity: [0.1, 0.24, 0.1] }}
+          transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
         />
 
         <motion.circle
@@ -205,6 +263,15 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
         <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-white/75" />
       </motion.div>
 
+      <motion.div
+        style={{ x: accentX, y: accentY }}
+        className="pointer-events-none absolute left-[58%] bottom-[18%] flex items-end gap-1 opacity-55"
+      >
+        <div className="h-6 w-1 rounded-full bg-primary/22" />
+        <div className="h-10 w-1 rounded-full bg-primary/28" />
+        <div className="h-4 w-1 rounded-full bg-primary/16" />
+        <div className="h-12 w-1 rounded-full bg-primary/32" />
+      </motion.div>
       <div className="pointer-events-none absolute bottom-[12%] right-[11%] flex items-center gap-2 opacity-55">
         <div className="h-px w-10 bg-primary/22" />
         <div className="grid gap-1">
