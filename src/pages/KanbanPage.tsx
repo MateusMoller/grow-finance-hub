@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { KanbanTaskDetailSheet, type KanbanStatus, type KanbanTaskItem } from "@/components/app/KanbanTaskDetailSheet";
-import { Badge } from "@/components/ui/badge";
+import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
-import { Check, ChevronsUpDown, ExternalLink, Filter, Loader2, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Filter, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -775,10 +775,15 @@ function KanbanCard({
       }}
       onDragEnd={onDragEnd}
       onClick={onOpenDetails}
-      className={`rounded-lg border bg-card p-3.5 hover:shadow-md transition-shadow group cursor-grab active:cursor-grabbing ${
+      className={`relative overflow-hidden rounded-lg border bg-card p-3.5 hover:shadow-md transition-shadow group cursor-grab active:cursor-grabbing ${
         isDragging ? "opacity-50" : ""
       }`}
     >
+      <TaskOriginRibbon
+        requestId={task.request_id}
+        integrationSource={task.integration_source}
+        className="right-3"
+      />
       <div className="flex items-start justify-between mb-2">
         <span className="text-sm font-medium leading-tight">{task.title}</span>
         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${priorityDot[task.priority] || "bg-muted-foreground"}`} />
@@ -791,11 +796,6 @@ function KanbanCard({
           <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
             {extraSectors > 0 ? `${primarySector} +${extraSectors}` : primarySector}
           </span>
-          {task.request_id && (
-            <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0">
-              <ExternalLink className="h-2.5 w-2.5" /> Solicitação
-            </Badge>
-          )}
         </div>
         {task.assignee && (
           <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
