@@ -33,16 +33,13 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
     <motion.div
       onMouseMove={handleIllustrationMove}
       onMouseLeave={handleIllustrationLeave}
-      className={`relative min-h-[460px] overflow-hidden rounded-[40px] px-2 py-3 ${className}`.trim()}
+      className={`relative min-h-[460px] overflow-hidden px-2 py-3 ${className}`.trim()}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_16%,rgba(83,96,145,0.16),transparent_24%),radial-gradient(circle_at_72%_20%,rgba(97,108,170,0.10),transparent_18%),radial-gradient(circle_at_46%_62%,rgba(82,98,140,0.16),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(246,247,252,0.96)_100%)]" />
       <motion.div
         style={{ x: grainShift }}
         className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(to_right,rgba(52,60,95,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(52,60,95,0.03)_1px,transparent_1px)] [background-size:80px_80px] [mask-image:linear-gradient(180deg,black_0%,black_68%,transparent_100%)]"
       />
-
-      <div className="pointer-events-none absolute inset-[7%_8%_12%_8%] rounded-[44px] border border-white/45 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_40px_120px_-80px_rgba(37,47,81,0.45)]" />
-      <div className="pointer-events-none absolute inset-[9%_10%_16%_10%] rounded-[40px] bg-[linear-gradient(135deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0.02)_36%,rgba(255,255,255,0)_100%)]" />
 
       <motion.div
         style={{ x: haloX, y: haloY }}
