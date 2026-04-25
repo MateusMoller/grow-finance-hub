@@ -1,53 +1,45 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, BriefcaseBusiness, Building2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { hasAnyInternalRole, hasPortalAccessRole, normalizeRoles } from "@/lib/accessControl";
+import { hasAnyInternalRole, hasClientRole, normalizeRoles } from "@/lib/accessControl";
 import growIcon from "@/assets/grow-icon.png";
 import { GrowHeroArtwork } from "@/components/site/GrowHeroArtwork";
 
-type AccessProfile = "internal" | "client";
+const resolveAccessTarget = (roles: string[]) => {
+  const normalizedRoles = normalizeRoles(roles);
 
-const accessOptions: Array<{
-  key: AccessProfile;
-  title: string;
-  subtitle: string;
-  icon: typeof BriefcaseBusiness;
-  target: string;
-}> = [
-  {
-    key: "internal",
-    title: "App Interno",
-    subtitle: "Operacao, tarefas, clientes e gestao da equipe.",
-    icon: BriefcaseBusiness,
-    target: "/app",
-  },
-  {
-    key: "client",
-    title: "Portal do Cliente",
-    subtitle: "Solicitacoes, documentos, formularios e atendimento.",
-    icon: Building2,
-    target: "/app/portal",
-  },
-];
+  if (hasAnyInternalRole(normalizedRoles)) {
+    return { path: "/app", label: "App Interno" as const };
+  }
+
+  if (hasClientRole(normalizedRoles)) {
+    return { path: "/app/portal", label: "Portal do Cliente" as const };
+  }
+
+  return null;
+};
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [accessProfile, setAccessProfile] = useState<AccessProfile>("internal");
-  const { signIn, signOut } = useAuth();
+  const { signIn, signOut, user, roles, roleLoaded, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const selectedAccess = useMemo(
-    () => accessOptions.find((option) => option.key === accessProfile) || accessOptions[0],
-    [accessProfile],
-  );
+  useEffect(() => {
+    if (authLoading || !user || !roleLoaded) return;
+
+    const target = resolveAccessTarget(roles);
+    if (target) {
+      navigate(target.path, { replace: true });
+    }
+  }, [authLoading, navigate, roleLoaded, roles, user]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -76,33 +68,23 @@ export default function LoginPage() {
       .eq("user_id", userData.user.id);
 
     setLoading(false);
+
     if (roleError) {
       await signOut();
       toast.error("Nao foi possivel validar suas permissoes de acesso.");
       return;
     }
 
-    const normalizedRoles = normalizeRoles((roleRows || []).map((row) => String(row.role || "")));
-    const hasInternalAccess = hasAnyInternalRole(normalizedRoles);
-    const hasPortalAccess = hasPortalAccessRole(normalizedRoles);
+    const target = resolveAccessTarget((roleRows || []).map((row) => String(row.role || "")));
 
-    if (selectedAccess.key === "internal" && !hasInternalAccess) {
-      if (!hasPortalAccess) {
-        await signOut();
-      }
-      toast.error("Este usuario nao tem permissao para acessar o App Interno.");
-      navigate(hasPortalAccess ? "/app/portal" : "/app/login", { replace: true });
-      return;
-    }
-
-    if (selectedAccess.key === "client" && !hasPortalAccess) {
+    if (!target) {
       await signOut();
-      toast.error("Este usuario nao possui permissao para acessar o Portal do Cliente.");
+      toast.error("Este usuario nao possui permissao para acessar o sistema.");
       return;
     }
 
-    toast.success(`Login realizado. Entrando em ${selectedAccess.title}.`);
-    navigate(selectedAccess.target);
+    toast.success(`Login realizado. Entrando em ${target.label}.`);
+    navigate(target.path, { replace: true });
   };
 
   return (
@@ -120,42 +102,11 @@ export default function LoginPage() {
             <span className="font-heading text-lg font-bold">Grow Finance</span>
           </div>
 
-          <div className="space-y-1.5">
-            <h2 className="font-heading text-2xl font-bold">Entrar</h2>
-          </div>
-
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Ambiente de entrada</p>
-            <div className="grid grid-cols-1 gap-2 rounded-xl bg-muted/50 p-1 sm:grid-cols-2">
-              {accessOptions.map((option) => {
-                const isActive = accessProfile === option.key;
-                const Icon = option.icon;
-
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setAccessProfile(option.key)}
-                    className={`relative overflow-hidden rounded-lg px-3 py-2.5 text-left transition-colors ${
-                      isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {isActive && (
-                      <motion.div
-                        layoutId="access-mode-highlight"
-                        className="absolute inset-0 rounded-lg bg-background shadow-sm ring-1 ring-border"
-                        transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.85 }}
-                      />
-                    )}
-                    <div className="relative flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                      <span className="text-sm font-semibold">{option.title}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">{selectedAccess.subtitle}</p>
+            <h2 className="font-heading text-2xl font-bold">Entrar</h2>
+            <p className="text-sm text-muted-foreground">
+              Use seu login normalmente. O sistema identifica seu perfil e redireciona automaticamente para o ambiente correto.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -180,7 +131,7 @@ export default function LoginPage() {
               />
             </div>
             <Button variant="hero" size="lg" className="w-full gap-2" type="submit" disabled={loading}>
-              {loading ? "Entrando..." : `Entrar em ${selectedAccess.title}`}
+              {loading ? "Entrando..." : "Entrar"}
               {!loading && <ArrowRight className="h-4 w-4" />}
             </Button>
           </form>
