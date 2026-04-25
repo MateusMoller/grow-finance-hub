@@ -470,7 +470,7 @@ const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
 type PortalRequestEntryMode = "freeform" | "support";
 
 export default function PortalClientePage() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, session, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
@@ -518,6 +518,7 @@ export default function PortalClientePage() {
   });
   const [changingPortalPassword, setChangingPortalPassword] = useState(false);
   const knownPortalTaskIdsRef = useRef<Set<string>>(new Set());
+  const ensuredPortalProfileRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -537,6 +538,12 @@ export default function PortalClientePage() {
   const fetchPortalData = useCallback(async () => {
     if (!user) return;
 
+    const activeSession = session ?? (await supabase.auth.getSession()).data.session;
+    if (!activeSession?.access_token) {
+      setLoadingData(false);
+      return;
+    }
+
     setLoadingData(true);
     setPortalAccessDenied(false);
     setPortalAccessMessage(DEFAULT_PORTAL_ACCESS_MESSAGE);
@@ -544,26 +551,61 @@ export default function PortalClientePage() {
     let ensureStatus: number | null = null;
     let ensureMessage = DEFAULT_PORTAL_ACCESS_MESSAGE;
 
-    const { error: ensurePortalError } = await supabase.functions.invoke("ensure-client-portal-profile", {
-      body: {},
-    });
+    const fetchClientRole = async () =>
+      supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .eq("role", "client")
+        .maybeSingle();
 
-    if (ensurePortalError) {
-      const parsedEnsureError = await parseFunctionError(ensurePortalError);
-      ensureStatus = parsedEnsureError.status;
-      ensureMessage = parsedEnsureError.message || DEFAULT_PORTAL_ACCESS_MESSAGE;
+    const fetchLinkedClient = async () =>
+      supabase
+        .from("clients")
+        .select("id, name, contact, email, portal_user_id, portal_cashflow_enabled")
+        .eq("portal_user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (ensureStatus !== 403 && ensureStatus !== 409) {
-        toast.error("Não foi possível sincronizar automaticamente o acesso do portal.");
-      }
+    let [{ data: roleData, error: roleError }, clientRes] = await Promise.all([
+      fetchClientRole(),
+      fetchLinkedClient(),
+    ]);
+
+    if (roleError) {
+      toast.error("Não foi possível validar a permissão de acesso ao portal.");
+      setPortalAccessMessage("Não foi possível validar a permissão de acesso ao portal.");
+      resetPortalCollections();
+      setLoadingData(false);
+      setPortalAccessDenied(true);
+      return;
     }
 
-    const { data: roleData, error: roleError } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .eq("role", "client")
-      .maybeSingle();
+    if ((!roleData || !clientRes.data) && ensuredPortalProfileRef.current !== user.id) {
+      ensuredPortalProfileRef.current = user.id;
+
+      const { error: ensurePortalError } = await supabase.functions.invoke("ensure-client-portal-profile", {
+        body: {},
+      });
+
+      if (ensurePortalError) {
+        const parsedEnsureError = await parseFunctionError(ensurePortalError);
+        ensureStatus = parsedEnsureError.status;
+        ensureMessage = parsedEnsureError.message || DEFAULT_PORTAL_ACCESS_MESSAGE;
+
+        if (ensureStatus === 401) {
+          ensuredPortalProfileRef.current = null;
+        } else if (ensureStatus !== 403 && ensureStatus !== 409) {
+          toast.error("Não foi possível sincronizar automaticamente o acesso do portal.");
+        }
+      } else {
+        [{ data: roleData, error: roleError }, clientRes] = await Promise.all([
+          fetchClientRole(),
+          fetchLinkedClient(),
+        ]);
+      }
+    }
 
     if (roleError) {
       toast.error("Não foi possível validar a permissão de acesso ao portal.");
@@ -582,14 +624,7 @@ export default function PortalClientePage() {
       return;
     }
 
-    const [clientRes, requestRes, docRes] = await Promise.all([
-      supabase
-        .from("clients")
-        .select("id, name, contact, email, portal_user_id, portal_cashflow_enabled")
-        .eq("portal_user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+    const [requestRes, docRes] = await Promise.all([
       supabase
         .from("client_requests")
         .select("id, user_id, title, description, category, sector, status, admin_notes, created_at, updated_at")
@@ -693,11 +728,11 @@ export default function PortalClientePage() {
     setCashflowEntries(fetchedCashflowEntries);
     setMessages(fetchedMessages);
     setLoadingData(false);
-  }, [resetPortalCollections, user]);
+  }, [resetPortalCollections, session, user]);
 
   useEffect(() => {
-    if (user) void fetchPortalData();
-  }, [fetchPortalData, user]);
+    if (user && session?.access_token) void fetchPortalData();
+  }, [fetchPortalData, session?.access_token, user]);
 
   useEffect(() => {
     knownPortalTaskIdsRef.current = new Set(portalTasks.map((task) => task.id));
@@ -1401,30 +1436,9 @@ export default function PortalClientePage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Central de solicitações</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Todo pedido do portal entra por aqui. Escolha o setor, informe o motivo e preencha apenas o que for necessario.
-                </p>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="mx-auto max-w-5xl space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-xl border bg-muted/15 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">1. Escolha</p>
-                      <p className="mt-1 text-sm font-medium">Setor e motivo</p>
-                      <p className="mt-1 text-xs text-muted-foreground">O sistema filtra a solicitacao certa antes do preenchimento.</p>
-                    </div>
-                    <div className="rounded-xl border bg-muted/15 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Preencha</p>
-                      <p className="mt-1 text-sm font-medium">Campos sob demanda</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Aparecem apenas os campos que fazem sentido para esse pedido.</p>
-                    </div>
-                    <div className="rounded-xl border bg-muted/15 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Envie</p>
-                      <p className="mt-1 text-sm font-medium">Historico centralizado</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Acompanhe tudo no mesmo historico logo abaixo.</p>
-                    </div>
-                  </div>
-
                   <div className="rounded-2xl border bg-background p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1">
