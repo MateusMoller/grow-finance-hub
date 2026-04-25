@@ -1460,40 +1460,12 @@ export default function PortalClientePage() {
 
           <TabsContent value="requests" className="space-y-4">
             <Card>
-              <CardHeader className="overflow-hidden rounded-t-xl border-b border-primary/10 bg-gradient-to-br from-primary/[0.08] via-background to-background pb-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary backdrop-blur">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Central de solicitacoes
-                    </div>
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg text-balance">Abra um pedido com mais clareza e menos atrito</CardTitle>
-                      <p className="max-w-2xl text-sm text-muted-foreground">
-                        Organize o pedido por setor, motivo e contexto em uma unica tela. O portal mostra so o que faz sentido para a equipe agir mais rapido.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <div className="rounded-xl border bg-background/85 px-3 py-2 shadow-sm backdrop-blur">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Motivos</p>
-                      <p className="mt-1 text-sm font-semibold">{availableReasons.length}</p>
-                    </div>
-                    <div className="rounded-xl border bg-background/85 px-3 py-2 shadow-sm backdrop-blur">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Campos</p>
-                      <p className="mt-1 text-sm font-semibold">{activeStructuredFields.length || 0}</p>
-                    </div>
-                    <div className="rounded-xl border bg-background/85 px-3 py-2 shadow-sm backdrop-blur col-span-2 sm:col-span-1">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Anexos</p>
-                      <p className="mt-1 text-sm font-semibold">{newRequestFiles.length}</p>
-                    </div>
-                  </div>
-                </div>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Central de solicitações</CardTitle>
               </CardHeader>
               <CardContent className="pt-5">
                 <div className="mx-auto max-w-5xl space-y-4">
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
-                    <div className="rounded-[1.4rem] border bg-background p-4 shadow-sm sm:p-5">
+                  <div className="rounded-[1.4rem] border bg-background p-4 shadow-sm sm:p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -1786,36 +1758,6 @@ export default function PortalClientePage() {
                           </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="rounded-[1.4rem] border bg-gradient-to-br from-background via-background to-primary/[0.04] p-4 shadow-sm sm:p-5">
-                      <div className="space-y-4">
-                        <div className="space-y-1">
-                          <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            <MessageSquare className="h-3.5 w-3.5" />
-                            Guia rapido
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Selecione o setor, refine o motivo e deixe o contexto principal em poucas linhas objetivas.
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="rounded-xl border bg-background px-3 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">1. Direcione</p>
-                            <p className="mt-1 text-sm font-medium">Setor e motivo definem a rota do pedido.</p>
-                          </div>
-                          <div className="rounded-xl border bg-background px-3 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">2. Resuma</p>
-                            <p className="mt-1 text-sm font-medium">Use o assunto para dizer exatamente o que precisa.</p>
-                          </div>
-                          <div className="rounded-xl border bg-background px-3 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">3. Complete</p>
-                            <p className="mt-1 text-sm font-medium">Anexe so o necessario para a equipe agir sem retrabalho.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </CardContent>
