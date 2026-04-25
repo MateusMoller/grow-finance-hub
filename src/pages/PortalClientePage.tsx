@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Clock,
   Download,
-  FileText,
   Filter,
   Loader2,
   MessageSquare,
@@ -22,7 +21,6 @@ import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
 import {
   documentCategories,
-  parsePortalFields,
   sectorOptions,
   type NewPortalCashflowEntryPayload,
   type PortalActionItem,
@@ -31,8 +29,6 @@ import {
   type PortalClientProfile,
   type PortalClientRequest,
   type PortalClientTask,
-  type PortalFormField,
-  type PortalFormTemplate,
   type PortalRequestMessage,
   type RequestStatus,
   type RequestStatusMeta,
@@ -116,7 +112,14 @@ const normalizeLooseToken = (value: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-type PortalGuidedField = PortalFormField;
+interface PortalGuidedField {
+  name: string;
+  label: string;
+  type: "text" | "email" | "date" | "select" | "textarea";
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+}
 
 interface PortalGuidedReason {
   key: string;
@@ -124,7 +127,6 @@ interface PortalGuidedReason {
   sector: string;
   description: string;
   defaultTitle: string;
-  templateKeywords?: string[];
   fields: PortalGuidedField[];
 }
 
@@ -161,7 +163,6 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       sector: "Departamento Pessoal",
       description: "Fluxo para admissao de colaborador com dados iniciais e documentacao.",
       defaultTitle: "Admissao de colaborador",
-      templateKeywords: ["admissao", "admissão"],
       fields: [
         { name: "nome_colaborador", label: "Nome do colaborador", type: "text", required: true },
         { name: "data_inicio", label: "Data de inicio", type: "date", required: true },
@@ -175,7 +176,6 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       sector: "Departamento Pessoal",
       description: "Fluxo para desligamento com dados base para calculo rescisorio.",
       defaultTitle: "Demissao de colaborador",
-      templateKeywords: ["demissao", "demissão", "rescisao", "rescisão"],
       fields: [
         { name: "nome_desligamento", label: "Nome do colaborador", type: "text", required: true },
         { name: "data_desligamento", label: "Data do desligamento", type: "date", required: true },
@@ -450,22 +450,6 @@ const getGuidedReasonsForSector = (sector: string) =>
 
 const getDefaultReasonKey = (sector: string) => getGuidedReasonsForSector(sector)[0]?.key || "";
 
-const findTemplateForReason = (
-  reason: PortalGuidedReason | null,
-  templates: PortalFormTemplate[],
-) => {
-  if (!reason?.templateKeywords?.length) return null;
-
-  return (
-    templates.find((template) => {
-      const haystack = normalizeLooseToken(
-        [template.title, template.description || "", template.sector].filter(Boolean).join(" ")
-      );
-      return reason.templateKeywords?.some((keyword) => haystack.includes(normalizeLooseToken(keyword)));
-    }) || null
-  );
-};
-
 const isEcontinuoDocument = (document: PortalClientDocument) => {
   const categoryToken = normalizeLooseToken(document.category || "");
   if (categoryToken.includes("e_continuo") || categoryToken.includes("econtinuo")) return true;
@@ -483,7 +467,7 @@ const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
   requestId: task.request_id,
 });
 
-type PortalRequestEntryMode = "freeform" | "forms" | "support";
+type PortalRequestEntryMode = "freeform" | "support";
 
 export default function PortalClientePage() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -497,7 +481,6 @@ export default function PortalClientePage() {
   const [clientProfile, setClientProfile] = useState<PortalClientProfile | null>(null);
   const [requests, setRequests] = useState<PortalClientRequest[]>([]);
   const [documents, setDocuments] = useState<PortalClientDocument[]>([]);
-  const [publishedForms, setPublishedForms] = useState<PortalFormTemplate[]>([]);
   const [portalTasks, setPortalTasks] = useState<PortalClientTask[]>([]);
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
   const [cashflowEntries, setCashflowEntries] = useState<PortalCashflowEntry[]>([]);
@@ -526,8 +509,7 @@ export default function PortalClientePage() {
   const [selectedRequest, setSelectedRequest] = useState<PortalClientRequest | null>(null);
   const [requestDetailOpen, setRequestDetailOpen] = useState(false);
 
-  const [selectedFormTemplate, setSelectedFormTemplate] = useState<PortalFormTemplate | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [requestFieldValues, setRequestFieldValues] = useState<Record<string, string>>({});
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -547,7 +529,6 @@ export default function PortalClientePage() {
     setClientProfile(null);
     setRequests([]);
     setDocuments([]);
-    setPublishedForms([]);
     setPortalTasks([]);
     setCashflowEntries([]);
     setMessages([]);
@@ -601,7 +582,7 @@ export default function PortalClientePage() {
       return;
     }
 
-    const [clientRes, requestRes, docRes, formsRes] = await Promise.all([
+    const [clientRes, requestRes, docRes] = await Promise.all([
       supabase
         .from("clients")
         .select("id, name, contact, email, portal_user_id, portal_cashflow_enabled")
@@ -619,11 +600,6 @@ export default function PortalClientePage() {
         .select("id, user_id, request_id, file_name, file_path, file_size, category, created_at, processed_at, processed_by")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("form_templates")
-        .select("id, title, description, sector, fields")
-        .eq("is_published", true)
-        .order("updated_at", { ascending: false }),
     ]);
 
     if (clientRes.error) {
@@ -647,18 +623,9 @@ export default function PortalClientePage() {
 
     if (requestRes.error) toast.error("Erro ao carregar solicitações.");
     if (docRes.error) toast.error("Erro ao carregar documentos.");
-    if (formsRes.error) toast.error("Erro ao carregar formulários publicados.");
-
     const client = (clientRes.data || null) as PortalClientProfile | null;
     const fetchedRequests = (requestRes.data || []) as PortalClientRequest[];
     const fetchedDocuments = (docRes.data || []) as PortalClientDocument[];
-    const fetchedForms: PortalFormTemplate[] = (formsRes.data || []).map((form) => ({
-      id: form.id,
-      title: form.title,
-      description: form.description,
-      sector: form.sector,
-      fields: parsePortalFields(form.fields),
-    }));
 
     let fetchedTasks: PortalClientTask[] = [];
     if (client?.id) {
@@ -722,7 +689,6 @@ export default function PortalClientePage() {
     setClientProfile(client);
     setRequests(fetchedRequests);
     setDocuments(fetchedDocuments);
-    setPublishedForms(fetchedForms);
     setPortalTasks(fetchedTasks);
     setCashflowEntries(fetchedCashflowEntries);
     setMessages(fetchedMessages);
@@ -900,15 +866,7 @@ export default function PortalClientePage() {
     [availableReasons, newRequestReasonKey]
   );
 
-  const autoMatchedTemplate = useMemo(
-    () => findTemplateForReason(selectedRequestReason, publishedForms),
-    [publishedForms, selectedRequestReason]
-  );
-
-  const activeFormTemplate = selectedFormTemplate || autoMatchedTemplate;
-  const activeStructuredFields = activeFormTemplate?.fields.length
-    ? activeFormTemplate.fields
-    : selectedRequestReason?.fields || [];
+  const activeStructuredFields = selectedRequestReason?.fields || [];
 
   useEffect(() => {
     if (!availableReasons.some((reason) => reason.key === newRequestReasonKey)) {
@@ -922,8 +880,7 @@ export default function PortalClientePage() {
     setNewRequestTitle("");
     setNewRequestDescription("");
     setNewRequestFiles([]);
-    setSelectedFormTemplate(null);
-    setFormValues({});
+    setRequestFieldValues({});
     if (requestFilesInputRef.current) requestFilesInputRef.current.value = "";
   };
 
@@ -944,8 +901,7 @@ export default function PortalClientePage() {
     mode: PortalRequestEntryMode = "freeform",
   ) => {
     openRequestsHub(mode);
-    setSelectedFormTemplate(null);
-    setFormValues({});
+    setRequestFieldValues({});
 
     const nextSector =
       preset?.sector && sectorOptions.includes(preset.sector) ? preset.sector : newRequestSector || DEFAULT_REQUEST_SECTOR;
@@ -962,16 +918,14 @@ export default function PortalClientePage() {
   };
 
   const handleRequestSectorChange = (value: string) => {
-    setSelectedFormTemplate(null);
-    setFormValues({});
+    setRequestFieldValues({});
     setNewRequestSector(value);
     setNewRequestReasonKey(getDefaultReasonKey(value));
   };
 
   const handleRequestReasonChange = (value: string) => {
     const reason = availableReasons.find((item) => item.key === value);
-    setSelectedFormTemplate(null);
-    setFormValues({});
+    setRequestFieldValues({});
     setNewRequestReasonKey(value);
     if (reason && !newRequestTitle.trim()) {
       setNewRequestTitle(reason.defaultTitle);
@@ -1021,7 +975,7 @@ export default function PortalClientePage() {
   const buildStructuredLines = (fields: PortalGuidedField[]) =>
     fields
       .map((field) => {
-        const value = formValues[field.name]?.trim();
+        const value = requestFieldValues[field.name]?.trim();
         if (!value) return null;
         return `${field.label}: ${value}`;
       })
@@ -1054,7 +1008,7 @@ export default function PortalClientePage() {
       toast.error("Selecione o setor responsavel.");
       return;
     }
-    if (!selectedRequestReason && !selectedFormTemplate) {
+    if (!selectedRequestReason) {
       toast.error("Selecione o motivo da solicitacao.");
       return;
     }
@@ -1063,7 +1017,7 @@ export default function PortalClientePage() {
       return;
     }
 
-    const missingRequired = activeStructuredFields.find((field) => field.required && !formValues[field.name]?.trim());
+    const missingRequired = activeStructuredFields.find((field) => field.required && !requestFieldValues[field.name]?.trim());
     if (missingRequired) {
       toast.error(`Preencha o campo obrigatorio: ${missingRequired.label}`);
       return;
@@ -1076,7 +1030,7 @@ export default function PortalClientePage() {
         user_id: user.id,
         title: newRequestTitle.trim(),
         description: buildRequestDescription(),
-        category: selectedRequestReason?.label || activeFormTemplate?.title || "Solicitacao",
+        category: selectedRequestReason?.label || "Solicitacao",
         sector: newRequestSector,
       })
       .select("id")
@@ -1088,27 +1042,10 @@ export default function PortalClientePage() {
       return;
     }
 
-    if (activeFormTemplate) {
-      const { error: submissionError } = await supabase.from("form_submissions").insert({
-        template_id: activeFormTemplate.id,
-        template_title: activeFormTemplate.title,
-        submitted_by: user.id,
-        submitted_by_name: clientProfile?.contact || clientProfile?.name || user.email || null,
-        data: formValues,
-        status: "pending",
-        client_id: clientProfile?.id || null,
-        request_id: createdRequest.id,
-      });
-
-      if (submissionError) {
-        toast.error("A solicitacao foi criada, mas houve falha ao registrar o formulario estruturado.");
-      }
-    }
-
     const uploadResult = await uploadFilesToRequest(
       createdRequest.id,
       newRequestFiles,
-      `Solicitacao - ${selectedRequestReason?.label || activeFormTemplate?.title || "Geral"}`
+      `Solicitacao - ${selectedRequestReason?.label || "Geral"}`
     );
 
     setCreatingRequest(false);
@@ -1216,17 +1153,8 @@ export default function PortalClientePage() {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
-  const openFormTemplate = (template: PortalFormTemplate) => {
-    openRequestsHub("forms");
-    setNewRequestSector(template.sector);
-    setNewRequestReasonKey(getDefaultReasonKey(template.sector));
-    setNewRequestTitle(template.title);
-    setSelectedFormTemplate(template);
-    setFormValues({});
-  };
-
-  const handleFormValueChange = (fieldName: string, value: string) => {
-    setFormValues((prev) => ({ ...prev, [fieldName]: value }));
+  const handleRequestFieldValueChange = (fieldName: string, value: string) => {
+    setRequestFieldValues((prev) => ({ ...prev, [fieldName]: value }));
   };
 
   const handleCreateCashflowEntry = async (payload: NewPortalCashflowEntryPayload) => {
@@ -1465,7 +1393,6 @@ export default function PortalClientePage() {
               recentUpdates={recentUpdates}
               onNewRequest={() => openRequestsHub("freeform")}
               onUploadDocument={() => setUploadDialogOpen(true)}
-              onOpenForms={() => openRequestsHub("forms")}
               onOpenSupport={() => openRequestsHub("support")}
             />
           </TabsContent>
@@ -1475,26 +1402,40 @@ export default function PortalClientePage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Central de solicitações</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Todo pedido do portal entra por aqui. Escolha o setor, informe o motivo e o formulario se ajusta ao tipo de demanda.
+                  Todo pedido do portal entra por aqui. Escolha o setor, informe o motivo e preencha apenas o que for necessario.
                 </p>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_320px]">
-                  <div ref={requestComposerRef} className="rounded-2xl border bg-background p-4 sm:p-5 space-y-5">
+                <div className="mx-auto max-w-5xl space-y-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border bg-muted/15 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">1. Escolha</p>
+                      <p className="mt-1 text-sm font-medium">Setor e motivo</p>
+                      <p className="mt-1 text-xs text-muted-foreground">O sistema filtra a solicitacao certa antes do preenchimento.</p>
+                    </div>
+                    <div className="rounded-xl border bg-muted/15 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">2. Preencha</p>
+                      <p className="mt-1 text-sm font-medium">Campos sob demanda</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Aparecem apenas os campos que fazem sentido para esse pedido.</p>
+                    </div>
+                    <div className="rounded-xl border bg-muted/15 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">3. Envie</p>
+                      <p className="mt-1 text-sm font-medium">Historico centralizado</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Acompanhe tudo no mesmo historico logo abaixo.</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border bg-background p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-semibold">Abrir nova solicitacao</h3>
                           <Badge variant="secondary">
-                            {requestEntryMode === "support"
-                              ? "atendimento por setor"
-                              : requestEntryMode === "forms"
-                                ? "formulario estruturado"
-                                : "fluxo guiado"}
+                            {requestEntryMode === "support" ? "atendimento por setor" : "fluxo guiado"}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          O motivo define o contexto e, quando existir formulario pronto, os campos estruturados entram automaticamente.
+                          Comece pelos atalhos ou selecione o setor manualmente. O restante do fluxo se organiza sozinho.
                         </p>
                       </div>
                       <Button type="button" variant="ghost" size="sm" onClick={resetNewRequestForm}>
@@ -1502,265 +1443,198 @@ export default function PortalClientePage() {
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Setor</label>
-                        <Select value={newRequestSector} onValueChange={handleRequestSectorChange}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o setor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {sectorOptions.map((sector) => (
-                              <SelectItem key={sector} value={sector}>
-                                {sector}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Motivo da solicitacao</label>
-                        <Select value={selectedRequestReason?.key || ""} onValueChange={handleRequestReasonChange}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o motivo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableReasons.map((reason) => (
-                              <SelectItem key={reason.key} value={reason.key}>
-                                {reason.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {selectedRequestReason ? (
-                      <div className="rounded-xl border bg-muted/25 p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium">{selectedRequestReason.label}</p>
-                          {activeFormTemplate ? (
-                            <Badge variant="outline">
-                              {selectedFormTemplate ? "Formulario selecionado" : "Formulario aplicado automaticamente"}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{selectedRequestReason.description}</p>
-                        {activeFormTemplate ? (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            Estrutura atual: {activeFormTemplate.title}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Assunto</label>
-                      <Input
-                        value={newRequestTitle}
-                        onChange={(event) => setNewRequestTitle(event.target.value)}
-                        placeholder={selectedRequestReason?.defaultTitle || "Ex.: Revisao da folha do mes"}
-                      />
-                    </div>
-
-                    {activeStructuredFields.length > 0 ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium">Campos da solicitacao</p>
-                            <p className="text-xs text-muted-foreground">
-                              Preencha os dados principais para a equipe receber o pedido de forma objetiva.
-                            </p>
-                          </div>
-                          {selectedFormTemplate ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedFormTemplate(null);
-                                setFormValues({});
-                              }}
-                            >
-                              Voltar ao fluxo guiado
-                            </Button>
-                          ) : null}
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          {activeStructuredFields.map((field) => (
-                            <div
-                              key={field.name}
-                              className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
-                            >
-                              <label className="text-sm font-medium">
-                                {field.label}
-                                {field.required ? <span className="ml-1 text-destructive">*</span> : null}
-                              </label>
-                              {field.type === "select" ? (
-                                <Select value={formValues[field.name] || ""} onValueChange={(value) => handleFormValueChange(field.name, value)}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Selecione..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {(field.options || []).map((option) => (
-                                      <SelectItem key={option} value={option}>
-                                        {option}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : field.type === "textarea" ? (
-                                <Textarea
-                                  rows={4}
-                                  value={formValues[field.name] || ""}
-                                  onChange={(event) => handleFormValueChange(field.name, event.target.value)}
-                                  placeholder={field.placeholder}
-                                />
-                              ) : (
-                                <Input
-                                  type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
-                                  value={formValues[field.name] || ""}
-                                  onChange={(event) => handleFormValueChange(field.name, event.target.value)}
-                                  placeholder={field.placeholder}
-                                />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Contexto adicional</label>
-                      <Textarea
-                        rows={5}
-                        value={newRequestDescription}
-                        onChange={(event) => setNewRequestDescription(event.target.value)}
-                        placeholder="Adicione prazo, urgencia, observacoes ou qualquer detalhe que ajude a equipe."
-                      />
-                    </div>
-
-                    <div className="space-y-2 rounded-xl border bg-card p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-medium">Arquivos no mesmo envio</p>
-                          <p className="text-xs text-muted-foreground">
-                            Anexe documentos que ajudem a equipe a tratar a solicitacao sem retrabalho.
-                          </p>
-                        </div>
-                        <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
-                          <Paperclip className="mr-1 h-4 w-4" /> Anexar arquivos
-                        </Button>
-                      </div>
-                      <input
-                        ref={requestFilesInputRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={handleRequestFileSelection}
-                      />
-                      {newRequestFiles.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">Nenhum arquivo selecionado.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {newRequestFiles.map((file, index) => (
-                            <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border px-3 py-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm">{file.name}</p>
-                                <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
-                              </div>
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeRequestFile(index)}>
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                      <p className="text-xs text-muted-foreground">
-                        A solicitacao entra no mesmo fluxo do portal e fica visivel no historico logo abaixo.
-                      </p>
-                      <Button type="button" className="gap-2" onClick={() => void handleCreateRequest()} disabled={creatingRequest}>
-                        {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        Enviar solicitacao
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border bg-background p-4">
-                      <p className="text-sm font-medium">Atalhos rapidos</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Entradas prontas para os pedidos mais recorrentes do portal.
-                      </p>
-                      <div className="mt-4 grid grid-cols-1 gap-2">
-                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "admissao", title: "Admissao de colaborador" }, "forms")}>
+                    <div className="mt-4 rounded-xl border bg-muted/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Atalhos frequentes</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "admissao", title: "Admissao de colaborador" }, "support")}>
                           Admissao
                         </Button>
-                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "demissao", title: "Demissao de colaborador" }, "forms")}>
+                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "demissao", title: "Demissao de colaborador" }, "support")}>
                           Demissao
                         </Button>
-                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "folha_pagamento", title: "Folha de pagamento" }, "support")}>
+                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "folha_pagamento", title: "Folha de pagamento" }, "support")}>
                           Folha de pagamento
                         </Button>
-                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Geral", reasonKey: "acesso_portal", title: "Suporte de acesso ao portal" }, "support")}>
+                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Geral", reasonKey: "acesso_portal", title: "Suporte de acesso ao portal" }, "support")}>
                           Acesso ao portal
                         </Button>
-                        <Button type="button" variant="outline" className="justify-start bg-card" onClick={() => prepareInlineRequest({ sector: "Financeiro", reasonKey: "controle_caixa", title: "Controle de caixa no portal" }, "support")}>
+                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Financeiro", reasonKey: "controle_caixa", title: "Controle de caixa no portal" }, "support")}>
                           Controle de caixa
                         </Button>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border bg-background p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium">Formularios publicados</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Se a equipe publicou um formulario especifico, voce pode carregá-lo aqui no mesmo fluxo.
-                          </p>
+                    <div ref={requestComposerRef} className="mt-5 space-y-5">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">Setor</label>
+                          <Select value={newRequestSector} onValueChange={handleRequestSectorChange}>
+                            <SelectTrigger className="bg-background">
+                              <SelectValue placeholder="Selecione o setor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sectorOptions.map((sector) => (
+                                <SelectItem key={sector} value={sector}>
+                                  {sector}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <Badge variant="outline">{publishedForms.length}</Badge>
+
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">Motivo da solicitacao</label>
+                          <Select value={selectedRequestReason?.key || ""} onValueChange={handleRequestReasonChange}>
+                            <SelectTrigger className="bg-background">
+                              <SelectValue placeholder="Selecione o motivo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableReasons.map((reason) => (
+                                <SelectItem key={reason.key} value={reason.key}>
+                                  {reason.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
-                      {publishedForms.length === 0 ? (
-                        <div className="mt-4 rounded-xl border border-dashed bg-card/40 p-4 text-center">
-                          <FileText className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
-                          <p className="text-sm font-medium">Nenhum formulario publicado agora.</p>
+                      {selectedRequestReason ? (
+                        <div className="rounded-xl border bg-background p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium">{selectedRequestReason.label}</p>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">{selectedRequestReason.description}</p>
                         </div>
-                      ) : (
-                        <div className="mt-4 space-y-2">
-                          {publishedForms.slice(0, 5).map((template) => (
-                            <button
-                              key={template.id}
-                              type="button"
-                              className="w-full rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted/30"
-                              onClick={() => openFormTemplate(template)}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-medium">{template.title}</p>
-                                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                    {template.description || "Sem descricao"}
-                                  </p>
-                                </div>
-                                <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                              </div>
-                            </button>
-                          ))}
-                          {publishedForms.length > 5 ? (
-                            <p className="pt-1 text-xs text-muted-foreground">
-                              Existem mais formularios publicados. Os principais atalhos aparecem primeiro.
+                      ) : null}
+
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Assunto</label>
+                        <Input
+                          value={newRequestTitle}
+                          onChange={(event) => setNewRequestTitle(event.target.value)}
+                          placeholder={selectedRequestReason?.defaultTitle || "Ex.: Revisao da folha do mes"}
+                        />
+                      </div>
+
+                      {activeStructuredFields.length > 0 ? (
+                        <div className="rounded-xl border bg-muted/15 p-4 space-y-3">
+                          <div>
+                            <p className="text-sm font-medium">Campos da solicitacao</p>
+                            <p className="text-xs text-muted-foreground">
+                              Preencha apenas o essencial para a equipe receber o pedido com contexto suficiente.
                             </p>
-                          ) : null}
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            {activeStructuredFields.map((field) => (
+                              <div
+                                key={field.name}
+                                className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
+                              >
+                                <label className="text-sm font-medium">
+                                  {field.label}
+                                  {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                                </label>
+                                {field.type === "select" ? (
+                                  <Select value={requestFieldValues[field.name] || ""} onValueChange={(value) => handleRequestFieldValueChange(field.name, value)}>
+                                    <SelectTrigger className="bg-background">
+                                      <SelectValue placeholder="Selecione..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {(field.options || []).map((option) => (
+                                        <SelectItem key={option} value={option}>
+                                          {option}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : field.type === "textarea" ? (
+                                  <Textarea
+                                    rows={4}
+                                    value={requestFieldValues[field.name] || ""}
+                                    onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
+                                    placeholder={field.placeholder}
+                                  />
+                                ) : (
+                                  <Input
+                                    type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
+                                    value={requestFieldValues[field.name] || ""}
+                                    onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
+                                    placeholder={field.placeholder}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      )}
+                      ) : null}
+
+                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">Contexto adicional</label>
+                          <Textarea
+                            rows={6}
+                            value={newRequestDescription}
+                            onChange={(event) => setNewRequestDescription(event.target.value)}
+                            placeholder="Descreva prazo, urgencia, observacoes ou qualquer detalhe que ajude a equipe."
+                          />
+                        </div>
+
+                        <div className="space-y-2 rounded-xl border bg-card p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium">Arquivos</p>
+                              <p className="text-xs text-muted-foreground">
+                                Anexe apenas o que for relevante para agilizar o retorno.
+                              </p>
+                            </div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
+                              <Paperclip className="mr-1 h-4 w-4" /> Anexar
+                            </Button>
+                          </div>
+                          <input
+                            ref={requestFilesInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={handleRequestFileSelection}
+                          />
+                          {newRequestFiles.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Nenhum arquivo selecionado.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {newRequestFiles.map((file, index) => (
+                                <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm">{file.name}</p>
+                                    <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                                  </div>
+                                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeRequestFile(index)}>
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Pronto para enviar</p>
+                          <p className="text-xs text-muted-foreground">
+                            A solicitacao entra no mesmo fluxo do portal e fica visivel no historico logo abaixo.
+                          </p>
+                        </div>
+                        <Button type="button" className="gap-2" onClick={() => void handleCreateRequest()} disabled={creatingRequest}>
+                          {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                          Enviar solicitacao
+                        </Button>
+                      </div>
                     </div>
                   </div>
+
                 </div>
               </CardContent>
             </Card>
@@ -1980,13 +1854,13 @@ export default function PortalClientePage() {
                 <div className="rounded-lg border bg-card p-4 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium">3. Preencha formulários quando solicitado</p>
+                      <p className="font-medium">3. Escolha o motivo certo</p>
                       <p className="text-sm text-muted-foreground">
-                        Quando existir formulario publicado para o motivo escolhido, ele aparece dentro do mesmo fluxo.
+                        O setor e o motivo definem automaticamente os campos necessarios para cada tipo de pedido.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("forms")}>
-                      Ir para central de solicitações
+                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("support")}>
+                      Ir para solicitações
                     </Button>
                   </div>
                 </div>

@@ -12,7 +12,6 @@ interface ClientPortalOverviewProps {
   recentUpdates: PortalActionItem[];
   onNewRequest: () => void;
   onUploadDocument: () => void;
-  onOpenForms: () => void;
   onOpenSupport: () => void;
 }
 
@@ -24,7 +23,6 @@ export function ClientPortalOverview({
   recentUpdates,
   onNewRequest,
   onUploadDocument,
-  onOpenForms,
   onOpenSupport,
 }: ClientPortalOverviewProps) {
   return (
@@ -47,7 +45,6 @@ export function ClientPortalOverview({
           <ClientPortalQuickActions
             onNewRequest={onNewRequest}
             onUploadDocument={onUploadDocument}
-            onOpenForms={onOpenForms}
             onOpenSupport={onOpenSupport}
           />
         </CardContent>

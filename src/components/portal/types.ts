@@ -90,23 +90,6 @@ export interface NewPortalCashflowEntryPayload {
   status: PortalCashflowEntryStatus;
 }
 
-export interface PortalFormField {
-  name: string;
-  label: string;
-  type: "text" | "email" | "date" | "select" | "textarea";
-  required?: boolean;
-  options?: string[];
-  placeholder?: string;
-}
-
-export interface PortalFormTemplate {
-  id: string;
-  title: string;
-  description: string | null;
-  sector: string;
-  fields: PortalFormField[];
-}
-
 export interface RequestStatusMeta {
   label: string;
   icon: LucideIcon;
@@ -238,26 +221,4 @@ export const cashflowCategoriesByType: Record<PortalCashflowEntryType, string[]>
     "Pro-labore",
     "Outras saidas",
   ],
-};
-
-export const parsePortalFields = (value: unknown): PortalFormField[] => {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const raw = item as Record<string, unknown>;
-      const type = String(raw.type || "text");
-      if (!["text", "email", "date", "select", "textarea"].includes(type)) return null;
-
-      return {
-        name: String(raw.name || ""),
-        label: String(raw.label || ""),
-        type: type as PortalFormField["type"],
-        required: Boolean(raw.required),
-        options: Array.isArray(raw.options) ? raw.options.map((option) => String(option)) : [],
-        placeholder: raw.placeholder ? String(raw.placeholder) : "",
-      };
-    })
-    .filter((field): field is PortalFormField => Boolean(field));
 };
