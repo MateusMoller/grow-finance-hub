@@ -1229,61 +1229,6 @@ export default function PortalClientePage() {
     setFormValues((prev) => ({ ...prev, [fieldName]: value }));
   };
 
-  const handleSubmitPortalForm = async () => {
-    if (!user || !selectedFormTemplate) return;
-
-    const missingRequired = selectedFormTemplate.fields.find(
-      (field) => field.required && !formValues[field.name]?.trim()
-    );
-    if (missingRequired) {
-      toast.error(`Preencha o campo obrigatório: ${missingRequired.label}`);
-      return;
-    }
-
-    setSubmittingForm(true);
-    const { data: createdRequest, error: requestError } = await supabase
-      .from("client_requests")
-      .insert({
-        user_id: user.id,
-        title: newRequestTitle.trim() || `Formulario: ${selectedFormTemplate.title}`,
-        description: buildRequestDescription(),
-        category: "Formulário",
-        sector: selectedFormTemplate.sector,
-      })
-      .select("id")
-      .single();
-
-    if (requestError || !createdRequest) {
-      setSubmittingForm(false);
-      toast.error("Erro ao enviar formulário.");
-      return;
-    }
-
-    const { error: submissionError } = await supabase.from("form_submissions").insert({
-      template_id: selectedFormTemplate.id,
-      template_title: selectedFormTemplate.title,
-      submitted_by: user.id,
-      submitted_by_name: clientProfile?.contact || clientProfile?.name || user.email || null,
-      data: formValues,
-      status: "pending",
-      client_id: clientProfile?.id || null,
-      request_id: createdRequest.id,
-    });
-
-    setSubmittingForm(false);
-    if (submissionError) {
-      toast.error("Formulário enviado, mas houve falha ao registrar os dados estruturados.");
-    } else {
-      toast.success("Formulário enviado com sucesso para o setor responsável.");
-    }
-
-    setSelectedFormTemplate(null);
-    setFormValues({});
-    setActiveTab("requests");
-    setRequestEntryMode("forms");
-    await fetchPortalData();
-  };
-
   const handleCreateCashflowEntry = async (payload: NewPortalCashflowEntryPayload) => {
     if (!user || !clientProfile?.id) {
       toast.error("Cliente não vinculado ao portal para registrar lançamentos.");

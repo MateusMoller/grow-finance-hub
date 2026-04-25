@@ -3,20 +3,22 @@ import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 export function GrowHeroArtwork({ className = "" }: { className?: string }) {
   const pointerX = useMotionValue(0);
   const pointerY = useMotionValue(0);
-  const smoothPointerX = useSpring(pointerX, { stiffness: 120, damping: 22, mass: 0.7 });
-  const smoothPointerY = useSpring(pointerY, { stiffness: 120, damping: 22, mass: 0.7 });
-  const sculptureX = useTransform(smoothPointerX, [-40, 40], [-18, 18]);
-  const sculptureY = useTransform(smoothPointerY, [-40, 40], [-14, 14]);
-  const haloX = useTransform(smoothPointerX, [-40, 40], [-28, 28]);
-  const haloY = useTransform(smoothPointerY, [-40, 40], [-18, 18]);
-  const illustrationRotate = useTransform(smoothPointerX, [-40, 40], [-8, 8]);
-  const ribbonShift = useTransform(smoothPointerX, [-40, 40], [-12, 12]);
-  const ribbonLift = useTransform(smoothPointerY, [-40, 40], [-10, 10]);
+  const smoothPointerX = useSpring(pointerX, { stiffness: 110, damping: 24, mass: 0.7 });
+  const smoothPointerY = useSpring(pointerY, { stiffness: 110, damping: 24, mass: 0.74 });
+
+  const haloX = useTransform(smoothPointerX, [-46, 46], [-26, 26]);
+  const haloY = useTransform(smoothPointerY, [-46, 46], [-18, 18]);
+  const sculptureX = useTransform(smoothPointerX, [-46, 46], [-20, 20]);
+  const sculptureY = useTransform(smoothPointerY, [-46, 46], [-16, 16]);
+  const sculptureRotate = useTransform(smoothPointerX, [-46, 46], [-7, 7]);
+  const ribbonShift = useTransform(smoothPointerX, [-46, 46], [-14, 14]);
+  const ribbonLift = useTransform(smoothPointerY, [-46, 46], [-10, 10]);
+  const grainShift = useTransform(smoothPointerX, [-46, 46], [-10, 10]);
 
   const handleIllustrationMove = (event: React.MouseEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
-    const offsetX = ((event.clientX - bounds.left) / bounds.width - 0.5) * 80;
-    const offsetY = ((event.clientY - bounds.top) / bounds.height - 0.5) * 80;
+    const offsetX = ((event.clientX - bounds.left) / bounds.width - 0.5) * 92;
+    const offsetY = ((event.clientY - bounds.top) / bounds.height - 0.5) * 92;
 
     pointerX.set(offsetX);
     pointerY.set(offsetY);
@@ -31,124 +33,188 @@ export function GrowHeroArtwork({ className = "" }: { className?: string }) {
     <motion.div
       onMouseMove={handleIllustrationMove}
       onMouseLeave={handleIllustrationLeave}
-      className={`relative min-h-[460px] overflow-hidden rounded-[38px] px-2 py-3 ${className}`.trim()}
+      className={`relative min-h-[460px] overflow-hidden rounded-[40px] px-2 py-3 ${className}`.trim()}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(82,98,140,0.18),transparent_26%),radial-gradient(circle_at_76%_24%,rgba(82,98,140,0.12),transparent_22%),radial-gradient(circle_at_52%_58%,rgba(82,98,140,0.12),transparent_34%)]" />
-      <div className="pointer-events-none absolute left-5 top-4 text-[88px] font-black leading-none tracking-[-0.08em] text-primary/7 dark:text-white/5 md:text-[118px]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_16%,rgba(83,96,145,0.16),transparent_24%),radial-gradient(circle_at_72%_20%,rgba(97,108,170,0.10),transparent_18%),radial-gradient(circle_at_46%_62%,rgba(82,98,140,0.16),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(246,247,252,0.96)_100%)]" />
+      <motion.div
+        style={{ x: grainShift }}
+        className="pointer-events-none absolute inset-0 opacity-50 [background-image:linear-gradient(to_right,rgba(52,60,95,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(52,60,95,0.03)_1px,transparent_1px)] [background-size:80px_80px] [mask-image:linear-gradient(180deg,black_0%,black_68%,transparent_100%)]"
+      />
+
+      <div className="pointer-events-none absolute inset-[7%_8%_12%_8%] rounded-[44px] border border-white/45 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_40px_120px_-80px_rgba(37,47,81,0.45)]" />
+      <div className="pointer-events-none absolute inset-[9%_10%_16%_10%] rounded-[40px] bg-[linear-gradient(135deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0.02)_36%,rgba(255,255,255,0)_100%)]" />
+
+      <motion.div
+        style={{ x: haloX, y: haloY }}
+        className="pointer-events-none absolute left-[36%] top-[42%] h-[320px] w-[320px] rounded-full bg-primary/12 blur-3xl"
+      />
+
+      <div className="pointer-events-none absolute left-[9%] top-[8%] text-[90px] font-black leading-none tracking-[-0.09em] text-foreground/90 md:text-[126px]">
         GROW
       </div>
-      <div className="pointer-events-none absolute bottom-1 right-2 text-[64px] font-black leading-none tracking-[-0.06em] text-primary/7 dark:text-white/5 md:text-[88px]">
+      <div className="pointer-events-none absolute bottom-[10%] right-[7%] text-[66px] font-black leading-none tracking-[-0.065em] text-foreground/90 md:text-[92px]">
         Finance
       </div>
 
       <motion.div
-        style={{ x: haloX, y: haloY }}
-        className="pointer-events-none absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/12 blur-3xl"
-      />
-
-      <motion.div style={{ x: sculptureX, y: sculptureY, rotate: illustrationRotate }} className="absolute inset-0">
-        <motion.div
-          animate={{ rotate: [-14, -8, -14], scale: [1, 1.04, 1] }}
-          transition={{ duration: 8.5, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute bottom-[4%] left-[10%] h-[280px] w-[190px] rounded-[44%_56%_52%_48%/40%_38%_62%_60%] border border-primary/18 bg-gradient-to-br from-primary/16 via-background/20 to-transparent shadow-[0_28px_70px_-36px_rgba(37,47,81,0.35)] backdrop-blur-[6px]"
-        />
-        <motion.div
-          animate={{ rotate: [22, 16, 22], scaleY: [1, 1.08, 1] }}
-          transition={{ duration: 7.8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-[34%] top-[20%] h-[245px] w-[160px] border border-primary/22 bg-gradient-to-b from-primary/20 via-background/10 to-transparent [clip-path:polygon(50%_0%,100%_34%,78%_100%,14%_84%,0%_28%)]"
-        />
-        <motion.div
-          animate={{ rotate: [-28, -18, -28], scale: [1, 1.05, 1] }}
-          transition={{ duration: 6.9, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-[49%] top-[44%] h-[150px] w-[122px] rounded-[42%_58%_60%_40%/46%_36%_64%_54%] bg-primary/20 blur-[2px]"
-        />
-        <motion.div
-          animate={{ y: [0, -18, 0], x: [0, 10, 0] }}
-          transition={{ duration: 5.6, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-[12%] top-[68%] h-24 w-24 rounded-full border border-primary/20 bg-gradient-to-br from-background/60 to-primary/10 backdrop-blur"
-        />
-        <motion.div
-          animate={{ y: [0, 14, 0], x: [0, -8, 0] }}
-          transition={{ duration: 6.1, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-          className="absolute bottom-[14%] right-[10%] h-16 w-16 rounded-full bg-primary/18 blur-sm"
-        />
-      </motion.div>
-
-      <motion.svg style={{ x: ribbonShift, y: ribbonLift }} viewBox="0 0 420 420" className="pointer-events-none absolute inset-0 h-full w-full">
-        <motion.path
-          d="M28 156 C 88 94, 170 86, 256 132 S 382 186, 392 108"
-          stroke="hsl(var(--primary) / 0.42)"
-          strokeWidth="1.5"
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray="5 10"
-          animate={{ pathLength: [0.82, 1, 0.82], opacity: [0.35, 0.9, 0.35] }}
-          transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.path
-          d="M54 300 C 144 250, 202 212, 254 240 S 350 310, 396 250"
-          stroke="hsl(var(--primary) / 0.28)"
-          strokeWidth="1.5"
-          fill="none"
-          strokeLinecap="round"
-          animate={{ pathLength: [0.7, 1, 0.7], opacity: [0.18, 0.65, 0.18] }}
-          transition={{ duration: 6.4, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
-        />
-        <motion.path
-          d="M108 58 C 188 118, 246 184, 206 338"
-          stroke="hsl(var(--foreground) / 0.12)"
-          strokeWidth="1"
-          fill="none"
-          strokeLinecap="round"
-          animate={{ opacity: [0.16, 0.4, 0.16] }}
-          transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.circle
-          cx="392"
-          cy="108"
-          r="6"
-          fill="hsl(var(--primary))"
-          animate={{ cx: [392, 368, 392], cy: [108, 126, 108] }}
-          transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.circle
-          cx="54"
-          cy="300"
-          r="5"
-          fill="hsl(var(--primary) / 0.7)"
-          animate={{ cx: [54, 72, 54], cy: [300, 286, 300] }}
-          transition={{ duration: 4.9, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
-        />
-      </motion.svg>
-
-      <motion.div
-        animate={{ x: [0, 8, 0], opacity: [0.5, 0.9, 0.5] }}
-        transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
-        className="pointer-events-none absolute left-10 top-10 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/70"
+        animate={{ x: [0, 8, 0], opacity: [0.36, 0.76, 0.36] }}
+        transition={{ duration: 6.2, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute left-[12%] top-[10%] text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/60"
       >
         fluxo
       </motion.div>
       <motion.div
-        animate={{ x: [0, -10, 0], opacity: [0.4, 0.82, 0.4] }}
-        transition={{ duration: 6.1, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
-        className="pointer-events-none absolute right-10 top-24 text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground"
+        animate={{ x: [0, -9, 0], opacity: [0.34, 0.78, 0.34] }}
+        transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut", delay: 0.35 }}
+        className="pointer-events-none absolute right-[13%] top-[16%] text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground"
       >
         clareza
       </motion.div>
       <motion.div
-        animate={{ x: [0, 12, 0], opacity: [0.4, 0.78, 0.4] }}
-        transition={{ duration: 5.7, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
-        className="pointer-events-none absolute bottom-20 left-12 text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground"
+        animate={{ x: [0, 9, 0], opacity: [0.34, 0.72, 0.34] }}
+        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
+        className="pointer-events-none absolute bottom-[18%] left-[13%] text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground"
       >
-        presença
+        presenca
       </motion.div>
       <motion.div
-        animate={{ x: [0, -8, 0], opacity: [0.45, 0.8, 0.45] }}
-        transition={{ duration: 6.3, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        className="pointer-events-none absolute bottom-14 right-10 text-[11px] font-semibold uppercase tracking-[0.28em] text-primary/70"
+        animate={{ x: [0, -7, 0], opacity: [0.38, 0.8, 0.38] }}
+        transition={{ duration: 5.9, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+        className="pointer-events-none absolute bottom-[14%] right-[15%] text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/62"
       >
-        decisão
+        decisao
       </motion.div>
+
+      <motion.div style={{ x: sculptureX, y: sculptureY, rotate: sculptureRotate }} className="absolute inset-0">
+        <motion.div
+          animate={{ rotate: [-12, -7, -12], scale: [1, 1.04, 1] }}
+          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute bottom-[16%] left-[14%] h-[270px] w-[165px] rounded-[42%_58%_54%_46%/36%_34%_66%_64%] border border-primary/16 bg-gradient-to-br from-white/72 via-primary/6 to-transparent shadow-[0_34px_78px_-44px_rgba(37,47,81,0.36)] backdrop-blur-[7px]"
+        />
+        <motion.div
+          animate={{ rotate: [18, 12, 18], scaleY: [1, 1.08, 1] }}
+          transition={{ duration: 8.3, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[38%] top-[22%] h-[208px] w-[126px] border border-primary/12 bg-gradient-to-b from-primary/16 via-white/10 to-transparent [clip-path:polygon(46%_0%,100%_32%,76%_100%,14%_82%,0%_30%)]"
+        />
+        <motion.div
+          animate={{ rotate: [-24, -18, -24], scale: [1, 1.04, 1] }}
+          transition={{ duration: 7.1, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[49%] top-[46%] h-[138px] w-[116px] rounded-[42%_58%_60%_40%/48%_38%_62%_52%] bg-primary/22 blur-[1.4px]"
+        />
+        <motion.div
+          animate={{ y: [0, -12, 0], x: [0, 8, 0] }}
+          transition={{ duration: 6.2, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[18%] top-[60%] h-[94px] w-[94px] rounded-full border border-primary/16 bg-gradient-to-br from-white/72 to-primary/8 backdrop-blur"
+        />
+        <motion.div
+          animate={{ y: [0, 14, 0], x: [0, -8, 0] }}
+          transition={{ duration: 5.7, repeat: Infinity, ease: "easeInOut", delay: 0.45 }}
+          className="absolute bottom-[20%] right-[16%] h-[58px] w-[58px] rounded-full bg-primary/16 blur-sm"
+        />
+        <motion.div
+          animate={{ opacity: [0.08, 0.2, 0.08], rotate: [0, 6, 0] }}
+          transition={{ duration: 7.4, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[12%] top-[14%] h-[210px] w-[210px] rounded-[36px] border border-primary/10"
+        />
+      </motion.div>
+
+      <motion.svg
+        style={{ x: ribbonShift, y: ribbonLift }}
+        viewBox="0 0 420 420"
+        className="pointer-events-none absolute inset-0 h-full w-full"
+      >
+        <motion.path
+          d="M30 158 C 94 92, 176 86, 260 128 S 382 186, 392 106"
+          stroke="hsl(var(--primary) / 0.34)"
+          strokeWidth="1.7"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ pathLength: [0.82, 1, 0.82], opacity: [0.36, 0.92, 0.36] }}
+          transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.path
+          d="M58 302 C 138 246, 202 218, 254 240 S 346 308, 392 254"
+          stroke="hsl(var(--primary) / 0.18)"
+          strokeWidth="1.35"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ pathLength: [0.72, 1, 0.72], opacity: [0.18, 0.6, 0.18] }}
+          transition={{ duration: 6.1, repeat: Infinity, ease: "easeInOut", delay: 0.35 }}
+        />
+        <motion.path
+          d="M118 58 C 196 120, 248 186, 214 330"
+          stroke="hsl(var(--foreground) / 0.08)"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ opacity: [0.12, 0.34, 0.12] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.path
+          d="M330 78 C 354 86, 366 100, 358 126"
+          stroke="hsl(var(--primary) / 0.14)"
+          strokeWidth="1.1"
+          fill="none"
+          strokeLinecap="round"
+          animate={{ opacity: [0.16, 0.5, 0.16] }}
+          transition={{ duration: 4.6, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
+        />
+
+        <motion.circle
+          cx="374"
+          cy="118"
+          r="5.6"
+          fill="hsl(var(--primary))"
+          animate={{ cx: [374, 360, 374], cy: [118, 132, 118] }}
+          transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.circle
+          cx="374"
+          cy="118"
+          r="14"
+          stroke="hsl(var(--primary) / 0.22)"
+          strokeWidth="1.1"
+          fill="none"
+          animate={{ r: [10, 18, 10], opacity: [0.18, 0.5, 0.18] }}
+          transition={{ duration: 4.8, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.circle
+          cx="76"
+          cy="290"
+          r="5.2"
+          fill="hsl(var(--primary) / 0.7)"
+          animate={{ cx: [76, 92, 76], cy: [290, 278, 290] }}
+          transition={{ duration: 5.1, repeat: Infinity, ease: "easeInOut", delay: 0.35 }}
+        />
+        <motion.circle
+          cx="76"
+          cy="290"
+          r="22"
+          stroke="hsl(var(--foreground) / 0.09)"
+          strokeWidth="1"
+          fill="none"
+          animate={{ r: [18, 26, 18], opacity: [0.12, 0.28, 0.12] }}
+          transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut", delay: 0.1 }}
+        />
+      </motion.svg>
+
+      <motion.div
+        animate={{ y: [0, -6, 0], opacity: [0.28, 0.62, 0.28], rotate: [0, 6, 0] }}
+        transition={{ duration: 4.7, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
+        className="pointer-events-none absolute right-[16%] top-[20%] h-4 w-4"
+      >
+        <div className="absolute inset-0 rotate-45 bg-primary/56 blur-[0.2px]" />
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white/75" />
+        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-white/75" />
+      </motion.div>
+
+      <div className="pointer-events-none absolute bottom-[12%] right-[11%] flex items-center gap-2 opacity-55">
+        <div className="h-px w-10 bg-primary/22" />
+        <div className="grid gap-1">
+          <div className="h-1.5 w-10 rounded-full bg-primary/18" />
+          <div className="h-1.5 w-6 rounded-full bg-primary/12" />
+        </div>
+      </div>
     </motion.div>
   );
 }
