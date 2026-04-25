@@ -12,6 +12,8 @@ import {
   Paperclip,
   Search,
   Send,
+  ShieldCheck,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -469,6 +471,44 @@ const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
 
 type PortalRequestEntryMode = "freeform" | "support";
 
+const portalRequestShortcuts = [
+  {
+    label: "Admissao",
+    hint: "Novo colaborador",
+    sector: "Departamento Pessoal",
+    reasonKey: "admissao",
+    title: "Admissao de colaborador",
+  },
+  {
+    label: "Demissao",
+    hint: "Encerramento de vinculo",
+    sector: "Departamento Pessoal",
+    reasonKey: "demissao",
+    title: "Demissao de colaborador",
+  },
+  {
+    label: "Folha",
+    hint: "Conferencia e ajustes",
+    sector: "Departamento Pessoal",
+    reasonKey: "folha_pagamento",
+    title: "Folha de pagamento",
+  },
+  {
+    label: "Acesso",
+    hint: "Portal e permissao",
+    sector: "Geral",
+    reasonKey: "acesso_portal",
+    title: "Suporte de acesso ao portal",
+  },
+  {
+    label: "Caixa",
+    hint: "Rotina financeira",
+    sector: "Financeiro",
+    reasonKey: "controle_caixa",
+    title: "Controle de caixa no portal",
+  },
+] as const;
+
 export default function PortalClientePage() {
   const { user, session, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -901,7 +941,14 @@ export default function PortalClientePage() {
     [availableReasons, newRequestReasonKey]
   );
 
-  const activeStructuredFields = selectedRequestReason?.fields || [];
+  const activeStructuredFields = useMemo(
+    () => selectedRequestReason?.fields || [],
+    [selectedRequestReason],
+  );
+  const completedStructuredFieldCount = useMemo(
+    () => activeStructuredFields.filter((field) => requestFieldValues[field.name]?.trim()).length,
+    [activeStructuredFields, requestFieldValues],
+  );
 
   useEffect(() => {
     if (!availableReasons.some((reason) => reason.key === newRequestReasonKey)) {
@@ -1396,27 +1443,6 @@ export default function PortalClientePage() {
 
           <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6">
             <div className="w-full max-w-7xl mx-auto space-y-5">
-              <div className="rounded-xl border bg-card p-4 sm:p-5">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div className="space-y-1">
-                    <h1 className="text-lg font-semibold">
-                      {clientProfile?.name || clientProfile?.contact || "Area do cliente"}
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                      Acompanhe tudo em um fluxo simples: abrir solicitação, enviar documentos e conversar com a equipe.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="gap-1.5" onClick={() => openRequestsHub("freeform")}>
-                      <MessageSquare className="h-4 w-4" /> Nova solicitação
-                    </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setUploadDialogOpen(true)}>
-                      <Upload className="h-4 w-4" /> Enviar documentos
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
 
           <TabsContent value="overview" className="space-y-4">
@@ -1434,235 +1460,390 @@ export default function PortalClientePage() {
 
           <TabsContent value="requests" className="space-y-4">
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Central de solicitações</CardTitle>
+              <CardHeader className="overflow-hidden rounded-t-xl border-b border-primary/10 bg-gradient-to-br from-primary/[0.08] via-background to-background pb-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-background/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary backdrop-blur">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Central de solicitacoes
+                    </div>
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg text-balance">Abra um pedido com mais clareza e menos atrito</CardTitle>
+                      <p className="max-w-2xl text-sm text-muted-foreground">
+                        Organize o pedido por setor, motivo e contexto em uma unica tela. O portal mostra so o que faz sentido para a equipe agir mais rapido.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border bg-background/85 px-3 py-2 shadow-sm backdrop-blur">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Motivos</p>
+                      <p className="mt-1 text-sm font-semibold">{availableReasons.length}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background/85 px-3 py-2 shadow-sm backdrop-blur">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Campos</p>
+                      <p className="mt-1 text-sm font-semibold">{activeStructuredFields.length || 0}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background/85 px-3 py-2 shadow-sm backdrop-blur col-span-2 sm:col-span-1">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Anexos</p>
+                      <p className="mt-1 text-sm font-semibold">{newRequestFiles.length}</p>
+                    </div>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="pt-5">
                 <div className="mx-auto max-w-5xl space-y-4">
-                  <div className="rounded-2xl border bg-background p-4 sm:p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold">Abrir nova solicitacao</h3>
-                          <Badge variant="secondary">
-                            {requestEntryMode === "support" ? "atendimento por setor" : "fluxo guiado"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Comece pelos atalhos ou selecione o setor manualmente. O restante do fluxo se organiza sozinho.
-                        </p>
-                      </div>
-                      <Button type="button" variant="ghost" size="sm" onClick={resetNewRequestForm}>
-                        Limpar
-                      </Button>
-                    </div>
-
-                    <div className="mt-4 rounded-xl border bg-muted/20 p-3">
-                      <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Atalhos frequentes</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "admissao", title: "Admissao de colaborador" }, "support")}>
-                          Admissao
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "demissao", title: "Demissao de colaborador" }, "support")}>
-                          Demissao
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Departamento Pessoal", reasonKey: "folha_pagamento", title: "Folha de pagamento" }, "support")}>
-                          Folha de pagamento
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Geral", reasonKey: "acesso_portal", title: "Suporte de acesso ao portal" }, "support")}>
-                          Acesso ao portal
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => prepareInlineRequest({ sector: "Financeiro", reasonKey: "controle_caixa", title: "Controle de caixa no portal" }, "support")}>
-                          Controle de caixa
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div ref={requestComposerRef} className="mt-5 space-y-5">
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium">Setor</label>
-                          <Select value={newRequestSector} onValueChange={handleRequestSectorChange}>
-                            <SelectTrigger className="bg-background">
-                              <SelectValue placeholder="Selecione o setor" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {sectorOptions.map((sector) => (
-                                <SelectItem key={sector} value={sector}>
-                                  {sector}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium">Motivo da solicitacao</label>
-                          <Select value={selectedRequestReason?.key || ""} onValueChange={handleRequestReasonChange}>
-                            <SelectTrigger className="bg-background">
-                              <SelectValue placeholder="Selecione o motivo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableReasons.map((reason) => (
-                                <SelectItem key={reason.key} value={reason.key}>
-                                  {reason.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      {selectedRequestReason ? (
-                        <div className="rounded-xl border bg-background p-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-medium">{selectedRequestReason.label}</p>
-                          </div>
-                          <p className="mt-1 text-sm text-muted-foreground">{selectedRequestReason.description}</p>
-                        </div>
-                      ) : null}
-
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Assunto</label>
-                        <Input
-                          value={newRequestTitle}
-                          onChange={(event) => setNewRequestTitle(event.target.value)}
-                          placeholder={selectedRequestReason?.defaultTitle || "Ex.: Revisao da folha do mes"}
-                        />
-                      </div>
-
-                      {activeStructuredFields.length > 0 ? (
-                        <div className="rounded-xl border bg-muted/15 p-4 space-y-3">
-                          <div>
-                            <p className="text-sm font-medium">Campos da solicitacao</p>
-                            <p className="text-xs text-muted-foreground">
-                              Preencha apenas o essencial para a equipe receber o pedido com contexto suficiente.
-                            </p>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            {activeStructuredFields.map((field) => (
-                              <div
-                                key={field.name}
-                                className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
-                              >
-                                <label className="text-sm font-medium">
-                                  {field.label}
-                                  {field.required ? <span className="ml-1 text-destructive">*</span> : null}
-                                </label>
-                                {field.type === "select" ? (
-                                  <Select value={requestFieldValues[field.name] || ""} onValueChange={(value) => handleRequestFieldValueChange(field.name, value)}>
-                                    <SelectTrigger className="bg-background">
-                                      <SelectValue placeholder="Selecione..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {(field.options || []).map((option) => (
-                                        <SelectItem key={option} value={option}>
-                                          {option}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : field.type === "textarea" ? (
-                                  <Textarea
-                                    rows={4}
-                                    value={requestFieldValues[field.name] || ""}
-                                    onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
-                                    placeholder={field.placeholder}
-                                  />
-                                ) : (
-                                  <Input
-                                    type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
-                                    value={requestFieldValues[field.name] || ""}
-                                    onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
-                                    placeholder={field.placeholder}
-                                  />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium">Contexto adicional</label>
-                          <Textarea
-                            rows={6}
-                            value={newRequestDescription}
-                            onChange={(event) => setNewRequestDescription(event.target.value)}
-                            placeholder="Descreva prazo, urgencia, observacoes ou qualquer detalhe que ajude a equipe."
-                          />
-                        </div>
-
-                        <div className="space-y-2 rounded-xl border bg-card p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-medium">Arquivos</p>
-                              <p className="text-xs text-muted-foreground">
-                                Anexe apenas o que for relevante para agilizar o retorno.
-                              </p>
-                            </div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
-                              <Paperclip className="mr-1 h-4 w-4" /> Anexar
-                            </Button>
-                          </div>
-                          <input
-                            ref={requestFilesInputRef}
-                            type="file"
-                            multiple
-                            className="hidden"
-                            onChange={handleRequestFileSelection}
-                          />
-                          {newRequestFiles.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">Nenhum arquivo selecionado.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {newRequestFiles.map((file, index) => (
-                                <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm">{file.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
-                                  </div>
-                                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeRequestFile(index)}>
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
+                    <div className="rounded-[1.4rem] border bg-background p-4 shadow-sm sm:p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <p className="text-sm font-medium">Pronto para enviar</p>
-                          <p className="text-xs text-muted-foreground">
-                            A solicitacao entra no mesmo fluxo do portal e fica visivel no historico logo abaixo.
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold">Abrir nova solicitacao</h3>
+                            <Badge variant="secondary">
+                              {requestEntryMode === "support" ? "atendimento por setor" : "fluxo guiado"}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Escolha o tipo do pedido e preencha em uma ordem natural, sem menus laterais ou blocos soltos.
                           </p>
                         </div>
-                        <Button type="button" className="gap-2" onClick={() => void handleCreateRequest()} disabled={creatingRequest}>
-                          {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                          Enviar solicitacao
+                        <Button type="button" variant="ghost" size="sm" onClick={resetNewRequestForm}>
+                          Limpar
                         </Button>
+                      </div>
+
+                      <div className="mt-4 rounded-2xl border border-dashed bg-muted/15 p-3 sm:p-4">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Atalhos frequentes
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {portalRequestShortcuts.map((shortcut) => (
+                            <Button
+                              key={shortcut.label}
+                              type="button"
+                              variant="outline"
+                              className="h-auto justify-start rounded-xl border bg-background px-3 py-3 text-left transition-transform hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background"
+                              onClick={() =>
+                                prepareInlineRequest(
+                                  {
+                                    sector: shortcut.sector,
+                                    reasonKey: shortcut.reasonKey,
+                                    title: shortcut.title,
+                                  },
+                                  "support",
+                                )
+                              }
+                            >
+                              <div className="space-y-0.5">
+                                <div className="text-sm font-medium">{shortcut.label}</div>
+                                <div className="text-xs text-muted-foreground">{shortcut.hint}</div>
+                              </div>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div ref={requestComposerRef} className="mt-5 space-y-4">
+                        <div className="rounded-2xl border bg-muted/10 p-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <label htmlFor="portal-request-sector" className="text-sm font-medium">Setor</label>
+                              <Select value={newRequestSector} onValueChange={handleRequestSectorChange}>
+                                <SelectTrigger id="portal-request-sector" className="bg-background">
+                                  <SelectValue placeholder="Selecione o setor" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {sectorOptions.map((sector) => (
+                                    <SelectItem key={sector} value={sector}>
+                                      {sector}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label htmlFor="portal-request-reason" className="text-sm font-medium">Motivo da solicitacao</label>
+                              <Select value={selectedRequestReason?.key || ""} onValueChange={handleRequestReasonChange}>
+                                <SelectTrigger id="portal-request-reason" className="bg-background">
+                                  <SelectValue placeholder="Selecione o motivo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableReasons.map((reason) => (
+                                    <SelectItem key={reason.key} value={reason.key}>
+                                      {reason.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 space-y-1.5">
+                            <label htmlFor="portal-request-title" className="text-sm font-medium">Assunto</label>
+                            <Input
+                              id="portal-request-title"
+                              name="portal_request_title"
+                              autoComplete="off"
+                              value={newRequestTitle}
+                              onChange={(event) => setNewRequestTitle(event.target.value)}
+                              placeholder={selectedRequestReason?.defaultTitle || "Ex.: Revisao da folha do mes"}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(280px,0.82fr)]">
+                          <div className="space-y-4">
+                            {selectedRequestReason ? (
+                              <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.08] via-background to-background p-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="border-primary/20 bg-background/80 text-primary">
+                                    {selectedRequestReason.sector}
+                                  </Badge>
+                                  <p className="text-sm font-semibold">{selectedRequestReason.label}</p>
+                                </div>
+                                <p className="mt-2 text-sm text-muted-foreground">{selectedRequestReason.description}</p>
+                              </div>
+                            ) : null}
+
+                            {activeStructuredFields.length > 0 ? (
+                              <div className="rounded-2xl border bg-muted/15 p-4 space-y-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium">Campos da solicitacao</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    O portal libera apenas os dados que ajudam a equipe a entender o pedido sem excesso de preenchimento.
+                                  </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                  {activeStructuredFields.map((field) => (
+                                    <div
+                                      key={field.name}
+                                      className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
+                                    >
+                                      <label htmlFor={`portal-field-${field.name}`} className="text-sm font-medium">
+                                        {field.label}
+                                        {field.required ? <span className="ml-1 text-destructive">*</span> : null}
+                                      </label>
+                                      {field.type === "select" ? (
+                                        <Select value={requestFieldValues[field.name] || ""} onValueChange={(value) => handleRequestFieldValueChange(field.name, value)}>
+                                          <SelectTrigger id={`portal-field-${field.name}`} className="bg-background">
+                                            <SelectValue placeholder="Selecione…" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {(field.options || []).map((option) => (
+                                              <SelectItem key={option} value={option}>
+                                                {option}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      ) : field.type === "textarea" ? (
+                                        <Textarea
+                                          id={`portal-field-${field.name}`}
+                                          name={field.name}
+                                          rows={4}
+                                          autoComplete="off"
+                                          value={requestFieldValues[field.name] || ""}
+                                          onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
+                                          placeholder={field.placeholder}
+                                        />
+                                      ) : (
+                                        <Input
+                                          id={`portal-field-${field.name}`}
+                                          name={field.name}
+                                          autoComplete={field.type === "email" ? "email" : "off"}
+                                          spellCheck={field.type === "email" ? false : undefined}
+                                          type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
+                                          value={requestFieldValues[field.name] || ""}
+                                          onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
+                                          placeholder={field.placeholder}
+                                        />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="space-y-1.5 rounded-2xl border bg-background p-4">
+                              <label htmlFor="portal-request-description" className="text-sm font-medium">Contexto adicional</label>
+                              <Textarea
+                                id="portal-request-description"
+                                name="portal_request_description"
+                                rows={7}
+                                autoComplete="off"
+                                value={newRequestDescription}
+                                onChange={(event) => setNewRequestDescription(event.target.value)}
+                                placeholder="Descreva prazo, urgencia, observacoes ou qualquer detalhe que ajude a equipe."
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium">Leitura do pedido</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Um resumo rapido do que ja esta pronto para envio.
+                                  </p>
+                                </div>
+                                <ShieldCheck className="h-4 w-4 text-primary" />
+                              </div>
+
+                              <div className="mt-4 grid gap-2">
+                                <div className="rounded-xl border bg-background px-3 py-2">
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Setor</p>
+                                  <p className="mt-1 text-sm font-medium">{newRequestSector}</p>
+                                </div>
+                                <div className="rounded-xl border bg-background px-3 py-2">
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Motivo</p>
+                                  <p className="mt-1 text-sm font-medium">{selectedRequestReason?.label || "Selecione o motivo"}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="rounded-xl border bg-background px-3 py-2">
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Campos</p>
+                                    <p className="mt-1 text-sm font-medium">
+                                      {completedStructuredFieldCount}/{activeStructuredFields.length || 0}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-xl border bg-background px-3 py-2">
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Anexos</p>
+                                    <p className="mt-1 text-sm font-medium">{newRequestFiles.length}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2 rounded-2xl border bg-card p-4 shadow-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-medium">Arquivos</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Envie apenas o material que acelera a analise.
+                                  </p>
+                                </div>
+                                <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
+                                  <Paperclip className="mr-1 h-4 w-4" /> Anexar
+                                </Button>
+                              </div>
+                              <input
+                                ref={requestFilesInputRef}
+                                type="file"
+                                multiple
+                                className="hidden"
+                                onChange={handleRequestFileSelection}
+                              />
+                              {newRequestFiles.length === 0 ? (
+                                <div className="rounded-xl border border-dashed bg-background px-3 py-6 text-center text-xs text-muted-foreground">
+                                  Nenhum arquivo selecionado.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {newRequestFiles.map((file, index) => (
+                                    <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-xl border bg-background px-3 py-2">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm">{file.name}</p>
+                                        <p className="text-[11px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label={`Remover arquivo ${file.name}`}
+                                        onClick={() => removeRequestFile(index)}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary to-primary/80 p-4 text-primary-foreground shadow-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-semibold">Pronto para enviar</p>
+                                  <p className="text-xs text-primary-foreground/80">
+                                    O pedido entra no mesmo fluxo do portal e aparece no historico com status e atualizacoes da equipe.
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="gap-2 bg-background text-foreground hover:bg-background/90"
+                                  onClick={() => void handleCreateRequest()}
+                                  disabled={creatingRequest}
+                                >
+                                  {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                  Enviar solicitacao
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.4rem] border bg-gradient-to-br from-background via-background to-primary/[0.04] p-4 shadow-sm sm:p-5">
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            Guia rapido
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Selecione o setor, refine o motivo e deixe o contexto principal em poucas linhas objetivas.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="rounded-xl border bg-background px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">1. Direcione</p>
+                            <p className="mt-1 text-sm font-medium">Setor e motivo definem a rota do pedido.</p>
+                          </div>
+                          <div className="rounded-xl border bg-background px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">2. Resuma</p>
+                            <p className="mt-1 text-sm font-medium">Use o assunto para dizer exatamente o que precisa.</p>
+                          </div>
+                          <div className="rounded-xl border bg-background px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">3. Complete</p>
+                            <p className="mt-1 text-sm font-medium">Anexe so o necessario para a equipe agir sem retrabalho.</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Histórico de solicitações</CardTitle>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base">Historico de solicitacoes</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Consulte status, retornos da equipe e documentos vinculados em uma leitura mais limpa.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="w-fit">
+                    {filteredRequests.length} item(ns)
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
                 <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <input
+                    aria-label="Buscar solicitacoes"
+                    name="portal_request_search"
+                    autoComplete="off"
                     className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-                    placeholder="Buscar por título, categoria ou setor..."
+                    placeholder="Buscar por titulo, categoria ou setor…"
                     value={requestSearch}
                     onChange={(event) => setRequestSearch(event.target.value)}
                   />
@@ -1709,16 +1890,24 @@ export default function PortalClientePage() {
                     <button
                       type="button"
                       key={request.id}
-                      className="w-full text-left rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-muted/30"
+                      className="w-full text-left rounded-2xl border bg-card px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-muted/20"
                       onClick={() => {
                         setSelectedRequest(request);
                         setRequestDetailOpen(true);
                       }}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary" className="text-[10px]">
+                              {request.category}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px]">
+                              {request.sector}
+                            </Badge>
+                          </div>
                           <p className="font-medium line-clamp-1">{request.title}</p>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span>{request.category}</span>
                             <span>•</span>
                             <span>{request.sector}</span>
@@ -1733,8 +1922,22 @@ export default function PortalClientePage() {
                           <ArrowRight className="h-4 w-4 text-muted-foreground" />
                         </div>
                       </div>
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-xl border bg-background px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Arquivos</p>
+                          <p className="mt-1 text-sm font-medium">
+                            {requestDocs.length} documento(s) vinculado(s)
+                          </p>
+                        </div>
+                        <div className="rounded-xl border bg-background px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Ultima interacao</p>
+                          <p className="mt-1 text-sm font-medium">
+                            {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "Sem mensagens"}
+                          </p>
+                        </div>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2 mt-3">
-                        <Badge variant="secondary" className="text-[10px]">
+                        <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary">
                           {requestDocs.length} documento(s) vinculado(s)
                         </Badge>
                         <Badge variant="outline" className="text-[10px]">

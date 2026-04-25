@@ -39,7 +39,7 @@ const menuSections: PortalMenuSection[] = [
     label: "Operacao",
     items: [
       { key: "requests", title: "Solicitacoes", icon: ClipboardList },
-      { key: "uploads", title: "Envios", icon: Upload },
+  { key: "uploads", title: "Obrigações", icon: Upload },
     ],
   },
   {
