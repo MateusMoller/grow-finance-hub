@@ -11,7 +11,7 @@ type TaskViewMode = "list" | "kanban";
 
 const resolveViewMode = (search: string): TaskViewMode => {
   const params = new URLSearchParams(search);
-  return params.get("view") === "kanban" ? "kanban" : "list";
+  return params.get("view") === "list" ? "list" : "kanban";
 };
 
 export default function TaskWorkspacePage() {
@@ -36,22 +36,24 @@ export default function TaskWorkspacePage() {
 
   const handleViewChange = (nextView: TaskViewMode) => {
     updateSearch((params) => {
-      if (nextView === "kanban") {
-        params.set("view", "kanban");
-      } else {
-        params.delete("view");
+      if (nextView === "list") {
+        params.set("view", "list");
+        return;
       }
+
+      params.delete("view");
     });
   };
 
   const handleCreateTask = () => {
     updateSearch((params) => {
       params.set("create", "1");
-      if (viewMode === "kanban") {
-        params.set("view", "kanban");
-      } else {
-        params.delete("view");
+      if (viewMode === "list") {
+        params.set("view", "list");
+        return;
       }
+
+      params.delete("view");
     });
   };
 
@@ -69,7 +71,7 @@ export default function TaskWorkspacePage() {
                   Tarefas em uma unica entrada
                 </h1>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  O time escolhe a forma de leitura mais conveniente para a rotina: lista para acompanhamento detalhado e kanban para fluxo visual.
+                  O kanban vira a leitura principal da operação, com a lista disponível quando o time precisar de uma visão mais detalhada.
                 </p>
               </div>
             </div>

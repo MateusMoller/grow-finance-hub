@@ -4411,15 +4411,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (actionKey === "sync_companies") {
-      const data = await handleSyncCompanies(
-        supabaseAdmin,
-        acessoriasApiBaseUrl,
-        acessoriasApiToken as string,
-        callerUser.id,
-        body,
+    if (actionKey === "sync_companies" || actionKey === "sync_obligations") {
+      return jsonResponse(
+        { error: "A importacao de dados do Acessorias para o Grow foi desativada." },
+        403,
       );
-      return jsonResponse({ ok: true, ...data });
     }
 
     if (actionKey === "set_link" || actionKey === "remove_link") {
@@ -4427,17 +4423,6 @@ Deno.serve(async (req) => {
         { error: "Vinculo manual desativado. O cruzamento e automatico por CNPJ." },
         403,
       );
-    }
-
-    if (actionKey === "sync_obligations") {
-      const data = await handleSyncObligations(
-        supabaseAdmin,
-        body,
-        acessoriasApiBaseUrl,
-        acessoriasApiToken as string,
-        callerUser.id,
-      );
-      return jsonResponse({ ok: true, ...data });
     }
 
     if (actionKey === "list_obligations") {

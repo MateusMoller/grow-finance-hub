@@ -182,58 +182,15 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Valid email is required" }, 400);
     }
 
-    const normalizedCnpj = normalizeCnpj(parsedPayload.cnpj);
-    if (!normalizedCnpj) {
-      return jsonResponse(
-        {
-          error:
-            "Cadastro manual bloqueado: informe um CNPJ valido sincronizado no Acessorias para criar cliente no portal.",
-        },
-        400,
-      );
+    const normalizedCnpj = parsedPayload.cnpj ? normalizeCnpj(parsedPayload.cnpj) : null;
+    if (parsedPayload.cnpj && !normalizedCnpj) {
+      return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
     }
 
     if (!isValidPassword(parsedPayload.password)) {
       return jsonResponse(
         { error: "Password must have at least 6 characters" },
         400,
-      );
-    }
-
-    const { data: acessoriasCompany, error: acessoriasCompanyError } = await supabaseAdmin
-      .from("acessorias_companies_cache")
-      .select("acessorias_company_id, company_name")
-      .eq("cnpj", normalizedCnpj)
-      .maybeSingle();
-
-    if (acessoriasCompanyError) {
-      throw acessoriasCompanyError;
-    }
-
-    if (!acessoriasCompany) {
-      return jsonResponse(
-        {
-          error:
-            "Empresa nao encontrada no Acessorias. Sincronize o modulo Acessorias antes de criar o acesso do portal.",
-        },
-        409,
-      );
-    }
-
-    const { data: existingCompanyLink, error: existingCompanyLinkError } = await supabaseAdmin
-      .from("client_acessorias_links")
-      .select("client_id")
-      .eq("acessorias_company_id", acessoriasCompany.acessorias_company_id)
-      .maybeSingle();
-
-    if (existingCompanyLinkError) {
-      throw existingCompanyLinkError;
-    }
-
-    if (existingCompanyLink) {
-      return jsonResponse(
-        { error: "Esta empresa do Acessorias ja esta vinculada a um cliente interno." },
-        409,
       );
     }
 
@@ -346,7 +303,7 @@ Deno.serve(async (req) => {
     const { data: createdClient, error: createClientError } = await supabaseAdmin
       .from("clients")
       .insert({
-        name: acessoriasCompany.company_name || parsedPayload.name,
+        name: parsedPayload.name,
         cnpj: normalizedCnpj,
         regime: parsedPayload.regime || "Simples Nacional",
         sector: parsedPayload.sector || "Contabil",
@@ -364,28 +321,6 @@ Deno.serve(async (req) => {
         await supabaseAdmin.auth.admin.deleteUser(portalUserId);
       }
       throw createClientError;
-    }
-
-    const { error: linkError } = await supabaseAdmin
-      .from("client_acessorias_links")
-      .upsert(
-        {
-          client_id: createdClient.id,
-          acessorias_company_id: acessoriasCompany.acessorias_company_id,
-          match_type: "portal_create",
-          match_score: 100,
-          created_by: callerUser.id,
-          last_synced_at: new Date().toISOString(),
-        },
-        { onConflict: "client_id" },
-      );
-
-    if (linkError) {
-      await supabaseAdmin.from("clients").delete().eq("id", createdClient.id);
-      if (portalUserCreatedNow) {
-        await supabaseAdmin.auth.admin.deleteUser(portalUserId);
-      }
-      throw linkError;
     }
 
     return jsonResponse({

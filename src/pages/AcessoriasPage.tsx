@@ -1293,14 +1293,14 @@ export function AcessoriasPage({ module = "obrigações" }: AcessoriasPageProps)
                 type="button"
                 variant="outline"
                 onClick={() => void handleManualSync()}
-                disabled={syncingCompanies || syncingObligations || !hasConfiguration}
+                disabled
               >
                 {syncingCompanies || syncingObligations ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <RefreshCcw className="h-4 w-4 mr-2" />
                 )}
-                Sincronizar agora
+                Importacao desativada
               </Button>
             )}
           </div>

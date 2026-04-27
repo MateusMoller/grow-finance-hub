@@ -784,14 +784,14 @@ function KanbanCard({
         integrationSource={task.integration_source}
         className="right-3"
       />
-      <div className="flex items-start justify-between mb-2">
+      <div className="mb-2 flex items-start justify-between gap-2 pr-8">
         <span className="text-sm font-medium leading-tight">{task.title}</span>
         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${priorityDot[task.priority] || "bg-muted-foreground"}`} />
       </div>
 
       {task.client_name && <div className="text-xs text-muted-foreground">{task.client_name}</div>}
 
-      <div className="flex items-center justify-between mt-3">
+      <div className="mt-3 flex items-center justify-between gap-2 pr-8">
         <div className="flex items-center gap-1.5">
           <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
             {extraSectors > 0 ? `${primarySector} +${extraSectors}` : primarySector}

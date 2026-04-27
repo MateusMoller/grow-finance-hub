@@ -660,7 +660,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                     requestId={task.requestId}
                     integrationSource={task.integrationSource}
                   />
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-4 pr-10 sm:pr-12">
                     <div className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}>
                       <StatusIcon className={`h-4 w-4 ${statusCfg.color}`} />
                     </div>
@@ -670,7 +670,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                           <h3 className="font-medium text-sm">{task.title}</h3>
                           <p className="text-xs text-muted-foreground mt-0.5">{task.client || "Sem cliente"}</p>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                           <Badge variant="outline" className={`text-xs ${priorityCfg.color} ${priorityCfg.bg} border-0`}>
                             {task.priority}
                           </Badge>
