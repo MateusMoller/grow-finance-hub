@@ -1417,13 +1417,13 @@ export default function PortalClientePage() {
       <div className="min-h-screen flex w-full">
         <PortalClienteSidebar activeTab={activeTab} onChangeTab={setActiveTab} />
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
-            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+        <div className="flex-1 flex min-w-0 flex-col">
+          <header className="flex min-h-16 items-center justify-between border-b bg-card px-3 py-2.5 shrink-0 md:px-4">
+            <div className="flex min-w-0 items-center gap-2 md:gap-3">
               <SidebarTrigger />
               <div className="min-w-0">
                 <p className="font-semibold text-sm">Portal do Cliente</p>
-                <p className="text-xs text-muted-foreground">Solicitações, documentos, atendimento e caixa</p>
+                <p className="hidden text-xs text-muted-foreground sm:block">Solicitacoes, documentos, atendimento e caixa</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1441,8 +1441,8 @@ export default function PortalClientePage() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6">
-            <div className="w-full max-w-7xl mx-auto space-y-5">
+          <main className="flex-1 overflow-auto bg-muted/20 p-2.5 sm:p-4 lg:p-6">
+            <div className="mx-auto w-full max-w-7xl space-y-4 sm:space-y-5">
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PortalTab)} className="space-y-4">
 
           <TabsContent value="overview" className="space-y-4">
@@ -1463,10 +1463,10 @@ export default function PortalClientePage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Central de solicitações</CardTitle>
               </CardHeader>
-              <CardContent className="pt-5">
-                <div className="mx-auto max-w-5xl space-y-4">
-                  <div className="rounded-[1.4rem] border bg-background p-4 shadow-sm sm:p-5">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+              <CardContent className="pt-4 sm:pt-5">
+                <div className="mx-auto max-w-6xl space-y-4">
+                  <div className="rounded-[1.4rem] border bg-background p-3.5 shadow-sm sm:p-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-semibold">Abrir nova solicitacao</h3>
@@ -1494,7 +1494,7 @@ export default function PortalClientePage() {
                               key={shortcut.label}
                               type="button"
                               variant="outline"
-                              className="h-auto justify-start rounded-xl border bg-background px-3 py-3 text-left transition-transform hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background"
+                              className="h-auto min-h-16 justify-start rounded-xl border bg-background px-3 py-3 text-left transition-transform hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background"
                               onClick={() =>
                                 prepareInlineRequest(
                                   {
@@ -1565,7 +1565,7 @@ export default function PortalClientePage() {
                         </div>
 
                         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(280px,0.82fr)]">
-                          <div className="space-y-4">
+                          <div className="order-2 space-y-4 xl:order-1">
                             {selectedRequestReason ? (
                               <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.08] via-background to-background p-4">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -1652,9 +1652,9 @@ export default function PortalClientePage() {
                             </div>
                           </div>
 
-                          <div className="space-y-4">
+                          <div className="order-1 space-y-4 xl:order-2">
                             <div className="rounded-2xl border bg-card p-4 shadow-sm">
-                              <div className="flex items-start justify-between gap-3">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="space-y-1">
                                   <p className="text-sm font-medium">Leitura do pedido</p>
                                   <p className="text-xs text-muted-foreground">
@@ -1664,7 +1664,7 @@ export default function PortalClientePage() {
                                 <ShieldCheck className="h-4 w-4 text-primary" />
                               </div>
 
-                              <div className="mt-4 grid gap-2">
+                              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                                 <div className="rounded-xl border bg-background px-3 py-2">
                                   <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Setor</p>
                                   <p className="mt-1 text-sm font-medium">{newRequestSector}</p>
@@ -1689,14 +1689,20 @@ export default function PortalClientePage() {
                             </div>
 
                             <div className="space-y-2 rounded-2xl border bg-card p-4 shadow-sm">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                   <p className="text-sm font-medium">Arquivos</p>
                                   <p className="text-xs text-muted-foreground">
                                     Envie apenas o material que acelera a analise.
                                   </p>
                                 </div>
-                                <Button type="button" variant="outline" size="sm" onClick={() => requestFilesInputRef.current?.click()}>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full sm:w-auto"
+                                  onClick={() => requestFilesInputRef.current?.click()}
+                                >
                                   <Paperclip className="mr-1 h-4 w-4" /> Anexar
                                 </Button>
                               </div>
@@ -1736,7 +1742,7 @@ export default function PortalClientePage() {
                             </div>
 
                             <div className="rounded-2xl border border-primary/15 bg-gradient-to-br from-primary to-primary/80 p-4 text-primary-foreground shadow-sm">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="space-y-1">
                                   <p className="text-sm font-semibold">Pronto para enviar</p>
                                   <p className="text-xs text-primary-foreground/80">
@@ -1746,7 +1752,7 @@ export default function PortalClientePage() {
                                 <Button
                                   type="button"
                                   variant="secondary"
-                                  className="gap-2 bg-background text-foreground hover:bg-background/90"
+                                  className="w-full gap-2 bg-background text-foreground hover:bg-background/90 sm:w-auto"
                                   onClick={() => void handleCreateRequest()}
                                   disabled={creatingRequest}
                                 >
@@ -1777,7 +1783,7 @@ export default function PortalClientePage() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
+              <CardContent className="grid grid-cols-1 gap-3 pt-0 md:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <input
@@ -1838,7 +1844,7 @@ export default function PortalClientePage() {
                         setRequestDetailOpen(true);
                       }}
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="secondary" className="text-[10px]">
@@ -1857,7 +1863,7 @@ export default function PortalClientePage() {
                             <span>Atualizada em {new Date(request.updated_at).toLocaleDateString("pt-BR")}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex shrink-0 items-center gap-2 sm:justify-end">
                           <Badge variant="outline" className={`border-0 ${statusMeta.className}`}>
                             <StatusIcon className="h-3 w-3 mr-1" /> {statusMeta.label}
                           </Badge>
@@ -1877,14 +1883,6 @@ export default function PortalClientePage() {
                             {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "Sem mensagens"}
                           </p>
                         </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-3">
-                        <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary">
-                          {requestDocs.length} documento(s) vinculado(s)
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px]">
-                          Última interação: {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "sem mensagens"}
-                        </Badge>
                       </div>
                     </button>
                   );
@@ -1983,70 +1981,70 @@ export default function PortalClientePage() {
             <Card>
               <CardContent className="p-4 space-y-3">
                 <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium">1. Abra uma solicitação</p>
                       <p className="text-sm text-muted-foreground">
                         Use a aba de solicitacoes para escolher setor, motivo e preencher os campos certos na propria pagina.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("freeform")}>
+                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("freeform")}>
                       Ir para solicitações
                     </Button>
                   </div>
                 </div>
 
                 <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium">2. Envie documentos</p>
                       <p className="text-sm text-muted-foreground">
                         Use o botao de envio para anexar os arquivos do mes de forma rápida e organizada.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setUploadDialogOpen(true)}>
+                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setUploadDialogOpen(true)}>
                       Enviar documentos
                     </Button>
                   </div>
                 </div>
 
                 <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium">3. Escolha o motivo certo</p>
                       <p className="text-sm text-muted-foreground">
                         O setor e o motivo definem automaticamente os campos necessarios para cada tipo de pedido.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("support")}>
+                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("support")}>
                       Ir para solicitações
                     </Button>
                   </div>
                 </div>
 
                 <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium">4. Acompanhe o controle de caixa (quando liberado)</p>
                       <p className="text-sm text-muted-foreground">
                         Se o admin liberar este modulo, voce pode registrar entradas e saidas e acompanhar os indicadores de caixa.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab("cashflow")}>
+                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setActiveTab("cashflow")}>
                       Ir para controle de caixa
                     </Button>
                   </div>
                 </div>
 
                 <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium">5. Fale com a equipe pelo mesmo fluxo</p>
                       <p className="text-sm text-muted-foreground">
                         Demandas por setor e acompanhamentos também nascem dentro da central de solicitações.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => openRequestsHub("support")}>
+                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("support")}>
                       Ir para solicitações
                     </Button>
                   </div>
@@ -2097,6 +2095,7 @@ export default function PortalClientePage() {
                     <Button
                       type="button"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() =>
                         prepareInlineRequest({
                           sector: "Geral",
@@ -2165,9 +2164,10 @@ export default function PortalClientePage() {
                       Status atual: {clientProfile?.portal_cashflow_enabled ? "liberado pelo admin" : "aguardando liberação do admin"}.
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <Button
                       type="button"
+                      className="w-full sm:w-auto"
                       onClick={() => void handlePortalPasswordChange()}
                       disabled={changingPortalPassword}
                     >
@@ -2177,6 +2177,7 @@ export default function PortalClientePage() {
                     <Button
                       type="button"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() =>
                         prepareInlineRequest({
                           sector: "Geral",
@@ -2210,7 +2211,7 @@ export default function PortalClientePage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Enviar documentos</DialogTitle>
             <DialogDescription>Envie seus documentos de forma rápida e organizada.</DialogDescription>
@@ -2251,9 +2252,9 @@ export default function PortalClientePage() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-medium">Arquivos</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => uploadFilesInputRef.current?.click()}>
+                <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => uploadFilesInputRef.current?.click()}>
                   <Upload className="h-4 w-4 mr-1" /> Selecionar arquivos
                 </Button>
               </div>
@@ -2281,11 +2282,11 @@ export default function PortalClientePage() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setUploadDialogOpen(false)}>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setUploadDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button type="button" className="gap-2" onClick={() => void handleUploadDocuments()} disabled={uploadingFiles}>
+            <Button type="button" className="w-full gap-2 sm:w-auto" onClick={() => void handleUploadDocuments()} disabled={uploadingFiles}>
               {uploadingFiles ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Enviar arquivos
             </Button>
@@ -2294,7 +2295,7 @@ export default function PortalClientePage() {
       </Dialog>
 
       <Sheet open={requestDetailOpen} onOpenChange={setRequestDetailOpen}>
-        <SheetContent className="sm:max-w-2xl overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           {selectedRequest && (() => {
             const statusMeta = statusConfig[selectedRequest.status];
             const StatusIcon = statusMeta.icon;
@@ -2341,12 +2342,13 @@ export default function PortalClientePage() {
                   </Card>
 
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <h4 className="text-sm font-medium">Conversa com a equipe</h4>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="w-full sm:w-auto"
                         onClick={() => {
                           setRequestDetailOpen(false);
                           setUploadRequestId(selectedRequest.id);
@@ -2371,7 +2373,7 @@ export default function PortalClientePage() {
                     ) : (
                       <div className="space-y-2">
                         {selectedRequestDocuments.map((document) => (
-                          <div key={document.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                          <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
                             <div className="min-w-0">
                               <p className="text-sm font-medium truncate">{document.file_name}</p>
                               <p className="text-[11px] text-muted-foreground">

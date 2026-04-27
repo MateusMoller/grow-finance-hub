@@ -39,7 +39,7 @@ const menuSections: PortalMenuSection[] = [
     label: "Operacao",
     items: [
       { key: "requests", title: "Solicitacoes", icon: ClipboardList },
-  { key: "uploads", title: "Obrigações", icon: Upload },
+      { key: "uploads", title: "Obrigacoes", icon: Upload },
     ],
   },
   {
@@ -69,7 +69,9 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
           {!collapsed && (
             <div className="min-w-0">
               <p className="font-heading text-sm font-bold text-sidebar-foreground">Portal do Cliente</p>
-              <p className="text-[11px] text-sidebar-foreground/65">Solicitacoes, documentos e caixa</p>
+              <p className="text-[11px] leading-relaxed text-sidebar-foreground/65">
+                Solicitacoes, documentos e caixa
+              </p>
             </div>
           )}
         </div>

@@ -427,7 +427,7 @@ export function ClientPortalCashflow({
         </CardHeader>
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Saldo realizado do mes</p>
@@ -474,7 +474,7 @@ export function ClientPortalCashflow({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -483,10 +483,10 @@ export function ClientPortalCashflow({
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="flex justify-end mb-3">
+            <div className="mb-3 flex justify-end">
               <Input
                 type="month"
-                className="w-[180px]"
+                className="w-full sm:w-[180px]"
                 value={referenceMonth}
                 onChange={(event) => setReferenceMonth(event.target.value)}
               />
@@ -669,8 +669,8 @@ export function ClientPortalCashflow({
                 </div>
               </div>
 
-              <div className="rounded-lg border overflow-hidden">
-                <Table>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table className="min-w-[780px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">Ok</TableHead>
@@ -822,10 +822,10 @@ export function ClientPortalCashflow({
                 </Table>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-stretch sm:justify-end">
                 <Button
                   type="button"
-                  className="gap-1.5"
+                  className="w-full gap-1.5 sm:w-auto"
                   disabled={selectedDrafts.length === 0 || importingDrafts}
                   onClick={() => void handleImportSelectedDrafts()}
                 >
@@ -838,7 +838,7 @@ export function ClientPortalCashflow({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Novo lancamento</CardTitle>
@@ -937,8 +937,8 @@ export function ClientPortalCashflow({
                 Nenhum lancamento registrado neste mes.
               </div>
             ) : (
-              <div className="rounded-lg border overflow-hidden">
-                <Table>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
