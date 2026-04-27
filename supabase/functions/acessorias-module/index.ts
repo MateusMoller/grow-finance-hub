@@ -138,6 +138,12 @@ type CreateKanbanTaskInput = {
   createdBy: string;
 };
 
+function buildObligationTaskTitle(obligationName: string, clientName: string) {
+  const safeObligationName = asTrimmedString(obligationName) || "Obrigacao";
+  const safeClientName = asTrimmedString(clientName) || "Cliente";
+  return `${safeObligationName}-${safeClientName}`;
+}
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1648,7 +1654,7 @@ async function ensureKanbanTaskForObligation(
     const { data: createdTask, error: createError } = await supabaseAdmin
       .from("kanban_tasks")
       .insert({
-        title: `[Acessorias] ${input.obligationName}`,
+        title: buildObligationTaskTitle(input.obligationName, input.clientName),
         description,
         client_name: input.clientName,
         assignee: null,
@@ -1682,7 +1688,7 @@ async function ensureKanbanTaskForObligation(
   }
 
   const updatePayload: Record<string, unknown> = {
-    title: `[Acessorias] ${input.obligationName}`,
+    title: buildObligationTaskTitle(input.obligationName, input.clientName),
     description,
     client_name: input.clientName,
     priority,
