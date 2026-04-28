@@ -126,15 +126,6 @@ export default function HomePage() {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button asChild className="w-full rounded-full px-6 sm:w-auto" size="lg">
-                  <Link to="/#contato">Quero Crescer</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full rounded-full px-6 sm:w-auto" size="lg">
-                  <Link to="/contato">Falar com um Especialista</Link>
-                </Button>
-              </div>
-
               <div className="grid gap-3 sm:grid-cols-3">
                 {heroStats.map((item) => (
                   <div key={item.label} className="rounded-2xl border border-border/70 bg-card/80 p-4">
