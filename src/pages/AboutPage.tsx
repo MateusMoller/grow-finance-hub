@@ -265,6 +265,30 @@ export default function AboutPage() {
             <div className="hero-impact-orb hero-impact-orb-c" />
             <div className="hero-impact-line hero-impact-line-a" />
             <div className="hero-impact-line hero-impact-line-b" />
+            <div className="hero-balance-cluster hidden lg:block" aria-hidden="true">
+              <svg viewBox="0 0 520 460" className="hero-balance-svg" fill="none">
+                <path
+                  className="hero-balance-path hero-balance-path-a"
+                  d="M28 98C86 68 138 62 200 86C263 111 327 162 390 158C433 156 468 134 494 102"
+                />
+                <path
+                  className="hero-balance-path hero-balance-path-b"
+                  d="M108 228C156 188 214 178 276 192C338 206 394 246 452 238"
+                />
+                <path
+                  className="hero-balance-path hero-balance-path-c"
+                  d="M56 332C112 294 172 284 232 294C298 305 354 350 430 356"
+                />
+                <circle className="hero-balance-node hero-balance-node-a" cx="183" cy="83" r="5.5" />
+                <circle className="hero-balance-node hero-balance-node-b" cx="330" cy="205" r="4.5" />
+                <circle className="hero-balance-node hero-balance-node-c" cx="104" cy="306" r="6.5" />
+                <circle className="hero-balance-ring" cx="104" cy="306" r="18" />
+                <circle className="hero-balance-ring hero-balance-ring-b" cx="330" cy="205" r="14" />
+              </svg>
+              <div className="hero-balance-blur hero-balance-blur-a" />
+              <div className="hero-balance-blur hero-balance-blur-b" />
+              <div className="hero-balance-shard" />
+            </div>
           </div>
 
           <div className="container relative flex min-h-[100svh] flex-col justify-center py-16 pb-14 pt-28 sm:pt-32 lg:py-20 lg:pt-28">
@@ -294,18 +318,6 @@ export default function AboutPage() {
                   Continue explorando
                 </div>
                 <div className="hero-discovery-layer relative">
-                  <div className="hero-discovery-cta-wrap mb-5 flex justify-start xl:absolute xl:right-0 xl:top-[-26px] xl:mb-0">
-                    <Button
-                      asChild
-                      className="hero-impact-cta group h-[52px] w-full rounded-full border-0 px-7 font-semibold text-white sm:w-auto"
-                    >
-                      <Link to="/contato">
-                        Falar com especialista
-                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                      </Link>
-                    </Button>
-                  </div>
-
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {discoveryRail.map((item, index) => (
                       <motion.div

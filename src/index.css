@@ -278,6 +278,142 @@
     transform: rotate(-12deg);
   }
 
+  @keyframes hero-balance-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+
+    50% {
+      transform: translate3d(0.65rem, -0.8rem, 0);
+    }
+  }
+
+  @keyframes hero-balance-pulse {
+    0%,
+    100% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: 0.9;
+      transform: scale(1.08);
+    }
+  }
+
+  @keyframes hero-balance-shift {
+    0%,
+    100% {
+      stroke-dashoffset: 0;
+      opacity: 0.82;
+    }
+
+    50% {
+      stroke-dashoffset: -18;
+      opacity: 1;
+    }
+  }
+
+  .hero-balance-cluster {
+    position: absolute;
+    right: 6%;
+    top: 16%;
+    width: min(36vw, 31rem);
+    height: min(38vw, 30rem);
+    opacity: 0.94;
+    animation: hero-balance-drift 11s ease-in-out infinite;
+  }
+
+  .hero-balance-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .hero-balance-path {
+    fill: none;
+    stroke: rgba(50, 58, 96, 0.26);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-dasharray: 5 10;
+    animation: hero-balance-shift 8.8s ease-in-out infinite;
+  }
+
+  .hero-balance-path-b {
+    stroke: rgba(77, 68, 137, 0.22);
+    stroke-dasharray: 3 12;
+    animation-delay: -2.2s;
+  }
+
+  .hero-balance-path-c {
+    stroke: rgba(120, 101, 137, 0.18);
+    stroke-dasharray: 4 14;
+    animation-delay: -3.5s;
+  }
+
+  .hero-balance-node {
+    fill: rgba(46, 52, 86, 0.84);
+    animation: hero-balance-pulse 4.4s ease-in-out infinite;
+  }
+
+  .hero-balance-node-b {
+    animation-delay: -1.6s;
+  }
+
+  .hero-balance-node-c {
+    animation-delay: -2.8s;
+  }
+
+  .hero-balance-ring {
+    fill: none;
+    stroke: rgba(77, 68, 137, 0.18);
+    stroke-width: 1;
+  }
+
+  .hero-balance-ring-b {
+    stroke: rgba(93, 101, 138, 0.16);
+  }
+
+  .hero-balance-blur {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(16px);
+    opacity: 0.58;
+  }
+
+  .hero-balance-blur-a {
+    right: 3%;
+    top: 4%;
+    width: 9.5rem;
+    height: 9.5rem;
+    background: radial-gradient(circle, rgba(128, 101, 137, 0.22) 0%, rgba(128, 101, 137, 0) 72%);
+  }
+
+  .hero-balance-blur-b {
+    left: 28%;
+    bottom: 10%;
+    width: 10.5rem;
+    height: 10.5rem;
+    background: radial-gradient(circle, rgba(77, 68, 137, 0.18) 0%, rgba(77, 68, 137, 0) 72%);
+  }
+
+  .hero-balance-shard {
+    position: absolute;
+    right: 24%;
+    top: 28%;
+    width: 4.5rem;
+    height: 7rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.06) 100%);
+    opacity: 0.44;
+    transform: rotate(22deg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+
   .hero-impact-note {
     border-left: 1px solid rgba(53, 61, 95, 0.16);
   }
@@ -501,6 +637,14 @@
       right: -2rem;
       height: 12rem;
       width: 12rem;
+    }
+
+    .hero-balance-cluster {
+      right: 2%;
+      top: 18%;
+      width: 18rem;
+      height: 16rem;
+      opacity: 0.62;
     }
 
     .hero-discovery-card {
