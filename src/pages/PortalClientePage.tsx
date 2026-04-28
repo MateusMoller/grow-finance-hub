@@ -54,6 +54,11 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  buildSecureStoragePath,
+  filterSecureDocuments,
+  SECURE_DOCUMENT_ACCEPT,
+} from "@/lib/fileUploadSecurity";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
@@ -1015,7 +1020,12 @@ export default function PortalClientePage() {
   };
 
   const handleRequestFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setNewRequestFiles(Array.from(event.target.files || []));
+    const selection = Array.from(event.target.files || []);
+    const { accepted, rejected } = filterSecureDocuments(selection);
+    setNewRequestFiles(accepted);
+    if (rejected.length > 0) {
+      toast.error(rejected[0]);
+    }
   };
 
   const removeRequestFile = (index: number) => {
@@ -1028,7 +1038,16 @@ export default function PortalClientePage() {
     let failed = 0;
 
     for (const file of files) {
-      const filePath = `${user.id}/${requestId}/${Date.now()}_${file.name}`;
+      const { accepted } = filterSecureDocuments([file]);
+      if (accepted.length === 0) {
+        failed += 1;
+        continue;
+      }
+
+      const filePath = buildSecureStoragePath(
+        [user.id, requestId, `${Date.now()}_${crypto.randomUUID()}`],
+        file.name,
+      );
       const { error: uploadError } = await supabase.storage.from("client-documents").upload(filePath, file);
       if (uploadError) {
         failed += 1;
@@ -1147,7 +1166,12 @@ export default function PortalClientePage() {
   };
 
   const handleUploadFilesSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setUploadFiles(Array.from(event.target.files || []));
+    const selection = Array.from(event.target.files || []);
+    const { accepted, rejected } = filterSecureDocuments(selection);
+    setUploadFiles(accepted);
+    if (rejected.length > 0) {
+      toast.error(rejected[0]);
+    }
   };
 
   const removeUploadFile = (index: number) => {
@@ -1166,7 +1190,16 @@ export default function PortalClientePage() {
     let failed = 0;
 
     for (const file of uploadFiles) {
-      const filePath = `${user.id}/${Date.now()}_${file.name}`;
+      const { accepted } = filterSecureDocuments([file]);
+      if (accepted.length === 0) {
+        failed += 1;
+        continue;
+      }
+
+      const filePath = buildSecureStoragePath(
+        [user.id, `${Date.now()}_${crypto.randomUUID()}`],
+        file.name,
+      );
       const { error: uploadError } = await supabase.storage.from("client-documents").upload(filePath, file);
       if (uploadError) {
         failed += 1;
@@ -1325,8 +1358,8 @@ export default function PortalClientePage() {
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
-      toast.error("A nova senha precisa ter no mínimo 6 caracteres.");
+    if (passwordForm.newPassword.length < 8) {
+      toast.error("A nova senha precisa ter no mínimo 8 caracteres.");
       return;
     }
 
@@ -1709,6 +1742,7 @@ export default function PortalClientePage() {
                               <input
                                 ref={requestFilesInputRef}
                                 type="file"
+                                accept={SECURE_DOCUMENT_ACCEPT}
                                 multiple
                                 className="hidden"
                                 onChange={handleRequestFileSelection}
@@ -2261,6 +2295,7 @@ export default function PortalClientePage() {
               <input
                 ref={uploadFilesInputRef}
                 type="file"
+                accept={SECURE_DOCUMENT_ACCEPT}
                 multiple
                 className="hidden"
                 onChange={handleUploadFilesSelection}

@@ -2,20 +2,16 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const FALLBACK_SUPABASE_URL = "https://vgkmcerjlwnzbiukinhd.supabase.co";
-const FALLBACK_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_yTevo6bvvk8CaNWLHhNICA_BHR-Mewi";
-
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL ?? FALLBACK_SUPABASE_URL).trim();
-const SUPABASE_PUBLISHABLE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? FALLBACK_SUPABASE_PUBLISHABLE_KEY).trim();
-
-if (
-  (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) &&
-  import.meta.env.MODE !== "production"
-) {
-  console.warn(
-    "[supabase] VITE_SUPABASE_URL e/ou VITE_SUPABASE_PUBLISHABLE_KEY não definidos no build. Aplicando fallback padrão.",
-  );
+function getRequiredEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY') {
+  const value = import.meta.env[name]?.trim();
+  if (!value) {
+    throw new Error(`[supabase] Variavel obrigatoria ausente: ${name}`);
+  }
+  return value;
 }
+
+const SUPABASE_URL = getRequiredEnv('VITE_SUPABASE_URL');
+const SUPABASE_PUBLISHABLE_KEY = getRequiredEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -25,5 +21,5 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
 });

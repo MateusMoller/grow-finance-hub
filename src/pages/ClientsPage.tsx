@@ -60,7 +60,6 @@ export default function ClientsPage() {
     contact: "",
     email: "",
     phone: "",
-    password: "",
   });
 
   const canCreateClients =
@@ -128,11 +127,6 @@ export default function ClientsPage() {
       return;
     }
 
-    if (newClient.password.trim().length < 6) {
-      toast.error("A senha do portal deve ter pelo menos 6 caracteres.");
-      return;
-    }
-
     const {
       data: { session },
       error: sessionError,
@@ -144,7 +138,10 @@ export default function ClientsPage() {
     }
 
     setCreating(true);
-    const { error } = await supabase.functions.invoke("create-client-with-portal", {
+    const { data, error } = await supabase.functions.invoke<{
+      portal_access_link?: string | null;
+      portal_access_link_type?: "invite" | "recovery" | null;
+    }>("create-client-with-portal", {
       body: {
         name: newClient.name,
         cnpj: newClient.cnpj || null,
@@ -153,7 +150,6 @@ export default function ClientsPage() {
         contact: newClient.contact || null,
         email: normalizedEmail,
         phone: newClient.phone || null,
-        password: newClient.password,
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -166,7 +162,28 @@ export default function ClientsPage() {
       return;
     }
 
-    toast.success("Cliente cadastrado com acesso de portal.");
+    const portalAccessLink = data?.portal_access_link?.trim();
+    if (portalAccessLink) {
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(portalAccessLink);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+
+      toast.success(
+        copied
+          ? "Cliente cadastrado. O link seguro de acesso foi copiado."
+          : "Cliente cadastrado. Guarde o link seguro de acesso retornado.",
+      );
+
+      if (!copied) {
+        window.prompt("Copie o link seguro de acesso do portal:", portalAccessLink);
+      }
+    } else {
+      toast.success("Cliente cadastrado com acesso de portal.");
+    }
     setCreateOpen(false);
     setNewClient({
       name: "",
@@ -176,7 +193,6 @@ export default function ClientsPage() {
       contact: "",
       email: "",
       phone: "",
-      password: "",
     });
     void loadClients();
   };
@@ -418,12 +434,13 @@ export default function ClientsPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Senha do Portal *</Label>
+              <Label>Acesso do Portal</Label>
               <Input
-                type="password"
+                type="text"
                 placeholder="MÃ­nimo 6 caracteres"
-                value={newClient.password}
-                onChange={(event) => setNewClient((prev) => ({ ...prev, password: event.target.value }))}
+                value="Convite seguro enviado por link"
+                readOnly
+                disabled
               />
             </div>
           </div>

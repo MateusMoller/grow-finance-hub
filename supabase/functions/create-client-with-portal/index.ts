@@ -28,7 +28,6 @@ type CreateClientPayload = {
   contact?: string;
   email: string;
   phone?: string;
-  password: string;
 };
 
 function jsonResponse(data: unknown, status = 200) {
@@ -63,10 +62,6 @@ function normalizeCnpj(value: unknown): string | null {
   return digits.length === 14 ? digits : null;
 }
 
-function isValidPassword(value: string) {
-  return value.length >= 6;
-}
-
 function extractBearerToken(req: Request): string | null {
   const authorization = req.headers.get("authorization");
   if (!authorization) return null;
@@ -75,10 +70,10 @@ function extractBearerToken(req: Request): string | null {
   return token.length > 0 ? token : null;
 }
 
-function isUserAlreadyRegisteredError(message?: string) {
-  if (!message) return false;
-  const lowered = message.toLowerCase();
-  return lowered.includes("already been registered") || lowered.includes("already registered");
+function getPortalRedirectUrl() {
+  return asTrimmedString(Deno.env.get("CLIENT_PORTAL_INVITE_REDIRECT_URL")) ||
+    asTrimmedString(Deno.env.get("SITE_URL")) ||
+    undefined;
 }
 
 async function findAuthUserByEmail(
@@ -171,7 +166,6 @@ Deno.serve(async (req) => {
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
       phone: asTrimmedString(payload.phone) || undefined,
-      password: asTrimmedString(payload.password) || "",
     };
 
     if (!parsedPayload.name) {
@@ -185,13 +179,6 @@ Deno.serve(async (req) => {
     const normalizedCnpj = parsedPayload.cnpj ? normalizeCnpj(parsedPayload.cnpj) : null;
     if (parsedPayload.cnpj && !normalizedCnpj) {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
-    }
-
-    if (!isValidPassword(parsedPayload.password)) {
-      return jsonResponse(
-        { error: "Password must have at least 6 characters" },
-        400,
-      );
     }
 
     const { data: existingClientByEmail, error: existingClientError } = await supabaseAdmin
@@ -213,31 +200,35 @@ Deno.serve(async (req) => {
 
     let portalUserId: string | null = null;
     let portalUserCreatedNow = false;
+    let portalAccessLink: string | null = null;
+    let portalAccessLinkType: "invite" | "recovery" | null = null;
+    const portalRedirectUrl = getPortalRedirectUrl();
 
-    const { data: createdAuthUser, error: createAuthUserError } = await supabaseAdmin.auth.admin
-      .createUser({
+    const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, parsedPayload.email);
+    if (existingAuthUser) {
+      portalUserId = existingAuthUser.id;
+    }
+
+    if (!portalUserId) {
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.generateLink({
+        type: "invite",
         email: parsedPayload.email,
-        password: parsedPayload.password,
-        email_confirm: true,
-        user_metadata: {
-          display_name: parsedPayload.contact || parsedPayload.name,
+        options: {
+          data: {
+            display_name: parsedPayload.contact || parsedPayload.name,
+          },
+          redirectTo: portalRedirectUrl,
         },
       });
 
-    if (createAuthUserError) {
-      if (!isUserAlreadyRegisteredError(createAuthUserError.message)) {
-        throw createAuthUserError;
+      if (inviteError) {
+        throw inviteError;
       }
 
-      const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, parsedPayload.email);
-      if (!existingAuthUser) {
-        return jsonResponse({ error: "User already exists but was not found for linking" }, 409);
-      }
-
-      portalUserId = existingAuthUser.id;
-    } else {
-      portalUserId = createdAuthUser.user?.id || null;
+      portalUserId = inviteData.user?.id || null;
       portalUserCreatedNow = Boolean(portalUserId);
+      portalAccessLink = inviteData.properties.action_link;
+      portalAccessLinkType = "invite";
     }
 
     if (!portalUserId) {
@@ -323,11 +314,32 @@ Deno.serve(async (req) => {
       throw createClientError;
     }
 
+    if (!portalAccessLink) {
+      const { data: recoveryData, error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({
+        type: "recovery",
+        email: parsedPayload.email,
+        options: portalRedirectUrl
+          ? {
+              redirectTo: portalRedirectUrl,
+            }
+          : undefined,
+      });
+
+      if (recoveryError) {
+        throw recoveryError;
+      }
+
+      portalAccessLink = recoveryData.properties.action_link;
+      portalAccessLinkType = "recovery";
+    }
+
     return jsonResponse({
       ok: true,
       client: createdClient,
       portal_user_created_now: portalUserCreatedNow,
       portal_user_id: portalUserId,
+      portal_access_link: portalAccessLink,
+      portal_access_link_type: portalAccessLinkType,
     });
   } catch (error: unknown) {
     const message =

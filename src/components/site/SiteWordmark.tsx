@@ -12,7 +12,7 @@ export function SiteWordmark({ className, size = "header" }: SiteWordmarkProps) 
     <span
       translate="no"
       className={cn(
-        "relative inline-flex min-w-0 flex-col items-start text-[#232844] dark:text-[#eef2ff]",
+        "relative inline-grid min-w-0 grid-cols-1 text-[#232844] dark:text-[#eef2ff]",
         className,
       )}
     >
@@ -26,10 +26,10 @@ export function SiteWordmark({ className, size = "header" }: SiteWordmarkProps) 
       </span>
       <span
         className={cn(
-          "block w-full pl-[0.06em] font-semibold lowercase leading-none text-[#4a5274]",
+          "block w-full pl-[0.08em] text-center font-semibold lowercase leading-none text-[#4a5274]",
           isHeader
-            ? "mt-0.5 text-[0.42rem] tracking-[0.34em] sm:text-[0.46rem]"
-            : "mt-0.5 text-[0.38rem] tracking-[0.28em] sm:text-[0.42rem]",
+            ? "mt-[1px] text-[0.42rem] tracking-[0.38em] sm:text-[0.47rem]"
+            : "mt-[1px] text-[0.38rem] tracking-[0.32em] sm:text-[0.43rem]",
         )}
       >
         contabilidade

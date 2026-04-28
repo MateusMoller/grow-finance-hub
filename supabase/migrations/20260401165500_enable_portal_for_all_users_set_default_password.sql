@@ -1,12 +1,10 @@
 -- WARNING:
 -- This migration was requested to:
 -- 1) allow all auth users to access the client portal
--- 2) set the same default password for all active users
+-- 2) link existing auth users to client records when possible
 -- Review security implications before running in production.
 
 DO $$
-DECLARE
-  v_default_password text := '123456';
 BEGIN
   -- Ensure all active users have the "client" role (in addition to existing roles).
   INSERT INTO public.user_roles (user_id, role)
@@ -88,13 +86,5 @@ BEGIN
       WHERE c.portal_user_id = u.id
     );
 
-  -- Set one shared default password for all active users (as requested).
-  UPDATE auth.users u
-  SET
-    encrypted_password = extensions.crypt(v_default_password, extensions.gen_salt('bf')),
-    email_confirmed_at = coalesce(u.email_confirmed_at, now()),
-    updated_at = now()
-  WHERE u.deleted_at IS NULL
-    AND u.email IS NOT NULL;
 END;
 $$;

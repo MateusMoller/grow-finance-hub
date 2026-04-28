@@ -269,6 +269,16 @@ function parseAuthToken(req: Request): string | null {
   return null;
 }
 
+function isMissingRelationError(message: string | undefined, relationName: string) {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("relation") &&
+    normalized.includes(relationName.toLowerCase()) &&
+    normalized.includes("does not exist")
+  );
+}
+
 function isMissingColumnError(message: string | undefined, columnName: string) {
   if (!message) return false;
   const msg = message.toLowerCase();
@@ -279,6 +289,37 @@ async function resolveIntegrationUser(
   supabaseAdmin: ReturnType<typeof createClient>,
   token: string,
 ) {
+  const tokenHash = await sha256Hex(token);
+  const credential = await supabaseAdmin
+    .from("integration_api_credentials")
+    .select("user_id, enabled, revoked_at")
+    .eq("token_hash", tokenHash)
+    .limit(1)
+    .maybeSingle();
+
+  const credentialTableMissing =
+    Boolean(credential.error) &&
+    isMissingRelationError(credential.error?.message, "integration_api_credentials");
+
+  if (!credentialTableMissing) {
+    if (credential.error) {
+      throw credential.error;
+    }
+
+    if (!credential.data?.user_id || credential.data.enabled !== true || credential.data.revoked_at) {
+      return null;
+    }
+
+    await supabaseAdmin
+      .from("integration_api_credentials")
+      .update({
+        last_used_at: new Date().toISOString(),
+      })
+      .eq("user_id", credential.data.user_id);
+
+    return credential.data.user_id as string;
+  }
+
   const modern = await supabaseAdmin
     .from("user_settings")
     .select("user_id")

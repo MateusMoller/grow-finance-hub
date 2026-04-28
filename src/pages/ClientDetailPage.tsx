@@ -19,6 +19,11 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { getClientSegmentOptions } from "@/lib/clientSegments";
+import {
+  buildSecureStoragePath,
+  SECURE_DOCUMENT_ACCEPT,
+  validateSecureDocument,
+} from "@/lib/fileUploadSecurity";
 import { sectorOptions } from "@/components/portal/types";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -1612,9 +1617,18 @@ export default function ClientDetailPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !id || !user) return;
+    const validationError = validateSecureDocument(file);
+    if (validationError) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      toast.error(validationError);
+      return;
+    }
 
     setUploading(true);
-    const filePath = `${id}/${uploadCategory}/${Date.now()}_${file.name}`;
+    const filePath = buildSecureStoragePath(
+      [id, uploadCategory, `${Date.now()}_${crypto.randomUUID()}`],
+      file.name,
+    );
 
     const { error: uploadError } = await supabase.storage
       .from("client-files")
@@ -1977,7 +1991,13 @@ export default function ClientDetailPage() {
 
   return (
     <AppLayout>
-      <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={SECURE_DOCUMENT_ACCEPT}
+        className="hidden"
+        onChange={handleFileUpload}
+      />
 
       <div className="space-y-6 max-w-5xl">
         {/* Header */}
