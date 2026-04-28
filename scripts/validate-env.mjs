@@ -2,10 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const ENV_FILE = join(process.cwd(), ".env");
-const REQUIRED_KEYS = [
-  "VITE_SUPABASE_URL",
-  "VITE_SUPABASE_PUBLISHABLE_KEY",
-];
+const REQUIRED_KEYS = ["VITE_SUPABASE_PUBLISHABLE_KEY"];
 
 function parseEnv(content) {
   const parsed = {};
@@ -38,6 +35,14 @@ if (!existsSync(ENV_FILE)) {
 
 const env = parseEnv(readFileSync(ENV_FILE, "utf8"));
 const missing = REQUIRED_KEYS.filter((key) => !env[key] || isPlaceholderValue(key, env[key]));
+
+const hasSupabaseUrl = Boolean(env.VITE_SUPABASE_URL) && !isPlaceholderValue("VITE_SUPABASE_URL", env.VITE_SUPABASE_URL);
+const hasSupabaseProjectId =
+  Boolean(env.VITE_SUPABASE_PROJECT_ID) && !isPlaceholderValue("VITE_SUPABASE_PROJECT_ID", env.VITE_SUPABASE_PROJECT_ID);
+
+if (!hasSupabaseUrl && !hasSupabaseProjectId) {
+  missing.push("VITE_SUPABASE_URL ou VITE_SUPABASE_PROJECT_ID");
+}
 
 if (missing.length > 0) {
   process.stderr.write(

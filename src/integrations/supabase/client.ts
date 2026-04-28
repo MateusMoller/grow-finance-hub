@@ -2,15 +2,27 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-function getRequiredEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY') {
-  const value = import.meta.env[name]?.trim();
+function readEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY' | 'VITE_SUPABASE_PROJECT_ID') {
+  const value = import.meta.env[name]?.trim().replace(/^['"]|['"]$/g, "");
+  return value || null;
+}
+
+function getRequiredEnv(
+  name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY',
+  fallback?: string | null,
+) {
+  const value = readEnv(name) ?? fallback ?? null;
   if (!value) {
     throw new Error(`[supabase] Variavel obrigatoria ausente: ${name}`);
   }
   return value;
 }
 
-const SUPABASE_URL = getRequiredEnv('VITE_SUPABASE_URL');
+const SUPABASE_PROJECT_ID = readEnv('VITE_SUPABASE_PROJECT_ID');
+const SUPABASE_URL = getRequiredEnv(
+  'VITE_SUPABASE_URL',
+  SUPABASE_PROJECT_ID ? `https://${SUPABASE_PROJECT_ID}.supabase.co` : null,
+);
 const SUPABASE_PUBLISHABLE_KEY = getRequiredEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
 
 // Import the supabase client like this:
