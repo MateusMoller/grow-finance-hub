@@ -108,9 +108,6 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <h2 className="font-heading text-2xl font-bold">Entrar</h2>
-            <p className="text-sm text-muted-foreground">
-              Use seu login normalmente. O sistema identifica seu perfil e redireciona automaticamente para o ambiente correto.
-            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

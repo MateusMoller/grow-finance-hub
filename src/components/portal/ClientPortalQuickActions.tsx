@@ -19,13 +19,6 @@ export function ClientPortalQuickActions({
       </Button>
       <Button
         variant="outline"
-        className="h-auto min-h-11 justify-start gap-2 bg-card px-4 py-3 text-left"
-        onClick={onUploadDocument}
-      >
-        <Upload className="h-4 w-4" /> Enviar documentos
-      </Button>
-      <Button
-        variant="outline"
         className="h-auto min-h-11 justify-start gap-2 bg-card px-4 py-3 text-left sm:col-span-2 xl:col-span-1"
         onClick={onOpenSupport}
       >
