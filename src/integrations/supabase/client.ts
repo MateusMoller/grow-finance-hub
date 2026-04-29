@@ -2,28 +2,35 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-function readEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY' | 'VITE_SUPABASE_PROJECT_ID') {
-  const value = import.meta.env[name]?.trim().replace(/^['"]|['"]$/g, "");
-  return value || null;
+function normalizeEnvValue(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/^['"]|['"]$/g, "");
+  if (!normalized) return null;
+  if (normalized.includes("your-project-id")) return null;
+  if (normalized.includes("xxxxxxxx")) return null;
+  return normalized;
 }
 
-function getRequiredEnv(
-  name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_PUBLISHABLE_KEY',
-  fallback?: string | null,
-) {
-  const value = readEnv(name) ?? fallback ?? null;
+function readSupabaseEnv() {
+  // Vite replaces these statically at build time; avoid dynamic key access.
+  const supabaseUrl = normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL);
+  const supabaseProjectId = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PROJECT_ID);
+  const publishableKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+
+  const resolvedUrl = supabaseUrl ?? (supabaseProjectId ? `https://${supabaseProjectId}.supabase.co` : null);
+  return { resolvedUrl, publishableKey };
+}
+
+function getRequiredEnv(name: "VITE_SUPABASE_URL" | "VITE_SUPABASE_PUBLISHABLE_KEY", value: string | null) {
   if (!value) {
     throw new Error(`[supabase] Variavel obrigatoria ausente: ${name}`);
   }
   return value;
 }
 
-const SUPABASE_PROJECT_ID = readEnv('VITE_SUPABASE_PROJECT_ID');
-const SUPABASE_URL = getRequiredEnv(
-  'VITE_SUPABASE_URL',
-  SUPABASE_PROJECT_ID ? `https://${SUPABASE_PROJECT_ID}.supabase.co` : null,
-);
-const SUPABASE_PUBLISHABLE_KEY = getRequiredEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
+const { resolvedUrl, publishableKey } = readSupabaseEnv();
+const SUPABASE_URL = getRequiredEnv("VITE_SUPABASE_URL", resolvedUrl);
+const SUPABASE_PUBLISHABLE_KEY = getRequiredEnv("VITE_SUPABASE_PUBLISHABLE_KEY", publishableKey);
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
