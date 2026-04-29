@@ -28,8 +28,8 @@ export function SiteWordmark({ className, size = "header" }: SiteWordmarkProps) 
         className={cn(
           "block w-full text-center font-bold lowercase leading-none text-[#7d87a7]",
           isHeader
-            ? "mt-[-2px] text-[0.42rem] tracking-[0.52em] sm:text-[0.48rem]"
-            : "mt-[-2px] text-[0.39rem] tracking-[0.44em] sm:text-[0.43rem]",
+            ? "mt-[2px] text-[0.42rem] tracking-[0.52em] sm:text-[0.48rem]"
+            : "mt-[2px] text-[0.39rem] tracking-[0.44em] sm:text-[0.43rem]",
         )}
       >
         contabilidade
