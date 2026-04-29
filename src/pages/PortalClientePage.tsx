@@ -1513,17 +1513,15 @@ export default function PortalClientePage() {
               <Card className="overflow-hidden border-primary/10 shadow-sm">
                 <CardHeader className="pb-4">
                   <div className="space-y-1.5">
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="text-base">Nova solicitacao</CardTitle>
-                        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-                          {requestEntryMode === "support" ? "Atendimento por setor" : "Fluxo guiado"}
-                        </Badge>
-                      </div>
-                      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                        Escolha o setor, refine o motivo e envie apenas o contexto que ajuda a equipe a agir com rapidez.
-                      </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-base">Nova solicitacao</CardTitle>
+                      <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
+                        {requestEntryMode === "support" ? "Atendimento por setor" : "Fluxo guiado"}
+                      </Badge>
                     </div>
+                    <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                      Escolha o setor, refine o motivo e envie apenas o contexto que ajuda a equipe a agir com rapidez.
+                    </p>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5 pt-0">
