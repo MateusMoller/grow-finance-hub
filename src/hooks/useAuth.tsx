@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
-import type { User, Session, AuthError } from "@supabase/supabase-js";
+import type { User, Session } from "@supabase/supabase-js";
 import {
   getPrimaryRole,
   hasAnyDepartmentRole,
@@ -19,7 +19,7 @@ interface AuthContextType {
   isInternalUser: boolean;
   isClientUser: boolean;
   isDepartmentUser: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -113,6 +113,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    if (!isSupabaseConfigured) {
+      return {
+        error: new Error("Configuracao do Supabase ausente. Verifique runtime-config.js ou variaveis VITE_SUPABASE_*."),
+      };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   };

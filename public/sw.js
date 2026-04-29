@@ -1,4 +1,4 @@
-const CACHE_NAME = "grow-finance-hub-cache-v6";
+const CACHE_NAME = "grow-finance-hub-cache-v7";
 const APP_SHELL = [
   "./index.html",
   "./manifest.webmanifest",

@@ -5,6 +5,16 @@ import type { Database } from './types';
 const FALLBACK_SUPABASE_URL = "https://invalid.supabase.local";
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_missing_configuration";
 
+type RuntimeSupabaseConfig = {
+  VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_PROJECT_ID?: string;
+  VITE_SUPABASE_PUBLISHABLE_KEY?: string;
+};
+
+type GrowWindow = Window & {
+  __GROW_RUNTIME_CONFIG__?: RuntimeSupabaseConfig;
+};
+
 function normalizeEnvValue(value: unknown) {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/^['"]|['"]$/g, "");
@@ -14,11 +24,21 @@ function normalizeEnvValue(value: unknown) {
   return normalized;
 }
 
+function readRuntimeConfig() {
+  if (typeof window === "undefined") return {};
+  return (window as GrowWindow).__GROW_RUNTIME_CONFIG__ ?? {};
+}
+
 function readSupabaseEnv() {
+  const runtimeConfig = readRuntimeConfig();
+
   // Vite replaces these statically at build time; avoid dynamic key access.
-  const supabaseUrl = normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL);
-  const supabaseProjectId = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PROJECT_ID);
-  const publishableKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+  const supabaseUrl = normalizeEnvValue(import.meta.env.VITE_SUPABASE_URL)
+    ?? normalizeEnvValue(runtimeConfig.VITE_SUPABASE_URL);
+  const supabaseProjectId = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PROJECT_ID)
+    ?? normalizeEnvValue(runtimeConfig.VITE_SUPABASE_PROJECT_ID);
+  const publishableKey = normalizeEnvValue(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
+    ?? normalizeEnvValue(runtimeConfig.VITE_SUPABASE_PUBLISHABLE_KEY);
 
   const resolvedUrl = supabaseUrl ?? (supabaseProjectId ? `https://${supabaseProjectId}.supabase.co` : null);
   return { resolvedUrl, publishableKey };
@@ -29,7 +49,7 @@ function resolveSupabaseConfig() {
   const isConfigured = Boolean(resolvedUrl && publishableKey);
 
   if (!isConfigured) {
-    console.error(
+    console.warn(
       "[supabase] Configuracao ausente: defina VITE_SUPABASE_PUBLISHABLE_KEY e VITE_SUPABASE_URL ou VITE_SUPABASE_PROJECT_ID. O app carregou em modo restrito."
     );
   }

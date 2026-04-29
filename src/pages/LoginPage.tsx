@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import { hasAnyInternalRole, hasClientRole, normalizeRoles } from "@/lib/accessControl";
 import growIcon from "@/assets/grow-icon.png";
 import { GrowHeroArtwork } from "@/components/site/GrowHeroArtwork";
@@ -50,7 +50,11 @@ export default function LoginPage() {
 
     if (error) {
       setLoading(false);
-      toast.error("E-mail ou senha invalidos.");
+      if (error.message.includes("Configuracao do Supabase ausente")) {
+        toast.error("Integracao de autenticacao indisponivel. Verifique a configuracao do ambiente.");
+      } else {
+        toast.error("E-mail ou senha invalidos.");
+      }
       return;
     }
 
@@ -130,11 +134,17 @@ export default function LoginPage() {
                 onChange={(event) => setPassword(event.target.value)}
               />
             </div>
-            <Button variant="hero" size="lg" className="w-full gap-2" type="submit" disabled={loading}>
-              {loading ? "Entrando..." : "Entrar"}
+            <Button variant="hero" size="lg" className="w-full gap-2" type="submit" disabled={loading || !isSupabaseConfigured}>
+              {loading ? "Entrando..." : (!isSupabaseConfigured ? "Configuracao pendente" : "Entrar")}
               {!loading && <ArrowRight className="h-4 w-4" />}
             </Button>
           </form>
+
+          {!isSupabaseConfigured && (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Autenticacao indisponivel: configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` no ambiente.
+            </p>
+          )}
 
           <div className="space-y-2 text-center text-sm">
             <p className="text-muted-foreground">
