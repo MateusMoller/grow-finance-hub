@@ -59,25 +59,31 @@ Essa decisão evita:
 - Bloqueio explícito de uso em client-side.
 - Tratamento controlado para ausência de configuração.
 - Base pronta para chamadas à Responses API.
+- Camada compartilhada para auth da Edge Function, contexto autorizado por cliente, tools internas e classificacao de risco.
+- `runGrowAssistant(...)` com loop de function/tool calling via Responses API.
+- Edge Function inicial `grow-assistant` com JWT obrigatorio.
+- Classificacao de risco para acoes de baixo, medio e alto impacto.
+- Registro de acoes pendentes de confirmacao e pendentes de revisao humana em `ai_action_logs`.
+- Deteccao de duplicidade com camada objetiva e segunda camada semantica via OpenAI, com fallback seguro.
+- Helper frontend para o portal consumir a assistente por `supabase.functions.invoke("grow-assistant")`.
+- Estrutura inicial de webhook WhatsApp em `supabase/functions/whatsapp-webhook`.
+- Funcoes auxiliares para `parseWhatsAppMessage`, `findClientByPhone`, `sendWhatsAppTextMessage`, `sendWhatsAppDocumentMessage` e `handleWhatsAppInboundMessage`.
+- Migration inicial para `ai_interactions`, `ai_action_logs`, `ai_duplicate_checks` e `whatsapp_webhook_logs`.
 - Atualização do `.env.example` com variáveis novas de IA e WhatsApp.
 
 ### Ainda nao implementado nesta fase
 
-- `getAuthorizedClientContext`.
-- `runGrowAssistant`.
-- tools internas.
-- endpoint `/api/ai/assistant` ou Edge Function equivalente.
-- tabelas de auditoria da IA.
-- webhook do WhatsApp.
+- endpoint dedicado de confirmacao `POST /api/ai/actions/confirm`.
+- interface visual do widget da assistente no portal.
+- envio real de relatorios/PDFs pelo WhatsApp com link seguro e aprovacao humana.
 
 ## Plano das proximas fases
 
-1. Criar uma Edge Function da assistente com `verify_jwt = true`.
-2. Implementar `getAuthorizedClientContext(userId, clienteId?)`.
-3. Restringir o contexto enviado para a OpenAI ao cliente autorizado.
-4. Adicionar tools internas com validação backend-first.
-5. Persistir logs e trilha de auditoria em tabelas dedicadas.
-6. Preparar o fluxo de WhatsApp com verificação forte de identidade.
+1. Aplicar as migrations novas no projeto Supabase.
+2. Conectar o widget/UX do portal ao helper `src/lib/ai/growAssistant.ts`.
+3. Implementar o endpoint de confirmacao para reaproveitar os `actionId` ja persistidos.
+4. Refinar validacao de identidade no WhatsApp para cenarios sensiveis e multiplos clientes.
+5. Adicionar envio por link seguro para relatorios/documentos sensiveis.
 
 ## Variaveis de ambiente
 
@@ -97,3 +103,20 @@ Essa decisão evita:
 - `WHATSAPP_PHONE_NUMBER_ID`
 
 Para producao, as variaveis privadas devem ser configuradas como secrets das Supabase Edge Functions, e nao como variaveis expostas ao Vite.
+
+## Fluxo Portal
+
+1. O frontend autenticado chama `grow-assistant` via `supabase.functions.invoke(...)`.
+2. A Edge Function valida o JWT e resolve o contexto autorizado do cliente.
+3. A assistente recebe somente o contexto daquele cliente.
+4. Tools internas sao executadas apenas no backend e sempre revalidam `cliente_id`.
+5. A resposta retorna `reply`, `action` e `safety`, pronta para o portal exibir.
+
+## Fluxo WhatsApp
+
+1. `GET /functions/v1/whatsapp-webhook` responde ao desafio de verificacao do Meta webhook.
+2. `POST /functions/v1/whatsapp-webhook` recebe mensagens/eventos.
+3. O backend normaliza o telefone e tenta localizar o cliente por `clients.phone` e `client_data`.
+4. Se houver ambiguidade ou falta de vinculo seguro, a resposta pede identificacao adicional ou direciona para humano.
+5. Se houver cliente unico com base suficiente, o backend chama `runGrowAssistant(..., channel = "whatsapp")`.
+6. Se as credenciais de envio estiverem configuradas, a resposta e enviada pela Cloud API; caso contrario, o webhook processa e registra log sem disparar mensagem.

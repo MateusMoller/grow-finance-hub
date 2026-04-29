@@ -27,6 +27,7 @@ export type OpenAIResponsesToolDefinition = {
   name: string;
   description?: string;
   parameters: Record<string, unknown>;
+  strict?: boolean;
 };
 
 export type OpenAIResponsePayload = {
