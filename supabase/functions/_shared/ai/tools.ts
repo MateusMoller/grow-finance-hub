@@ -767,14 +767,18 @@ async function solicitarEnvioRelatorio(params: {
   canal?: string | null;
 }): Promise<ToolExecutionResult> {
   const tipoRelatorio = asTrimmedString(params.tipoRelatorio) || "relatorio";
-  const riskLevel = classifyReportRisk(tipoRelatorio);
+  const channel = asTrimmedString(params.canal) || "portal";
+  const baseRiskLevel = classifyReportRisk(tipoRelatorio);
+  const escalatedForUnverifiedWhatsapp =
+    channel === "whatsapp" && !params.context.requester.isIdentityVerified;
+  const riskLevel = escalatedForUnverifiedWhatsapp ? "alto" : baseRiskLevel;
   const requiresHumanReview = requiresHumanReviewForRisk(riskLevel);
   const confirmationRequired = requiresConfirmationForRisk(riskLevel);
   const exigeLinkSeguro = requiresHumanReview || !params.context.permissions.canReceiveSensitiveReportsDirectly;
   const actionPayload = {
     tipo_relatorio: tipoRelatorio,
     competencia: normalizeCompetencia(params.competencia),
-    canal: params.canal || "portal",
+    canal: channel,
   };
   let actionId: string | null = null;
 
@@ -810,7 +814,9 @@ async function solicitarEnvioRelatorio(params: {
       pode_enviar: !requiresHumanReview,
       exige_confirmacao: confirmationRequired,
       exige_link_seguro: exigeLinkSeguro,
-      motivo: isSensitiveReportType(tipoRelatorio)
+      motivo: escalatedForUnverifiedWhatsapp
+        ? "Pedido recebido por WhatsApp sem identidade validada em sessao. O envio deve seguir por link seguro no portal ou validacao humana."
+        : isSensitiveReportType(tipoRelatorio)
         ? "Relatorio sensivel. Preferir link seguro no portal ou aprovacao humana."
         : "Relatorio resumido pode seguir com confirmacao explicita.",
       mensagem_sugerida: exigeLinkSeguro

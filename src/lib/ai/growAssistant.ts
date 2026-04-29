@@ -27,6 +27,11 @@ export interface GrowAssistantResponse {
   detectedIntent?: string | null;
 }
 
+export interface ConfirmGrowAssistantActionInput {
+  actionId: string;
+  confirm: boolean;
+}
+
 export interface AskGrowAssistantInput {
   clienteId: string;
   message: string;
@@ -78,6 +83,25 @@ export async function askGrowAssistant(input: AskGrowAssistantInput): Promise<Gr
 
   if (!data) {
     throw new GrowAssistantError("A assistente Grow nao retornou dados.");
+  }
+
+  return data;
+}
+
+export async function confirmGrowAssistantAction(input: ConfirmGrowAssistantActionInput): Promise<GrowAssistantResponse> {
+  const { data, error } = await supabase.functions.invoke<GrowAssistantResponse>("grow-assistant-confirm-action", {
+    body: {
+      actionId: input.actionId,
+      confirm: input.confirm,
+    },
+  });
+
+  if (error) {
+    throw await parseFunctionsError(error);
+  }
+
+  if (!data) {
+    throw new GrowAssistantError("A confirmacao da assistente Grow nao retornou dados.");
   }
 
   return data;

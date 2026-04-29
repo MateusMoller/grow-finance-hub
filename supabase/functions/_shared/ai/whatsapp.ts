@@ -4,7 +4,7 @@ import { runGrowAssistantWithAuthorizedContext } from "./assistant.ts";
 import { getAuthorizedClientContext } from "./authorization.ts";
 import { logWhatsAppWebhookEvent } from "./logging.ts";
 import type { JsonRecord, ParsedWhatsAppInboundMessage, WhatsAppClientMatch } from "./types.ts";
-import { asRecord, asTrimmedString, maskCnpj, normalizePhoneDigits } from "./utils.ts";
+import { asRecord, asTrimmedString, maskCnpj, normalizePhoneDigits, normalizeText } from "./utils.ts";
 
 const DEFAULT_WHATSAPP_GRAPH_API_VERSION = "v23.0";
 
@@ -195,6 +195,7 @@ export async function findClientByPhone(
         portalUserId: client.portal_user_id,
         phone: client.phone,
         cnpjMasked: maskCnpj(client.cnpj),
+        cnpjDigits: asTrimmedString(client.cnpj)?.replace(/\D/g, "") || null,
         matchedBy: "clients.phone",
       });
       continue;
@@ -207,6 +208,7 @@ export async function findClientByPhone(
         portalUserId: client.portal_user_id,
         phone: whatsappByClient.get(client.id) || client.phone,
         cnpjMasked: maskCnpj(client.cnpj),
+        cnpjDigits: asTrimmedString(client.cnpj)?.replace(/\D/g, "") || null,
         matchedBy: "client_data.whatsapp",
       });
       continue;
@@ -219,6 +221,7 @@ export async function findClientByPhone(
         portalUserId: client.portal_user_id,
         phone: telefoneByClient.get(client.id) || client.phone,
         cnpjMasked: maskCnpj(client.cnpj),
+        cnpjDigits: asTrimmedString(client.cnpj)?.replace(/\D/g, "") || null,
         matchedBy: "client_data.telefone",
       });
     }
@@ -293,6 +296,19 @@ function buildAmbiguousPhoneReply(_matches: WhatsAppClientMatch[]) {
   return "Localizei mais de um cliente vinculado a este numero. Responda com o CNPJ ou a razao social da empresa para seguirmos com seguranca.";
 }
 
+function resolveMatchByUserReply(matches: WhatsAppClientMatch[], text: string) {
+  const digits = normalizePhoneDigits(text);
+  if (digits && digits.length >= 8) {
+    const byCnpj = matches.find((item) => item.cnpjDigits === digits);
+    if (byCnpj) return byCnpj;
+  }
+
+  const normalizedText = normalizeText(text);
+  if (!normalizedText) return null;
+
+  return matches.find((item) => normalizeText(item.clientName).includes(normalizedText));
+}
+
 export async function handleWhatsAppInboundMessage(params: {
   payload: unknown;
   supabaseAdmin: SupabaseClient;
@@ -333,8 +349,45 @@ export async function handleWhatsAppInboundMessage(params: {
       reply = buildUnknownPhoneReply();
       processingStatus = "unknown_phone";
     } else if (matches.length > 1) {
-      reply = buildAmbiguousPhoneReply(matches);
-      processingStatus = "multiple_clients";
+      const resolvedMatch = resolveMatchByUserReply(matches, message.text);
+
+      if (!resolvedMatch) {
+        reply = buildAmbiguousPhoneReply(matches);
+        processingStatus = "multiple_clients";
+      } else if (!resolvedMatch.portalUserId) {
+        clientId = resolvedMatch.clientId;
+        reply =
+          "Identifiquei a empresa, mas este numero ainda nao esta habilitado para atendimento automatizado com acesso seguro ao portal. Vou direcionar para atendimento humano.";
+        processingStatus = "missing_portal_user";
+      } else {
+        clientId = resolvedMatch.clientId;
+        userId = resolvedMatch.portalUserId;
+
+        const authorizedContext = await getAuthorizedClientContext({
+          supabaseAdmin: params.supabaseAdmin,
+          userId: resolvedMatch.portalUserId,
+          requesterRoles: ["client"],
+          clienteId: resolvedMatch.clientId,
+          requesterDisplayName: message.profileName || "Contato WhatsApp",
+          requesterEmail: null,
+          requesterIdentityMethod: "phone_match",
+          requesterIdentityVerified: false,
+        });
+
+        const result = await runGrowAssistantWithAuthorizedContext({
+          supabaseAdmin: params.supabaseAdmin,
+          userId: resolvedMatch.portalUserId,
+          requesterRoles: ["client"],
+          clienteId: resolvedMatch.clientId,
+          message: message.text || "Mensagem recebida sem conteudo textual.",
+          channel: "whatsapp",
+          attachments: message.attachments,
+          authorizedContext,
+        });
+
+        reply = result.reply;
+        processingStatus = result.action.type;
+      }
     } else {
       const match = matches[0];
       clientId = match.clientId;

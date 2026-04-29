@@ -6,12 +6,14 @@ import type {
 } from "./types.ts";
 import { getAuthorizedClientContext } from "./authorization.ts";
 import { finalizeAiInteraction, logAiInteractionStart } from "./logging.ts";
+import { classifyOperationalIntent } from "./intent.ts";
 import { buildDefaultAction, buildSafetyEnvelope } from "./risk.ts";
 import { createOpenAIResponse, extractResponseText } from "./openaiClient.ts";
 import { executeGrowAssistantTool, getGrowAssistantToolDefinitions } from "./tools.ts";
 import { asTrimmedString } from "./utils.ts";
 
-function buildAssistantInstructions(context: AuthorizedClientContext) {
+function buildAssistantInstructions(context: AuthorizedClientContext, message: string) {
+  const intentClassification = classifyOperationalIntent(message);
   const serializedContext = {
     identidade_requisitante: {
       metodo: context.requester.identityMethod,
@@ -63,6 +65,9 @@ function buildAssistantInstructions(context: AuthorizedClientContext) {
     "Toda acao deve respeitar as permissoes do usuario e as regras do sistema.",
     "Se a identidade estiver marcada como nao verificada, evite fornecer qualquer conteudo sensivel diretamente e prefira confirmacao adicional, link seguro no portal ou validacao humana.",
     "Se usar uma ferramenta, utilize apenas o cliente_id autorizado ja fornecido no contexto.",
+    `Classificacao inicial da solicitacao: ${intentClassification.intent}.`,
+    `Leitura operacional inicial: ${intentClassification.summary}`,
+    `Ferramentas mais provaveis para este caso: ${intentClassification.toolHints.join(", ")}.`,
     `Contexto autorizado do cliente: ${JSON.stringify(serializedContext)}`,
   ].join("\n");
 }
@@ -136,12 +141,14 @@ export async function runGrowAssistantWithAuthorizedContext(params: RunGrowAssis
     action_requested: {
       channel: params.channel,
       attachments_count: params.attachments?.length || 0,
+      intent_hint: classifyOperationalIntent(params.message).intent,
     },
     action_executed: {},
     requires_human_review: false,
   });
 
-  const instructions = buildAssistantInstructions(context);
+  const intentClassification = classifyOperationalIntent(params.message);
+  const instructions = buildAssistantInstructions(context, params.message);
   const toolDefinitions = getGrowAssistantToolDefinitions();
   const toolExecutions: ToolExecutionResult[] = [];
 
@@ -205,7 +212,7 @@ export async function runGrowAssistantWithAuthorizedContext(params: RunGrowAssis
 
   await finalizeAiInteraction(params.supabaseAdmin, interaction.id, {
     ai_response: reply,
-    detected_intent: detectedIntent,
+    detected_intent: detectedIntent || intentClassification.intent,
     risk_level: safety.riskLevel,
     action_executed: {
       action,
@@ -226,7 +233,7 @@ export async function runGrowAssistantWithAuthorizedContext(params: RunGrowAssis
       clientId: context.client.id,
       clientName: context.client.name,
     },
-    detectedIntent,
+    detectedIntent: detectedIntent || intentClassification.intent,
     toolExecutions,
     interactionId: interaction.id,
   };

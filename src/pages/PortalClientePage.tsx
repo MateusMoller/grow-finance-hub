@@ -20,6 +20,7 @@ import {
 import { RequestChat } from "@/components/app/RequestChat";
 import { ClientPortalCashflow } from "@/components/portal/ClientPortalCashflow";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
+import { GrowAssistantWidget } from "@/components/portal/GrowAssistantWidget";
 import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
 import {
   documentCategories,
@@ -1489,6 +1490,23 @@ export default function PortalClientePage() {
               onUploadDocument={() => setUploadDialogOpen(true)}
               onOpenSupport={() => openRequestsHub("support")}
             />
+
+            {clientProfile?.id ? (
+              <GrowAssistantWidget
+                clientId={clientProfile.id}
+                clientName={clientProfile.name || clientProfile.contact || "Cliente Grow"}
+                onRequestHumanSupport={() =>
+                  prepareInlineRequest(
+                    {
+                      sector: "Geral",
+                      reasonKey: "outro_assunto",
+                      title: "Encaminhamento para atendimento humano",
+                      description: "Quero encaminhar esta demanda para atendimento humano após a triagem da assistente Grow.",
+                    },
+                    "support",
+                  )}
+              />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="requests" className="space-y-4">

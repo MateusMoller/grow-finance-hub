@@ -219,5 +219,6 @@ export type WhatsAppClientMatch = {
   portalUserId: string | null;
   phone: string | null;
   cnpjMasked: string | null;
+  cnpjDigits: string | null;
   matchedBy: "clients.phone" | "client_data.whatsapp" | "client_data.telefone";
 };

@@ -39,5 +39,8 @@ verify_jwt = true
 [functions.grow-assistant]
 verify_jwt = true
 
+[functions.grow-assistant-confirm-action]
+verify_jwt = true
+
 [functions.whatsapp-webhook]
 verify_jwt = false
