@@ -437,7 +437,7 @@ export default function ClientsPage() {
               <Label>Acesso do Portal</Label>
               <Input
                 type="text"
-                placeholder="MÃ­nimo 6 caracteres"
+                placeholder="Acesso por convite seguro"
                 value="Convite seguro enviado por link"
                 readOnly
                 disabled
@@ -458,3 +458,4 @@ export default function ClientsPage() {
     </AppLayout>
   );
 }
+

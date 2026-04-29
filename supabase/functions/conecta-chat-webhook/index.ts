@@ -269,25 +269,9 @@ function parseAuthToken(req: Request): string | null {
   return null;
 }
 
-function isMissingRelationError(message: string | undefined, relationName: string) {
-  if (!message) return false;
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("relation") &&
-    normalized.includes(relationName.toLowerCase()) &&
-    normalized.includes("does not exist")
-  );
-}
-
-function isMissingColumnError(message: string | undefined, columnName: string) {
-  if (!message) return false;
-  const msg = message.toLowerCase();
-  return msg.includes("column") && msg.includes(columnName.toLowerCase());
-}
-
 async function resolveIntegrationUser(
   supabaseAdmin: ReturnType<typeof createClient>,
-  token: string,
+  token: string
 ) {
   const tokenHash = await sha256Hex(token);
   const credential = await supabaseAdmin
@@ -297,73 +281,22 @@ async function resolveIntegrationUser(
     .limit(1)
     .maybeSingle();
 
-  const credentialTableMissing =
-    Boolean(credential.error) &&
-    isMissingRelationError(credential.error?.message, "integration_api_credentials");
-
-  if (!credentialTableMissing) {
-    if (credential.error) {
-      throw credential.error;
-    }
-
-    if (!credential.data?.user_id || credential.data.enabled !== true || credential.data.revoked_at) {
-      return null;
-    }
-
-    await supabaseAdmin
-      .from("integration_api_credentials")
-      .update({
-        last_used_at: new Date().toISOString(),
-      })
-      .eq("user_id", credential.data.user_id);
-
-    return credential.data.user_id as string;
+  if (credential.error) {
+    throw credential.error;
   }
 
-  const modern = await supabaseAdmin
-    .from("user_settings")
-    .select("user_id")
-    .eq("api_access", true)
-    .eq("api_token", token)
-    .limit(1)
-    .maybeSingle();
-
-  if (!modern.error && modern.data?.user_id) {
-    return modern.data.user_id as string;
+  if (!credential.data?.user_id || credential.data.enabled !== true || credential.data.revoked_at) {
+    return null;
   }
 
-  const modernHasMissingColumns =
-    Boolean(modern.error) &&
-    (isMissingColumnError(modern.error?.message, "api_access") ||
-      isMissingColumnError(modern.error?.message, "api_token"));
+  await supabaseAdmin
+    .from("integration_api_credentials")
+    .update({
+      last_used_at: new Date().toISOString(),
+    })
+    .eq("user_id", credential.data.user_id);
 
-  if (modern.error && !modernHasMissingColumns) {
-    throw modern.error;
-  }
-
-  const shouldTryLegacy = modernHasMissingColumns || (!modern.error && !modern.data);
-  if (!shouldTryLegacy) return null;
-
-  const legacy = await supabaseAdmin
-    .from("user_settings")
-    .select("user_id")
-    .eq("integrations_api_access", true)
-    .eq("integrations_api_token", token)
-    .limit(1)
-    .maybeSingle();
-
-  const legacyHasMissingColumns =
-    Boolean(legacy.error) &&
-    (isMissingColumnError(legacy.error?.message, "integrations_api_access") ||
-      isMissingColumnError(legacy.error?.message, "integrations_api_token"));
-
-  if (legacyHasMissingColumns) return null;
-
-  if (legacy.error) {
-    throw legacy.error;
-  }
-
-  return (legacy.data?.user_id as string | undefined) || null;
+  return credential.data.user_id as string;
 }
 
 Deno.serve(async (req) => {
