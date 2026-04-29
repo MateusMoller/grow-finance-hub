@@ -71,9 +71,11 @@ const ensureGrowServiceWorker = async () => {
   if (!registration || !isGrowServiceWorkerRegistration(registration)) {
     registration = await navigator.serviceWorker.register(`${normalizePwaBasePath()}sw.js`, {
       scope: scopePath,
+      updateViaCache: "none",
     });
   }
 
+  await registration.update();
   await navigator.serviceWorker.ready;
 };
 

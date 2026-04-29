@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import type { User, Session, AuthError } from "@supabase/supabase-js";
 import {
   getPrimaryRole,
@@ -34,6 +34,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [roleLoaded, setRoleLoaded] = useState(false);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setRole(null);
+      setRoles([]);
+      setRoleLoaded(true);
+      setLoading(false);
+      return;
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
@@ -51,15 +59,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const initializeAuth = async () => {
-      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
 
-      setSession(initialSession);
-      setUser(initialSession?.user ?? null);
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
 
-      if (initialSession?.user) {
-        setRoleLoaded(false);
-        await fetchRole(initialSession.user.id);
-      } else {
+        if (initialSession?.user) {
+          setRoleLoaded(false);
+          await fetchRole(initialSession.user.id);
+        } else {
+          setRole(null);
+          setRoles([]);
+          setRoleLoaded(true);
+        }
+      } catch {
+        setSession(null);
+        setUser(null);
         setRole(null);
         setRoles([]);
         setRoleLoaded(true);

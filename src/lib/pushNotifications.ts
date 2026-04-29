@@ -51,9 +51,13 @@ const ensureServiceWorkerRegistration = async () => {
   let registration = await navigator.serviceWorker.getRegistration(scope);
 
   if (!registration) {
-    registration = await navigator.serviceWorker.register(getServiceWorkerUrl(), { scope });
+    registration = await navigator.serviceWorker.register(getServiceWorkerUrl(), {
+      scope,
+      updateViaCache: "none",
+    });
   }
 
+  await registration.update();
   await navigator.serviceWorker.ready;
   return registration;
 };

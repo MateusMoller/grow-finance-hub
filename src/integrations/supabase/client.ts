@@ -2,6 +2,9 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+const FALLBACK_SUPABASE_URL = "https://invalid.supabase.local";
+const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_missing_configuration";
+
 function normalizeEnvValue(value: unknown) {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/^['"]|['"]$/g, "");
@@ -21,16 +24,27 @@ function readSupabaseEnv() {
   return { resolvedUrl, publishableKey };
 }
 
-function getRequiredEnv(name: "VITE_SUPABASE_URL" | "VITE_SUPABASE_PUBLISHABLE_KEY", value: string | null) {
-  if (!value) {
-    throw new Error(`[supabase] Variavel obrigatoria ausente: ${name}`);
+function resolveSupabaseConfig() {
+  const { resolvedUrl, publishableKey } = readSupabaseEnv();
+  const isConfigured = Boolean(resolvedUrl && publishableKey);
+
+  if (!isConfigured) {
+    console.error(
+      "[supabase] Configuracao ausente: defina VITE_SUPABASE_PUBLISHABLE_KEY e VITE_SUPABASE_URL ou VITE_SUPABASE_PROJECT_ID. O app carregou em modo restrito."
+    );
   }
-  return value;
+
+  return {
+    url: resolvedUrl ?? FALLBACK_SUPABASE_URL,
+    publishableKey: publishableKey ?? FALLBACK_PUBLISHABLE_KEY,
+    isConfigured,
+  };
 }
 
-const { resolvedUrl, publishableKey } = readSupabaseEnv();
-const SUPABASE_URL = getRequiredEnv("VITE_SUPABASE_URL", resolvedUrl);
-const SUPABASE_PUBLISHABLE_KEY = getRequiredEnv("VITE_SUPABASE_PUBLISHABLE_KEY", publishableKey);
+const supabaseConfig = resolveSupabaseConfig();
+const SUPABASE_URL = supabaseConfig.url;
+const SUPABASE_PUBLISHABLE_KEY = supabaseConfig.publishableKey;
+export const isSupabaseConfigured = supabaseConfig.isConfigured;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

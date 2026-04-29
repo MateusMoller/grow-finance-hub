@@ -1,4 +1,4 @@
-const CACHE_NAME = "grow-finance-hub-cache-v4";
+const CACHE_NAME = "grow-finance-hub-cache-v6";
 const APP_SHELL = [
   "./index.html",
   "./manifest.webmanifest",
@@ -66,13 +66,32 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const destination = request.destination;
+
+  if (["script", "style", "worker"].includes(destination)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          return cached || Response.error();
+        }),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then(async (cachedResponse) => {
       if (cachedResponse) return cachedResponse;
 
       const networkResponse = await fetch(request);
-      const destination = request.destination;
-      const shouldCache = ["script", "style", "image", "font", "manifest"].includes(destination);
+      const shouldCache = ["image", "font", "manifest"].includes(destination);
 
       if (shouldCache && networkResponse.ok) {
         const copy = networkResponse.clone();
