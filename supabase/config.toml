@@ -46,7 +46,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.open-finance-module]
-verify_jwt = true
+verify_jwt = false
 
 [functions.open-finance-webhook]
 verify_jwt = false
