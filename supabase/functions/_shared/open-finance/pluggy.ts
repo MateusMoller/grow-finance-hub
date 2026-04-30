@@ -26,6 +26,7 @@ type PluggyAuthResponse = {
 
 type PluggyConnectTokenResponse = {
   accessToken?: string;
+  connectToken?: string;
   expiresAt?: string;
 };
 
@@ -115,9 +116,14 @@ export function createPluggyAdapter(): ProviderAdapter {
         }),
       });
 
-      const sessionToken = asString(data.accessToken);
+      const sessionToken = asString(data.accessToken) || asString(data.connectToken);
       if (!sessionToken) throw new Error("Pluggy connect token not returned");
-      const connectUrl = `${connectBaseUrl}?token=${encodeURIComponent(sessionToken)}`;
+      const connectUrlObject = new URL(connectBaseUrl.endsWith("/") ? connectBaseUrl : `${connectBaseUrl}/`);
+      // Keep multiple aliases for compatibility with Pluggy Connect URL parsers.
+      connectUrlObject.searchParams.set("connectToken", sessionToken);
+      connectUrlObject.searchParams.set("connect_token", sessionToken);
+      connectUrlObject.searchParams.set("token", sessionToken);
+      const connectUrl = connectUrlObject.toString();
       return {
         sessionToken,
         connectUrl,
