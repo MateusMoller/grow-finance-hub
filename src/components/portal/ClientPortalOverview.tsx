@@ -11,8 +11,8 @@ interface ClientPortalOverviewProps {
   pendingNow: PortalActionItem[];
   recentUpdates: PortalActionItem[];
   onNewRequest: () => void;
-  onUploadDocument: () => void;
   onOpenSupport: () => void;
+  onOpenHistory: () => void;
 }
 
 export function ClientPortalOverview({
@@ -22,8 +22,8 @@ export function ClientPortalOverview({
   pendingNow,
   recentUpdates,
   onNewRequest,
-  onUploadDocument,
   onOpenSupport,
+  onOpenHistory,
 }: ClientPortalOverviewProps) {
   return (
     <div className="space-y-5">
@@ -44,8 +44,8 @@ export function ClientPortalOverview({
         <CardContent className="pt-0">
           <ClientPortalQuickActions
             onNewRequest={onNewRequest}
-            onUploadDocument={onUploadDocument}
             onOpenSupport={onOpenSupport}
+            onOpenHistory={onOpenHistory}
           />
         </CardContent>
       </Card>

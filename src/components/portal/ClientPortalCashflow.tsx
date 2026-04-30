@@ -17,6 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { PluggyConnect } from "react-pluggy-connect";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ interface ClientPortalCashflowProps {
   onCreateEntriesBatch: (
     payloads: NewPortalCashflowEntryPayload[],
   ) => Promise<{ success: boolean; inserted: number }>;
-  onCreateOpenFinanceSession: () => Promise<boolean>;
+  onCreateOpenFinanceSession: () => Promise<string | null>;
   onManualSyncOpenFinance: (connectionId: string) => Promise<OpenFinanceSyncStatus | null>;
   onDisconnectOpenFinance: (connectionId: string) => Promise<boolean>;
   onRefreshOpenFinance: () => Promise<void>;
@@ -156,6 +157,7 @@ export function ClientPortalCashflow({
   const [parsingImport, setParsingImport] = useState(false);
   const [importingDrafts, setImportingDrafts] = useState(false);
   const [importDrafts, setImportDrafts] = useState<ImportDraftRow[]>([]);
+  const [pluggyConnectToken, setPluggyConnectToken] = useState<string | null>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const monthlyEntries = useMemo(
@@ -254,8 +256,6 @@ export function ClientPortalCashflow({
     return map;
   }, [openFinanceAccounts]);
 
-  const formatProviderLabel = (provider: OpenFinanceProvider) => (provider === "pluggy" ? "Pluggy" : "Openi");
-
   const formatConnectionStatus = (status: string) => {
     const token = String(status || "").trim().toLowerCase();
     if (token === "active") return "Ativa";
@@ -284,8 +284,9 @@ export function ClientPortalCashflow({
       toast.error("Este modulo ainda nao foi liberado para este cliente.");
       return;
     }
-    const success = await onCreateOpenFinanceSession();
-    if (!success) return;
+    const sessionToken = await onCreateOpenFinanceSession();
+    if (!sessionToken) return;
+    setPluggyConnectToken(sessionToken);
     toast.success("Sessao de conexao iniciada. Finalize o consentimento no fluxo do banco.");
   };
 
@@ -532,6 +533,30 @@ export function ClientPortalCashflow({
               {openFinanceConnecting ? "Conectando..." : "Conectar conta"}
             </Button>
           </div>
+          {pluggyConnectToken ? (
+            <PluggyConnect
+              connectToken={pluggyConnectToken}
+              includeSandbox={false}
+              language="pt"
+              onSuccess={async () => {
+                toast.success("Conta conectada com sucesso.");
+                setPluggyConnectToken(null);
+                await onRefreshOpenFinance();
+              }}
+              onError={(error) => {
+                setPluggyConnectToken(null);
+                toast.error(error?.message || "Erro na conexao bancaria.");
+              }}
+              onClose={async () => {
+                setPluggyConnectToken(null);
+                await onRefreshOpenFinance();
+              }}
+              onLoadError={(error) => {
+                setPluggyConnectToken(null);
+                toast.error(error.message || "Falha ao carregar o Pluggy Connect.");
+              }}
+            />
+          ) : null}
 
           <div className="flex justify-end">
             <Button
@@ -559,7 +584,7 @@ export function ClientPortalCashflow({
                   <div key={connection.id} className="rounded-lg border p-3 space-y-2">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
-                        <p className="text-sm font-medium">{formatProviderLabel(connection.provider)}</p>
+                        <p className="text-sm font-medium">Conexao bancaria</p>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <Badge variant="outline">{formatConnectionStatus(connection.status)}</Badge>
                           <Badge variant="secondary">{formatConsentStatus(connection.consent_status)}</Badge>

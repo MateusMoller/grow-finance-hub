@@ -1435,10 +1435,10 @@ export default function PortalClientePage() {
     return { success: true, inserted: payloads.length };
   };
 
-  const handleCreateOpenFinanceSession = async () => {
+  const handleCreateOpenFinanceSession = async (): Promise<string | null> => {
     if (!clientProfile?.id) {
       toast.error("Cliente nao vinculado ao portal.");
-      return false;
+      return null;
     }
 
     setOpenFinanceConnecting(true);
@@ -1452,20 +1452,13 @@ export default function PortalClientePage() {
         clientId: clientProfile.id,
       });
 
-      if (data.connectUrl && typeof data.connectUrl === "string") {
-        window.open(data.connectUrl, "_blank", "noopener,noreferrer");
-      } else if (data.sessionToken && typeof data.sessionToken === "string") {
-        await navigator.clipboard.writeText(data.sessionToken);
-        toast.info("Token de conexao copiado para uso no widget.");
-      } else {
+      if (!data.sessionToken || typeof data.sessionToken !== "string") {
         throw new Error("Nao foi possivel iniciar a sessao de conexao.");
       }
-
-      await fetchOpenFinanceData(clientProfile.id);
-      return true;
+      return data.sessionToken;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao iniciar conexao bancaria.");
-      return false;
+      return null;
     } finally {
       setOpenFinanceConnecting(false);
     }
@@ -1658,8 +1651,8 @@ export default function PortalClientePage() {
               pendingNow={pendingNow}
               recentUpdates={recentUpdates}
               onNewRequest={() => openRequestsHub("freeform")}
-              onUploadDocument={() => setUploadDialogOpen(true)}
               onOpenSupport={() => openRequestsHub("support")}
+              onOpenHistory={() => setActiveTab("request-history")}
             />
 
             {clientProfile?.id ? (
