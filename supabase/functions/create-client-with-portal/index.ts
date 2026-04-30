@@ -28,6 +28,7 @@ type CreateClientPayload = {
   contact?: string;
   email: string;
   phone?: string;
+  portalPassword?: string;
 };
 
 type ExistingClientRow = {
@@ -178,6 +179,7 @@ Deno.serve(async (req) => {
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
       phone: asTrimmedString(payload.phone) || undefined,
+      portalPassword: asTrimmedString(payload.portalPassword) || undefined,
     };
 
     if (!parsedPayload.name) {
@@ -193,7 +195,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
     }
 
-    const normalizedPortalPassword = "123456";
+    const normalizedPortalPassword = parsedPayload.portalPassword || "123456";
 
     const clientMatchFilters = [
       `email.ilike.${parsedPayload.email}`,
