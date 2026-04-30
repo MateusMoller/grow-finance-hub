@@ -27,7 +27,6 @@ import {
   type NewPortalCashflowEntryPayload,
   type OpenFinanceAccount,
   type OpenFinanceConnection,
-  type OpenFinanceProvider,
   type OpenFinanceSyncStatus,
   type PortalActionItem,
   type PortalCashflowEntry,
@@ -1436,7 +1435,7 @@ export default function PortalClientePage() {
     return { success: true, inserted: payloads.length };
   };
 
-  const handleCreateOpenFinanceSession = async (provider: OpenFinanceProvider) => {
+  const handleCreateOpenFinanceSession = async () => {
     if (!clientProfile?.id) {
       toast.error("Cliente nao vinculado ao portal.");
       return false;
@@ -1449,7 +1448,7 @@ export default function PortalClientePage() {
         connectUrl?: string | null;
       }>({
         action: "create_connect_session",
-        provider,
+        provider: "pluggy",
         clientId: clientProfile.id,
       });
 

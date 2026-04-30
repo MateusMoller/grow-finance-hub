@@ -30,7 +30,6 @@ import {
   type NewPortalCashflowEntryPayload,
   type OpenFinanceAccount,
   type OpenFinanceConnection,
-  type OpenFinanceProvider,
   type OpenFinanceSyncStatus,
   type PortalCashflowEntry,
   type PortalCashflowEntryStatus,
@@ -53,7 +52,7 @@ interface ClientPortalCashflowProps {
   onCreateEntriesBatch: (
     payloads: NewPortalCashflowEntryPayload[],
   ) => Promise<{ success: boolean; inserted: number }>;
-  onCreateOpenFinanceSession: (provider: OpenFinanceProvider) => Promise<boolean>;
+  onCreateOpenFinanceSession: () => Promise<boolean>;
   onManualSyncOpenFinance: (connectionId: string) => Promise<OpenFinanceSyncStatus | null>;
   onDisconnectOpenFinance: (connectionId: string) => Promise<boolean>;
   onRefreshOpenFinance: () => Promise<void>;
@@ -151,7 +150,6 @@ export function ClientPortalCashflow({
   const [entryType, setEntryType] = useState<PortalCashflowEntryType>("income");
   const [entryCategory, setEntryCategory] = useState(cashflowCategoriesByType.income[0]);
   const [entryStatus, setEntryStatus] = useState<PortalCashflowEntryStatus>("confirmed");
-  const [openFinanceProvider, setOpenFinanceProvider] = useState<OpenFinanceProvider>("pluggy");
   const [entryDescription, setEntryDescription] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
   const [importFiles, setImportFiles] = useState<File[]>([]);
@@ -286,7 +284,7 @@ export function ClientPortalCashflow({
       toast.error("Este modulo ainda nao foi liberado para este cliente.");
       return;
     }
-    const success = await onCreateOpenFinanceSession(openFinanceProvider);
+    const success = await onCreateOpenFinanceSession();
     if (!success) return;
     toast.success("Sessao de conexao iniciada. Finalize o consentimento no fluxo do banco.");
   };
@@ -520,22 +518,7 @@ export function ClientPortalCashflow({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[220px_1fr_auto] sm:items-end">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Provedor</Label>
-              <Select
-                value={openFinanceProvider}
-                onValueChange={(value) => setOpenFinanceProvider(value as OpenFinanceProvider)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pluggy">Pluggy</SelectItem>
-                  <SelectItem value="openi">Openi</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <div className="text-xs text-muted-foreground">
               O consentimento e feito no fluxo seguro do banco. Depois disso, os extratos entram automaticamente no caixa como lancamentos confirmados.
             </div>
