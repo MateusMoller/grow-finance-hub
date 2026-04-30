@@ -90,6 +90,51 @@ export interface NewPortalCashflowEntryPayload {
   status: PortalCashflowEntryStatus;
 }
 
+export type OpenFinanceProvider = "pluggy" | "openi";
+
+export interface OpenFinanceConnection {
+  id: string;
+  client_id: string;
+  provider: OpenFinanceProvider;
+  status: string;
+  consent_status: string;
+  consent_expires_at: string | null;
+  external_item_id: string;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+  disconnected_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpenFinanceAccount {
+  id: string;
+  connection_id: string;
+  external_account_id: string;
+  account_name: string | null;
+  account_type: string | null;
+  institution_name: string | null;
+  account_mask: string | null;
+  currency_code: string | null;
+  is_active: boolean;
+}
+
+export interface OpenFinanceSyncStatus {
+  connectionId: string;
+  syncedAccounts: number;
+  syncedTransactions: number;
+  importedEntries: number;
+}
+
+export interface OpenFinanceTransactionDigest {
+  external_transaction_id: string;
+  occurred_at: string;
+  description: string;
+  amount: number;
+  direction: "in" | "out";
+  category: string | null;
+}
+
 export interface RequestStatusMeta {
   label: string;
   icon: LucideIcon;

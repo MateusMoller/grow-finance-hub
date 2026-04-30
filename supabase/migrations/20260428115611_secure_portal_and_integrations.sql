@@ -47,14 +47,18 @@ BEGIN
         us.user_id,
         encode(extensions.digest(token_source.token_value, 'sha256'), 'hex'),
         left(token_source.token_value, 12),
-        coalesce(us.api_access, us.integrations_api_access, true),
+        coalesce(
+          nullif((to_jsonb(us)->>'api_access'), '')::boolean,
+          nullif((to_jsonb(us)->>'integrations_api_access'), '')::boolean,
+          true
+        ),
         now(),
         now()
       FROM public.user_settings us
       CROSS JOIN LATERAL (
         SELECT coalesce(
-          nullif(trim(coalesce(us.api_token, '')), ''),
-          nullif(trim(coalesce(us.integrations_api_token, '')), '')
+          nullif(trim(coalesce(to_jsonb(us)->>'api_token', '')), ''),
+          nullif(trim(coalesce(to_jsonb(us)->>'integrations_api_token', '')), '')
         ) AS token_value
       ) AS token_source
       WHERE token_source.token_value IS NOT NULL

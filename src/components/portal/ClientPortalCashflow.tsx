@@ -4,12 +4,15 @@ import {
   CalendarDays,
   CheckCircle2,
   CircleDollarSign,
+  Link2,
   Loader2,
   LockKeyhole,
   Plus,
+  RefreshCcw,
   Trash2,
   TrendingDown,
   TrendingUp,
+  Unplug,
   Upload,
   Wallet,
 } from "lucide-react";
@@ -25,6 +28,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   cashflowCategoriesByType,
   type NewPortalCashflowEntryPayload,
+  type OpenFinanceAccount,
+  type OpenFinanceConnection,
+  type OpenFinanceProvider,
+  type OpenFinanceSyncStatus,
   type PortalCashflowEntry,
   type PortalCashflowEntryStatus,
   type PortalCashflowEntryType,
@@ -34,12 +41,22 @@ import { parseCashflowFiles, type ParsedCashflowSuggestion } from "@/lib/cashflo
 interface ClientPortalCashflowProps {
   enabled: boolean;
   loading: boolean;
+  openFinanceLoading: boolean;
+  openFinanceConnecting: boolean;
+  openFinanceSyncingConnectionId: string | null;
+  openFinanceDisconnectingConnectionId: string | null;
+  openFinanceConnections: OpenFinanceConnection[];
+  openFinanceAccounts: OpenFinanceAccount[];
   entries: PortalCashflowEntry[];
   creating: boolean;
   onCreateEntry: (payload: NewPortalCashflowEntryPayload) => Promise<boolean>;
   onCreateEntriesBatch: (
     payloads: NewPortalCashflowEntryPayload[],
   ) => Promise<{ success: boolean; inserted: number }>;
+  onCreateOpenFinanceSession: (provider: OpenFinanceProvider) => Promise<boolean>;
+  onManualSyncOpenFinance: (connectionId: string) => Promise<OpenFinanceSyncStatus | null>;
+  onDisconnectOpenFinance: (connectionId: string) => Promise<boolean>;
+  onRefreshOpenFinance: () => Promise<void>;
   onRequestEnable: () => void;
 }
 
@@ -112,10 +129,20 @@ const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: numbe
 export function ClientPortalCashflow({
   enabled,
   loading,
+  openFinanceLoading,
+  openFinanceConnecting,
+  openFinanceSyncingConnectionId,
+  openFinanceDisconnectingConnectionId,
+  openFinanceConnections,
+  openFinanceAccounts,
   entries,
   creating,
   onCreateEntry,
   onCreateEntriesBatch,
+  onCreateOpenFinanceSession,
+  onManualSyncOpenFinance,
+  onDisconnectOpenFinance,
+  onRefreshOpenFinance,
   onRequestEnable,
 }: ClientPortalCashflowProps) {
   const today = useMemo(() => new Date(), []);
@@ -124,6 +151,7 @@ export function ClientPortalCashflow({
   const [entryType, setEntryType] = useState<PortalCashflowEntryType>("income");
   const [entryCategory, setEntryCategory] = useState(cashflowCategoriesByType.income[0]);
   const [entryStatus, setEntryStatus] = useState<PortalCashflowEntryStatus>("confirmed");
+  const [openFinanceProvider, setOpenFinanceProvider] = useState<OpenFinanceProvider>("pluggy");
   const [entryDescription, setEntryDescription] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
   const [importFiles, setImportFiles] = useState<File[]>([]);
@@ -218,9 +246,63 @@ export function ClientPortalCashflow({
       .slice(0, 6);
   }, [monthlyEntries]);
 
+  const accountsByConnection = useMemo(() => {
+    const map = new Map<string, OpenFinanceAccount[]>();
+    openFinanceAccounts.forEach((account) => {
+      const list = map.get(account.connection_id) || [];
+      list.push(account);
+      map.set(account.connection_id, list);
+    });
+    return map;
+  }, [openFinanceAccounts]);
+
+  const formatProviderLabel = (provider: OpenFinanceProvider) => (provider === "pluggy" ? "Pluggy" : "Openi");
+
+  const formatConnectionStatus = (status: string) => {
+    const token = String(status || "").trim().toLowerCase();
+    if (token === "active") return "Ativa";
+    if (token === "pending_consent") return "Pendente de consentimento";
+    if (token === "inactive") return "Inativa";
+    if (token === "error") return "Erro";
+    return "Desconhecido";
+  };
+
+  const formatConsentStatus = (status: string) => {
+    const token = String(status || "").trim().toLowerCase();
+    if (token === "granted") return "Consentimento ativo";
+    if (token === "pending") return "Aguardando consentimento";
+    if (token === "revoked") return "Consentimento revogado";
+    if (token === "expired") return "Consentimento expirado";
+    return "Consentimento não informado";
+  };
+
   const handleTypeChange = (value: PortalCashflowEntryType) => {
     setEntryType(value);
     setEntryCategory(cashflowCategoriesByType[value][0]);
+  };
+
+  const handleCreateOpenFinanceSession = async () => {
+    if (!enabled) {
+      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      return;
+    }
+    const success = await onCreateOpenFinanceSession(openFinanceProvider);
+    if (!success) return;
+    toast.success("Sessao de conexao iniciada. Finalize o consentimento no fluxo do banco.");
+  };
+
+  const handleManualSyncOpenFinance = async (connectionId: string) => {
+    const result = await onManualSyncOpenFinance(connectionId);
+    if (!result) return;
+    toast.success(
+      `Sincronizacao concluida: ${result.syncedTransactions} transacoes e ${result.importedEntries} lancamentos importados.`,
+    );
+  };
+
+  const handleDisconnectOpenFinance = async (connectionId: string) => {
+    const success = await onDisconnectOpenFinance(connectionId);
+    if (!success) return;
+    toast.success("Conta desconectada. O historico de caixa foi preservado.");
   };
 
   const handleCreateEntry = async () => {
@@ -425,6 +507,139 @@ export function ClientPortalCashflow({
             Visão mensal com saldo realizado, saldo projetado e principais saídas para apoiar decisão rápida.
           </CardDescription>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-primary" />
+            Conectar conta bancaria (Open Finance)
+          </CardTitle>
+          <CardDescription>
+            Conecte suas contas para importar extratos automaticamente no fluxo de caixa. A importacao manual continua disponivel como contingencia.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-0">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[220px_1fr_auto] sm:items-end">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Provedor</Label>
+              <Select
+                value={openFinanceProvider}
+                onValueChange={(value) => setOpenFinanceProvider(value as OpenFinanceProvider)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pluggy">Pluggy</SelectItem>
+                  <SelectItem value="openi">Openi</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              O consentimento e feito no fluxo seguro do banco. Depois disso, os extratos entram automaticamente no caixa como lancamentos confirmados.
+            </div>
+            <Button
+              type="button"
+              className="gap-1.5"
+              onClick={() => void handleCreateOpenFinanceSession()}
+              disabled={openFinanceConnecting}
+            >
+              {openFinanceConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+              {openFinanceConnecting ? "Conectando..." : "Conectar conta"}
+            </Button>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => void onRefreshOpenFinance()}
+              disabled={openFinanceLoading}
+            >
+              {openFinanceLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              Atualizar conexoes
+            </Button>
+          </div>
+
+          {openFinanceConnections.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Nenhuma conta conectada ainda.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {openFinanceConnections.map((connection) => {
+                const connectedAccounts = accountsByConnection.get(connection.id) || [];
+                return (
+                  <div key={connection.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{formatProviderLabel(connection.provider)}</p>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <Badge variant="outline">{formatConnectionStatus(connection.status)}</Badge>
+                          <Badge variant="secondary">{formatConsentStatus(connection.consent_status)}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Ultima sincronizacao:{" "}
+                          {connection.last_synced_at
+                            ? new Date(connection.last_synced_at).toLocaleString("pt-BR")
+                            : "ainda nao sincronizada"}
+                        </p>
+                        {connection.last_sync_error ? (
+                          <p className="text-xs text-destructive">Erro: {connection.last_sync_error}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => void handleManualSyncOpenFinance(connection.id)}
+                          disabled={openFinanceSyncingConnectionId === connection.id}
+                        >
+                          {openFinanceSyncingConnectionId === connection.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCcw className="h-4 w-4" />
+                          )}
+                          Sincronizar agora
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => void handleDisconnectOpenFinance(connection.id)}
+                          disabled={openFinanceDisconnectingConnectionId === connection.id}
+                        >
+                          {openFinanceDisconnectingConnectionId === connection.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Unplug className="h-4 w-4" />
+                          )}
+                          Desconectar
+                        </Button>
+                      </div>
+                    </div>
+                    {connectedAccounts.length > 0 ? (
+                      <div className="text-xs text-muted-foreground">
+                        Contas conectadas:{" "}
+                        {connectedAccounts
+                          .map((account) =>
+                            `${account.institution_name || "Banco"}${account.account_mask ? ` (${account.account_mask})` : ""}`,
+                          )
+                          .join(", ")}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

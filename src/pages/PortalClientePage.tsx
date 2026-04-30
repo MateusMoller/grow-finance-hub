@@ -25,6 +25,10 @@ import {
   documentCategories,
   sectorOptions,
   type NewPortalCashflowEntryPayload,
+  type OpenFinanceAccount,
+  type OpenFinanceConnection,
+  type OpenFinanceProvider,
+  type OpenFinanceSyncStatus,
   type PortalActionItem,
   type PortalCashflowEntry,
   type PortalClientDocument,
@@ -529,6 +533,12 @@ export default function PortalClientePage() {
   const [portalTasks, setPortalTasks] = useState<PortalClientTask[]>([]);
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
   const [cashflowEntries, setCashflowEntries] = useState<PortalCashflowEntry[]>([]);
+  const [openFinanceConnections, setOpenFinanceConnections] = useState<OpenFinanceConnection[]>([]);
+  const [openFinanceAccounts, setOpenFinanceAccounts] = useState<OpenFinanceAccount[]>([]);
+  const [openFinanceLoading, setOpenFinanceLoading] = useState(false);
+  const [openFinanceConnecting, setOpenFinanceConnecting] = useState(false);
+  const [openFinanceSyncingConnectionId, setOpenFinanceSyncingConnectionId] = useState<string | null>(null);
+  const [openFinanceDisconnectingConnectionId, setOpenFinanceDisconnectingConnectionId] = useState<string | null>(null);
   const [creatingCashflowEntry, setCreatingCashflowEntry] = useState(false);
 
   const [requestSearch, setRequestSearch] = useState("");
@@ -577,8 +587,80 @@ export default function PortalClientePage() {
     setDocuments([]);
     setPortalTasks([]);
     setCashflowEntries([]);
+    setOpenFinanceConnections([]);
+    setOpenFinanceAccounts([]);
     setMessages([]);
   }, []);
+
+  const invokeOpenFinanceModule = useCallback(
+    async <TData extends Record<string, unknown> = Record<string, unknown>>(
+      body: Record<string, unknown>,
+    ) => {
+      const {
+        data: { session: activeSession },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error("Nao foi possivel validar a sessao atual.");
+      }
+
+      const accessToken = activeSession?.access_token;
+      if (!accessToken) {
+        throw new Error("Sessao expirada. Entre novamente para continuar.");
+      }
+
+      const invokeOnce = async (token: string) =>
+        supabase.functions.invoke<TData>("open-finance-module", {
+          body,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+      let { data, error } = await invokeOnce(accessToken);
+
+      if (error instanceof FunctionsHttpError && error.context.status === 401) {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        const refreshedToken = refreshed.session?.access_token;
+        if (!refreshError && refreshedToken) {
+          const retried = await invokeOnce(refreshedToken);
+          data = retried.data;
+          error = retried.error;
+        }
+      }
+
+      if (error) {
+        const parsedError = await parseFunctionError(error);
+        throw new Error(parsedError.message);
+      }
+
+      return (data || {}) as TData;
+    },
+    [],
+  );
+
+  const fetchOpenFinanceData = useCallback(
+    async (clientId: string) => {
+      setOpenFinanceLoading(true);
+      try {
+        const response = await invokeOpenFinanceModule<{
+          connections?: OpenFinanceConnection[];
+          accounts?: OpenFinanceAccount[];
+        }>({
+          action: "list_connections",
+          clientId,
+        });
+        setOpenFinanceConnections(response.connections || []);
+        setOpenFinanceAccounts(response.accounts || []);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Erro ao carregar conexoes bancarias.");
+      } finally {
+        setOpenFinanceLoading(false);
+      }
+    },
+    [invokeOpenFinanceModule],
+  );
 
   const fetchPortalData = useCallback(async () => {
     if (!user) return;
@@ -772,8 +854,16 @@ export default function PortalClientePage() {
     setPortalTasks(fetchedTasks);
     setCashflowEntries(fetchedCashflowEntries);
     setMessages(fetchedMessages);
+
+    if (client.portal_cashflow_enabled) {
+      await fetchOpenFinanceData(client.id);
+    } else {
+      setOpenFinanceConnections([]);
+      setOpenFinanceAccounts([]);
+    }
+
     setLoadingData(false);
-  }, [resetPortalCollections, session, user]);
+  }, [fetchOpenFinanceData, resetPortalCollections, session, user]);
 
   useEffect(() => {
     if (user && session?.access_token) void fetchPortalData();
@@ -1344,6 +1434,89 @@ export default function PortalClientePage() {
 
     await fetchPortalData();
     return { success: true, inserted: payloads.length };
+  };
+
+  const handleCreateOpenFinanceSession = async (provider: OpenFinanceProvider) => {
+    if (!clientProfile?.id) {
+      toast.error("Cliente nao vinculado ao portal.");
+      return false;
+    }
+
+    setOpenFinanceConnecting(true);
+    try {
+      const data = await invokeOpenFinanceModule<{
+        sessionToken?: string;
+        connectUrl?: string | null;
+      }>({
+        action: "create_connect_session",
+        provider,
+        clientId: clientProfile.id,
+      });
+
+      if (data.connectUrl && typeof data.connectUrl === "string") {
+        window.open(data.connectUrl, "_blank", "noopener,noreferrer");
+      } else if (data.sessionToken && typeof data.sessionToken === "string") {
+        await navigator.clipboard.writeText(data.sessionToken);
+        toast.info("Token de conexao copiado para uso no widget.");
+      } else {
+        throw new Error("Nao foi possivel iniciar a sessao de conexao.");
+      }
+
+      await fetchOpenFinanceData(clientProfile.id);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao iniciar conexao bancaria.");
+      return false;
+    } finally {
+      setOpenFinanceConnecting(false);
+    }
+  };
+
+  const handleManualSyncOpenFinance = async (connectionId: string): Promise<OpenFinanceSyncStatus | null> => {
+    if (!clientProfile?.id) {
+      toast.error("Cliente nao vinculado ao portal.");
+      return null;
+    }
+
+    setOpenFinanceSyncingConnectionId(connectionId);
+    try {
+      const data = await invokeOpenFinanceModule<OpenFinanceSyncStatus>({
+        action: "manual_sync",
+        connectionId,
+        clientId: clientProfile.id,
+      });
+      await fetchPortalData();
+      return data;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao sincronizar extratos.");
+      return null;
+    } finally {
+      setOpenFinanceSyncingConnectionId(null);
+    }
+  };
+
+  const handleDisconnectOpenFinance = async (connectionId: string) => {
+    if (!clientProfile?.id) {
+      toast.error("Cliente nao vinculado ao portal.");
+      return false;
+    }
+
+    setOpenFinanceDisconnectingConnectionId(connectionId);
+    try {
+      const data = await invokeOpenFinanceModule<{ success?: boolean }>({
+        action: "disconnect_connection",
+        connectionId,
+        clientId: clientProfile.id,
+      });
+
+      await fetchOpenFinanceData(clientProfile.id);
+      return data.success === true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao desconectar conta.");
+      return false;
+    } finally {
+      setOpenFinanceDisconnectingConnectionId(null);
+    }
   };
 
   const handlePortalPasswordChange = async () => {
@@ -2000,10 +2173,23 @@ export default function PortalClientePage() {
             <ClientPortalCashflow
               enabled={Boolean(clientProfile?.portal_cashflow_enabled)}
               loading={loadingData}
+              openFinanceLoading={openFinanceLoading}
+              openFinanceConnecting={openFinanceConnecting}
+              openFinanceSyncingConnectionId={openFinanceSyncingConnectionId}
+              openFinanceDisconnectingConnectionId={openFinanceDisconnectingConnectionId}
+              openFinanceConnections={openFinanceConnections}
+              openFinanceAccounts={openFinanceAccounts}
               entries={cashflowEntries}
               creating={creatingCashflowEntry}
               onCreateEntry={handleCreateCashflowEntry}
               onCreateEntriesBatch={handleCreateCashflowEntriesBatch}
+              onCreateOpenFinanceSession={handleCreateOpenFinanceSession}
+              onManualSyncOpenFinance={handleManualSyncOpenFinance}
+              onDisconnectOpenFinance={handleDisconnectOpenFinance}
+              onRefreshOpenFinance={async () => {
+                if (!clientProfile?.id) return;
+                await fetchOpenFinanceData(clientProfile.id);
+              }}
               onRequestEnable={() =>
                 prepareInlineRequest({
                   sector: "Financeiro",

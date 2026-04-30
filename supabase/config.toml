@@ -44,3 +44,9 @@ verify_jwt = true
 
 [functions.whatsapp-webhook]
 verify_jwt = false
+
+[functions.open-finance-module]
+verify_jwt = true
+
+[functions.open-finance-webhook]
+verify_jwt = false
