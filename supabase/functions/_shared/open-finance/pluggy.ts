@@ -89,11 +89,11 @@ function mapTransaction(raw: JsonRecord): ProviderTransaction | null {
 }
 
 export function createPluggyAdapter(): ProviderAdapter {
-  const baseUrl = ensureEnv("").replace(/\/$/, "");
-  const clientId = ensureEnv("1cd9d85c-7d2c-4871-a6dc-6169021cf5da");
-  const clientSecret = ensureEnv("7471b994-0f32-4b6c-81c0-2facda8134f8");
-  const connectBaseUrl = (Deno.env.get("https://api.pluggy.ai/webhooks") || "https://connect.pluggy.ai").replace(/\/$/, "");
-  const webhookSecret = ensureEnv("https://api.pluggy.ai/webhooks");
+  const baseUrl = ensureEnv("PLUGGY_API_BASE_URL").replace(/\/$/, "");
+  const clientId = ensureEnv("PLUGGY_CLIENT_ID");
+  const clientSecret = ensureEnv("PLUGGY_CLIENT_SECRET");
+  const connectBaseUrl = (Deno.env.get("PLUGGY_CONNECT_BASE_URL") || "https://connect.pluggy.ai").replace(/\/$/, "");
+  const webhookSecret = ensureEnv("OPEN_FINANCE_WEBHOOK_SECRET_PLUGGY");
 
   async function authorizedHeaders(): Promise<HeadersInit> {
     const apiKey = await getApiKey(baseUrl, clientId, clientSecret);
