@@ -28,6 +28,7 @@ type CreateClientPayload = {
   contact?: string;
   email: string;
   phone?: string;
+  portalPassword?: string;
 };
 
 type ExistingClientRow = {
@@ -68,6 +69,12 @@ function normalizeCnpj(value: unknown): string | null {
   if (!text) return null;
   const digits = text.replace(/\D/g, "");
   return digits.length === 14 ? digits : null;
+}
+
+function normalizePortalPassword(value: unknown): string | null {
+  const password = asTrimmedString(value);
+  if (!password) return null;
+  return password.length >= 8 ? password : null;
 }
 
 function isInactiveClientStatus(value: string | null | undefined) {
@@ -178,6 +185,7 @@ Deno.serve(async (req) => {
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
       phone: asTrimmedString(payload.phone) || undefined,
+      portalPassword: asTrimmedString(payload.portalPassword) || undefined,
     };
 
     if (!parsedPayload.name) {
@@ -191,6 +199,13 @@ Deno.serve(async (req) => {
     const normalizedCnpj = parsedPayload.cnpj ? normalizeCnpj(parsedPayload.cnpj) : null;
     if (parsedPayload.cnpj && !normalizedCnpj) {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
+    }
+
+    const normalizedPortalPassword = parsedPayload.portalPassword
+      ? normalizePortalPassword(parsedPayload.portalPassword)
+      : null;
+    if (parsedPayload.portalPassword && !normalizedPortalPassword) {
+      return jsonResponse({ error: "A senha do portal precisa ter pelo menos 8 caracteres." }, 400);
     }
 
     const clientMatchFilters = [
@@ -243,7 +258,8 @@ Deno.serve(async (req) => {
     let portalUserId: string | null = null;
     let portalUserCreatedNow = false;
     let portalAccessLink: string | null = null;
-    let portalAccessLinkType: "invite" | "recovery" | null = null;
+    let portalAccessLinkType: "invite" | "recovery" | "password" | null = null;
+    let portalPasswordApplied = false;
     const portalRedirectUrl = getPortalRedirectUrl();
 
     const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, parsedPayload.email);
@@ -252,25 +268,45 @@ Deno.serve(async (req) => {
     }
 
     if (!portalUserId) {
-      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.generateLink({
-        type: "invite",
-        email: parsedPayload.email,
-        options: {
-          data: {
+      if (normalizedPortalPassword) {
+        const { data: createdUserData, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+          email: parsedPayload.email,
+          password: normalizedPortalPassword,
+          email_confirm: true,
+          user_metadata: {
             display_name: parsedPayload.contact || parsedPayload.name,
           },
-          redirectTo: portalRedirectUrl,
-        },
-      });
+        });
 
-      if (inviteError) {
-        throw inviteError;
+        if (createUserError) {
+          throw createUserError;
+        }
+
+        portalUserId = createdUserData.user?.id || null;
+        portalUserCreatedNow = Boolean(portalUserId);
+        portalPasswordApplied = portalUserCreatedNow;
+        portalAccessLinkType = portalUserCreatedNow ? "password" : null;
+      } else {
+        const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.generateLink({
+          type: "invite",
+          email: parsedPayload.email,
+          options: {
+            data: {
+              display_name: parsedPayload.contact || parsedPayload.name,
+            },
+            redirectTo: portalRedirectUrl,
+          },
+        });
+
+        if (inviteError) {
+          throw inviteError;
+        }
+
+        portalUserId = inviteData.user?.id || null;
+        portalUserCreatedNow = Boolean(portalUserId);
+        portalAccessLink = inviteData.properties.action_link;
+        portalAccessLinkType = "invite";
       }
-
-      portalUserId = inviteData.user?.id || null;
-      portalUserCreatedNow = Boolean(portalUserId);
-      portalAccessLink = inviteData.properties.action_link;
-      portalAccessLinkType = "invite";
     }
 
     if (!portalUserId) {
@@ -310,6 +346,24 @@ Deno.serve(async (req) => {
         { error: "Portal user is already linked to another client" },
         409,
       );
+    }
+
+    if (portalUserId && normalizedPortalPassword && !portalUserCreatedNow) {
+      const { error: passwordUpdateError } = await supabaseAdmin.auth.admin.updateUserById(portalUserId, {
+        password: normalizedPortalPassword,
+        email_confirm: true,
+        user_metadata: {
+          display_name: parsedPayload.contact || parsedPayload.name,
+        },
+      });
+
+      if (passwordUpdateError) {
+        throw passwordUpdateError;
+      }
+
+      portalPasswordApplied = true;
+      portalAccessLink = null;
+      portalAccessLinkType = "password";
     }
 
     const { error: roleUpsertError } = await supabaseAdmin.from("user_roles").upsert(
@@ -365,7 +419,7 @@ Deno.serve(async (req) => {
       throw createClientError;
     }
 
-    if (!portalAccessLink) {
+    if (!portalAccessLink && !portalPasswordApplied) {
       const { data: recoveryData, error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({
         type: "recovery",
         email: parsedPayload.email,
@@ -391,6 +445,7 @@ Deno.serve(async (req) => {
       portal_user_id: portalUserId,
       portal_access_link: portalAccessLink,
       portal_access_link_type: portalAccessLinkType,
+      portal_password_applied: portalPasswordApplied,
     });
   } catch (error: unknown) {
     const message =
