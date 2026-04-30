@@ -78,7 +78,7 @@ export default function ClientsPage() {
     contact: "",
     email: "",
     phone: "",
-    portalPassword: "",
+    portalPassword: "123456",
   });
 
   const canCreateClients =
@@ -146,11 +146,6 @@ export default function ClientsPage() {
       return;
     }
 
-    if (newClient.portalPassword.trim() && newClient.portalPassword.trim().length < 8) {
-      toast.error("A senha do portal precisa ter pelo menos 8 caracteres.");
-      return;
-    }
-
     const {
       data: { session },
       error: sessionError,
@@ -175,7 +170,7 @@ export default function ClientsPage() {
         contact: newClient.contact || null,
         email: normalizedEmail,
         phone: newClient.phone || null,
-        portalPassword: newClient.portalPassword.trim() || null,
+        portalPassword: newClient.portalPassword.trim() || "123456",
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -189,29 +184,10 @@ export default function ClientsPage() {
       return;
     }
 
-    const portalAccessLink = data?.portal_access_link?.trim();
     const portalPasswordApplied = Boolean(data?.portal_password_applied);
 
-    if (portalAccessLink) {
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(portalAccessLink);
-        copied = true;
-      } catch {
-        copied = false;
-      }
-
-      toast.success(
-        copied
-          ? "Cliente cadastrado. O link seguro de acesso foi copiado."
-          : "Cliente cadastrado. Guarde o link seguro de acesso retornado.",
-      );
-
-      if (!copied) {
-        window.prompt("Copie o link seguro de acesso do portal:", portalAccessLink);
-      }
-    } else if (portalPasswordApplied) {
-      toast.success("Cliente cadastrado com acesso por senha no portal.");
+    if (portalPasswordApplied) {
+      toast.success(`Cliente cadastrado. Senha inicial do portal: ${newClient.portalPassword.trim() || "123456"}.`);
     } else {
       toast.success("Cliente cadastrado com acesso de portal.");
     }
@@ -224,7 +200,7 @@ export default function ClientsPage() {
       contact: "",
       email: "",
       phone: "",
-      portalPassword: "",
+      portalPassword: "123456",
     });
     void loadClients();
   };
@@ -460,7 +436,7 @@ export default function ClientsPage() {
                 <Label>Senha do Portal</Label>
                 <Input
                   type="password"
-                  placeholder="Mínimo de 8 caracteres"
+                  placeholder="123456"
                   value={newClient.portalPassword}
                   onChange={(event) => setNewClient((prev) => ({ ...prev, portalPassword: event.target.value }))}
                 />
@@ -480,8 +456,8 @@ export default function ClientsPage() {
               <Label>Acesso do Portal</Label>
               <Input
                 type="text"
-                placeholder="Senha direta ou link seguro"
-                value={newClient.portalPassword.trim() ? "Acesso direto por senha" : "Convite seguro enviado por link"}
+                placeholder="Acesso inicial do portal"
+                value={`Acesso inicial por senha: ${newClient.portalPassword.trim() || "123456"}`}
                 readOnly
                 disabled
               />

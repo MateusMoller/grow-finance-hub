@@ -72,9 +72,7 @@ function normalizeCnpj(value: unknown): string | null {
 }
 
 function normalizePortalPassword(value: unknown): string | null {
-  const password = asTrimmedString(value);
-  if (!password) return null;
-  return password.length >= 8 ? password : null;
+  return asTrimmedString(value);
 }
 
 function isInactiveClientStatus(value: string | null | undefined) {
@@ -201,12 +199,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
     }
 
-    const normalizedPortalPassword = parsedPayload.portalPassword
-      ? normalizePortalPassword(parsedPayload.portalPassword)
-      : null;
-    if (parsedPayload.portalPassword && !normalizedPortalPassword) {
-      return jsonResponse({ error: "A senha do portal precisa ter pelo menos 8 caracteres." }, 400);
-    }
+    const normalizedPortalPassword = normalizePortalPassword(parsedPayload.portalPassword) || "123456";
 
     const clientMatchFilters = [
       `email.ilike.${parsedPayload.email}`,
