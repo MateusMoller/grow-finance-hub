@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { clientSegmentOptions } from "@/lib/clientSegments";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,23 @@ interface Client {
 }
 
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
+
+const parseFunctionErrorMessage = async (error: unknown) => {
+  if (!(error instanceof FunctionsHttpError)) {
+    return error instanceof Error ? error.message : "Não foi possível cadastrar o cliente.";
+  }
+
+  try {
+    const payload = await error.context.json();
+    if (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string") {
+      return payload.error;
+    }
+  } catch {
+    // ignore payload parsing failures
+  }
+
+  return error.message || "Não foi possível cadastrar o cliente.";
+};
 
 const statusColors: Record<string, string> = {
   Ativo: "bg-primary/10 text-primary",
@@ -158,7 +176,8 @@ export default function ClientsPage() {
     setCreating(false);
 
     if (error) {
-      toast.error(error.message || "NÃ£o foi possÃ­vel cadastrar o cliente.");
+      const errorMessage = await parseFunctionErrorMessage(error);
+      toast.error(errorMessage || "NÃ£o foi possÃ­vel cadastrar o cliente.");
       return;
     }
 

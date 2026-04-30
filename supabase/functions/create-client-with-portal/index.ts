@@ -30,6 +30,14 @@ type CreateClientPayload = {
   phone?: string;
 };
 
+type ExistingClientRow = {
+  id: string;
+  email: string | null;
+  cnpj: string | null;
+  portal_user_id: string | null;
+  status: string | null;
+};
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -60,6 +68,10 @@ function normalizeCnpj(value: unknown): string | null {
   if (!text) return null;
   const digits = text.replace(/\D/g, "");
   return digits.length === 14 ? digits : null;
+}
+
+function isInactiveClientStatus(value: string | null | undefined) {
+  return asTrimmedString(value)?.toLowerCase() === "inativo";
 }
 
 function extractBearerToken(req: Request): string | null {
@@ -181,21 +193,51 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
     }
 
-    const { data: existingClientByEmail, error: existingClientError } = await supabaseAdmin
-      .from("clients")
-      .select("id")
-      .ilike("email", parsedPayload.email)
-      .limit(1);
+    const clientMatchFilters = [
+      `email.ilike.${parsedPayload.email}`,
+      normalizedCnpj ? `cnpj.eq.${normalizedCnpj}` : null,
+    ].filter(Boolean);
 
-    if (existingClientError) {
-      throw existingClientError;
-    }
+    let existingClientToLink: ExistingClientRow | null = null;
+    if (clientMatchFilters.length > 0) {
+      const { data: existingClientMatches, error: existingClientError } = await supabaseAdmin
+        .from("clients")
+        .select("id, email, cnpj, portal_user_id, status")
+        .or(clientMatchFilters.join(","))
+        .limit(10);
 
-    if ((existingClientByEmail || []).length > 0) {
-      return jsonResponse(
-        { error: "There is already a registered client with this email" },
-        409,
-      );
+      if (existingClientError) {
+        throw existingClientError;
+      }
+
+      const matches = (existingClientMatches || []) as ExistingClientRow[];
+      const emailMatch = matches.find((client) => normalizeEmail(client.email) === parsedPayload.email);
+      const cnpjMatch = normalizedCnpj
+        ? matches.find((client) => normalizeCnpj(client.cnpj) === normalizedCnpj)
+        : null;
+
+      if (emailMatch && cnpjMatch && emailMatch.id !== cnpjMatch.id) {
+        return jsonResponse(
+          { error: "Encontramos conflito entre e-mail e CNPJ em clientes diferentes. Revise os cadastros antes de continuar." },
+          409,
+        );
+      }
+
+      existingClientToLink = emailMatch || cnpjMatch || null;
+
+      if (existingClientToLink?.portal_user_id) {
+        return jsonResponse(
+          { error: "Este cliente ja possui um usuario de portal vinculado." },
+          409,
+        );
+      }
+
+      if (existingClientToLink && isInactiveClientStatus(existingClientToLink.status)) {
+        return jsonResponse(
+          { error: "Este cliente esta inativo. Reative o cadastro antes de liberar o acesso ao portal." },
+          409,
+        );
+      }
     }
 
     let portalUserId: string | null = null;
@@ -291,19 +333,28 @@ Deno.serve(async (req) => {
       throw profileUpsertError;
     }
 
-    const { data: createdClient, error: createClientError } = await supabaseAdmin
-      .from("clients")
-      .insert({
-        name: parsedPayload.name,
-        cnpj: normalizedCnpj,
-        regime: parsedPayload.regime || "Simples Nacional",
-        sector: parsedPayload.sector || "Contabil",
-        contact: parsedPayload.contact || null,
-        email: parsedPayload.email,
-        phone: parsedPayload.phone || null,
-        portal_user_id: portalUserId,
-        created_by: callerUser.id,
-      })
+    const clientWritePayload = {
+      name: parsedPayload.name,
+      cnpj: normalizedCnpj,
+      regime: parsedPayload.regime || "Simples Nacional",
+      sector: parsedPayload.sector || "Contabil",
+      contact: parsedPayload.contact || null,
+      email: parsedPayload.email,
+      phone: parsedPayload.phone || null,
+      portal_user_id: portalUserId,
+      created_by: callerUser.id,
+    };
+
+    const clientWriteQuery = existingClientToLink
+      ? supabaseAdmin
+          .from("clients")
+          .update(clientWritePayload)
+          .eq("id", existingClientToLink.id)
+      : supabaseAdmin
+          .from("clients")
+          .insert(clientWritePayload);
+
+    const { data: createdClient, error: createClientError } = await clientWriteQuery
       .select("id, name, email, portal_user_id")
       .single();
 
