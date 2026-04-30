@@ -1684,16 +1684,27 @@ export default function PortalClientePage() {
             <div className="mx-auto max-w-6xl space-y-4">
               <Card className="overflow-hidden border-primary/10 shadow-sm">
                 <CardHeader className="pb-4">
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CardTitle className="text-base">Nova solicitacao</CardTitle>
-                      <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-                        {requestEntryMode === "support" ? "Atendimento por setor" : "Fluxo guiado"}
-                      </Badge>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-base">Nova solicitacao</CardTitle>
+                        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
+                          {requestEntryMode === "support" ? "Atendimento por setor" : "Fluxo guiado"}
+                        </Badge>
+                      </div>
+                      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                        Escolha o setor, refine o motivo e envie apenas o contexto que ajuda a equipe a agir com rapidez.
+                      </p>
                     </div>
-                    <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                      Escolha o setor, refine o motivo e envie apenas o contexto que ajuda a equipe a agir com rapidez.
-                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() => setActiveTab("request-history")}
+                    >
+                      Ver historico
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5 pt-0">
@@ -1729,8 +1740,8 @@ export default function PortalClientePage() {
                     </div>
                   </div>
 
-                  <div ref={requestComposerRef} className="rounded-[1.6rem] border bg-background p-4 sm:p-5">
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+                  <div ref={requestComposerRef} className="rounded-[1.6rem] border bg-white p-4 sm:p-5">
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
                       <div className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-2">
                           <div className="space-y-1.5">
@@ -1779,9 +1790,9 @@ export default function PortalClientePage() {
                         </div>
 
                         {selectedRequestReason ? (
-                          <div className="rounded-2xl border border-primary/15 bg-primary/[0.04] px-4 py-3">
+                          <div className="rounded-2xl border bg-white px-4 py-3">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="border-primary/20 bg-background text-primary">
+                              <Badge variant="outline" className="bg-white text-primary">
                                 {selectedRequestReason.sector}
                               </Badge>
                               <p className="text-sm font-medium">{selectedRequestReason.label}</p>
@@ -1793,7 +1804,7 @@ export default function PortalClientePage() {
                         ) : null}
 
                         {activeStructuredFields.length > 0 ? (
-                          <div className="space-y-3 rounded-2xl border bg-muted/[0.08] p-4">
+                          <div className="space-y-3 rounded-2xl border bg-white p-4">
                             <div className="space-y-1">
                               <p className="text-sm font-medium">Campos do pedido</p>
                               <p className="text-xs leading-relaxed text-muted-foreground">
@@ -1855,7 +1866,7 @@ export default function PortalClientePage() {
                           </div>
                         ) : null}
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 rounded-2xl border bg-white p-4">
                           <label htmlFor="portal-request-description" className="text-sm font-medium">Contexto adicional</label>
                           <Textarea
                             id="portal-request-description"
@@ -1870,7 +1881,7 @@ export default function PortalClientePage() {
                       </div>
 
                       <div className="space-y-3">
-                        <div className="rounded-2xl border bg-muted/[0.08] p-4">
+                        <div className="rounded-2xl border bg-white p-4">
                           <div className="space-y-1">
                             <p className="text-sm font-medium">Resumo do envio</p>
                             <p className="text-xs leading-relaxed text-muted-foreground">
@@ -1879,28 +1890,28 @@ export default function PortalClientePage() {
                           </div>
 
                           <div className="mt-4 grid grid-cols-2 gap-2">
-                            <div className="rounded-xl border bg-background px-3 py-2">
+                            <div className="rounded-xl border bg-white px-3 py-2">
                               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Setor</p>
                               <p className="mt-1 text-sm font-medium">{newRequestSector}</p>
                             </div>
-                            <div className="rounded-xl border bg-background px-3 py-2">
+                            <div className="rounded-xl border bg-white px-3 py-2">
                               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Motivo</p>
                               <p className="mt-1 text-sm font-medium">{selectedRequestReason?.label || "Escolher"}</p>
                             </div>
-                            <div className="rounded-xl border bg-background px-3 py-2">
+                            <div className="rounded-xl border bg-white px-3 py-2">
                               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Campos</p>
                               <p className="mt-1 text-sm font-medium">
                                 {completedStructuredFieldCount}/{activeStructuredFields.length || 0}
                               </p>
                             </div>
-                            <div className="rounded-xl border bg-background px-3 py-2">
+                            <div className="rounded-xl border bg-white px-3 py-2">
                               <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Anexos</p>
                               <p className="mt-1 text-sm font-medium">{newRequestFiles.length}</p>
                             </div>
                           </div>
                         </div>
 
-                        <div className="space-y-3 rounded-2xl border border-dashed bg-background p-4">
+                        <div className="space-y-3 rounded-2xl border bg-white p-4">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                               <p className="text-sm font-medium">Arquivos</p>
@@ -1928,7 +1939,7 @@ export default function PortalClientePage() {
                             onChange={handleRequestFileSelection}
                           />
                           {newRequestFiles.length === 0 ? (
-                            <div className="rounded-xl border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                            <div className="rounded-xl border bg-white px-3 py-4 text-sm text-muted-foreground">
                               Nenhum arquivo selecionado.
                             </div>
                           ) : (
@@ -1936,7 +1947,7 @@ export default function PortalClientePage() {
                               {newRequestFiles.map((file, index) => (
                                 <div
                                   key={`${file.name}-${index}`}
-                                  className="flex items-center justify-between gap-3 rounded-xl border bg-background px-3 py-2"
+                                  className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2"
                                 >
                                   <div className="min-w-0">
                                     <p className="truncate text-sm font-medium">{file.name}</p>
@@ -1967,6 +1978,14 @@ export default function PortalClientePage() {
                         O pedido entra no historico do portal com status, mensagens e documentos vinculados.
                       </p>
                       <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="w-full sm:w-auto"
+                          onClick={() => setActiveTab("request-history")}
+                        >
+                          Acompanhar historico
+                        </Button>
                         <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={resetNewRequestForm}>
                           Limpar
                         </Button>
@@ -1984,19 +2003,34 @@ export default function PortalClientePage() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
+          </TabsContent>
 
+          <TabsContent value="request-history" className="space-y-4">
+            <div className="mx-auto max-w-6xl space-y-4">
               <Card>
                 <CardHeader className="pb-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-1">
                       <CardTitle className="text-base">Historico de solicitacoes</CardTitle>
                       <p className="text-sm text-muted-foreground">
-                        Veja o andamento dos pedidos e abra o detalhe apenas quando precisar acompanhar a conversa.
+                        Consulte andamento, retornos da equipe e documentos vinculados em um modulo separado do envio.
                       </p>
                     </div>
-                    <Badge variant="outline" className="w-fit">
-                      {filteredRequests.length} item(ns)
-                    </Badge>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Badge variant="outline" className="w-fit">
+                        {filteredRequests.length} item(ns)
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => openRequestsHub("freeform")}
+                      >
+                        Nova solicitacao
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-0">
