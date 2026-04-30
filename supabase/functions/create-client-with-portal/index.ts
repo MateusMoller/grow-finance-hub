@@ -28,7 +28,6 @@ type CreateClientPayload = {
   contact?: string;
   email: string;
   phone?: string;
-  portalPassword?: string;
 };
 
 type ExistingClientRow = {
@@ -69,10 +68,6 @@ function normalizeCnpj(value: unknown): string | null {
   if (!text) return null;
   const digits = text.replace(/\D/g, "");
   return digits.length === 14 ? digits : null;
-}
-
-function normalizePortalPassword(value: unknown): string | null {
-  return asTrimmedString(value);
 }
 
 function isInactiveClientStatus(value: string | null | undefined) {
@@ -183,7 +178,6 @@ Deno.serve(async (req) => {
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
       phone: asTrimmedString(payload.phone) || undefined,
-      portalPassword: asTrimmedString(payload.portalPassword) || undefined,
     };
 
     if (!parsedPayload.name) {
@@ -199,7 +193,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
     }
 
-    const normalizedPortalPassword = normalizePortalPassword(parsedPayload.portalPassword) || "123456";
+    const normalizedPortalPassword = "123456";
 
     const clientMatchFilters = [
       `email.ilike.${parsedPayload.email}`,

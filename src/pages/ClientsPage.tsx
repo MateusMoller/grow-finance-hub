@@ -170,7 +170,7 @@ export default function ClientsPage() {
         contact: newClient.contact || null,
         email: normalizedEmail,
         phone: newClient.phone || null,
-        portalPassword: newClient.portalPassword.trim() || "123456",
+        portalPassword: "123456",
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -187,7 +187,7 @@ export default function ClientsPage() {
     const portalPasswordApplied = Boolean(data?.portal_password_applied);
 
     if (portalPasswordApplied) {
-      toast.success(`Cliente cadastrado. Senha inicial do portal: ${newClient.portalPassword.trim() || "123456"}.`);
+      toast.success("Cliente cadastrado. Senha inicial do portal: 123456.");
     } else {
       toast.success("Cliente cadastrado com acesso de portal.");
     }
@@ -437,8 +437,9 @@ export default function ClientsPage() {
                 <Input
                   type="password"
                   placeholder="123456"
-                  value={newClient.portalPassword}
-                  onChange={(event) => setNewClient((prev) => ({ ...prev, portalPassword: event.target.value }))}
+                  value="123456"
+                  readOnly
+                  disabled
                 />
               </div>
             </div>
@@ -457,7 +458,7 @@ export default function ClientsPage() {
               <Input
                 type="text"
                 placeholder="Acesso inicial do portal"
-                value={`Acesso inicial por senha: ${newClient.portalPassword.trim() || "123456"}`}
+                value="Acesso inicial por senha: 123456"
                 readOnly
                 disabled
               />
