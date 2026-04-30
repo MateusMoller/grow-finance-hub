@@ -983,33 +983,6 @@ export default function PortalClientePage() {
       requests.filter((request) => request.status === "completed").length +
       portalTasks.filter((task) => task.status === "completed").length;
 
-    return [
-      {
-        label: "Solicitações pendentes",
-        value: requests.filter((request) => request.status === "pending").length,
-        helper: "Aguardando avanço",
-      },
-      {
-        label: "Solicitações em andamento",
-        value: requests.filter((request) => request.status === "in_progress").length,
-        helper: "Em tratamento pela Grow",
-      },
-      {
-        label: "Documentos enviados no mês",
-        value: docsThisMonth,
-        helper: "Envios deste mês",
-      },
-      {
-        label: "Pendências da Grow",
-        value: pendingNow.length,
-        helper: "O que precisamos de você",
-      },
-      {
-        label: "Itens concluídos recentemente",
-        value: recentlyCompleted,
-        helper: "Entregas já finalizadas",
-      },
-    ];
   }, [documents, pendingNow.length, portalTasks, requests]);
 
   const filteredRequests = useMemo(() => {
