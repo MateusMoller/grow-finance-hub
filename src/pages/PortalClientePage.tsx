@@ -1741,8 +1741,7 @@ export default function PortalClientePage() {
                   </div>
 
                   <div ref={requestComposerRef} className="rounded-[1.6rem] border bg-white p-4 sm:p-5">
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-                      <div className="space-y-4">
+                    <div className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-2">
                           <div className="space-y-1.5">
                             <label htmlFor="portal-request-sector" className="text-sm font-medium">Setor</label>
@@ -1879,98 +1878,66 @@ export default function PortalClientePage() {
                           />
                         </div>
                       </div>
+                    </div>
 
-                      <div className="space-y-3">
-                        <div className="rounded-2xl border bg-white p-4">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">Resumo do envio</p>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                              Uma leitura compacta do que ja esta pronto antes de enviar.
-                            </p>
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-2 gap-2">
-                            <div className="rounded-xl border bg-white px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Setor</p>
-                              <p className="mt-1 text-sm font-medium">{newRequestSector}</p>
-                            </div>
-                            <div className="rounded-xl border bg-white px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Motivo</p>
-                              <p className="mt-1 text-sm font-medium">{selectedRequestReason?.label || "Escolher"}</p>
-                            </div>
-                            <div className="rounded-xl border bg-white px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Campos</p>
-                              <p className="mt-1 text-sm font-medium">
-                                {completedStructuredFieldCount}/{activeStructuredFields.length || 0}
-                              </p>
-                            </div>
-                            <div className="rounded-xl border bg-white px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Anexos</p>
-                              <p className="mt-1 text-sm font-medium">{newRequestFiles.length}</p>
-                            </div>
-                          </div>
+                    <div className="mt-4 space-y-3 rounded-2xl border bg-white p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-medium">Arquivos</p>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            Inclua apenas o material que acelera a leitura do pedido.
+                          </p>
                         </div>
-
-                        <div className="space-y-3 rounded-2xl border bg-white p-4">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <p className="text-sm font-medium">Arquivos</p>
-                              <p className="text-xs leading-relaxed text-muted-foreground">
-                                Inclua apenas o material que acelera a leitura do pedido.
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="w-full sm:w-auto"
-                              onClick={() => requestFilesInputRef.current?.click()}
-                            >
-                              <Paperclip className="mr-1 h-4 w-4" />
-                              Adicionar
-                            </Button>
-                          </div>
-                          <input
-                            ref={requestFilesInputRef}
-                            type="file"
-                            accept={SECURE_DOCUMENT_ACCEPT}
-                            multiple
-                            className="hidden"
-                            onChange={handleRequestFileSelection}
-                          />
-                          {newRequestFiles.length === 0 ? (
-                            <div className="rounded-xl border bg-white px-3 py-4 text-sm text-muted-foreground">
-                              Nenhum arquivo selecionado.
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {newRequestFiles.map((file, index) => (
-                                <div
-                                  key={`${file.name}-${index}`}
-                                  className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2"
-                                >
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm font-medium">{file.name}</p>
-                                    <p className="text-[11px] text-muted-foreground">
-                                      {(file.size / 1024).toFixed(1)} KB
-                                    </p>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 shrink-0"
-                                    aria-label={`Remover arquivo ${file.name}`}
-                                    onClick={() => removeRequestFile(index)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full sm:w-auto"
+                          onClick={() => requestFilesInputRef.current?.click()}
+                        >
+                          <Paperclip className="mr-1 h-4 w-4" />
+                          Adicionar
+                        </Button>
                       </div>
+                      <input
+                        ref={requestFilesInputRef}
+                        type="file"
+                        accept={SECURE_DOCUMENT_ACCEPT}
+                        multiple
+                        className="hidden"
+                        onChange={handleRequestFileSelection}
+                      />
+                      {newRequestFiles.length === 0 ? (
+                        <div className="rounded-xl border bg-white px-3 py-4 text-sm text-muted-foreground">
+                          Nenhum arquivo selecionado.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {newRequestFiles.map((file, index) => (
+                            <div
+                              key={`${file.name}-${index}`}
+                              className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">{file.name}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {(file.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                aria-label={`Remover arquivo ${file.name}`}
+                                onClick={() => removeRequestFile(index)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -2000,7 +1967,6 @@ export default function PortalClientePage() {
                         </Button>
                       </div>
                     </div>
-                  </div>
                 </CardContent>
               </Card>
             </div>
