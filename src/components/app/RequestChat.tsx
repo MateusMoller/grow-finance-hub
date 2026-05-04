@@ -18,9 +18,19 @@ interface Message extends RequestMessageRow {
 interface RequestChatProps {
   requestId: string;
   isTeamMember?: boolean;
+  inputPlaceholder?: string;
+  quickReplies?: Array<{
+    label: string;
+    text: string;
+  }>;
 }
 
-export function RequestChat({ requestId, isTeamMember = false }: RequestChatProps) {
+export function RequestChat({
+  requestId,
+  isTeamMember = false,
+  inputPlaceholder = "Digite sua mensagem...",
+  quickReplies = [],
+}: RequestChatProps) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -114,6 +124,10 @@ export function RequestChat({ requestId, isTeamMember = false }: RequestChatProp
     }
   };
 
+  const applyQuickReply = (text: string) => {
+    setNewMessage(text);
+  };
+
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString("pt-BR", {
@@ -197,12 +211,28 @@ export function RequestChat({ requestId, isTeamMember = false }: RequestChatProp
 
       {/* Input area */}
       <div className="border-t pt-3 mt-2">
+        {quickReplies.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {quickReplies.map((reply) => (
+              <Button
+                key={reply.label}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-full px-3 text-[11px]"
+                onClick={() => applyQuickReply(reply.text)}
+              >
+                {reply.label}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <Textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Digite sua mensagem..."
+            placeholder={inputPlaceholder}
             rows={2}
             className="resize-none text-sm"
           />

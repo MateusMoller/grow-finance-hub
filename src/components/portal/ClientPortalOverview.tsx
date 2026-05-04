@@ -1,13 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, Clock3, Sparkles } from "lucide-react";
-import type { PortalActionItem, PortalSummaryMetric } from "@/components/portal/types";
+import type { PortalActionItem } from "@/components/portal/types";
 import { ClientPortalQuickActions } from "@/components/portal/ClientPortalQuickActions";
 
 interface ClientPortalOverviewProps {
   clientName: string;
   monthLabel: string;
-  metrics: PortalSummaryMetric[];
   pendingNow: PortalActionItem[];
   recentUpdates: PortalActionItem[];
   onNewRequest: () => void;
@@ -18,7 +17,6 @@ interface ClientPortalOverviewProps {
 export function ClientPortalOverview({
   clientName,
   monthLabel,
-  metrics,
   pendingNow,
   recentUpdates,
   onNewRequest,
@@ -49,16 +47,6 @@ export function ClientPortalOverview({
           />
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {metrics.map((metric) => (
-          <div key={metric.label} className="rounded-2xl border bg-card p-4 shadow-sm">
-            <p className="text-xs leading-relaxed text-muted-foreground">{metric.label}</p>
-            <p className="mt-1 text-2xl font-semibold">{metric.value}</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{metric.helper}</p>
-          </div>
-        ))}
-      </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>

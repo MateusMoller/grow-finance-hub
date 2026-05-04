@@ -109,11 +109,6 @@ const statusConfig: Record<RequestStatus, RequestStatusMeta> = {
   },
 };
 
-const getMonthKey = (dateString: string) => {
-  const date = new Date(dateString);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-};
-
 const asArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 
 const normalizeLooseToken = (value: string) =>
@@ -495,27 +490,6 @@ const portalRequestShortcuts = [
     sector: "Departamento Pessoal",
     reasonKey: "demissao",
     title: "Demissao de colaborador",
-  },
-  {
-    label: "Folha",
-    hint: "Conferencia e ajustes",
-    sector: "Departamento Pessoal",
-    reasonKey: "folha_pagamento",
-    title: "Folha de pagamento",
-  },
-  {
-    label: "Acesso",
-    hint: "Portal e permissao",
-    sector: "Geral",
-    reasonKey: "acesso_portal",
-    title: "Suporte de acesso ao portal",
-  },
-  {
-    label: "Caixa",
-    hint: "Rotina financeira",
-    sector: "Financeiro",
-    reasonKey: "controle_caixa",
-    title: "Controle de caixa no portal",
   },
 ] as const;
 
@@ -976,45 +950,6 @@ export default function PortalClientePage() {
       } as PortalActionItem;
     });
   }, [latestMessageByRequest, requests]);
-
-  const overviewMetrics = useMemo(() => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const docsThisMonth = documents.filter((document) => getMonthKey(document.created_at) === currentMonth).length;
-    const recentlyCompleted =
-      requests.filter((request) => request.status === "completed").length +
-      portalTasks.filter((task) => task.status === "completed").length;
-    const pendingRequests = requests.filter((request) => request.status === "pending").length;
-    const activeRequests = requests.filter((request) => request.status === "in_progress").length;
-
-    return [
-      {
-        label: "Pendencias agora",
-        value: pendingNow.length,
-        helper: "Solicitacoes e tarefas aguardando sua acao.",
-      },
-      {
-        label: "Pedidos pendentes",
-        value: pendingRequests,
-        helper: "Itens que ainda nao foram concluidos.",
-      },
-      {
-        label: "Em andamento",
-        value: activeRequests,
-        helper: "Demandas em tratamento pela equipe.",
-      },
-      {
-        label: "Concluidos",
-        value: recentlyCompleted,
-        helper: "Solicitacoes e tarefas finalizadas.",
-      },
-      {
-        label: "Documentos no mes",
-        value: docsThisMonth,
-        helper: "Arquivos enviados no mes atual.",
-      },
-    ];
-  }, [documents, pendingNow.length, portalTasks, requests]);
 
   const filteredRequests = useMemo(() => {
     const term = requestSearch.trim().toLowerCase();
@@ -1651,7 +1586,6 @@ export default function PortalClientePage() {
             <ClientPortalOverview
               clientName={clientProfile?.name || clientProfile?.contact || "Cliente Grow"}
               monthLabel={currentMonthLabel}
-              metrics={overviewMetrics}
               pendingNow={pendingNow}
               recentUpdates={recentUpdates}
               onNewRequest={() => openRequestsHub("freeform")}
@@ -2589,7 +2523,28 @@ export default function PortalClientePage() {
                         Enviar documento para esta solicitação
                       </Button>
                     </div>
-                    <RequestChat requestId={selectedRequest.id} isTeamMember={false} />
+                    <p className="text-xs text-muted-foreground">
+                      Responda direto por aqui para manter tudo no mesmo histórico. Se precisar, anexe o documento no botão acima.
+                    </p>
+                    <RequestChat
+                      requestId={selectedRequest.id}
+                      isTeamMember={false}
+                      inputPlaceholder="Escreva aqui a resposta da solicitação..."
+                      quickReplies={[
+                        {
+                          label: "Estou enviando agora",
+                          text: "Perfeito, estou enviando as informações solicitadas agora.",
+                        },
+                        {
+                          label: "Preciso de prazo",
+                          text: "Recebi a solicitação. Preciso de um prazo adicional para enviar tudo.",
+                        },
+                        {
+                          label: "Não tenho este dado",
+                          text: "No momento não tenho esse dado/documento. Podem me orientar a alternativa?",
+                        },
+                      ]}
+                    />
                   </div>
 
                   <div className="space-y-2">
