@@ -12,7 +12,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-export type PortalTab = "overview" | "requests" | "internal-requests" | "request-history" | "uploads" | "cashflow" | "manual" | "settings";
+export type PortalTab = "overview" | "requests" | "request-history" | "uploads" | "cashflow" | "manual" | "settings";
 
 interface PortalClienteSidebarProps {
   activeTab: PortalTab;
@@ -39,7 +39,6 @@ const menuSections: PortalMenuSection[] = [
     label: "Operacao",
     items: [
       { key: "requests", title: "Solicitacoes", icon: ClipboardList },
-      { key: "internal-requests", title: "Solicitacoes da equipe", icon: ClipboardList },
       { key: "request-history", title: "Historico", icon: History },
       { key: "uploads", title: "Obrigacoes", icon: Upload },
     ],

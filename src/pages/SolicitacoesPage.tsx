@@ -349,8 +349,45 @@ export default function SolicitacoesPage() {
     });
 
     setRequests(enriched);
+
+    const linkedRequests = enriched.filter((request) => Boolean(request.client?.id));
+    if (linkedRequests.length > 0) {
+      const linkedRequestIds = linkedRequests.map((request) => request.id);
+      const { data: existingTaskRows, error: existingTaskError } = await supabase
+        .from("client_portal_tasks")
+        .select("request_id")
+        .in("request_id", linkedRequestIds);
+
+      if (!existingTaskError) {
+        const existingRequestTaskIds = new Set(
+          (existingTaskRows || [])
+            .map((row) => row.request_id)
+            .filter((requestId): requestId is string => Boolean(requestId))
+        );
+
+        const missingTasks = linkedRequests.filter((request) => !existingRequestTaskIds.has(request.id));
+        if (missingTasks.length > 0) {
+          const payload = missingTasks.map((request) => ({
+            client_id: request.client!.id,
+            request_id: request.id,
+            title: `Retorno da solicitacao: ${request.title}`,
+            description: "Interaja por esta tarefa para enviar o retorno e anexos solicitados pela equipe Grow.",
+            type: "request_return" as const,
+            status: "pending_client" as const,
+            sector: request.sector || "Geral",
+            created_by: user?.id || request.user_id,
+          }));
+
+          const { error: insertTaskError } = await supabase.from("client_portal_tasks").insert(payload);
+          if (insertTaskError) {
+            toast.error("Nao foi possivel criar automaticamente as tarefas vinculadas das solicitacoes.");
+          }
+        }
+      }
+    }
+
     setLoadingRequests(false);
-  }, []);
+  }, [user?.id]);
 
   const fetchTasks = useCallback(async () => {
     setLoadingTasks(true);

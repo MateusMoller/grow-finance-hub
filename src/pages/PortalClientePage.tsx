@@ -538,8 +538,6 @@ export default function PortalClientePage() {
 
   const [selectedRequest, setSelectedRequest] = useState<PortalClientRequest | null>(null);
   const [requestDetailOpen, setRequestDetailOpen] = useState(false);
-  const [selectedInternalTask, setSelectedInternalTask] = useState<PortalClientTask | null>(null);
-  const [internalTaskDetailOpen, setInternalTaskDetailOpen] = useState(false);
 
   const [requestFieldValues, setRequestFieldValues] = useState<Record<string, string>>({});
 
@@ -978,10 +976,6 @@ export default function PortalClientePage() {
     setRequestDetailOpen(true);
   }, [requests]);
 
-  const openInternalTaskDetail = useCallback((task: PortalClientTask) => {
-    setSelectedInternalTask(task);
-    setInternalTaskDetailOpen(true);
-  }, []);
 
   const availableReasons = useMemo(() => getGuidedReasonsForSector(newRequestSector), [newRequestSector]);
 
@@ -2057,55 +2051,6 @@ export default function PortalClientePage() {
               </Card>
             </div>
           </TabsContent>
-          <TabsContent value="internal-requests" className="space-y-4">
-            <div className="mx-auto max-w-6xl space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Solicitacoes da equipe Grow</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Demandas abertas diretamente pela equipe interna para seu atendimento.
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {loadingData ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    </div>
-                  ) : portalTasks.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed p-10 text-center">
-                      <MessageSquare className="mx-auto mb-2 h-10 w-10 text-muted-foreground" />
-                      <p className="font-medium">Nenhuma solicitacao interna no momento.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {portalTasks.map((task) => (
-                        <button
-                          key={task.id}
-                          type="button"
-                          className="group w-full rounded-2xl border bg-background px-4 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-muted/10"
-                          onClick={() => openInternalTaskDetail(task)}
-                        >
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="min-w-0 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="secondary" className="text-[10px]">{task.sector || "Geral"}</Badge>
-                                <Badge variant="outline" className="text-[10px]">{task.type || "Solicitacao"}</Badge>
-                              </div>
-                              <p className="line-clamp-1 text-sm font-semibold sm:text-base">{task.title}</p>
-                              <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-                                {task.description || "Sem descricao adicional."}
-                              </p>
-                            </div>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
           <TabsContent value="uploads" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
@@ -2652,59 +2597,6 @@ export default function PortalClientePage() {
         </SheetContent>
       </Sheet>
 
-      <Sheet open={internalTaskDetailOpen} onOpenChange={setInternalTaskDetailOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          {selectedInternalTask && (
-            <>
-              <SheetHeader>
-                <SheetTitle className="text-left">{selectedInternalTask.title}</SheetTitle>
-              </SheetHeader>
-              <div className="mt-6 space-y-5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="text-[10px]">{selectedInternalTask.sector || "Geral"}</Badge>
-                  <Badge variant="outline" className="text-[10px]">{selectedInternalTask.type || "Solicitacao"}</Badge>
-                  {selectedInternalTask.due_date && (
-                    <Badge variant="outline" className="text-[10px]">
-                      Prazo: {new Date(selectedInternalTask.due_date).toLocaleDateString("pt-BR")}
-                    </Badge>
-                  )}
-                </div>
-
-                <Card>
-                  <CardContent className="p-4 space-y-3">
-                    <p className="text-sm font-medium">Resumo</p>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedInternalTask.description || "Sem descricao informada."}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                {selectedInternalTask.request_id ? (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Comunicacao cliente x Grow</h4>
-                    <p className="text-xs text-muted-foreground">
-                      Responda por aqui para manter todo o historico desta solicitacao.
-                    </p>
-                    <RequestChat
-                      requestId={selectedInternalTask.request_id}
-                      isTeamMember={false}
-                      inputPlaceholder="Escreva aqui sua resposta para a equipe..."
-                    />
-                  </div>
-                ) : (
-                  <Card>
-                    <CardContent className="p-4">
-                      <p className="text-sm text-muted-foreground">
-                        Esta solicitacao interna ainda nao possui um chat vinculado.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
     </SidebarProvider>
   );
 }
