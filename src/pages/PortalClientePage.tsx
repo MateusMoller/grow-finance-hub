@@ -114,6 +114,8 @@ const getMonthKey = (dateString: string) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
 
+const asArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
 const normalizeLooseToken = (value: string) =>
   value
     .normalize("NFD")
@@ -785,8 +787,8 @@ export default function PortalClientePage() {
     if (requestRes.error) toast.error("Erro ao carregar solicitações.");
     if (docRes.error) toast.error("Erro ao carregar documentos.");
     const client = (clientRes.data || null) as PortalClientProfile | null;
-    const fetchedRequests = (requestRes.data || []) as PortalClientRequest[];
-    const fetchedDocuments = (docRes.data || []) as PortalClientDocument[];
+    const fetchedRequests = asArray<PortalClientRequest>(requestRes.data);
+    const fetchedDocuments = asArray<PortalClientDocument>(docRes.data);
 
     let fetchedTasks: PortalClientTask[] = [];
     if (client?.id) {
@@ -799,7 +801,7 @@ export default function PortalClientePage() {
       if (tasksError) {
         toast.error("Erro ao carregar pendências.");
       } else {
-        fetchedTasks = (tasksData || []) as PortalClientTask[];
+        fetchedTasks = asArray<PortalClientTask>(tasksData);
       }
     }
 
@@ -815,7 +817,7 @@ export default function PortalClientePage() {
       if (cashflowError) {
         toast.error("Erro ao carregar controle de caixa.");
       } else {
-        fetchedCashflowEntries = (cashflowData || []) as PortalCashflowEntry[];
+        fetchedCashflowEntries = asArray<PortalCashflowEntry>(cashflowData);
       }
     }
 
@@ -831,7 +833,7 @@ export default function PortalClientePage() {
       if (messageError) {
         toast.error("Erro ao carregar mensagens.");
       } else {
-        fetchedMessages = (messageData || []) as PortalRequestMessage[];
+        fetchedMessages = asArray<PortalRequestMessage>(messageData);
       }
     }
 
@@ -869,7 +871,7 @@ export default function PortalClientePage() {
   }, [fetchPortalData, session?.access_token, user]);
 
   useEffect(() => {
-    knownPortalTaskIdsRef.current = new Set(portalTasks.map((task) => task.id));
+    knownPortalTaskIdsRef.current = new Set(asArray<PortalClientTask>(portalTasks).map((task) => task.id));
   }, [portalTasks]);
 
   useEffect(() => {
@@ -982,7 +984,36 @@ export default function PortalClientePage() {
     const recentlyCompleted =
       requests.filter((request) => request.status === "completed").length +
       portalTasks.filter((task) => task.status === "completed").length;
+    const pendingRequests = requests.filter((request) => request.status === "pending").length;
+    const activeRequests = requests.filter((request) => request.status === "in_progress").length;
 
+    return [
+      {
+        label: "Pendencias agora",
+        value: pendingNow.length,
+        helper: "Solicitacoes e tarefas aguardando sua acao.",
+      },
+      {
+        label: "Pedidos pendentes",
+        value: pendingRequests,
+        helper: "Itens que ainda nao foram concluidos.",
+      },
+      {
+        label: "Em andamento",
+        value: activeRequests,
+        helper: "Demandas em tratamento pela equipe.",
+      },
+      {
+        label: "Concluidos",
+        value: recentlyCompleted,
+        helper: "Solicitacoes e tarefas finalizadas.",
+      },
+      {
+        label: "Documentos no mes",
+        value: docsThisMonth,
+        helper: "Arquivos enviados no mes atual.",
+      },
+    ];
   }, [documents, pendingNow.length, portalTasks, requests]);
 
   const filteredRequests = useMemo(() => {

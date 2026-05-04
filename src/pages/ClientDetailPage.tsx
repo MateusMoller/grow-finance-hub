@@ -685,7 +685,13 @@ const parseBusinessProfilesValue = (rawValue: string | undefined) => {
   const selected = new Set<ClientBusinessProfileKey>();
 
   tokens.forEach((token) => {
-    const mapped = clientBusinessProfileKeyByToken[token];
+    let mapped = clientBusinessProfileKeyByToken[token];
+    if (!mapped && token === "comercio") {
+      mapped = "comÃ©rcio";
+    }
+    if (!mapped && token === "servicos") {
+      mapped = "prestador_servicos";
+    }
     if (mapped) selected.add(mapped);
   });
 

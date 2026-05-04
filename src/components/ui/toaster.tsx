@@ -3,10 +3,11 @@ import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastVi
 
 export function Toaster() {
   const { toasts } = useToast();
+  const safeToasts = Array.isArray(toasts) ? toasts : [];
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
+      {safeToasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">
