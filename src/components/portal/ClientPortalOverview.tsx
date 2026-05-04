@@ -9,6 +9,7 @@ interface ClientPortalOverviewProps {
   monthLabel: string;
   pendingNow: PortalActionItem[];
   recentUpdates: PortalActionItem[];
+  onOpenRequestDetail: (requestId: string) => void;
   onNewRequest: () => void;
   onOpenSupport: () => void;
   onOpenHistory: () => void;
@@ -19,6 +20,7 @@ export function ClientPortalOverview({
   monthLabel,
   pendingNow,
   recentUpdates,
+  onOpenRequestDetail,
   onNewRequest,
   onOpenSupport,
   onOpenHistory,
@@ -63,7 +65,13 @@ export function ClientPortalOverview({
               </p>
             ) : (
               pendingNow.map((item) => (
-                <div key={item.id} className="rounded-xl border bg-background px-3 py-3">
+                <button
+                  key={item.id}
+                  type="button"
+                  className="w-full rounded-xl border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/20"
+                  onClick={() => item.requestId && onOpenRequestDetail(item.requestId)}
+                  disabled={!item.requestId}
+                >
                   <p className="text-sm font-medium">{item.title}</p>
                   {item.description && <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -78,7 +86,7 @@ export function ClientPortalOverview({
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
               ))
             )}
           </CardContent>
@@ -98,7 +106,13 @@ export function ClientPortalOverview({
               </p>
             ) : (
               recentUpdates.map((item) => (
-                <div key={item.id} className="rounded-xl border bg-background px-3 py-3">
+                <button
+                  key={item.id}
+                  type="button"
+                  className="w-full rounded-xl border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/20"
+                  onClick={() => item.requestId && onOpenRequestDetail(item.requestId)}
+                  disabled={!item.requestId}
+                >
                   <p className="text-sm font-medium">{item.title}</p>
                   {item.description && <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>}
                   <div className="mt-2 flex items-center justify-between gap-2">
@@ -117,7 +131,7 @@ export function ClientPortalOverview({
                       <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                     )}
                   </div>
-                </div>
+                </button>
               ))
             )}
           </CardContent>

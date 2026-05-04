@@ -966,6 +966,15 @@ export default function PortalClientePage() {
   }, [requestSearch, requestStatusFilter, requests]);
 
   const selectedRequestDocuments = selectedRequest ? documentsByRequest.get(selectedRequest.id) || [] : [];
+  const openRequestDetailById = useCallback((requestId: string) => {
+    const request = requests.find((item) => item.id === requestId);
+    if (!request) {
+      toast.error("Nao foi possivel abrir esta solicitacao.");
+      return;
+    }
+    setSelectedRequest(request);
+    setRequestDetailOpen(true);
+  }, [requests]);
 
   const availableReasons = useMemo(() => getGuidedReasonsForSector(newRequestSector), [newRequestSector]);
 
@@ -1588,6 +1597,7 @@ export default function PortalClientePage() {
               monthLabel={currentMonthLabel}
               pendingNow={pendingNow}
               recentUpdates={recentUpdates}
+              onOpenRequestDetail={openRequestDetailById}
               onNewRequest={() => openRequestsHub("freeform")}
               onOpenSupport={() => openRequestsHub("support")}
               onOpenHistory={() => setActiveTab("request-history")}
