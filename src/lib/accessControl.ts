@@ -31,27 +31,33 @@ export const rolePriority: string[] = [
 
 export const normalizeRole = (role: string | null | undefined) => String(role || "").trim().toLowerCase();
 
-export const normalizeRoles = (roles: string[]) =>
-  Array.from(new Set(roles.map((role) => normalizeRole(role)).filter(Boolean)));
+type RoleLike = string | null | undefined;
+type RoleListLike = readonly RoleLike[] | null | undefined;
 
-export const isInternalRole = (role: string | null | undefined) => internalRoleSet.has(normalizeRole(role));
+export const normalizeRoles = (roles: RoleListLike) =>
+  Array.from(new Set((roles ?? []).map((role) => normalizeRole(role)).filter(Boolean)));
 
-export const hasAnyInternalRole = (roles: string[]) => roles.some((role) => internalRoleSet.has(normalizeRole(role)));
+export const isInternalRole = (role: RoleLike) => internalRoleSet.has(normalizeRole(role));
 
-export const hasAnyDepartmentRole = (roles: string[]) => roles.some((role) => departmentRoleSet.has(normalizeRole(role)));
+export const hasAnyInternalRole = (roles: RoleListLike) =>
+  (roles ?? []).some((role) => internalRoleSet.has(normalizeRole(role)));
 
-export const hasClientRole = (roles: string[]) => roles.some((role) => normalizeRole(role) === CLIENT_ROLE);
+export const hasAnyDepartmentRole = (roles: RoleListLike) =>
+  (roles ?? []).some((role) => departmentRoleSet.has(normalizeRole(role)));
 
-export const isDepartmentOnlyUser = (roles: string[]) => {
+export const hasClientRole = (roles: RoleListLike) =>
+  (roles ?? []).some((role) => normalizeRole(role) === CLIENT_ROLE);
+
+export const isDepartmentOnlyUser = (roles: RoleListLike) => {
   const normalized = normalizeRoles(roles);
   const hasDepartment = normalized.some((role) => departmentRoleSet.has(role));
   const hasElevatedInternal = normalized.some((role) => elevatedInternalRoleSet.has(role));
   return hasDepartment && !hasElevatedInternal;
 };
 
-export const hasPortalAccessRole = (roles: string[]) => hasClientRole(roles) || hasAnyInternalRole(roles);
+export const hasPortalAccessRole = (roles: RoleListLike) => hasClientRole(roles) || hasAnyInternalRole(roles);
 
-export const getPrimaryRole = (roles: string[]) => {
+export const getPrimaryRole = (roles: RoleListLike) => {
   const normalized = normalizeRoles(roles);
   if (normalized.length === 0) return null;
 
