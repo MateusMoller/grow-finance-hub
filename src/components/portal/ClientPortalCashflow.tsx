@@ -711,41 +711,41 @@ export function ClientPortalCashflow({
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-slate-50">
+      <Card className="overflow-hidden border-slate-200/80 bg-gradient-to-br from-stone-50 via-white to-slate-100 text-slate-950 shadow-sm">
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge className="w-fit bg-sky-400/20 text-sky-100 hover:bg-sky-400/20">Fluxo de caixa Grow</Badge>
+                <Badge className="w-fit border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50">Fluxo de caixa Grow</Badge>
                 <Badge variant="outline" className={healthStatusMeta.className}>
                   Saude do caixa: {healthStatusMeta.label}
                 </Badge>
               </div>
               <div>
                 <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Caixa organizado em operacao, conciliacao e gestao.</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
                   Acompanhe o caixa atual, visualize o saldo projetado e resolva pendencias sem sair do portal.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[420px]">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Saldo atual</p>
-                <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.currentBalance >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+              <div className="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.35)] backdrop-blur">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Saldo atual</p>
+                <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.currentBalance >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                   {formatMoney(dashboardMetrics.currentBalance)}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Projecao 15 dias</p>
-                <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.projectedFifteen >= 0 ? "text-sky-200" : "text-rose-300"}`}>
+              <div className="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.35)] backdrop-blur">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Projecao 15 dias</p>
+                <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.projectedFifteen >= 0 ? "text-sky-700" : "text-rose-600"}`}>
                   {formatMoney(dashboardMetrics.projectedFifteen)}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Pendencias</p>
-                <p className="mt-2 text-2xl font-semibold text-amber-200">{conciliationEntries.length}</p>
-                <p className="mt-1 text-xs text-slate-300">Itens esperando revisao ou conciliacao</p>
+              <div className="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.35)] backdrop-blur">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Pendencias</p>
+                <p className="mt-2 text-2xl font-semibold text-amber-600">{conciliationEntries.length}</p>
+                <p className="mt-1 text-xs text-slate-600">Itens esperando revisao ou conciliacao</p>
               </div>
             </div>
           </div>
@@ -778,49 +778,49 @@ export function ClientPortalCashflow({
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/78 p-4 backdrop-blur">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <TrendingDown className="h-4 w-4 text-amber-200" />
+                <TrendingDown className="h-4 w-4 text-amber-600" />
                 Maiores saidas futuras
               </div>
               <div className="mt-4 space-y-3">
                 {dashboardMetrics.topFutureExpenses.length === 0 ? (
-                  <p className="text-sm text-slate-300">Nenhuma saida relevante prevista nos proximos 30 dias.</p>
+                  <p className="text-sm text-slate-600">Nenhuma saida relevante prevista nos proximos 30 dias.</p>
                 ) : (
                   dashboardMetrics.topFutureExpenses.map((entry) => (
-                    <div key={entry.id} className="flex items-start justify-between gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
+                    <div key={entry.id} className="flex items-start justify-between gap-3 border-b border-slate-200/80 pb-3 last:border-b-0 last:pb-0">
                       <div>
-                        <p className="text-sm font-medium text-slate-50">{entry.description}</p>
-                        <p className="text-xs text-slate-300">
+                        <p className="text-sm font-medium text-slate-900">{entry.description}</p>
+                        <p className="text-xs text-slate-500">
                           {formatDate(getEntryDueDate(entry))} • {entry.category}
                         </p>
                       </div>
-                      <p className="text-sm font-semibold text-rose-200">{formatMoney(entry.amount)}</p>
+                      <p className="text-sm font-semibold text-rose-600">{formatMoney(entry.amount)}</p>
                     </div>
                   ))
                 )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/78 p-4 backdrop-blur">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <AlertTriangle className="h-4 w-4 text-amber-200" />
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
                 Alerta de caixa
               </div>
               {dashboardMetrics.gapAlert ? (
                 <div className="mt-4 space-y-3">
-                  <p className="text-sm text-slate-200">
+                  <p className="text-sm text-slate-700">
                     O saldo projetado fica negativo em <span className="font-semibold">{formatDate(dashboardMetrics.gapAlert.date)}</span>.
                   </p>
-                  <p className="text-2xl font-semibold text-rose-200">{formatMoney(dashboardMetrics.gapAlert.balance)}</p>
-                  <p className="text-xs leading-relaxed text-slate-300">
+                  <p className="text-2xl font-semibold text-rose-600">{formatMoney(dashboardMetrics.gapAlert.balance)}</p>
+                  <p className="text-xs leading-relaxed text-slate-600">
                     Revise as saidas futuras, antecipe recebimentos ou reorganize prazos antes desta data.
                   </p>
                 </div>
               ) : (
                 <div className="mt-4 space-y-2">
-                  <p className="text-sm text-emerald-200">Nenhum buraco de caixa projetado nos proximos 30 dias.</p>
-                  <p className="text-xs leading-relaxed text-slate-300">
+                  <p className="text-sm text-emerald-700">Nenhum buraco de caixa projetado nos proximos 30 dias.</p>
+                  <p className="text-xs leading-relaxed text-slate-600">
                     Continue acompanhando entradas previstas, conciliacoes pendentes e despesas de maior impacto.
                   </p>
                 </div>
@@ -831,21 +831,21 @@ export function ClientPortalCashflow({
           {activeConsultiveAlerts.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
               {activeConsultiveAlerts.map((alert) => (
-                <div key={alert.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div key={alert.id} className="rounded-2xl border border-slate-200/80 bg-white/78 p-4 backdrop-blur">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-slate-50">{alert.title}</p>
+                    <p className="text-sm font-medium text-slate-900">{alert.title}</p>
                     <Badge
                       variant="outline"
                       className={
                         alert.severity === "critical"
-                          ? "border-rose-300/30 bg-rose-400/10 text-rose-100"
-                          : "border-amber-300/30 bg-amber-400/10 text-amber-100"
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
                       }
                     >
                       {alert.severity === "critical" ? "Critico" : "Atencao"}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-slate-300">{alert.message}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600">{alert.message}</p>
                 </div>
               ))}
             </div>
