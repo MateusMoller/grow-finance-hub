@@ -1490,59 +1490,74 @@ export default function ClientDetailPage() {
     };
 
     setCreatingPortalTask(true);
-    const { data: requestData, error: requestError } = await supabase
-      .from("client_requests")
-      .insert({
-        user_id: client.portal_user_id,
-        title: taskTitle,
-        description: taskDescription,
-        category: categoryByTaskType[portalTaskDraft.type] || "Solicitacao",
-        sector: taskSector,
-        status: "pending",
-      })
-      .select("id")
-      .single();
+    let linkedRequestId: string | null = null;
 
-    if (requestError || !requestData?.id) {
+    try {
+      const { data: requestData, error: requestError } = await supabase
+        .from("client_requests")
+        .insert({
+          user_id: client.portal_user_id,
+          title: taskTitle,
+          description: taskDescription,
+          category: categoryByTaskType[portalTaskDraft.type] || "Solicitacao",
+          sector: taskSector,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (requestError || !requestData?.id) {
+        toast.error("Nao foi possivel criar a solicitacao vinculada.");
+        return;
+      }
+
+      linkedRequestId = requestData.id;
+
+      if (taskDescription) {
+        const { error: messageError } = await supabase.from("request_messages").insert({
+          request_id: requestData.id,
+          user_id: user.id,
+          content: taskDescription,
+          is_from_team: true,
+        });
+
+        if (messageError) {
+          await supabase.from("client_requests").delete().eq("id", requestData.id);
+          toast.error("Nao foi possivel iniciar o chat da solicitacao.");
+          return;
+        }
+      }
+
+      const { data, error } = await supabase
+        .from("client_portal_tasks")
+        .insert({
+          client_id: id,
+          request_id: requestData.id,
+          title: taskTitle,
+          description: taskDescription,
+          type: portalTaskDraft.type,
+          status: "pending_client",
+          due_date: portalTaskDraft.dueDate || null,
+          sector: taskSector,
+          created_by: user.id,
+        })
+        .select("*")
+        .single();
+
+      if (error || !data) {
+        if (linkedRequestId) {
+          await supabase.from("client_requests").delete().eq("id", linkedRequestId);
+        }
+        toast.error("Nao foi possivel criar a pendencia vinculada ao portal.");
+        return;
+      }
+
+      setPortalTasks((prev) => [data as ClientPortalTaskRow, ...prev]);
+      resetPortalTaskDraft();
+      toast.success("Pendencia criada com solicitacao vinculada e chat para o cliente.");
+    } finally {
       setCreatingPortalTask(false);
-      toast.error("Nao foi possivel criar a solicitacao vinculada.");
-      return;
     }
-
-    if (taskDescription) {
-      await supabase.from("request_messages").insert({
-        request_id: requestData.id,
-        user_id: user.id,
-        content: taskDescription,
-        is_from_team: true,
-      });
-    }
-
-    const { data, error } = await supabase
-      .from("client_portal_tasks")
-      .insert({
-        client_id: id,
-        request_id: requestData.id,
-        title: taskTitle,
-        description: taskDescription,
-        type: portalTaskDraft.type,
-        status: "pending_client",
-        due_date: portalTaskDraft.dueDate || null,
-        sector: taskSector,
-        created_by: user.id,
-      })
-      .select("*")
-      .single();
-    setCreatingPortalTask(false);
-
-    if (error) {
-      toast.error("Não foi possível criar a pendencia.");
-      return;
-    }
-
-    setPortalTasks((prev) => [data as ClientPortalTaskRow, ...prev]);
-    resetPortalTaskDraft();
-    toast.success("Pendencia criada com solicitacao vinculada e chat para o cliente.");
   };
 
   const handlePortalTaskStatusChange = async (taskId: string, status: PortalTaskStatus) => {
