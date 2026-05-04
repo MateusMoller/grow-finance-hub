@@ -18,6 +18,12 @@ interface PublishedNewsletter {
   created_at: string;
 }
 
+type NewsletterContentBlock =
+  | { type: "paragraph"; content: string }
+  | { type: "image"; url: string; alt: string }
+  | { type: "video"; url: string }
+  | { type: "audio"; url: string };
+
 const formatDate = (value: string | null) => {
   if (!value) return "Sem data";
   return new Date(value).toLocaleDateString("pt-BR", {
@@ -36,6 +42,55 @@ const parseNewsletter = (row: NewsletterRow): PublishedNewsletter => ({
   published_at: row.published_at,
   created_at: row.created_at,
 });
+
+const IMAGE_MARKDOWN_REGEX = /^!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)$/i;
+const VIDEO_MARKDOWN_REGEX = /^\[video\]\((https?:\/\/[^\s)]+)\)$/i;
+const AUDIO_MARKDOWN_REGEX = /^\[audio\]\((https?:\/\/[^\s)]+)\)$/i;
+const URL_ONLY_REGEX = /^https?:\/\/\S+$/i;
+
+const IMAGE_EXTENSION_REGEX = /\.(png|jpe?g|gif|webp|svg|avif)(\?.*)?$/i;
+const VIDEO_EXTENSION_REGEX = /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i;
+const AUDIO_EXTENSION_REGEX = /\.(mp3|wav|ogg|m4a|aac|flac)(\?.*)?$/i;
+
+const parseNewsletterBlocks = (content: string): NewsletterContentBlock[] =>
+  content
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const imageMatch = block.match(IMAGE_MARKDOWN_REGEX);
+      if (imageMatch) {
+        return {
+          type: "image" as const,
+          alt: imageMatch[1] || "Imagem da newsletter",
+          url: imageMatch[2],
+        };
+      }
+
+      const videoMatch = block.match(VIDEO_MARKDOWN_REGEX);
+      if (videoMatch) {
+        return { type: "video" as const, url: videoMatch[1] };
+      }
+
+      const audioMatch = block.match(AUDIO_MARKDOWN_REGEX);
+      if (audioMatch) {
+        return { type: "audio" as const, url: audioMatch[1] };
+      }
+
+      if (URL_ONLY_REGEX.test(block)) {
+        if (IMAGE_EXTENSION_REGEX.test(block)) {
+          return { type: "image" as const, alt: "Imagem da newsletter", url: block };
+        }
+        if (VIDEO_EXTENSION_REGEX.test(block)) {
+          return { type: "video" as const, url: block };
+        }
+        if (AUDIO_EXTENSION_REGEX.test(block)) {
+          return { type: "audio" as const, url: block };
+        }
+      }
+
+      return { type: "paragraph" as const, content: block };
+    });
 
 export default function NewsletterPage() {
   const [loading, setLoading] = useState(true);
@@ -71,6 +126,10 @@ export default function NewsletterPage() {
   const activeNewsletter = useMemo(
     () => newsletters.find((item) => item.slug === activeSlug) || newsletters[0] || null,
     [activeSlug, newsletters],
+  );
+  const activeBlocks = useMemo(
+    () => (activeNewsletter ? parseNewsletterBlocks(activeNewsletter.content) : []),
+    [activeNewsletter],
   );
 
   return (
@@ -141,13 +200,35 @@ export default function NewsletterPage() {
                     </div>
 
                     <div className="space-y-4 text-sm leading-relaxed">
-                      {activeNewsletter.content
-                        .split(/\n{2,}/)
-                        .map((paragraph) => paragraph.trim())
-                        .filter(Boolean)
-                        .map((paragraph, index) => (
-                          <p key={`${activeNewsletter.id}-${index}`}>{paragraph}</p>
-                        ))}
+                      {activeBlocks.map((block, index) => {
+                        const blockKey = `${activeNewsletter.id}-${index}`;
+                        if (block.type === "image") {
+                          return (
+                            <figure key={blockKey} className="overflow-hidden rounded-xl border bg-muted/20">
+                              <img src={block.url} alt={block.alt} loading="lazy" className="h-auto w-full object-cover" />
+                            </figure>
+                          );
+                        }
+                        if (block.type === "video") {
+                          return (
+                            <div key={blockKey} className="overflow-hidden rounded-xl border bg-black/80 p-2">
+                              <video src={block.url} controls preload="metadata" className="w-full rounded-lg" />
+                            </div>
+                          );
+                        }
+                        if (block.type === "audio") {
+                          return (
+                            <div key={blockKey} className="rounded-xl border bg-muted/20 p-3">
+                              <audio src={block.url} controls preload="metadata" className="w-full" />
+                            </div>
+                          );
+                        }
+                        return (
+                          <p key={blockKey} className="whitespace-pre-line">
+                            {block.content}
+                          </p>
+                        );
+                      })}
                     </div>
                   </>
                 )}

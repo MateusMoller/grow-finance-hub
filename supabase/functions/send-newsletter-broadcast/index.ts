@@ -43,11 +43,36 @@ function escapeHtml(value: string) {
 }
 
 function toHtmlParagraphs(value: string) {
+  const imageRegex = /^!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)$/i;
+  const videoRegex = /^\[video\]\((https?:\/\/[^\s)]+)\)$/i;
+  const audioRegex = /^\[audio\]\((https?:\/\/[^\s)]+)\)$/i;
+
   return value
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean)
-    .map((block) => `<p style="margin: 0 0 14px; line-height: 1.6;">${escapeHtml(block).replace(/\n/g, "<br/>")}</p>`)
+    .map((block) => {
+      const imageMatch = block.match(imageRegex);
+      if (imageMatch) {
+        const alt = escapeHtml(imageMatch[1] || "Imagem");
+        const src = escapeHtml(imageMatch[2]);
+        return `<div style="margin: 0 0 16px;"><img src="${src}" alt="${alt}" style="max-width:100%;height:auto;border-radius:10px;" /></div>`;
+      }
+
+      const videoMatch = block.match(videoRegex);
+      if (videoMatch) {
+        const url = escapeHtml(videoMatch[1]);
+        return `<p style="margin:0 0 14px;line-height:1.6;">Video: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>`;
+      }
+
+      const audioMatch = block.match(audioRegex);
+      if (audioMatch) {
+        const url = escapeHtml(audioMatch[1]);
+        return `<p style="margin:0 0 14px;line-height:1.6;">Audio: <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>`;
+      }
+
+      return `<p style="margin: 0 0 14px; line-height: 1.6;">${escapeHtml(block).replace(/\n/g, "<br/>")}</p>`;
+    })
     .join("");
 }
 
@@ -71,8 +96,12 @@ function buildNewsletterHtml(title: string, excerpt: string | null, content: str
 }
 
 function buildNewsletterText(title: string, excerpt: string | null, content: string) {
+  const normalizedContent = content
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/gi, "Imagem: $2")
+    .replace(/\[video\]\((https?:\/\/[^\s)]+)\)/gi, "Video: $1")
+    .replace(/\[audio\]\((https?:\/\/[^\s)]+)\)/gi, "Audio: $1");
   const summaryBlock = excerpt ? `${excerpt}\n\n` : "";
-  return `Grow Contabilidade\n\n${title}\n\n${summaryBlock}${content}`;
+  return `Grow Contabilidade\n\n${title}\n\n${summaryBlock}${normalizedContent}`;
 }
 
 async function sendEmailViaResend(params: {

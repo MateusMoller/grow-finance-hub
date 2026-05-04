@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,10 @@ import {
   Mail,
   Users,
   AlertTriangle,
+  Upload,
+  Image,
+  Film,
+  Music2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -94,6 +98,28 @@ const getFunctionErrorMessage = async (error: unknown) => {
   return "Erro ao executar função";
 };
 
+const NEWSLETTER_MEDIA_BUCKET = "newsletter-media";
+
+const getMediaKind = (file: File): "image" | "video" | "audio" | "file" => {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "file";
+};
+
+const buildMediaSnippet = (fileName: string, mediaUrl: string, mediaKind: "image" | "video" | "audio" | "file") => {
+  if (mediaKind === "image") return `![${fileName}](${mediaUrl})`;
+  if (mediaKind === "video") return `[video](${mediaUrl})`;
+  if (mediaKind === "audio") return `[audio](${mediaUrl})`;
+  return mediaUrl;
+};
+
+const sanitizeFileName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_");
+
 export default function NewsletterAdminPage() {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
@@ -108,6 +134,8 @@ export default function NewsletterAdminPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingNewsletterId, setEditingNewsletterId] = useState<string | null>(null);
   const [draft, setDraft] = useState<NewsletterEditorState>(createEmptyDraft());
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchNewsletters = useCallback(async () => {
     if (!isAdmin) {
@@ -183,6 +211,56 @@ export default function NewsletterAdminPage() {
       is_published: newsletter.is_published,
     });
     setEditorOpen(true);
+  };
+
+  const uploadMediaToNewsletter = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (!isAdmin || !user?.id) {
+      toast.error("Apenas admin pode enviar midias para newsletter");
+      return;
+    }
+
+    setUploadingMedia(true);
+    const snippets: string[] = [];
+    let failedCount = 0;
+
+    for (const file of Array.from(files)) {
+      const normalizedName = sanitizeFileName(file.name || "arquivo");
+      const filePath = `${user.id}/${Date.now()}_${crypto.randomUUID()}_${normalizedName}`;
+      const { error: uploadError } = await supabase.storage
+        .from(NEWSLETTER_MEDIA_BUCKET)
+        .upload(filePath, file, { upsert: false, contentType: file.type || undefined });
+
+      if (uploadError) {
+        failedCount += 1;
+        continue;
+      }
+
+      const { data: publicData } = supabase.storage.from(NEWSLETTER_MEDIA_BUCKET).getPublicUrl(filePath);
+      const mediaUrl = publicData.publicUrl;
+      snippets.push(buildMediaSnippet(file.name, mediaUrl, getMediaKind(file)));
+    }
+
+    setUploadingMedia(false);
+    if (mediaInputRef.current) {
+      mediaInputRef.current.value = "";
+    }
+
+    if (snippets.length === 0) {
+      toast.error("Nao foi possivel enviar as midias selecionadas.");
+      return;
+    }
+
+    setDraft((prev) => ({
+      ...prev,
+      content: prev.content.trim() ? `${prev.content.trim()}\n\n${snippets.join("\n\n")}` : snippets.join("\n\n"),
+    }));
+
+    if (failedCount > 0) {
+      toast.warning(`${snippets.length} midia(s) enviada(s), ${failedCount} falharam.`);
+    } else {
+      toast.success(`${snippets.length} midia(s) adicionada(s) ao conteudo.`);
+    }
   };
 
   const dispatchEmails = async (newsletterId: string, silentSuccess = false) => {
@@ -581,6 +659,45 @@ export default function NewsletterAdminPage() {
                 onChange={(event) => setDraft((prev) => ({ ...prev, content: event.target.value }))}
                 placeholder="Escreva aqui o conteúdo completo da newsletter."
               />
+            </div>
+
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">Imagens e midias</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => mediaInputRef.current?.click()}
+                  disabled={uploadingMedia}
+                >
+                  {uploadingMedia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Enviar arquivos
+                </Button>
+                <input
+                  ref={mediaInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept="image/*,video/*,audio/*"
+                  onChange={(event) => void uploadMediaToNewsletter(event.target.files)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                As midias enviadas entram automaticamente no conteudo. Formatos aceitos: imagem, video e audio.
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded border px-2 py-1">
+                  <Image className="h-3 w-3" /> ![titulo](url)
+                </span>
+                <span className="inline-flex items-center gap-1 rounded border px-2 py-1">
+                  <Film className="h-3 w-3" /> [video](url)
+                </span>
+                <span className="inline-flex items-center gap-1 rounded border px-2 py-1">
+                  <Music2 className="h-3 w-3" /> [audio](url)
+                </span>
+              </div>
             </div>
 
             <label className="flex items-center gap-2 rounded-lg border p-3 text-sm">
