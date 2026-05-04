@@ -1029,7 +1029,6 @@ export default function ClientDetailPage() {
     setLoadingAcessoriasObligations(false);
 
     if (error) {
-      await supabase.from("client_requests").delete().eq("id", requestData.id);
       toast.error("Não foi possível carregar as obrigações deste cliente.");
       return;
     }
