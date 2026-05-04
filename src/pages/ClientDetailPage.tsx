@@ -695,6 +695,10 @@ const parseBusinessProfilesValue = (rawValue: string | undefined) => {
     if (mapped) selected.add(mapped);
   });
 
+  if (tokens.some((token) => token === "comercio")) {
+    selected.add(clientBusinessProfileOptions[0].key);
+  }
+
   return clientBusinessProfileOptions
     .map((option) => option.key)
     .filter((key) => selected.has(key));
