@@ -34,19 +34,21 @@ export const normalizeRole = (role: string | null | undefined) => String(role ||
 type RoleLike = string | null | undefined;
 type RoleListLike = readonly RoleLike[] | null | undefined;
 
+const safeRoleList = (roles: RoleListLike) => (Array.isArray(roles) ? roles : []);
+
 export const normalizeRoles = (roles: RoleListLike) =>
-  Array.from(new Set((roles ?? []).map((role) => normalizeRole(role)).filter(Boolean)));
+  Array.from(new Set(safeRoleList(roles).map((role) => normalizeRole(role)).filter(Boolean)));
 
 export const isInternalRole = (role: RoleLike) => internalRoleSet.has(normalizeRole(role));
 
 export const hasAnyInternalRole = (roles: RoleListLike) =>
-  (roles ?? []).some((role) => internalRoleSet.has(normalizeRole(role)));
+  safeRoleList(roles).some((role) => internalRoleSet.has(normalizeRole(role)));
 
 export const hasAnyDepartmentRole = (roles: RoleListLike) =>
-  (roles ?? []).some((role) => departmentRoleSet.has(normalizeRole(role)));
+  safeRoleList(roles).some((role) => departmentRoleSet.has(normalizeRole(role)));
 
 export const hasClientRole = (roles: RoleListLike) =>
-  (roles ?? []).some((role) => normalizeRole(role) === CLIENT_ROLE);
+  safeRoleList(roles).some((role) => normalizeRole(role) === CLIENT_ROLE);
 
 export const isDepartmentOnlyUser = (roles: RoleListLike) => {
   const normalized = normalizeRoles(roles);
