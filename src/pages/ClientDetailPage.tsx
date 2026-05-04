@@ -1029,6 +1029,7 @@ export default function ClientDetailPage() {
     setLoadingAcessoriasObligations(false);
 
     if (error) {
+      await supabase.from("client_requests").delete().eq("id", requestData.id);
       toast.error("Não foi possível carregar as obrigações deste cliente.");
       return;
     }
@@ -1478,17 +1479,57 @@ export default function ClientDetailPage() {
       return;
     }
 
+    const taskTitle = portalTaskDraft.title.trim();
+    const taskDescription = portalTaskDraft.description.trim() || null;
+    const taskSector = portalTaskDraft.sector || "Geral";
+    const categoryByTaskType: Record<PortalTaskType, string> = {
+      document: "Documento",
+      request_return: "Retorno de solicitacao",
+      analysis: "Analise",
+      deliverable: "Entregavel",
+      general: "Solicitacao",
+    };
+
     setCreatingPortalTask(true);
+    const { data: requestData, error: requestError } = await supabase
+      .from("client_requests")
+      .insert({
+        user_id: client.portal_user_id,
+        title: taskTitle,
+        description: taskDescription,
+        category: categoryByTaskType[portalTaskDraft.type] || "Solicitacao",
+        sector: taskSector,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (requestError || !requestData?.id) {
+      setCreatingPortalTask(false);
+      toast.error("Nao foi possivel criar a solicitacao vinculada.");
+      return;
+    }
+
+    if (taskDescription) {
+      await supabase.from("request_messages").insert({
+        request_id: requestData.id,
+        user_id: user.id,
+        content: taskDescription,
+        is_from_team: true,
+      });
+    }
+
     const { data, error } = await supabase
       .from("client_portal_tasks")
       .insert({
         client_id: id,
-        title: portalTaskDraft.title.trim(),
-        description: portalTaskDraft.description.trim() || null,
+        request_id: requestData.id,
+        title: taskTitle,
+        description: taskDescription,
         type: portalTaskDraft.type,
         status: "pending_client",
         due_date: portalTaskDraft.dueDate || null,
-        sector: portalTaskDraft.sector || "Geral",
+        sector: taskSector,
         created_by: user.id,
       })
       .select("*")
@@ -1502,7 +1543,7 @@ export default function ClientDetailPage() {
 
     setPortalTasks((prev) => [data as ClientPortalTaskRow, ...prev]);
     resetPortalTaskDraft();
-    toast.success("Pendencia criada e publicada para o cliente.");
+    toast.success("Pendencia criada com solicitacao vinculada e chat para o cliente.");
   };
 
   const handlePortalTaskStatusChange = async (taskId: string, status: PortalTaskStatus) => {
