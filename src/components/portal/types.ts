@@ -66,16 +66,111 @@ export interface PortalClientTask {
 
 export type PortalCashflowEntryType = "income" | "expense";
 export type PortalCashflowEntryStatus = "predicted" | "confirmed";
+export type CashflowLifecycleStatus = "predicted" | "due" | "overdue" | "confirmed";
+export type CashflowOriginType = "manual" | "import_file" | "open_finance" | "obligation_projection" | "recurring_rule";
+export type CashflowReconciliationStatus = "not_applicable" | "pending" | "suggested" | "reconciled" | "ignored";
+export type CashflowReviewStatus = "pending_review" | "classified" | "approved";
+export type CashflowAccountSourceType = "manual" | "bank_open_finance" | "cash" | "other";
+export type CashflowHealthStatus = "em_dia" | "atencao" | "critico";
+
+export interface CashflowConsultiveAlert {
+  id: string;
+  client_id: string;
+  source_type: string;
+  source_key: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  message: string;
+  status: "active" | "resolved" | "dismissed";
+  metadata: Record<string, unknown>;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CashflowHealthSnapshot {
+  client_id: string;
+  health_status: CashflowHealthStatus;
+  current_balance: number;
+  projected_balance_7: number;
+  projected_balance_15: number;
+  projected_balance_30: number;
+  overdue_entries: number;
+  pending_review_entries: number;
+  pending_reconciliation_entries: number;
+  review_coverage: number;
+  critical_calendar_events: number;
+  last_activity_at: string | null;
+  projected_gap_date: string | null;
+  metadata: Record<string, unknown>;
+  generated_at: string;
+  updated_at: string;
+}
+
+export interface CashflowRule {
+  id: string;
+  client_id: string | null;
+  match_text: string;
+  entry_type: PortalCashflowEntryType;
+  category: string;
+  counterparty_name: string | null;
+  mark_as_transfer: boolean;
+  auto_approve_threshold: number;
+  is_active: boolean;
+  notes: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CashflowAccount {
+  id: string;
+  client_id: string;
+  label: string;
+  source_type: CashflowAccountSourceType;
+  currency_code: string;
+  open_finance_account_id: string | null;
+  open_finance_connection_id: string | null;
+  institution_name: string | null;
+  account_mask: string | null;
+  is_primary: boolean;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface PortalCashflowEntry {
   id: string;
   client_id: string;
   entry_date: string;
+  due_date: string | null;
+  effective_date: string | null;
+  competence_month: string | null;
+  account_id: string | null;
   entry_type: PortalCashflowEntryType;
   category: string;
   description: string;
   amount: number;
   status: PortalCashflowEntryStatus;
+  lifecycle_status: CashflowLifecycleStatus | null;
+  matched_rule_id: string | null;
+  origin_type: CashflowOriginType | null;
+  reconciliation_status: CashflowReconciliationStatus | null;
+  review_status: CashflowReviewStatus | null;
+  review_owner_id: string | null;
+  reviewed_at: string | null;
+  rule_match_confidence: number | null;
+  counterparty_name: string | null;
+  document_ref: string | null;
+  notes: string | null;
+  is_transfer: boolean;
+  is_hidden_from_projection: boolean;
+  integration_source: string | null;
+  integration_key: string | null;
+  integration_connection_id: string | null;
+  integration_account_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -83,11 +178,24 @@ export interface PortalCashflowEntry {
 
 export interface NewPortalCashflowEntryPayload {
   entry_date: string;
+  due_date?: string;
+  effective_date?: string | null;
+  competence_month?: string | null;
+  account_id?: string | null;
   entry_type: PortalCashflowEntryType;
   category: string;
   description: string;
   amount: number;
   status: PortalCashflowEntryStatus;
+  lifecycle_status?: CashflowLifecycleStatus;
+  origin_type?: CashflowOriginType;
+  reconciliation_status?: CashflowReconciliationStatus;
+  review_status?: CashflowReviewStatus;
+  counterparty_name?: string | null;
+  document_ref?: string | null;
+  notes?: string | null;
+  is_transfer?: boolean;
+  is_hidden_from_projection?: boolean;
 }
 
 export type OpenFinanceProvider = "pluggy" | "openi";

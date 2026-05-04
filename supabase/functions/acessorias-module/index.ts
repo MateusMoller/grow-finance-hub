@@ -183,6 +183,30 @@ function asBoolean(value: unknown): boolean {
   return text === "true" || text === "1" || text === "yes" || text === "sim";
 }
 
+function normalizeCashflowEntryType(value: unknown): "income" | "expense" {
+  const token = normalizeToken(asTrimmedString(value) || "");
+  if (["income", "entrada", "receita"].includes(token)) return "income";
+  return "expense";
+}
+
+function normalizePositiveNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? Number(value.toFixed(2)) : null;
+  }
+
+  const text = asTrimmedText(value);
+  if (!text) return null;
+
+  const normalized = text.includes(",") && text.includes(".")
+    ? text.replace(/\./g, "").replace(",", ".")
+    : text.includes(",")
+      ? text.replace(",", ".")
+      : text;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Number(parsed.toFixed(2));
+}
+
 function normalizeToken(value: string) {
   return value
     .normalize("NFD")
@@ -3405,7 +3429,7 @@ async function handleListObligations(
   let query = supabaseAdmin
     .from("client_acessorias_obligations")
     .select(
-      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, last_synced_at",
+      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, has_financial_impact, projected_amount, financial_entry_type, financial_category, cashflow_account_id, last_synced_at",
     )
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("updated_at", { ascending: false });
@@ -3463,12 +3487,23 @@ async function handleAssignObligation(
   const status = normalizeObligationStatus(asTrimmedString(body.status)) || "pendente";
   const protocol = asTrimmedString(body.protocol);
   const notes = asTrimmedString(body.notes);
+  const hasFinancialImpact = Object.prototype.hasOwnProperty.call(body, "has_financial_impact")
+    ? asBoolean(body.has_financial_impact)
+    : false;
+  const projectedAmount = normalizePositiveNumber(body.projected_amount);
+  const financialEntryType = normalizeCashflowEntryType(body.financial_entry_type);
+  const financialCategory = asTrimmedString(body.financial_category);
+  const cashflowAccountId = asTrimmedString(body.cashflow_account_id);
   const syncRemote = Object.prototype.hasOwnProperty.call(body, "sync_remote")
     ? asBoolean(body.sync_remote)
     : true;
 
   if (!clientId || !obligationName) {
     return jsonResponse({ error: "client_id e obligation_name sao obrigatorios" }, 400);
+  }
+
+  if (hasFinancialImpact && !projectedAmount) {
+    return jsonResponse({ error: "projected_amount deve ser maior que zero quando houver impacto financeiro" }, 400);
   }
 
   const { data: client, error: clientError } = await supabaseAdmin
@@ -3565,6 +3600,11 @@ async function handleAssignObligation(
     status,
     protocol,
     notes,
+    has_financial_impact: hasFinancialImpact,
+    projected_amount: hasFinancialImpact ? projectedAmount : null,
+    financial_entry_type: financialEntryType,
+    financial_category: hasFinancialImpact ? financialCategory : null,
+    cashflow_account_id: hasFinancialImpact ? cashflowAccountId : null,
     source_payload: {
       source: "manual",
       created_by: callerUserId,
@@ -3584,7 +3624,9 @@ async function handleAssignObligation(
   const { data: upserted, error: upsertError } = await supabaseAdmin
     .from("client_acessorias_obligations")
     .upsert(row, { onConflict: "client_id,acessorias_obligation_id,obligation_period_key" })
-    .select("id, client_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, status")
+    .select(
+      "id, client_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, status, has_financial_impact, projected_amount, financial_entry_type, financial_category, cashflow_account_id",
+    )
     .maybeSingle();
   if (upsertError) throw upsertError;
 
@@ -3623,7 +3665,7 @@ async function handleUpdateObligation(
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("client_acessorias_obligations")
     .select(
-      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, source_payload",
+      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, has_financial_impact, projected_amount, financial_entry_type, financial_category, cashflow_account_id, source_payload",
     )
     .eq("id", obligationRowId)
     .maybeSingle();
@@ -3643,6 +3685,11 @@ async function handleUpdateObligation(
   const hasStatus = Object.prototype.hasOwnProperty.call(body, "status");
   const hasProtocol = Object.prototype.hasOwnProperty.call(body, "protocol");
   const hasNotes = Object.prototype.hasOwnProperty.call(body, "notes");
+  const hasFinancialImpact = Object.prototype.hasOwnProperty.call(body, "has_financial_impact");
+  const hasProjectedAmount = Object.prototype.hasOwnProperty.call(body, "projected_amount");
+  const hasFinancialEntryType = Object.prototype.hasOwnProperty.call(body, "financial_entry_type");
+  const hasFinancialCategory = Object.prototype.hasOwnProperty.call(body, "financial_category");
+  const hasCashflowAccountId = Object.prototype.hasOwnProperty.call(body, "cashflow_account_id");
 
   const nextValues = {
     obligation_name: providedName || existing.obligation_name,
@@ -3653,7 +3700,18 @@ async function handleUpdateObligation(
       : normalizeObligationStatus(existing.status),
     protocol: hasProtocol ? asTrimmedString(body.protocol) : existing.protocol,
     notes: hasNotes ? asTrimmedString(body.notes) : existing.notes,
+    has_financial_impact: hasFinancialImpact ? asBoolean(body.has_financial_impact) : Boolean(existing.has_financial_impact),
+    projected_amount: hasProjectedAmount ? normalizePositiveNumber(body.projected_amount) : existing.projected_amount,
+    financial_entry_type: hasFinancialEntryType
+      ? normalizeCashflowEntryType(body.financial_entry_type)
+      : normalizeCashflowEntryType(existing.financial_entry_type),
+    financial_category: hasFinancialCategory ? asTrimmedString(body.financial_category) : existing.financial_category,
+    cashflow_account_id: hasCashflowAccountId ? asTrimmedString(body.cashflow_account_id) : existing.cashflow_account_id,
   };
+
+  if (nextValues.has_financial_impact && !nextValues.projected_amount) {
+    return jsonResponse({ error: "projected_amount deve ser maior que zero quando houver impacto financeiro" }, 400);
+  }
 
   const syncRemote = Object.prototype.hasOwnProperty.call(body, "sync_remote")
     ? asBoolean(body.sync_remote)
@@ -3783,12 +3841,17 @@ async function handleUpdateObligation(
       status: nextValues.status,
       protocol: nextValues.protocol,
       notes: nextValues.notes,
+      has_financial_impact: nextValues.has_financial_impact,
+      projected_amount: nextValues.has_financial_impact ? nextValues.projected_amount : null,
+      financial_entry_type: nextValues.financial_entry_type,
+      financial_category: nextValues.has_financial_impact ? nextValues.financial_category : null,
+      cashflow_account_id: nextValues.has_financial_impact ? nextValues.cashflow_account_id : null,
       source_payload: sourcePayload,
       last_synced_at: nowIso,
     })
     .eq("id", obligationRowId)
     .select(
-      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, last_synced_at",
+      "id, client_id, acessorias_company_id, acessorias_obligation_id, obligation_name, obligation_period, due_date, delivered_at, status, protocol, notes, has_financial_impact, projected_amount, financial_entry_type, financial_category, cashflow_account_id, last_synced_at",
     )
     .maybeSingle();
   if (updateError) throw updateError;

@@ -27,6 +27,7 @@ const FormulariosPage = lazy(() => import("./pages/FormulariosPage"));
 const CRMPage = lazy(() => import("./pages/CRMPage"));
 const ChatInternoPage = lazy(() => import("./pages/ChatInternoPage"));
 const RelatoriosPage = lazy(() => import("./pages/RelatoriosPage"));
+const FinanceiroPage = lazy(() => import("./pages/FinanceiroPage"));
 const ObrigacoesPage = lazy(() => import("./pages/ObrigacoesPage"));
 const EContinuoPage = lazy(() => import("./pages/EContinuoPage"));
 const NewsletterAdminPage = lazy(() => import("./pages/NewsletterAdminPage"));
@@ -123,6 +124,7 @@ const App = () => (
                   <Route path="/app/newsletter" element={<ProtectedRoute scope="internal"><NewsletterAdminPage /></ProtectedRoute>} />
                   <Route path="/app/comercial" element={<ProtectedRoute scope="internal"><Navigate to="/app/crm" replace /></ProtectedRoute>} />
                   <Route path="/app/relatorios" element={<ProtectedRoute scope="internal"><RelatoriosPage /></ProtectedRoute>} />
+                  <Route path="/app/financeiro" element={<ProtectedRoute scope="internal"><FinanceiroPage /></ProtectedRoute>} />
                   <Route path="/app/obrigacoes" element={<ProtectedRoute scope="internal"><ObrigacoesPage /></ProtectedRoute>} />
                   <Route path="/app/econtinuo" element={<ProtectedRoute scope="internal"><EContinuoPage /></ProtectedRoute>} />
                   <Route path="/app/acessorias" element={<ProtectedRoute scope="internal"><Navigate to="/app/obrigacoes" replace /></ProtectedRoute>} />

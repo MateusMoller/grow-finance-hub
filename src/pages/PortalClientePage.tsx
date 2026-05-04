@@ -22,6 +22,9 @@ import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { GrowAssistantWidget } from "@/components/portal/GrowAssistantWidget";
 import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
 import {
+  type CashflowAccount,
+  type CashflowConsultiveAlert,
+  type CashflowHealthSnapshot,
   documentCategories,
   sectorOptions,
   type NewPortalCashflowEntryPayload,
@@ -508,6 +511,9 @@ export default function PortalClientePage() {
   const [portalTasks, setPortalTasks] = useState<PortalClientTask[]>([]);
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
   const [cashflowEntries, setCashflowEntries] = useState<PortalCashflowEntry[]>([]);
+  const [cashflowAccounts, setCashflowAccounts] = useState<CashflowAccount[]>([]);
+  const [cashflowAlerts, setCashflowAlerts] = useState<CashflowConsultiveAlert[]>([]);
+  const [cashflowHealthSnapshot, setCashflowHealthSnapshot] = useState<CashflowHealthSnapshot | null>(null);
   const [openFinanceConnections, setOpenFinanceConnections] = useState<OpenFinanceConnection[]>([]);
   const [openFinanceAccounts, setOpenFinanceAccounts] = useState<OpenFinanceAccount[]>([]);
   const [openFinanceLoading, setOpenFinanceLoading] = useState(false);
@@ -562,6 +568,9 @@ export default function PortalClientePage() {
     setDocuments([]);
     setPortalTasks([]);
     setCashflowEntries([]);
+    setCashflowAccounts([]);
+    setCashflowAlerts([]);
+    setCashflowHealthSnapshot(null);
     setOpenFinanceConnections([]);
     setOpenFinanceAccounts([]);
     setMessages([]);
@@ -636,6 +645,24 @@ export default function PortalClientePage() {
     },
     [invokeOpenFinanceModule],
   );
+
+  const fetchCashflowAccounts = useCallback(async (clientId: string) => {
+    const { data, error } = await supabase
+      .from("client_cashflow_accounts")
+      .select(
+        "id, client_id, label, source_type, currency_code, open_finance_account_id, open_finance_connection_id, institution_name, account_mask, is_primary, is_active, notes, created_at, updated_at",
+      )
+      .eq("client_id", clientId)
+      .order("is_primary", { ascending: false })
+      .order("label", { ascending: true });
+
+    if (error) {
+      toast.error("Erro ao carregar contas do fluxo de caixa.");
+      return [];
+    }
+
+    return asArray<CashflowAccount>(data);
+  }, []);
 
   const fetchPortalData = useCallback(async () => {
     if (!user) return;
@@ -780,19 +807,53 @@ export default function PortalClientePage() {
     }
 
     let fetchedCashflowEntries: PortalCashflowEntry[] = [];
+    let fetchedCashflowAccounts: CashflowAccount[] = [];
+    let fetchedCashflowAlerts: CashflowConsultiveAlert[] = [];
+    let fetchedCashflowHealthSnapshot: CashflowHealthSnapshot | null = null;
     if (client?.id && client.portal_cashflow_enabled) {
-      const { data: cashflowData, error: cashflowError } = await supabase
-        .from("client_cashflow_entries")
-        .select("id, client_id, entry_date, entry_type, category, description, amount, status, created_by, created_at, updated_at")
-        .eq("client_id", client.id)
-        .order("entry_date", { ascending: false })
-        .order("created_at", { ascending: false });
+      const [cashflowRes, cashflowAlertsRes, cashflowHealthRes] = await Promise.all([
+        supabase
+          .from("client_cashflow_entries")
+          .select(
+            "id, client_id, entry_date, due_date, effective_date, competence_month, account_id, entry_type, category, description, amount, status, lifecycle_status, matched_rule_id, origin_type, reconciliation_status, review_status, review_owner_id, reviewed_at, rule_match_confidence, counterparty_name, document_ref, notes, is_transfer, is_hidden_from_projection, integration_source, integration_key, integration_connection_id, integration_account_id, created_by, created_at, updated_at",
+          )
+          .eq("client_id", client.id)
+          .order("entry_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("client_cashflow_consultive_alerts")
+          .select("id, client_id, source_type, source_key, severity, title, message, status, metadata, resolved_at, created_at, updated_at")
+          .eq("client_id", client.id)
+          .eq("status", "active")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("client_cashflow_health_snapshots")
+          .select(
+            "client_id, health_status, current_balance, projected_balance_7, projected_balance_15, projected_balance_30, overdue_entries, pending_review_entries, pending_reconciliation_entries, review_coverage, critical_calendar_events, last_activity_at, projected_gap_date, metadata, generated_at, updated_at",
+          )
+          .eq("client_id", client.id)
+          .maybeSingle(),
+      ]);
 
-      if (cashflowError) {
+      if (cashflowRes.error) {
         toast.error("Erro ao carregar controle de caixa.");
       } else {
-        fetchedCashflowEntries = asArray<PortalCashflowEntry>(cashflowData);
+        fetchedCashflowEntries = asArray<PortalCashflowEntry>(cashflowRes.data);
       }
+
+      if (cashflowAlertsRes.error) {
+        toast.error("Erro ao carregar alertas consultivos do caixa.");
+      } else {
+        fetchedCashflowAlerts = asArray<CashflowConsultiveAlert>(cashflowAlertsRes.data);
+      }
+
+      if (cashflowHealthRes.error) {
+        toast.error("Erro ao carregar saude do caixa.");
+      } else {
+        fetchedCashflowHealthSnapshot = (cashflowHealthRes.data || null) as CashflowHealthSnapshot | null;
+      }
+
+      fetchedCashflowAccounts = await fetchCashflowAccounts(client.id);
     }
 
     let fetchedMessages: PortalRequestMessage[] = [];
@@ -828,6 +889,9 @@ export default function PortalClientePage() {
     setDocuments(fetchedDocuments);
     setPortalTasks(fetchedTasks);
     setCashflowEntries(fetchedCashflowEntries);
+    setCashflowAccounts(fetchedCashflowAccounts);
+    setCashflowAlerts(fetchedCashflowAlerts);
+    setCashflowHealthSnapshot(fetchedCashflowHealthSnapshot);
     setMessages(fetchedMessages);
 
     if (client.portal_cashflow_enabled) {
@@ -838,7 +902,7 @@ export default function PortalClientePage() {
     }
 
     setLoadingData(false);
-  }, [fetchOpenFinanceData, resetPortalCollections, session, user]);
+  }, [fetchCashflowAccounts, fetchOpenFinanceData, resetPortalCollections, session, user]);
 
   useEffect(() => {
     if (user && session?.access_token) void fetchPortalData();
@@ -1322,14 +1386,29 @@ export default function PortalClientePage() {
     }
 
     setCreatingCashflowEntry(true);
+    const dueDate = payload.due_date || payload.entry_date;
+    const effectiveDate = payload.status === "confirmed" ? payload.effective_date || dueDate : null;
     const { error } = await supabase.from("client_cashflow_entries").insert({
       client_id: clientProfile.id,
       entry_date: payload.entry_date,
+      due_date: dueDate,
+      effective_date: effectiveDate,
+      competence_month: payload.competence_month || `${dueDate.slice(0, 7)}-01`,
+      account_id: payload.account_id || null,
       entry_type: payload.entry_type,
       category: payload.category,
       description: payload.description,
       amount: payload.amount,
       status: payload.status,
+      lifecycle_status: payload.lifecycle_status || (payload.status === "confirmed" ? "confirmed" : "predicted"),
+      origin_type: payload.origin_type || "manual",
+      reconciliation_status: payload.reconciliation_status || "not_applicable",
+      review_status: payload.review_status || "pending_review",
+      counterparty_name: payload.counterparty_name || null,
+      document_ref: payload.document_ref || null,
+      notes: payload.notes || null,
+      is_transfer: payload.is_transfer || false,
+      is_hidden_from_projection: payload.is_hidden_from_projection || false,
       created_by: user.id,
     });
     setCreatingCashflowEntry(false);
@@ -1365,11 +1444,28 @@ export default function PortalClientePage() {
       payloads.map((payload) => ({
         client_id: clientProfile.id,
         entry_date: payload.entry_date,
+        due_date: payload.due_date || payload.entry_date,
+        effective_date:
+          payload.status === "confirmed"
+            ? payload.effective_date || payload.due_date || payload.entry_date
+            : null,
+        competence_month:
+          payload.competence_month || `${(payload.due_date || payload.entry_date).slice(0, 7)}-01`,
+        account_id: payload.account_id || null,
         entry_type: payload.entry_type,
         category: payload.category,
         description: payload.description,
         amount: payload.amount,
         status: payload.status,
+        lifecycle_status: payload.lifecycle_status || (payload.status === "confirmed" ? "confirmed" : "predicted"),
+        origin_type: payload.origin_type || "import_file",
+        reconciliation_status: payload.reconciliation_status || "not_applicable",
+        review_status: payload.review_status || "pending_review",
+        counterparty_name: payload.counterparty_name || null,
+        document_ref: payload.document_ref || null,
+        notes: payload.notes || null,
+        is_transfer: payload.is_transfer || false,
+        is_hidden_from_projection: payload.is_hidden_from_projection || false,
         created_by: user.id,
       })),
     );
@@ -1451,6 +1547,7 @@ export default function PortalClientePage() {
       });
 
       await fetchOpenFinanceData(clientProfile.id);
+      setCashflowAccounts(await fetchCashflowAccounts(clientProfile.id));
       return data.success === true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao desconectar conta.");
@@ -2111,16 +2208,19 @@ export default function PortalClientePage() {
             )}
           </TabsContent>
           <TabsContent value="cashflow" className="space-y-4">
-            <ClientPortalCashflow
-              enabled={Boolean(clientProfile?.portal_cashflow_enabled)}
-              loading={loadingData}
-              openFinanceLoading={openFinanceLoading}
-              openFinanceConnecting={openFinanceConnecting}
-              openFinanceSyncingConnectionId={openFinanceSyncingConnectionId}
-              openFinanceDisconnectingConnectionId={openFinanceDisconnectingConnectionId}
-              openFinanceConnections={openFinanceConnections}
-              openFinanceAccounts={openFinanceAccounts}
-              entries={cashflowEntries}
+      <ClientPortalCashflow
+        enabled={Boolean(clientProfile?.portal_cashflow_enabled)}
+        loading={loadingData}
+        openFinanceLoading={openFinanceLoading}
+        openFinanceConnecting={openFinanceConnecting}
+        openFinanceSyncingConnectionId={openFinanceSyncingConnectionId}
+        openFinanceDisconnectingConnectionId={openFinanceDisconnectingConnectionId}
+        openFinanceConnections={openFinanceConnections}
+        openFinanceAccounts={openFinanceAccounts}
+        cashflowAccounts={cashflowAccounts}
+        entries={cashflowEntries}
+        consultiveAlerts={cashflowAlerts}
+        healthSnapshot={cashflowHealthSnapshot}
               creating={creatingCashflowEntry}
               onCreateEntry={handleCreateCashflowEntry}
               onCreateEntriesBatch={handleCreateCashflowEntriesBatch}

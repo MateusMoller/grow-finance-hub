@@ -1,5 +1,6 @@
-import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   BarChart3,
   CalendarDays,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   LockKeyhole,
   Plus,
   RefreshCcw,
+  ShieldCheck,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -26,17 +28,48 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  cashflowCategoriesByType,
-  type NewPortalCashflowEntryPayload,
-  type OpenFinanceAccount,
-  type OpenFinanceConnection,
-  type OpenFinanceSyncStatus,
-  type PortalCashflowEntry,
-  type PortalCashflowEntryStatus,
-  type PortalCashflowEntryType,
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import type {
+  CashflowAccount,
+  CashflowConsultiveAlert,
+  CashflowHealthSnapshot,
+  NewPortalCashflowEntryPayload,
+  OpenFinanceAccount,
+  OpenFinanceConnection,
+  OpenFinanceSyncStatus,
+  PortalCashflowEntry,
+  PortalCashflowEntryStatus,
+  PortalCashflowEntryType,
 } from "@/components/portal/types";
+import {
+  buildCashflowTrendSeries,
+  type CashflowGroupBy,
+  cashflowCurrencyFormatter as currencyFormatter,
+  formatCashflowAccountLabel,
+  formatCashflowLifecycleStatus,
+  formatCashflowOriginType,
+  formatCashflowReconciliationStatus,
+  formatCashflowReviewStatus,
+  getCashflowAccountMap,
+  getCashflowGapAlert,
+  getCurrentCashBalance,
+  getEntryDueDate,
+  getEntryLifecycleStatus,
+  getEntryReferenceDate,
+  getProjectedBalanceAtHorizon,
+  getTopFutureExpenses,
+  getUpcomingDueEntries,
+  getUniqueCashflowCategories,
+  getTodayIsoDate,
+  groupCashflowEntries,
+  isEntryVisibleInManagerialView,
+  normalizeCashflowText,
+  toMonthKey,
+} from "@/lib/cashflow";
 import { parseCashflowFiles, type ParsedCashflowSuggestion } from "@/lib/cashflowImportParser";
+
+type PortalLayer = "operational" | "conciliation" | "managerial";
 
 interface ClientPortalCashflowProps {
   enabled: boolean;
@@ -47,7 +80,10 @@ interface ClientPortalCashflowProps {
   openFinanceDisconnectingConnectionId: string | null;
   openFinanceConnections: OpenFinanceConnection[];
   openFinanceAccounts: OpenFinanceAccount[];
+  cashflowAccounts: CashflowAccount[];
   entries: PortalCashflowEntry[];
+  consultiveAlerts: CashflowConsultiveAlert[];
+  healthSnapshot: CashflowHealthSnapshot | null;
   creating: boolean;
   onCreateEntry: (payload: NewPortalCashflowEntryPayload) => Promise<boolean>;
   onCreateEntriesBatch: (
@@ -59,37 +95,6 @@ interface ClientPortalCashflowProps {
   onRefreshOpenFinance: () => Promise<void>;
   onRequestEnable: () => void;
 }
-
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  maximumFractionDigits: 2,
-});
-
-const toLocalDateInput = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const toMonthKey = (dateString: string) => dateString.slice(0, 7);
-
-const formatDate = (dateString: string) =>
-  new Date(`${dateString}T00:00:00`).toLocaleDateString("pt-BR");
-
-const statusLabel: Record<PortalCashflowEntryStatus, string> = {
-  confirmed: "Confirmado",
-  predicted: "Previsto",
-};
-
-const typeLabel: Record<PortalCashflowEntryType, string> = {
-  income: "Entrada",
-  expense: "Saida",
-};
-
-const getSignedAmount = (entry: PortalCashflowEntry) =>
-  entry.entry_type === "income" ? entry.amount : -entry.amount;
 
 interface ImportDraftRow {
   id: string;
@@ -105,26 +110,99 @@ interface ImportDraftRow {
   confidence: number;
 }
 
-const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: number): ImportDraftRow => {
-  const availableCategories = cashflowCategoriesByType[suggestion.entryType];
-  const defaultCategory = availableCategories.includes(suggestion.category)
-    ? suggestion.category
-    : availableCategories[0];
+function MetricCard({
+  title,
+  value,
+  helper,
+  tone = "default",
+}: {
+  title: string;
+  value: string;
+  helper: string;
+  tone?: "default" | "success" | "warning" | "danger";
+}) {
+  const valueClassName =
+    tone === "success"
+      ? "text-emerald-600"
+      : tone === "warning"
+        ? "text-amber-600"
+        : tone === "danger"
+          ? "text-destructive"
+          : "text-foreground";
 
+  return (
+    <Card className="border-border/70 bg-card/95">
+      <CardContent className="p-4">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+        <p className={`mt-2 text-2xl font-semibold ${valueClassName}`}>{value}</p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{helper}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+const toLocalDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildMonthBounds = (monthKey: string) => {
+  const [yearText, monthText] = monthKey.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+
+  if (!year || !month) {
+    const today = new Date();
+    const fallback = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    return buildMonthBounds(fallback);
+  }
+
+  const firstDay = `${monthKey}-01`;
+  const lastDay = new Date(year, month, 0);
   return {
-    id: `${suggestion.sourceFile}-${index}-${suggestion.entryDate}`,
-    selected: true,
-    entryDate: suggestion.entryDate,
-    entryType: suggestion.entryType,
-    category: defaultCategory,
-    description: suggestion.description,
-    amountText: suggestion.amount.toFixed(2),
-    status: suggestion.confidence >= 0.98 ? "confirmed" : "predicted",
-    sourceFile: suggestion.sourceFile,
-    sourceLine: suggestion.sourceLine,
-    confidence: suggestion.confidence,
+    startDate: firstDay,
+    endDate: toLocalDateInput(lastDay),
   };
 };
+
+const formatDate = (dateString: string | null | undefined) =>
+  dateString ? new Date(`${dateString}T00:00:00`).toLocaleDateString("pt-BR") : "-";
+
+const formatMoney = (amount: number) => currencyFormatter.format(amount);
+
+const formatConnectionStatus = (status: string) => {
+  const token = String(status || "").trim().toLowerCase();
+  if (token === "active") return "Ativa";
+  if (token === "pending_consent") return "Pendente de consentimento";
+  if (token === "inactive") return "Inativa";
+  if (token === "error") return "Erro";
+  return "Desconhecida";
+};
+
+const formatConsentStatus = (status: string) => {
+  const token = String(status || "").trim().toLowerCase();
+  if (token === "granted") return "Consentimento ativo";
+  if (token === "pending") return "Aguardando consentimento";
+  if (token === "revoked") return "Consentimento revogado";
+  if (token === "expired") return "Consentimento expirado";
+  return "Consentimento nao informado";
+};
+
+const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: number): ImportDraftRow => ({
+  id: `${suggestion.sourceFile}-${index}-${suggestion.entryDate}`,
+  selected: true,
+  entryDate: suggestion.entryDate,
+  entryType: suggestion.entryType,
+  category: suggestion.category,
+  description: suggestion.description,
+  amountText: suggestion.amount.toFixed(2),
+  status: suggestion.confidence >= 0.98 ? "confirmed" : "predicted",
+  sourceFile: suggestion.sourceFile,
+  sourceLine: suggestion.sourceLine,
+  confidence: suggestion.confidence,
+});
 
 export function ClientPortalCashflow({
   enabled,
@@ -135,7 +213,10 @@ export function ClientPortalCashflow({
   openFinanceDisconnectingConnectionId,
   openFinanceConnections,
   openFinanceAccounts,
+  cashflowAccounts,
   entries,
+  consultiveAlerts,
+  healthSnapshot,
   creating,
   onCreateEntry,
   onCreateEntriesBatch,
@@ -146,137 +227,262 @@ export function ClientPortalCashflow({
   onRequestEnable,
 }: ClientPortalCashflowProps) {
   const today = useMemo(() => new Date(), []);
-  const [referenceMonth, setReferenceMonth] = useState(() => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
-  const [entryDate, setEntryDate] = useState(() => toLocalDateInput(today));
+  const todayIso = useMemo(() => getTodayIsoDate(), []);
+  const initialMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const initialMonthBounds = useMemo(() => buildMonthBounds(initialMonth), [initialMonth]);
+
+  const [activeLayer, setActiveLayer] = useState<PortalLayer>("operational");
+  const [referenceMonth, setReferenceMonth] = useState(initialMonth);
+  const [periodStart, setPeriodStart] = useState(initialMonthBounds.startDate);
+  const [periodEnd, setPeriodEnd] = useState(initialMonthBounds.endDate);
+  const [search, setSearch] = useState("");
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [entryTypeFilter, setEntryTypeFilter] = useState<PortalCashflowEntryType | "all">("all");
+  const [originFilter, setOriginFilter] = useState("all");
+  const [lifecycleFilter, setLifecycleFilter] = useState("all");
+  const [reconciliationFilter, setReconciliationFilter] = useState("all");
+  const [managerialGroupBy, setManagerialGroupBy] = useState<CashflowGroupBy>("category");
+
+  const [entryDueDate, setEntryDueDate] = useState(() => toLocalDateInput(today));
+  const [entryEffectiveDate, setEntryEffectiveDate] = useState(() => toLocalDateInput(today));
   const [entryType, setEntryType] = useState<PortalCashflowEntryType>("income");
-  const [entryCategory, setEntryCategory] = useState(cashflowCategoriesByType.income[0]);
+  const [entryCategory, setEntryCategory] = useState("Recebimento de clientes");
   const [entryStatus, setEntryStatus] = useState<PortalCashflowEntryStatus>("confirmed");
   const [entryDescription, setEntryDescription] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
+  const [entryCounterparty, setEntryCounterparty] = useState("");
+  const [entryDocumentRef, setEntryDocumentRef] = useState("");
+  const [entryNotes, setEntryNotes] = useState("");
+  const [entryAccountId, setEntryAccountId] = useState<string>("none");
+
+  const [importAccountId, setImportAccountId] = useState<string>("none");
   const [importFiles, setImportFiles] = useState<File[]>([]);
   const [parsingImport, setParsingImport] = useState(false);
   const [importingDrafts, setImportingDrafts] = useState(false);
   const [importDrafts, setImportDrafts] = useState<ImportDraftRow[]>([]);
   const [pluggyConnectToken, setPluggyConnectToken] = useState<string | null>(null);
+
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
-  const monthlyEntries = useMemo(
-    () =>
-      entries.filter((entry) => toMonthKey(entry.entry_date) === referenceMonth),
-    [entries, referenceMonth],
+  const accountMap = useMemo(() => getCashflowAccountMap(cashflowAccounts), [cashflowAccounts]);
+  const activeCashflowAccounts = useMemo(
+    () => cashflowAccounts.filter((account) => account.is_active),
+    [cashflowAccounts],
   );
-
-  const sortedMonthlyEntries = useMemo(
-    () =>
-      [...monthlyEntries].sort(
-        (a, b) =>
-          b.entry_date.localeCompare(a.entry_date) || b.created_at.localeCompare(a.created_at),
-      ),
-    [monthlyEntries],
+  const primaryAccountId = useMemo(
+    () => activeCashflowAccounts.find((account) => account.is_primary)?.id || activeCashflowAccounts[0]?.id || "none",
+    [activeCashflowAccounts],
   );
-
-  const totals = useMemo(() => {
-    const confirmedIncome = monthlyEntries
-      .filter((entry) => entry.status === "confirmed" && entry.entry_type === "income")
-      .reduce((sum, entry) => sum + entry.amount, 0);
-
-    const confirmedExpense = monthlyEntries
-      .filter((entry) => entry.status === "confirmed" && entry.entry_type === "expense")
-      .reduce((sum, entry) => sum + entry.amount, 0);
-
-    const projectedBalance = monthlyEntries.reduce((sum, entry) => sum + getSignedAmount(entry), 0);
-    const realizedBalance = confirmedIncome - confirmedExpense;
-
-    return {
-      confirmedIncome,
-      confirmedExpense,
-      realizedBalance,
-      projectedBalance,
-    };
-  }, [monthlyEntries]);
-
-  const dailyBalanceChart = useMemo(() => {
-    const [yearText, monthText] = referenceMonth.split("-");
-    const year = Number(yearText);
-    const month = Number(monthText);
-    if (!year || !month) return [];
-
-    const daysInMonth = new Date(year, month, 0).getDate;
-    const dailyRealized = new Map<number, number>();
-    const dailyProjected = new Map<number, number>();
-
-    monthlyEntries.forEach((entry) => {
-      const day = Number(entry.entry_date.split("-")[2] || "1");
-      const signedAmount = getSignedAmount(entry);
-      dailyProjected.set(day, (dailyProjected.get(day) || 0) + signedAmount);
-
-      if (entry.status === "confirmed") {
-        dailyRealized.set(day, (dailyRealized.get(day) || 0) + signedAmount);
-      }
-    });
-
-    let runningRealized = 0;
-    let runningProjected = 0;
-    const output: Array<{ day: string; realized: number; projected: number }> = [];
-
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      runningRealized += dailyRealized.get(day) || 0;
-      runningProjected += dailyProjected.get(day) || 0;
-      output.push({
-        day: String(day).padStart(2, "0"),
-        realized: Number(runningRealized.toFixed(2)),
-        projected: Number(runningProjected.toFixed(2)),
-      });
-    }
-
-    return output;
-  }, [monthlyEntries, referenceMonth]);
-
-  const expenseByCategory = useMemo(() => {
-    const map = new Map<string, number>();
-    monthlyEntries
-      .filter((entry) => entry.entry_type === "expense")
-      .forEach((entry) => {
-        map.set(entry.category, (map.get(entry.category) || 0) + entry.amount);
-      });
-
-    return [...map.entries()]
-      .map(([category, amount]) => ({ category, amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 6);
-  }, [monthlyEntries]);
-
   const accountsByConnection = useMemo(() => {
     const map = new Map<string, OpenFinanceAccount[]>();
     openFinanceAccounts.forEach((account) => {
-      const list = map.get(account.connection_id) || [];
-      list.push(account);
-      map.set(account.connection_id, list);
+      const collection = map.get(account.connection_id) || [];
+      collection.push(account);
+      map.set(account.connection_id, collection);
     });
     return map;
   }, [openFinanceAccounts]);
 
-  const formatConnectionStatus = (status: string) => {
-    const token = String(status || "").trim().toLowerCase();
-    if (token === "active") return "Ativa";
-    if (token === "pending_consent") return "Pendente de consentimento";
-    if (token === "inactive") return "Inativa";
-    if (token === "error") return "Erro";
-    return "Desconhecido";
+  const categories = useMemo(() => getUniqueCashflowCategories(entries), [entries]);
+  const normalizedSearch = useMemo(() => normalizeCashflowText(search), [search]);
+  const activeConsultiveAlerts = useMemo(
+    () => consultiveAlerts.filter((alert) => alert.status === "active").slice(0, 3),
+    [consultiveAlerts],
+  );
+  const healthStatusMeta = useMemo(() => {
+    if (healthSnapshot?.health_status === "critico") {
+      return {
+        label: "Critico",
+        className: "bg-rose-400/15 text-rose-100 border-rose-300/20",
+      };
+    }
+    if (healthSnapshot?.health_status === "atencao") {
+      return {
+        label: "Atencao",
+        className: "bg-amber-400/15 text-amber-100 border-amber-300/20",
+      };
+    }
+    return {
+      label: "Em dia",
+      className: "bg-emerald-400/15 text-emerald-100 border-emerald-300/20",
+    };
+  }, [healthSnapshot]);
+
+  useEffect(() => {
+    setEntryAccountId((current) => (current === "none" ? primaryAccountId : current));
+    setImportAccountId((current) => (current === "none" ? primaryAccountId : current));
+  }, [primaryAccountId]);
+
+  const handleReferenceMonthChange = (value: string) => {
+    setReferenceMonth(value);
+    const monthBounds = buildMonthBounds(value);
+    setPeriodStart(monthBounds.startDate);
+    setPeriodEnd(monthBounds.endDate);
   };
 
-  const formatConsentStatus = (status: string) => {
-    const token = String(status || "").trim().toLowerCase();
-    if (token === "granted") return "Consentimento ativo";
-    if (token === "pending") return "Aguardando consentimento";
-    if (token === "revoked") return "Consentimento revogado";
-    if (token === "expired") return "Consentimento expirado";
-    return "Consentimento não informado";
-  };
+  const analysisEntries = useMemo(
+    () =>
+      entries
+        .filter((entry) => accountFilter === "all" || entry.account_id === accountFilter)
+        .filter((entry) => categoryFilter === "all" || entry.category === categoryFilter)
+        .filter((entry) => entryTypeFilter === "all" || entry.entry_type === entryTypeFilter)
+        .filter((entry) => originFilter === "all" || (entry.origin_type || "manual") === originFilter),
+    [accountFilter, categoryFilter, entries, entryTypeFilter, originFilter],
+  );
+
+  const filteredEntries = useMemo(
+    () =>
+      analysisEntries
+        .filter((entry) => {
+          const referenceDate = getEntryReferenceDate(entry);
+          if (periodStart && referenceDate < periodStart) return false;
+          if (periodEnd && referenceDate > periodEnd) return false;
+          return true;
+        })
+        .filter((entry) => lifecycleFilter === "all" || getEntryLifecycleStatus(entry) === lifecycleFilter)
+        .filter(
+          (entry) => reconciliationFilter === "all" || (entry.reconciliation_status || "not_applicable") === reconciliationFilter,
+        )
+        .filter((entry) => {
+          if (!normalizedSearch) return true;
+
+          const accountLabel = formatCashflowAccountLabel(accountMap.get(entry.account_id || ""));
+          const searchable = [
+            entry.description,
+            entry.category,
+            entry.counterparty_name || "",
+            entry.document_ref || "",
+            accountLabel,
+          ]
+            .map((value) => normalizeCashflowText(value))
+            .join(" ");
+
+          return searchable.includes(normalizedSearch);
+        })
+        .sort((left, right) => {
+          const dateDiff = getEntryReferenceDate(right).localeCompare(getEntryReferenceDate(left));
+          if (dateDiff !== 0) return dateDiff;
+          return right.created_at.localeCompare(left.created_at);
+        }),
+    [
+      accountMap,
+      analysisEntries,
+      lifecycleFilter,
+      normalizedSearch,
+      periodEnd,
+      periodStart,
+      reconciliationFilter,
+    ],
+  );
+
+  const managerialEntries = useMemo(
+    () => filteredEntries.filter((entry) => isEntryVisibleInManagerialView(entry)),
+    [filteredEntries],
+  );
+
+  const conciliationEntries = useMemo(
+    () =>
+      analysisEntries
+        .filter((entry) => (entry.origin_type || "manual") !== "manual")
+        .filter(
+          (entry) =>
+            entry.review_status === "pending_review" ||
+            entry.review_status === "classified" ||
+            entry.reconciliation_status === "pending" ||
+            entry.reconciliation_status === "suggested",
+        )
+        .sort((left, right) => getEntryDueDate(left).localeCompare(getEntryDueDate(right))),
+    [analysisEntries],
+  );
+
+  const dashboardMetrics = useMemo(() => {
+    const currentBalance = getCurrentCashBalance(analysisEntries, todayIso);
+    const projectedSeven = getProjectedBalanceAtHorizon(analysisEntries, 7, todayIso);
+    const projectedFifteen = getProjectedBalanceAtHorizon(analysisEntries, 15, todayIso);
+    const projectedThirty = getProjectedBalanceAtHorizon(analysisEntries, 30, todayIso);
+    const upcomingDueEntries = getUpcomingDueEntries(analysisEntries, 7, todayIso);
+    const upcomingDueAmount = upcomingDueEntries.reduce((sum, entry) => sum + Math.abs(entry.amount), 0);
+    const topFutureExpenses = getTopFutureExpenses(analysisEntries, 30, 5, todayIso);
+    const gapAlert = getCashflowGapAlert(analysisEntries, 30, todayIso);
+
+    return {
+      currentBalance,
+      projectedSeven,
+      projectedFifteen,
+      projectedThirty,
+      upcomingDueEntries,
+      upcomingDueAmount,
+      topFutureExpenses,
+      gapAlert,
+    };
+  }, [analysisEntries, todayIso]);
+
+  const trendSeries = useMemo(() => buildCashflowTrendSeries(managerialEntries, periodStart, periodEnd), [
+    managerialEntries,
+    periodEnd,
+    periodStart,
+  ]);
+
+  const groupedRows = useMemo(
+    () =>
+      groupCashflowEntries(managerialEntries, managerialGroupBy, {
+        accountMap,
+      }),
+    [accountMap, managerialEntries, managerialGroupBy],
+  );
+
+  const expenseByCategory = useMemo(
+    () =>
+      groupCashflowEntries(
+        managerialEntries.filter((entry) => entry.entry_type === "expense"),
+        "category",
+      ).slice(0, 6),
+    [managerialEntries],
+  );
+
+  const monthlyEntries = useMemo(
+    () => entries.filter((entry) => toMonthKey(getEntryReferenceDate(entry)) === referenceMonth),
+    [entries, referenceMonth],
+  );
+
+  const reviewSummary = useMemo(() => {
+    const pendingReview = conciliationEntries.filter((entry) => entry.review_status === "pending_review").length;
+    const classified = conciliationEntries.filter((entry) => entry.review_status === "classified").length;
+    const pendingReconciliation = conciliationEntries.filter((entry) => entry.reconciliation_status === "pending").length;
+    const suggestedReconciliation = conciliationEntries.filter((entry) => entry.reconciliation_status === "suggested").length;
+
+    return {
+      pendingReview,
+      classified,
+      pendingReconciliation,
+      suggestedReconciliation,
+    };
+  }, [conciliationEntries]);
+
+  const selectedDrafts = useMemo(() => importDrafts.filter((draft) => draft.selected), [importDrafts]);
 
   const handleTypeChange = (value: PortalCashflowEntryType) => {
     setEntryType(value);
-    setEntryCategory(cashflowCategoriesByType[value][0]);
+    if (value === "income") {
+      setEntryCategory("Recebimento de clientes");
+      return;
+    }
+    setEntryCategory("Fornecedores");
+  };
+
+  const resetGuidedEntry = () => {
+    setEntryDueDate(todayIso);
+    setEntryEffectiveDate(todayIso);
+    setEntryType("income");
+    setEntryCategory("Recebimento de clientes");
+    setEntryStatus("confirmed");
+    setEntryDescription("");
+    setEntryAmount("");
+    setEntryCounterparty("");
+    setEntryDocumentRef("");
+    setEntryNotes("");
+    setEntryAccountId(primaryAccountId);
   };
 
   const handleCreateOpenFinanceSession = async () => {
@@ -284,8 +490,10 @@ export function ClientPortalCashflow({
       toast.error("Este modulo ainda nao foi liberado para este cliente.");
       return;
     }
+
     const sessionToken = await onCreateOpenFinanceSession();
     if (!sessionToken) return;
+
     setPluggyConnectToken(sessionToken);
     toast.success("Sessao de conexao iniciada. Finalize o consentimento no fluxo do banco.");
   };
@@ -293,6 +501,7 @@ export function ClientPortalCashflow({
   const handleManualSyncOpenFinance = async (connectionId: string) => {
     const result = await onManualSyncOpenFinance(connectionId);
     if (!result) return;
+
     toast.success(
       `Sincronizacao concluida: ${result.syncedTransactions} transacoes e ${result.importedEntries} lancamentos importados.`,
     );
@@ -301,41 +510,53 @@ export function ClientPortalCashflow({
   const handleDisconnectOpenFinance = async (connectionId: string) => {
     const success = await onDisconnectOpenFinance(connectionId);
     if (!success) return;
-    toast.success("Conta desconectada. O historico de caixa foi preservado.");
+    toast.success("Conta desconectada. O historico do caixa foi preservado.");
   };
 
   const handleCreateEntry = async () => {
     if (!enabled) {
-      toast.error("Este módulo ainda não foi liberado para este cliente.");
+      toast.error("Este modulo ainda nao foi liberado para este cliente.");
       return;
     }
 
     const normalizedDescription = entryDescription.trim();
+    const normalizedAmount = Number(entryAmount.replace(",", "."));
     if (normalizedDescription.length < 3) {
-      toast.error("Descreva o lançamento com pelo menos 3 caracteres.");
+      toast.error("Descreva o lancamento com pelo menos 3 caracteres.");
       return;
     }
-
-    const normalizedAmount = Number(entryAmount.replace(",", "."));
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
       toast.error("Informe um valor valido maior que zero.");
       return;
     }
 
+    const dueDate = entryDueDate;
+    const effectiveDate = entryStatus === "confirmed" ? entryEffectiveDate || dueDate : null;
+
     const success = await onCreateEntry({
-      entry_date: entryDate,
+      entry_date: dueDate,
+      due_date: dueDate,
+      effective_date: effectiveDate,
+      competence_month: `${dueDate.slice(0, 7)}-01`,
+      account_id: entryAccountId === "none" ? null : entryAccountId,
       entry_type: entryType,
       category: entryCategory,
       description: normalizedDescription,
       amount: Number(normalizedAmount.toFixed(2)),
       status: entryStatus,
+      lifecycle_status: entryStatus === "confirmed" ? "confirmed" : "predicted",
+      origin_type: "manual",
+      reconciliation_status: "not_applicable",
+      review_status: "pending_review",
+      counterparty_name: entryCounterparty.trim() || null,
+      document_ref: entryDocumentRef.trim() || null,
+      notes: entryNotes.trim() || null,
     });
 
     if (!success) return;
 
-    setEntryDescription("");
-    setEntryAmount("");
-    setEntryStatus("confirmed");
+    toast.success("Lancamento registrado.");
+    resetGuidedEntry();
   };
 
   const handleImportFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
@@ -361,29 +582,18 @@ export function ClientPortalCashflow({
   };
 
   const handleDraftTypeChange = (id: string, type: PortalCashflowEntryType) => {
-    updateImportDraft(id, (draft) => {
-      const categories = cashflowCategoriesByType[type];
-      const keepCategory = categories.includes(draft.category);
-
-      return {
-        ...draft,
-        entryType: type,
-        category: keepCategory ? draft.category : categories[0],
-      };
-    });
+    updateImportDraft(id, (draft) => ({
+      ...draft,
+      entryType: type,
+      category: type === "income" ? "Recebimento de clientes" : "Fornecedores",
+    }));
   };
-
-  const selectedDrafts = useMemo(
-    () => importDrafts.filter((draft) => draft.selected),
-    [importDrafts],
-  );
 
   const handleParseImportFiles = async () => {
     if (!enabled) {
-      toast.error("Este módulo ainda não foi liberado para este cliente.");
+      toast.error("Este modulo ainda nao foi liberado para este cliente.");
       return;
     }
-
     if (importFiles.length === 0) {
       toast.error("Selecione ao menos um arquivo para importar.");
       return;
@@ -393,58 +603,61 @@ export function ClientPortalCashflow({
     const result = await parseCashflowFiles(importFiles);
     setParsingImport(false);
 
-    if (result.warnings.length > 0) {
-      result.warnings.forEach((warning) => toast.warning(warning));
-    }
+    result.warnings.forEach((warning) => toast.warning(warning));
 
     if (result.entries.length === 0) {
       setImportDrafts([]);
       return;
     }
 
-    const drafts = result.entries.map((entry, index) => suggestionToDraftRow(entry, index));
-    setImportDrafts(drafts);
-    toast.success(`${drafts.length} sugestão(oes) de lancamento gerada(s) para revisão.`);
+    setImportDrafts(result.entries.map((entry, index) => suggestionToDraftRow(entry, index)));
+    toast.success(`${result.entries.length} sugestoes geradas para revisao.`);
   };
 
   const handleImportSelectedDrafts = async () => {
     if (!enabled) {
-      toast.error("Este módulo ainda não foi liberado para este cliente.");
+      toast.error("Este modulo ainda nao foi liberado para este cliente.");
       return;
     }
-
     if (selectedDrafts.length === 0) {
-      toast.error("Selecione ao menos um lançamento sugerido para importar.");
+      toast.error("Selecione ao menos um lancamento sugerido.");
       return;
     }
 
     const payloads: NewPortalCashflowEntryPayload[] = [];
+
     for (const draft of selectedDrafts) {
       const description = draft.description.trim();
       const amount = Number(draft.amountText.replace(",", "."));
 
       if (!draft.entryDate) {
-        toast.error(`Data obrigatoria na sugestão "${description || draft.sourceFile}".`);
+        toast.error("Toda sugestao precisa ter uma data.");
         return;
       }
-
       if (description.length < 3) {
-        toast.error(`Descrição inválida na sugestão de ${draft.sourceFile}.`);
+        toast.error(`Descricao invalida em ${draft.sourceFile}.`);
         return;
       }
-
       if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error(`Valor inválido na sugestão de ${draft.sourceFile}.`);
+        toast.error(`Valor invalido em ${draft.sourceFile}.`);
         return;
       }
 
       payloads.push({
         entry_date: draft.entryDate,
+        due_date: draft.entryDate,
+        effective_date: draft.status === "confirmed" ? draft.entryDate : null,
+        competence_month: `${draft.entryDate.slice(0, 7)}-01`,
+        account_id: importAccountId === "none" ? null : importAccountId,
         entry_type: draft.entryType,
         category: draft.category,
         description,
         amount: Number(amount.toFixed(2)),
         status: draft.status,
+        lifecycle_status: draft.status === "confirmed" ? "confirmed" : "predicted",
+        origin_type: "import_file",
+        reconciliation_status: "pending",
+        review_status: "pending_review",
       });
     }
 
@@ -454,764 +667,1202 @@ export function ClientPortalCashflow({
 
     if (!result.success) return;
 
-    const latestImportedDate = payloads
-      .map((payload) => payload.entry_date)
-      .sort()
-      .at(-1);
+    const latestImportedDate = payloads.map((payload) => payload.entry_date).sort().at(-1);
     if (latestImportedDate) {
-      setReferenceMonth(latestImportedDate.slice(0, 7));
+      handleReferenceMonthChange(latestImportedDate.slice(0, 7));
     }
 
-    toast.success(`${result.inserted} lancamento(s) importado(s) com sucesso.`);
-    if (latestImportedDate) {
-      const importedMonthLabel = new Date(`${latestImportedDate}T00:00:00`).toLocaleDateString("pt-BR", {
-        month: "long",
-        year: "numeric",
-      });
-      toast.info(`Dashboard atualizado para ${importedMonthLabel}.`);
-    }
+    toast.success(`${result.inserted} lancamento(s) importado(s).`);
     clearImportData();
+    setActiveLayer("conciliation");
   };
 
   if (!enabled) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
             <LockKeyhole className="h-4 w-4 text-amber-600" />
             Controle de caixa bloqueado
           </CardTitle>
           <CardDescription>
-            O acesso a este módulo depende de liberação do admin. Ao ser liberado, você poderá acompanhar saldo, entradas, saídas e previsões.
+            O acesso a este modulo depende de liberacao do admin. Quando estiver ativo, voce podera acompanhar saldo,
+            previsoes, conciliacao e pendencias operacionais.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <Button type="button" onClick={onRequestEnable}>
-            Solicitar liberação do controle de caixa
+            Solicitar liberacao do controle de caixa
           </Button>
         </CardContent>
       </Card>
     );
   }
 
-  return (
-    <div className="space-y-4">
+  if (loading) {
+    return (
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-primary" />
-            Dashboard de caixa
-          </CardTitle>
-          <CardDescription>
-            Visão mensal com saldo realizado, saldo projetado e principais saídas para apoiar decisão rápida.
-          </CardDescription>
-        </CardHeader>
+        <CardContent className="flex h-48 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </CardContent>
       </Card>
+    );
+  }
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Link2 className="h-4 w-4 text-primary" />
-            Conectar conta bancaria (Open Finance)
-          </CardTitle>
-          <CardDescription>
-            Conecte suas contas para importar extratos automaticamente no fluxo de caixa. A importacao manual continua disponivel como contingencia.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-0">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div className="text-xs text-muted-foreground">
-              O consentimento e feito no fluxo seguro do banco. Depois disso, os extratos entram automaticamente no caixa como lancamentos confirmados.
+  return (
+    <div className="space-y-6">
+      <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-slate-50">
+        <CardContent className="space-y-6 p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="w-fit bg-sky-400/20 text-sky-100 hover:bg-sky-400/20">Fluxo de caixa Grow</Badge>
+                <Badge variant="outline" className={healthStatusMeta.className}>
+                  Saude do caixa: {healthStatusMeta.label}
+                </Badge>
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Caixa organizado em operacao, conciliacao e gestao.</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
+                  Acompanhe o caixa atual, visualize o saldo projetado e resolva pendencias sem sair do portal.
+                </p>
+              </div>
             </div>
-            <Button
-              type="button"
-              className="gap-1.5"
-              onClick={() => void handleCreateOpenFinanceSession()}
-              disabled={openFinanceConnecting}
-            >
-              {openFinanceConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-              {openFinanceConnecting ? "Conectando..." : "Conectar conta"}
-            </Button>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[420px]">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Saldo atual</p>
+                <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.currentBalance >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                  {formatMoney(dashboardMetrics.currentBalance)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Projecao 15 dias</p>
+                <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.projectedFifteen >= 0 ? "text-sky-200" : "text-rose-300"}`}>
+                  {formatMoney(dashboardMetrics.projectedFifteen)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Pendencias</p>
+                <p className="mt-2 text-2xl font-semibold text-amber-200">{conciliationEntries.length}</p>
+                <p className="mt-1 text-xs text-slate-300">Itens esperando revisao ou conciliacao</p>
+              </div>
+            </div>
           </div>
-          {pluggyConnectToken ? (
-            <PluggyConnect
-              connectToken={pluggyConnectToken}
-              includeSandbox={false}
-              language="pt"
-              onSuccess={async () => {
-                toast.success("Conta conectada com sucesso.");
-                setPluggyConnectToken(null);
-                await onRefreshOpenFinance();
-              }}
-              onError={(error) => {
-                setPluggyConnectToken(null);
-                toast.error(error?.message || "Erro na conexao bancaria.");
-              }}
-              onClose={async () => {
-                setPluggyConnectToken(null);
-                await onRefreshOpenFinance();
-              }}
-              onLoadError={(error) => {
-                setPluggyConnectToken(null);
-                toast.error(error.message || "Falha ao carregar o Pluggy Connect.");
-              }}
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Saldo projetado 7 dias"
+              value={formatMoney(dashboardMetrics.projectedSeven)}
+              helper="Saldo esperado considerando previstos e vencidos ainda em aberto."
+              tone={dashboardMetrics.projectedSeven >= 0 ? "success" : "danger"}
             />
-          ) : null}
-
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => void onRefreshOpenFinance()}
-              disabled={openFinanceLoading}
-            >
-              {openFinanceLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-              Atualizar conexoes
-            </Button>
+            <MetricCard
+              title="Saldo projetado 15 dias"
+              value={formatMoney(dashboardMetrics.projectedFifteen)}
+              helper="Visao intermediaria para negociar prazos e reforcar caixa."
+              tone={dashboardMetrics.projectedFifteen >= 0 ? "success" : "danger"}
+            />
+            <MetricCard
+              title="Saldo projetado 30 dias"
+              value={formatMoney(dashboardMetrics.projectedThirty)}
+              helper="Leitura do mes para antecipar folga ou estresse de caixa."
+              tone={dashboardMetrics.projectedThirty >= 0 ? "success" : "danger"}
+            />
+            <MetricCard
+              title="Contas a vencer"
+              value={`${dashboardMetrics.upcomingDueEntries.length}`}
+              helper={`${formatMoney(dashboardMetrics.upcomingDueAmount)} previstos nos proximos 7 dias.`}
+              tone={dashboardMetrics.upcomingDueEntries.length > 0 ? "warning" : "success"}
+            />
           </div>
 
-          {openFinanceConnections.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Nenhuma conta conectada ainda.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {openFinanceConnections.map((connection) => {
-                const connectedAccounts = accountsByConnection.get(connection.id) || [];
-                return (
-                  <div key={connection.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Conexao bancaria</p>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <Badge variant="outline">{formatConnectionStatus(connection.status)}</Badge>
-                          <Badge variant="secondary">{formatConsentStatus(connection.consent_status)}</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Ultima sincronizacao:{" "}
-                          {connection.last_synced_at
-                            ? new Date(connection.last_synced_at).toLocaleString("pt-BR")
-                            : "ainda nao sincronizada"}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <TrendingDown className="h-4 w-4 text-amber-200" />
+                Maiores saidas futuras
+              </div>
+              <div className="mt-4 space-y-3">
+                {dashboardMetrics.topFutureExpenses.length === 0 ? (
+                  <p className="text-sm text-slate-300">Nenhuma saida relevante prevista nos proximos 30 dias.</p>
+                ) : (
+                  dashboardMetrics.topFutureExpenses.map((entry) => (
+                    <div key={entry.id} className="flex items-start justify-between gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
+                      <div>
+                        <p className="text-sm font-medium text-slate-50">{entry.description}</p>
+                        <p className="text-xs text-slate-300">
+                          {formatDate(getEntryDueDate(entry))} • {entry.category}
                         </p>
-                        {connection.last_sync_error ? (
-                          <p className="text-xs text-destructive">Erro: {connection.last_sync_error}</p>
-                        ) : null}
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => void handleManualSyncOpenFinance(connection.id)}
-                          disabled={openFinanceSyncingConnectionId === connection.id}
-                        >
-                          {openFinanceSyncingConnectionId === connection.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCcw className="h-4 w-4" />
-                          )}
-                          Sincronizar agora
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => void handleDisconnectOpenFinance(connection.id)}
-                          disabled={openFinanceDisconnectingConnectionId === connection.id}
-                        >
-                          {openFinanceDisconnectingConnectionId === connection.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Unplug className="h-4 w-4" />
-                          )}
-                          Desconectar
-                        </Button>
-                      </div>
+                      <p className="text-sm font-semibold text-rose-200">{formatMoney(entry.amount)}</p>
                     </div>
-                    {connectedAccounts.length > 0 ? (
-                      <div className="text-xs text-muted-foreground">
-                        Contas conectadas:{" "}
-                        {connectedAccounts
-                          .map((account) =>
-                            `${account.institution_name || "Banco"}${account.account_mask ? ` (${account.account_mask})` : ""}`,
-                          )
-                          .join(", ")}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                  ))
+                )}
+              </div>
             </div>
-          )}
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <AlertTriangle className="h-4 w-4 text-amber-200" />
+                Alerta de caixa
+              </div>
+              {dashboardMetrics.gapAlert ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-sm text-slate-200">
+                    O saldo projetado fica negativo em <span className="font-semibold">{formatDate(dashboardMetrics.gapAlert.date)}</span>.
+                  </p>
+                  <p className="text-2xl font-semibold text-rose-200">{formatMoney(dashboardMetrics.gapAlert.balance)}</p>
+                  <p className="text-xs leading-relaxed text-slate-300">
+                    Revise as saidas futuras, antecipe recebimentos ou reorganize prazos antes desta data.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm text-emerald-200">Nenhum buraco de caixa projetado nos proximos 30 dias.</p>
+                  <p className="text-xs leading-relaxed text-slate-300">
+                    Continue acompanhando entradas previstas, conciliacoes pendentes e despesas de maior impacto.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {activeConsultiveAlerts.length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+              {activeConsultiveAlerts.map((alert) => (
+                <div key={alert.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-slate-50">{alert.title}</p>
+                    <Badge
+                      variant="outline"
+                      className={
+                        alert.severity === "critical"
+                          ? "border-rose-300/30 bg-rose-400/10 text-rose-100"
+                          : "border-amber-300/30 bg-amber-400/10 text-amber-100"
+                      }
+                    >
+                      {alert.severity === "critical" ? "Critico" : "Atencao"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-300">{alert.message}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Saldo realizado do mes</p>
-            <p className={`text-2xl font-semibold mt-1 ${totals.realizedBalance >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-              {currencyFormatter.format(totals.realizedBalance)}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-1">Somente lançamentos confirmados</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Entradas confirmadas</p>
-            <div className="flex items-center gap-2 mt-1">
-              <TrendingUp className="h-4 w-4 text-emerald-600" />
-              <p className="text-2xl font-semibold text-emerald-600">{currencyFormatter.format(totals.confirmedIncome)}</p>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Receitas efetivamente recebidas</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Saidas confirmadas</p>
-            <div className="flex items-center gap-2 mt-1">
-              <TrendingDown className="h-4 w-4 text-destructive" />
-              <p className="text-2xl font-semibold text-destructive">{currencyFormatter.format(totals.confirmedExpense)}</p>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Pagamentos e custos efetivados</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Saldo projetado do mes</p>
-            <div className="flex items-center gap-2 mt-1">
-              <CircleDollarSign className="h-4 w-4 text-primary" />
-              <p className={`text-2xl font-semibold ${totals.projectedBalance >= 0 ? "text-primary" : "text-destructive"}`}>
-                {currencyFormatter.format(totals.projectedBalance)}
-              </p>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Considera confirmados e previstos</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-primary" />
-              Evolucao diaria do saldo
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="mb-3 flex justify-end">
-              <Input
-                type="month"
-                className="w-full sm:w-[180px]"
-                value={referenceMonth}
-                onChange={(event) => setReferenceMonth(event.target.value)}
-              />
-            </div>
-            {loading ? (
-              <div className="h-[260px] flex items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              </div>
-            ) : dailyBalanceChart.length === 0 ? (
-              <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
-                Sem dados para o mes selecionado.
-              </div>
-            ) : (
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dailyBalanceChart}>
-                    <defs>
-                      <linearGradient id="realizedGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.04} />
-                      </linearGradient>
-                      <linearGradient id="projectedGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.28} />
-                        <stop offset="95%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" tickMargin={8} />
-                    <YAxis tickFormatter={(value) => currencyFormatter.format(Number(value)).replace("R$", "R$ ")} width={96} />
-                    <Tooltip
-                      formatter={(value: number, name: string) => [
-                        currencyFormatter.format(Number(value)),
-                        name === "realized" ? "Saldo realizado" : "Saldo projetado",
-                      ]}
-                      labelFormatter={(value) => `Dia ${value}`}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="projected"
-                      stroke="hsl(var(--muted-foreground))"
-                      strokeWidth={1.8}
-                      fill="url(#projectedGradient)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="realized"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2.2}
-                      fill="url(#realizedGradient)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-primary" />
-              Principais saidas por categoria
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {expenseByCategory.length === 0 ? (
-              <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
-                Nenhuma saida registrada para o mes selecionado.
-              </div>
-            ) : (
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={expenseByCategory}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="category" tick={{ fontSize: 11 }} interval={0} angle={-12} textAnchor="end" height={56} />
-                    <YAxis tickFormatter={(value) => currencyFormatter.format(Number(value)).replace("R$", "R$ ")} width={90} />
-                    <Tooltip formatter={(value: number) => currencyFormatter.format(Number(value))} />
-                    <Bar dataKey="amount" fill="hsl(var(--destructive))" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Upload className="h-4 w-4 text-primary" />
-            Importação automática de extratos
-          </CardTitle>
-          <CardDescription>
-            Envie OFX, PDF, Excel, CSV ou imagem do extrato. O sistema gera os lançamentos automaticamente para você revisar e confirmar.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-0">
-          <div className="grid gap-3 xl:grid-cols-[1fr_auto_auto] xl:items-end">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Arquivos do extrato</Label>
-              <Input
-                ref={importFileInputRef}
-                type="file"
-                multiple
-                accept=".ofx,.pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
-                onChange={handleImportFileSelection}
-              />
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <CardTitle className="text-base">Filtros e periodo</CardTitle>
+              <CardDescription>
+                Ajuste a leitura operacional e gerencial do caixa sem perder a visao das pendencias.
+              </CardDescription>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => void handleParseImportFiles()}
-              disabled={parsingImport || importFiles.length === 0}
-            >
-              {parsingImport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {parsingImport ? "Lendo arquivos..." : "Gerar sugestões"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={clearImportData}
-              disabled={parsingImport || importingDrafts}
-            >
-              Limpar
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => handleReferenceMonthChange(initialMonth)}>
+                Mes atual
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSearch("")}>
+                Limpar busca
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Mes de referencia</Label>
+            <Input type="month" value={referenceMonth} onChange={(event) => handleReferenceMonthChange(event.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Periodo inicial</Label>
+            <Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Periodo final</Label>
+            <Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Busca</Label>
+            <Input
+              placeholder="Descricao, conta, categoria ou documento"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
 
-          {importFiles.length > 0 ? (
-            <div className="rounded-lg border p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Arquivos selecionados</p>
-              <div className="flex flex-wrap gap-2">
-                {importFiles.map((file, index) => (
-                  <Badge key={`${file.name}-${index}`} variant="secondary" className="gap-1.5 py-1.5">
-                    {file.name}
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() => removeImportFile(index)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </Badge>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Conta</Label>
+            <Select value={accountFilter} onValueChange={setAccountFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as contas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as contas</SelectItem>
+                {activeCashflowAccounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {formatCashflowAccountLabel(account)}
+                  </SelectItem>
                 ))}
-              </div>
-            </div>
-          ) : null}
+              </SelectContent>
+            </Select>
+          </div>
 
-          {importDrafts.length > 0 ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2 justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {selectedDrafts.length} de {importDrafts.length} sugestão(oes) selecionada(s)
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setImportDrafts((currentDrafts) =>
-                        currentDrafts.map((draft) => ({ ...draft, selected: true })),
-                      )
-                    }
-                  >
-                    Selecionar tudo
+          <div className="space-y-1.5">
+            <Label className="text-xs">Categoria</Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as categorias" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Tipo</Label>
+            <Select value={entryTypeFilter} onValueChange={(value) => setEntryTypeFilter(value as PortalCashflowEntryType | "all")}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os tipos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                <SelectItem value="income">Entrada</SelectItem>
+                <SelectItem value="expense">Saida</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Origem</Label>
+            <Select value={originFilter} onValueChange={setOriginFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as origens" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as origens</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="import_file">Importacao</SelectItem>
+                <SelectItem value="open_finance">Open Finance</SelectItem>
+                <SelectItem value="obligation_projection">Obrigacao</SelectItem>
+                <SelectItem value="recurring_rule">Recorrencia</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Situacao</Label>
+            <Select value={lifecycleFilter} onValueChange={setLifecycleFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as situacoes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as situacoes</SelectItem>
+                <SelectItem value="predicted">Previsto</SelectItem>
+                <SelectItem value="due">Vence hoje</SelectItem>
+                <SelectItem value="overdue">Vencido</SelectItem>
+                <SelectItem value="confirmed">Confirmado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Conciliacao</Label>
+            <Select value={reconciliationFilter} onValueChange={setReconciliationFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as situacoes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as situacoes</SelectItem>
+                <SelectItem value="not_applicable">Nao aplicavel</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="suggested">Sugerido</SelectItem>
+                <SelectItem value="reconciled">Conciliado</SelectItem>
+                <SelectItem value="ignored">Ignorado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs value={activeLayer} onValueChange={(value) => setActiveLayer(value as PortalLayer)}>
+        <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-3">
+          <TabsTrigger value="operational" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
+            Operacional
+          </TabsTrigger>
+          <TabsTrigger value="conciliation" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
+            Conciliacao
+          </TabsTrigger>
+          <TabsTrigger value="managerial" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
+            Visao gerencial
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="operational" className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-border/70">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <CircleDollarSign className="h-4 w-4 text-primary" />
+                  Lancamento guiado
+                </CardTitle>
+                <CardDescription>
+                  Registre o caixa com vencimento, data efetiva, conta, contraparte e observacoes.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Tipo</Label>
+                    <Select value={entryType} onValueChange={(value) => handleTypeChange(value as PortalCashflowEntryType)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="income">Entrada</SelectItem>
+                        <SelectItem value="expense">Saida</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Conta</Label>
+                    <Select value={entryAccountId} onValueChange={setEntryAccountId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a conta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem conta definida</SelectItem>
+                        {activeCashflowAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {formatCashflowAccountLabel(account)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Vencimento</Label>
+                    <Input type="date" value={entryDueDate} onChange={(event) => setEntryDueDate(event.target.value)} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Data efetiva</Label>
+                    <Input
+                      type="date"
+                      value={entryStatus === "confirmed" ? entryEffectiveDate : ""}
+                      onChange={(event) => setEntryEffectiveDate(event.target.value)}
+                      disabled={entryStatus !== "confirmed"}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Categoria</Label>
+                    <Input value={entryCategory} onChange={(event) => setEntryCategory(event.target.value)} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Status</Label>
+                    <Select value={entryStatus} onValueChange={(value) => setEntryStatus(value as PortalCashflowEntryStatus)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="confirmed">Confirmado</SelectItem>
+                        <SelectItem value="predicted">Previsto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs">Descricao</Label>
+                    <Input
+                      value={entryDescription}
+                      onChange={(event) => setEntryDescription(event.target.value)}
+                      placeholder="Ex.: Recebimento da parcela 2 do cliente X"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Valor (R$)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entryAmount}
+                      onChange={(event) => setEntryAmount(event.target.value)}
+                      placeholder="0,00"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Contraparte</Label>
+                    <Input
+                      value={entryCounterparty}
+                      onChange={(event) => setEntryCounterparty(event.target.value)}
+                      placeholder="Cliente, banco ou fornecedor"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Documento</Label>
+                    <Input
+                      value={entryDocumentRef}
+                      onChange={(event) => setEntryDocumentRef(event.target.value)}
+                      placeholder="NF, recibo, contrato ou referencia interna"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Observacao</Label>
+                    <Textarea
+                      value={entryNotes}
+                      onChange={(event) => setEntryNotes(event.target.value)}
+                      className="min-h-[46px]"
+                      placeholder="Detalhes que ajudem a Grow a revisar este item."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="ghost" onClick={resetGuidedEntry}>
+                    Limpar
                   </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setImportDrafts((currentDrafts) =>
-                        currentDrafts.map((draft) => ({ ...draft, selected: false })),
-                      )
-                    }
-                  >
-                    Limpar seleção
+                  <Button type="button" onClick={() => void handleCreateEntry()} disabled={creating} className="gap-2">
+                    {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {creating ? "Registrando..." : "Registrar lancamento"}
                   </Button>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              <div className="overflow-x-auto rounded-lg border">
-                <Table className="min-w-[780px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">Ok</TableHead>
-                      <TableHead className="w-[130px]">Data</TableHead>
-                      <TableHead className="w-[120px]">Tipo</TableHead>
-                      <TableHead className="w-[170px]">Categoria</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead className="w-[120px]">Valor</TableHead>
-                      <TableHead className="w-[140px]">Status</TableHead>
-                      <TableHead className="w-[150px]">Origem</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {importDrafts.map((draft) => (
-                      <TableRow key={draft.id}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            checked={draft.selected}
-                            className="h-4 w-4 rounded border-input bg-background"
-                            onChange={(event) =>
-                              updateImportDraft(draft.id, (currentDraft) => ({
-                                ...currentDraft,
-                                selected: event.target.checked,
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="date"
-                            value={draft.entryDate}
-                            onChange={(event) =>
-                              updateImportDraft(draft.id, (currentDraft) => ({
-                                ...currentDraft,
-                                entryDate: event.target.value,
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={draft.entryType}
-                            onValueChange={(value) => handleDraftTypeChange(draft.id, value as PortalCashflowEntryType)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="income">Entrada</SelectItem>
-                              <SelectItem value="expense">Saida</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={draft.category}
-                            onValueChange={(value) =>
-                              updateImportDraft(draft.id, (currentDraft) => ({
-                                ...currentDraft,
-                                category: value,
-                              }))
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {cashflowCategoriesByType[draft.entryType].map((category) => (
-                                <SelectItem key={category} value={category}>
-                                  {category}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={draft.description}
-                            onChange={(event) =>
-                              updateImportDraft(draft.id, (currentDraft) => ({
-                                ...currentDraft,
-                                description: event.target.value,
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={draft.amountText}
-                            onChange={(event) =>
-                              updateImportDraft(draft.id, (currentDraft) => ({
-                                ...currentDraft,
-                                amountText: event.target.value,
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={draft.status}
-                            onValueChange={(value) =>
-                              updateImportDraft(draft.id, (currentDraft) => ({
-                                ...currentDraft,
-                                status: value as PortalCashflowEntryStatus,
-                              }))
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="confirmed">Confirmado</SelectItem>
-                              <SelectItem value="predicted">Previsto</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium line-clamp-1">{draft.sourceFile}</p>
-                            <p className="text-[11px] text-muted-foreground line-clamp-1">{draft.sourceLine}</p>
-                            <Badge variant="outline" className="text-[10px]">
-                              Confianca {Math.round(draft.confidence * 100)}%
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
+            <div className="space-y-6">
+              <Card className="border-border/70">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Upload className="h-4 w-4 text-primary" />
+                    Importacao assistida
+                  </CardTitle>
+                  <CardDescription>
+                    Gere sugestoes a partir de arquivos e envie para a mesma fila de revisao da conciliacao.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input ref={importFileInputRef} type="file" multiple onChange={handleImportFileSelection} />
+                    <Button
+                      type="button"
+                      className="gap-2"
+                      onClick={() => void handleParseImportFiles()}
+                      disabled={parsingImport || importFiles.length === 0}
+                    >
+                      {parsingImport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {parsingImport ? "Lendo..." : "Gerar sugestoes"}
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Conta de destino</Label>
+                    <Select value={importAccountId} onValueChange={setImportAccountId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a conta" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem conta definida</SelectItem>
+                        {activeCashflowAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {formatCashflowAccountLabel(account)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {importFiles.length > 0 ? (
+                    <div className="rounded-xl border p-3">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Arquivos selecionados</p>
+                      <div className="flex flex-wrap gap-2">
+                        {importFiles.map((file, index) => (
+                          <Badge key={`${file.name}-${index}`} variant="secondary" className="gap-1.5 py-1.5">
+                            {file.name}
+                            <button type="button" onClick={() => removeImportFile(index)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {importDrafts.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          {selectedDrafts.length} de {importDrafts.length} sugestoes selecionadas
+                        </p>
+                        <div className="flex gap-2">
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() =>
-                              setImportDrafts((currentDrafts) =>
-                                currentDrafts.filter((currentDraft) => currentDraft.id !== draft.id),
-                              )
-                            }
+                            size="sm"
+                            onClick={() => setImportDrafts((current) => current.map((draft) => ({ ...draft, selected: true })))}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            Selecionar tudo
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setImportDrafts((current) => current.map((draft) => ({ ...draft, selected: false })))}
+                          >
+                            Limpar selecao
+                          </Button>
+                        </div>
+                      </div>
 
-              <div className="flex justify-stretch sm:justify-end">
-                <Button
-                  type="button"
-                  className="w-full gap-1.5 sm:w-auto"
-                  disabled={selectedDrafts.length === 0 || importingDrafts}
-                  onClick={() => void handleImportSelectedDrafts()}
-                >
-                  {importingDrafts ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  {importingDrafts ? "Importando..." : `Importar selecionados (${selectedDrafts.length})`}
-                </Button>
-              </div>
+                      <div className="overflow-x-auto rounded-xl border">
+                        <Table className="min-w-[760px]">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-10">Ok</TableHead>
+                              <TableHead>Data</TableHead>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Categoria</TableHead>
+                              <TableHead>Descricao</TableHead>
+                              <TableHead>Valor</TableHead>
+                              <TableHead>Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {importDrafts.map((draft) => (
+                              <TableRow key={draft.id}>
+                                <TableCell>
+                                  <input
+                                    type="checkbox"
+                                    checked={draft.selected}
+                                    className="h-4 w-4 rounded border-input bg-background"
+                                    onChange={(event) =>
+                                      updateImportDraft(draft.id, (currentDraft) => ({
+                                        ...currentDraft,
+                                        selected: event.target.checked,
+                                      }))
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="date"
+                                    value={draft.entryDate}
+                                    onChange={(event) =>
+                                      updateImportDraft(draft.id, (currentDraft) => ({
+                                        ...currentDraft,
+                                        entryDate: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Select value={draft.entryType} onValueChange={(value) => handleDraftTypeChange(draft.id, value as PortalCashflowEntryType)}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="income">Entrada</SelectItem>
+                                      <SelectItem value="expense">Saida</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={draft.category}
+                                    onChange={(event) =>
+                                      updateImportDraft(draft.id, (currentDraft) => ({
+                                        ...currentDraft,
+                                        category: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={draft.description}
+                                    onChange={(event) =>
+                                      updateImportDraft(draft.id, (currentDraft) => ({
+                                        ...currentDraft,
+                                        description: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={draft.amountText}
+                                    onChange={(event) =>
+                                      updateImportDraft(draft.id, (currentDraft) => ({
+                                        ...currentDraft,
+                                        amountText: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <div className="space-y-2">
+                                    <Select
+                                      value={draft.status}
+                                      onValueChange={(value) =>
+                                        updateImportDraft(draft.id, (currentDraft) => ({
+                                          ...currentDraft,
+                                          status: value as PortalCashflowEntryStatus,
+                                        }))
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="confirmed">Confirmado</SelectItem>
+                                        <SelectItem value="predicted">Previsto</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {draft.sourceFile} • confianca {Math.round(draft.confidence * 100)}%
+                                    </p>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <Button type="button" variant="ghost" onClick={clearImportData} disabled={parsingImport || importingDrafts}>
+                          Limpar
+                        </Button>
+                        <Button
+                          type="button"
+                          className="gap-2"
+                          disabled={selectedDrafts.length === 0 || importingDrafts}
+                          onClick={() => void handleImportSelectedDrafts()}
+                        >
+                          {importingDrafts ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          {importingDrafts ? "Importando..." : `Importar selecionados (${selectedDrafts.length})`}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/70">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Link2 className="h-4 w-4 text-primary" />
+                    Open Finance
+                  </CardTitle>
+                  <CardDescription>
+                    Conecte o banco, acompanhe sincronizacoes e preserve o historico importado no caixa.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      O consentimento acontece no fluxo seguro do banco. Depois disso, os extratos entram na revisao do caixa.
+                    </p>
+                    <Button
+                      type="button"
+                      className="gap-2"
+                      onClick={() => void handleCreateOpenFinanceSession()}
+                      disabled={openFinanceConnecting}
+                    >
+                      {openFinanceConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                      {openFinanceConnecting ? "Conectando..." : "Conectar conta"}
+                    </Button>
+                  </div>
+
+                  {pluggyConnectToken ? (
+                    <PluggyConnect
+                      connectToken={pluggyConnectToken}
+                      includeSandbox={false}
+                      language="pt"
+                      onSuccess={async () => {
+                        toast.success("Conta conectada com sucesso.");
+                        setPluggyConnectToken(null);
+                        await onRefreshOpenFinance();
+                      }}
+                      onError={(error) => {
+                        setPluggyConnectToken(null);
+                        toast.error(error?.message || "Erro na conexao bancaria.");
+                      }}
+                      onClose={async () => {
+                        setPluggyConnectToken(null);
+                        await onRefreshOpenFinance();
+                      }}
+                      onLoadError={(error) => {
+                        setPluggyConnectToken(null);
+                        toast.error(error.message || "Falha ao carregar o Pluggy Connect.");
+                      }}
+                    />
+                  ) : null}
+
+                  <div className="flex justify-end">
+                    <Button type="button" variant="ghost" size="sm" className="gap-2" onClick={() => void onRefreshOpenFinance()} disabled={openFinanceLoading}>
+                      {openFinanceLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                      Atualizar conexoes
+                    </Button>
+                  </div>
+
+                  {openFinanceConnections.length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                      Nenhuma conta conectada ainda.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {openFinanceConnections.map((connection) => {
+                        const connectionAccounts = accountsByConnection.get(connection.id) || [];
+
+                        return (
+                          <div key={connection.id} className="rounded-xl border p-4">
+                            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline">{formatConnectionStatus(connection.status)}</Badge>
+                                  <Badge variant="secondary">{formatConsentStatus(connection.consent_status)}</Badge>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  <p>Ultima sincronizacao: {connection.last_synced_at ? new Date(connection.last_synced_at).toLocaleString("pt-BR") : "Ainda nao sincronizado"}</p>
+                                  <p>Contas vinculadas: {connectionAccounts.length}</p>
+                                </div>
+                                {connection.last_sync_error ? (
+                                  <p className="text-xs text-destructive">{connection.last_sync_error}</p>
+                                ) : null}
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-2"
+                                  onClick={() => void handleManualSyncOpenFinance(connection.id)}
+                                  disabled={openFinanceSyncingConnectionId === connection.id}
+                                >
+                                  {openFinanceSyncingConnectionId === connection.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <RefreshCcw className="h-4 w-4" />
+                                  )}
+                                  Sincronizar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="gap-2 text-destructive"
+                                  onClick={() => void handleDisconnectOpenFinance(connection.id)}
+                                  disabled={openFinanceDisconnectingConnectionId === connection.id}
+                                >
+                                  {openFinanceDisconnectingConnectionId === connection.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Unplug className="h-4 w-4" />
+                                  )}
+                                  Desconectar
+                                </Button>
+                              </div>
+                            </div>
+
+                            {connectionAccounts.length > 0 ? (
+                              <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                {connectionAccounts.map((account) => (
+                                  <div key={account.id} className="rounded-xl border bg-muted/30 p-3">
+                                    <p className="text-sm font-medium">{account.account_name || "Conta bancaria"}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {account.institution_name || "Instituicao nao informada"}
+                                      {account.account_mask ? ` • ${account.account_mask}` : ""}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          ) : null}
+          </div>
+
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                Lista operacional
+              </CardTitle>
+              <CardDescription>
+                {filteredEntries.length} lancamentos no periodo filtrado. Use esta lista para revisar o fluxo do dia a dia.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredEntries.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  Nenhum lancamento encontrado para o recorte atual.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border">
+                  <Table className="min-w-[980px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Descricao</TableHead>
+                        <TableHead>Conta</TableHead>
+                        <TableHead>Origem</TableHead>
+                        <TableHead>Situacao</TableHead>
+                        <TableHead>Conciliacao</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredEntries.slice(0, 80).map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="text-xs text-muted-foreground">{formatDate(getEntryReferenceDate(entry))}</TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium line-clamp-1">{entry.description}</p>
+                                {entry.review_status !== "approved" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> : null}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                {entry.category}
+                                {entry.counterparty_name ? ` • ${entry.counterparty_name}` : ""}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatCashflowAccountLabel(accountMap.get(entry.account_id || ""))}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">
+                              {formatCashflowOriginType(entry.origin_type)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {formatCashflowLifecycleStatus(getEntryLifecycleStatus(entry))}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {formatCashflowReconciliationStatus(entry.reconciliation_status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-medium ${entry.entry_type === "income" ? "text-emerald-600" : "text-destructive"}`}
+                          >
+                            {entry.entry_type === "income" ? "+" : "-"} {formatMoney(entry.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="conciliation" className="space-y-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Pendentes de revisao"
+              value={String(reviewSummary.pendingReview)}
+              helper="Itens aguardando classificacao ou aprovacao pela equipe."
+              tone={reviewSummary.pendingReview > 0 ? "warning" : "success"}
+            />
+            <MetricCard
+              title="Classificados"
+              value={String(reviewSummary.classified)}
+              helper="Lancamentos com sugestao aplicada, mas ainda sem aprovacao final."
+              tone={reviewSummary.classified > 0 ? "warning" : "success"}
+            />
+            <MetricCard
+              title="Pendentes de conciliacao"
+              value={String(reviewSummary.pendingReconciliation)}
+              helper="Itens bancarios ainda nao conciliados operacionalmente."
+              tone={reviewSummary.pendingReconciliation > 0 ? "warning" : "success"}
+            />
+            <MetricCard
+              title="Sugeridos"
+              value={String(reviewSummary.suggestedReconciliation)}
+              helper="Casos com indicio de conciliacao, aguardando confirmacao."
+              tone={reviewSummary.suggestedReconciliation > 0 ? "warning" : "success"}
+            />
+          </div>
+
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Fila de conciliacao e revisao
+              </CardTitle>
+              <CardDescription>
+                Veja o que chegou por importacao ou Open Finance e ainda precisa de tratamento.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {conciliationEntries.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  Nao ha pendencias de conciliacao neste momento.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border">
+                  <Table className="min-w-[980px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Descricao</TableHead>
+                        <TableHead>Conta</TableHead>
+                        <TableHead>Origem</TableHead>
+                        <TableHead>Revisao</TableHead>
+                        <TableHead>Conciliacao</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {conciliationEntries.slice(0, 80).map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="text-sm text-muted-foreground">{formatDate(getEntryDueDate(entry))}</TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium line-clamp-1">{entry.description}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {entry.category}
+                                {entry.document_ref ? ` • ${entry.document_ref}` : ""}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatCashflowAccountLabel(accountMap.get(entry.account_id || ""))}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">
+                              {formatCashflowOriginType(entry.origin_type)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {formatCashflowReviewStatus(entry.review_status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {formatCashflowReconciliationStatus(entry.reconciliation_status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-medium ${entry.entry_type === "income" ? "text-emerald-600" : "text-destructive"}`}
+                          >
+                            {entry.entry_type === "income" ? "+" : "-"} {formatMoney(entry.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="managerial" className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+            <Card className="border-border/70">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  Tendencia do periodo
+                </CardTitle>
+                <CardDescription>
+                  Comparativo acumulado entre realizado e projetado no recorte atual.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendSeries}>
+                      <defs>
+                        <linearGradient id="portalRealized" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.38} />
+                          <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.04} />
+                        </linearGradient>
+                        <linearGradient id="portalProjected" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#22c55e" stopOpacity={0.28} />
+                          <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} minTickGap={24} />
+                      <YAxis tickFormatter={(value) => `${Math.round(value / 1000)}k`} tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value: number) => formatMoney(value)} />
+                      <Area
+                        type="monotone"
+                        dataKey="realized"
+                        stroke="#0ea5e9"
+                        strokeWidth={2}
+                        fill="url(#portalRealized)"
+                        name="Realizado"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="projected"
+                        stroke="#22c55e"
+                        strokeWidth={2}
+                        fill="url(#portalProjected)"
+                        name="Projetado"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                  Saidas por categoria
+                </CardTitle>
+                <CardDescription>As categorias que mais pressionam o caixa neste recorte.</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={expenseByCategory}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} angle={-12} textAnchor="end" height={72} />
+                      <YAxis tickFormatter={(value) => `${Math.round(value / 1000)}k`} tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value: number) => formatMoney(value)} />
+                      <Bar dataKey="expense" fill="#ef4444" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <CardTitle className="text-sm">Visao agrupada</CardTitle>
+                  <CardDescription>
+                    Leia o caixa por dia, semana, mes, conta ou categoria para decidir com mais clareza.
+                  </CardDescription>
+                </div>
+                <div className="w-full xl:w-[220px]">
+                  <Select value={managerialGroupBy} onValueChange={(value) => setManagerialGroupBy(value as CashflowGroupBy)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Agrupar por" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">Dia</SelectItem>
+                      <SelectItem value="week">Semana</SelectItem>
+                      <SelectItem value="month">Mes</SelectItem>
+                      <SelectItem value="account">Conta</SelectItem>
+                      <SelectItem value="category">Categoria</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {groupedRows.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  Nenhum dado gerencial disponivel para este periodo.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border">
+                  <Table className="min-w-[760px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Grupo</TableHead>
+                        <TableHead className="text-right">Entradas</TableHead>
+                        <TableHead className="text-right">Saidas</TableHead>
+                        <TableHead className="text-right">Saldo</TableHead>
+                        <TableHead className="text-right">Lancamentos</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {groupedRows.map((row) => (
+                        <TableRow key={row.key}>
+                          <TableCell className="font-medium">{row.label}</TableCell>
+                          <TableCell className="text-right text-emerald-600">{formatMoney(row.income)}</TableCell>
+                          <TableCell className="text-right text-destructive">{formatMoney(row.expense)}</TableCell>
+                          <TableCell className={`text-right font-medium ${row.net >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                            {formatMoney(row.net)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">{row.count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Card className="border-border/70">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Wallet className="h-4 w-4 text-primary" />
+            Resumo do mes selecionado
+          </CardTitle>
+          <CardDescription>
+            {monthlyEntries.length} lancamentos em {new Date(`${referenceMonth}-01T00:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <MetricCard
+            title="Entradas do mes"
+            value={formatMoney(
+              monthlyEntries.filter((entry) => entry.entry_type === "income").reduce((sum, entry) => sum + entry.amount, 0),
+            )}
+            helper="Total bruto de entradas registradas no mes."
+            tone="success"
+          />
+          <MetricCard
+            title="Saidas do mes"
+            value={formatMoney(
+              monthlyEntries.filter((entry) => entry.entry_type === "expense").reduce((sum, entry) => sum + entry.amount, 0),
+            )}
+            helper="Total bruto de saidas registradas no mes."
+            tone="danger"
+          />
+          <MetricCard
+            title="Itens com atencao"
+            value={String(monthlyEntries.filter((entry) => entry.review_status !== "approved").length)}
+            helper="Lancamentos que ainda pedem revisao ou conciliacao neste mes."
+            tone={monthlyEntries.some((entry) => entry.review_status !== "approved") ? "warning" : "success"}
+          />
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <Card className="xl:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Novo lancamento</CardTitle>
-            <CardDescription>
-              Registre entradas e saidas para manter o dashboard atualizado em tempo real.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Data</Label>
-                <Input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Tipo</Label>
-                <Select value={entryType} onValueChange={(value) => handleTypeChange(value as PortalCashflowEntryType)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="income">Entrada</SelectItem>
-                    <SelectItem value="expense">Saida</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Categoria</Label>
-              <Select value={entryCategory} onValueChange={setEntryCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {cashflowCategoriesByType[entryType].map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Descrição</Label>
-              <Input
-                value={entryDescription}
-                onChange={(event) => setEntryDescription(event.target.value)}
-                placeholder="Ex.: Recebimento da parcela 2 do cliente X"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Valor (R$)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={entryAmount}
-                  onChange={(event) => setEntryAmount(event.target.value)}
-                  placeholder="0,00"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Status</Label>
-                <Select value={entryStatus} onValueChange={(value) => setEntryStatus(value as PortalCashflowEntryStatus)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="confirmed">Confirmado</SelectItem>
-                    <SelectItem value="predicted">Previsto</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <Button type="button" onClick={() => void handleCreateEntry()} disabled={creating} className="w-full">
-              {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-              {creating ? "Registrando..." : "Registrar lançamento"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="xl:col-span-3">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Lancamentos recentes</CardTitle>
-            <CardDescription>
-              Ultimos registros do mes selecionado para revisão rápida do fluxo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {sortedMonthlyEntries.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-8 text-sm text-center text-muted-foreground">
-                Nenhum lancamento registrado neste mes.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <Table className="min-w-[640px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedMonthlyEntries.slice(0, 12).map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="text-xs text-muted-foreground">{formatDate(entry.entry_date)}</TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium line-clamp-1">{entry.description}</p>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] border-0 ${
-                                entry.entry_type === "income"
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                                  : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
-                              }`}
-                            >
-                              {typeLabel[entry.entry_type]}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{entry.category}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-[10px]">
-                            {statusLabel[entry.status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell
-                          className={`text-right font-medium ${
-                            entry.entry_type === "income" ? "text-emerald-600" : "text-destructive"
-                          }`}
-                        >
-                          {entry.entry_type === "income" ? "+" : "-"} {currencyFormatter.format(entry.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

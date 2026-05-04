@@ -113,6 +113,61 @@ async function resolveClient(
   return linkedClient;
 }
 
+async function upsertCashflowAccountsFromOpenFinanceAccounts(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  rows: Array<{
+    id: string;
+    client_id: string;
+    connection_id: string;
+    account_name: string | null;
+    institution_name: string | null;
+    account_mask: string | null;
+    currency_code: string | null;
+    is_active: boolean;
+  }>,
+) {
+  if (rows.length === 0) return;
+
+  const payload = rows.map((row) => ({
+    client_id: row.client_id,
+    label:
+      `${row.account_name || row.institution_name || "Conta bancaria"}${row.account_mask ? ` (${row.account_mask})` : ""}`,
+    source_type: "bank_open_finance",
+    currency_code: row.currency_code || "BRL",
+    open_finance_account_id: row.id,
+    open_finance_connection_id: row.connection_id,
+    institution_name: row.institution_name,
+    account_mask: row.account_mask,
+    is_primary: false,
+    is_active: row.is_active,
+    notes: "Conta vinculada automaticamente a partir do Open Finance.",
+  }));
+
+  const { error } = await supabaseAdmin
+    .from("client_cashflow_accounts")
+    .upsert(payload, { onConflict: "open_finance_account_id" });
+
+  if (error) throw error;
+}
+
+async function getCashflowAccountMapForConnection(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  connectionId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("client_cashflow_accounts")
+    .select("id, open_finance_account_id")
+    .eq("open_finance_connection_id", connectionId);
+
+  if (error) throw error;
+
+  return new Map(
+    (data || [])
+      .filter((row) => row.open_finance_account_id)
+      .map((row) => [String(row.open_finance_account_id), String(row.id)]),
+  );
+}
+
 async function persistSyncData(params: {
   supabaseAdmin: ReturnType<typeof createClient>;
   clientId: string;
@@ -166,26 +221,62 @@ async function persistSyncData(params: {
   }));
 
   let accountIdByExternalId = new Map<string, string>();
+  let persistedOpenFinanceAccounts: Array<{
+    id: string;
+    client_id: string;
+    connection_id: string;
+    external_account_id: string;
+    account_name: string | null;
+    institution_name: string | null;
+    account_mask: string | null;
+    currency_code: string | null;
+    is_active: boolean;
+  }> = [];
 
   if (accountUpsertPayload.length > 0) {
     const { data: accountRows, error: accountUpsertError } = await supabaseAdmin
       .from("open_finance_accounts")
       .upsert(accountUpsertPayload, { onConflict: "connection_id,external_account_id" })
-      .select("id, external_account_id");
+      .select("id, client_id, connection_id, external_account_id, account_name, institution_name, account_mask, currency_code, is_active");
     if (accountUpsertError) throw accountUpsertError;
+    persistedOpenFinanceAccounts = (accountRows || []).map((row) => ({
+      id: String(row.id),
+      client_id: String(row.client_id),
+      connection_id: String(row.connection_id),
+      external_account_id: String(row.external_account_id),
+      account_name: row.account_name ? String(row.account_name) : null,
+      institution_name: row.institution_name ? String(row.institution_name) : null,
+      account_mask: row.account_mask ? String(row.account_mask) : null,
+      currency_code: row.currency_code ? String(row.currency_code) : null,
+      is_active: Boolean(row.is_active),
+    }));
     accountIdByExternalId = new Map(
-      (accountRows || []).map((row) => [String(row.external_account_id), String(row.id)]),
+      persistedOpenFinanceAccounts.map((row) => [row.external_account_id, row.id]),
     );
   } else {
     const { data: existingAccounts, error: existingAccountsError } = await supabaseAdmin
       .from("open_finance_accounts")
-      .select("id, external_account_id")
+      .select("id, client_id, connection_id, external_account_id, account_name, institution_name, account_mask, currency_code, is_active")
       .eq("connection_id", connectionId);
     if (existingAccountsError) throw existingAccountsError;
+    persistedOpenFinanceAccounts = (existingAccounts || []).map((row) => ({
+      id: String(row.id),
+      client_id: String(row.client_id),
+      connection_id: String(row.connection_id),
+      external_account_id: String(row.external_account_id),
+      account_name: row.account_name ? String(row.account_name) : null,
+      institution_name: row.institution_name ? String(row.institution_name) : null,
+      account_mask: row.account_mask ? String(row.account_mask) : null,
+      currency_code: row.currency_code ? String(row.currency_code) : null,
+      is_active: Boolean(row.is_active),
+    }));
     accountIdByExternalId = new Map(
-      (existingAccounts || []).map((row) => [String(row.external_account_id), String(row.id)]),
+      persistedOpenFinanceAccounts.map((row) => [row.external_account_id, row.id]),
     );
   }
+
+  await upsertCashflowAccountsFromOpenFinanceAccounts(supabaseAdmin, persistedOpenFinanceAccounts);
+  const cashflowAccountIdByOpenFinanceAccountId = await getCashflowAccountMapForConnection(supabaseAdmin, connectionId);
 
   const transactionUpsertPayload = transactions
     .map((transaction) => {
@@ -242,20 +333,34 @@ async function persistSyncData(params: {
 
   const cashflowUpsertPayload = pendingRows
     .filter((row) => !existingIntegrationKeys.has(`${source}:${row.external_transaction_id}`))
-    .map((row) => ({
-      client_id: clientId,
-      entry_date: String(row.occurred_at).slice(0, 10),
-      entry_type: deriveCashflowType(String(row.direction)),
-      category: deriveCashflowCategory(String(row.direction), asString(row.category)),
-      description: asString(row.description) || "Lancamento bancario",
-      amount: Number(Number(row.amount || 0).toFixed(2)),
-      status: "confirmed",
-      created_by: null,
-      integration_source: source,
-      integration_key: `${source}:${row.external_transaction_id}`,
-      integration_connection_id: connectionId,
-      integration_account_id: row.account_id,
-    }));
+    .map((row) => {
+      const effectiveDate = String(row.occurred_at).slice(0, 10);
+      const competenceMonth = `${effectiveDate.slice(0, 7)}-01`;
+      const integrationAccountId = String(row.account_id);
+
+      return {
+        client_id: clientId,
+        entry_date: effectiveDate,
+        due_date: effectiveDate,
+        effective_date: effectiveDate,
+        competence_month: competenceMonth,
+        account_id: cashflowAccountIdByOpenFinanceAccountId.get(integrationAccountId) || null,
+        entry_type: deriveCashflowType(String(row.direction)),
+        category: deriveCashflowCategory(String(row.direction), asString(row.category)),
+        description: asString(row.description) || "Lancamento bancario",
+        amount: Number(Number(row.amount || 0).toFixed(2)),
+        status: "confirmed",
+        lifecycle_status: "confirmed",
+        origin_type: "open_finance",
+        reconciliation_status: "pending",
+        review_status: "pending_review",
+        created_by: null,
+        integration_source: source,
+        integration_key: `${source}:${row.external_transaction_id}`,
+        integration_connection_id: connectionId,
+        integration_account_id: integrationAccountId,
+      };
+    });
 
   if (cashflowUpsertPayload.length > 0) {
     const { error: cashflowUpsertError } = await supabaseAdmin

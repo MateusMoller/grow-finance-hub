@@ -414,47 +414,263 @@ export type Database = {
           },
         ]
       }
+      client_cashflow_accounts: {
+        Row: {
+          account_mask: string | null
+          client_id: string
+          created_at: string
+          currency_code: string
+          id: string
+          institution_name: string | null
+          is_active: boolean
+          is_primary: boolean
+          label: string
+          notes: string | null
+          open_finance_account_id: string | null
+          open_finance_connection_id: string | null
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          account_mask?: string | null
+          client_id: string
+          created_at?: string
+          currency_code?: string
+          id?: string
+          institution_name?: string | null
+          is_active?: boolean
+          is_primary?: boolean
+          label: string
+          notes?: string | null
+          open_finance_account_id?: string | null
+          open_finance_connection_id?: string | null
+          source_type?: string
+          updated_at?: string
+        }
+        Update: {
+          account_mask?: string | null
+          client_id?: string
+          created_at?: string
+          currency_code?: string
+          id?: string
+          institution_name?: string | null
+          is_active?: boolean
+          is_primary?: boolean
+          label?: string
+          notes?: string | null
+          open_finance_account_id?: string | null
+          open_finance_connection_id?: string | null
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cashflow_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_accounts_open_finance_account_id_fkey"
+            columns: ["open_finance_account_id"]
+            isOneToOne: false
+            referencedRelation: "open_finance_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_accounts_open_finance_connection_id_fkey"
+            columns: ["open_finance_connection_id"]
+            isOneToOne: false
+            referencedRelation: "open_finance_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_cashflow_rules: {
+        Row: {
+          auto_approve_threshold: number
+          category: string
+          client_id: string | null
+          counterparty_name: string | null
+          created_at: string
+          created_by: string | null
+          entry_type: string
+          id: string
+          is_active: boolean
+          mark_as_transfer: boolean
+          match_text: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          auto_approve_threshold?: number
+          category: string
+          client_id?: string | null
+          counterparty_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_type?: string
+          id?: string
+          is_active?: boolean
+          mark_as_transfer?: boolean
+          match_text: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          auto_approve_threshold?: number
+          category?: string
+          client_id?: string | null
+          counterparty_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_type?: string
+          id?: string
+          is_active?: boolean
+          mark_as_transfer?: boolean
+          match_text?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cashflow_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_cashflow_entries: {
         Row: {
+          account_id: string | null
           amount: number
           category: string
           client_id: string
+          competence_month: string | null
+          counterparty_name: string | null
           created_at: string
           created_by: string | null
           description: string
+          document_ref: string | null
+          due_date: string | null
+          effective_date: string | null
           entry_date: string
           entry_type: string
           id: string
+          integration_account_id: string | null
+          integration_connection_id: string | null
+          integration_key: string | null
+          integration_source: string | null
+          is_hidden_from_projection: boolean
+          is_transfer: boolean
+          lifecycle_status: string | null
+          matched_rule_id: string | null
+          notes: string | null
+          origin_type: string | null
+          reconciliation_status: string | null
+          review_owner_id: string | null
+          review_status: string | null
+          reviewed_at: string | null
+          rule_match_confidence: number | null
           status: string
           updated_at: string
         }
         Insert: {
+          account_id?: string | null
           amount: number
           category?: string
           client_id: string
+          competence_month?: string | null
+          counterparty_name?: string | null
           created_at?: string
           created_by?: string | null
           description: string
+          document_ref?: string | null
+          due_date?: string | null
+          effective_date?: string | null
           entry_date?: string
           entry_type?: string
           id?: string
+          integration_account_id?: string | null
+          integration_connection_id?: string | null
+          integration_key?: string | null
+          integration_source?: string | null
+          is_hidden_from_projection?: boolean
+          is_transfer?: boolean
+          lifecycle_status?: string | null
+          matched_rule_id?: string | null
+          notes?: string | null
+          origin_type?: string | null
+          reconciliation_status?: string | null
+          review_owner_id?: string | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          rule_match_confidence?: number | null
           status?: string
           updated_at?: string
         }
         Update: {
+          account_id?: string | null
           amount?: number
           category?: string
           client_id?: string
+          competence_month?: string | null
+          counterparty_name?: string | null
           created_at?: string
           created_by?: string | null
           description?: string
+          document_ref?: string | null
+          due_date?: string | null
+          effective_date?: string | null
           entry_date?: string
           entry_type?: string
           id?: string
+          integration_account_id?: string | null
+          integration_connection_id?: string | null
+          integration_key?: string | null
+          integration_source?: string | null
+          is_hidden_from_projection?: boolean
+          is_transfer?: boolean
+          lifecycle_status?: string | null
+          matched_rule_id?: string | null
+          notes?: string | null
+          origin_type?: string | null
+          reconciliation_status?: string | null
+          review_owner_id?: string | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          rule_match_confidence?: number | null
           status?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "client_cashflow_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "client_cashflow_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "client_cashflow_entries_client_id_fkey"
             columns: ["client_id"]
@@ -467,6 +683,152 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_entries_integration_account_id_fkey"
+            columns: ["integration_account_id"]
+            isOneToOne: false
+            referencedRelation: "open_finance_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_entries_integration_connection_id_fkey"
+            columns: ["integration_connection_id"]
+            isOneToOne: false
+            referencedRelation: "open_finance_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_entries_matched_rule_id_fkey"
+            columns: ["matched_rule_id"]
+            isOneToOne: false
+            referencedRelation: "client_cashflow_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_cashflow_entries_review_owner_id_fkey"
+            columns: ["review_owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_cashflow_consultive_alerts: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          message: string
+          metadata: Json
+          resolved_at: string | null
+          severity: string
+          source_key: string
+          source_type: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json
+          resolved_at?: string | null
+          severity?: string
+          source_key: string
+          source_type: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json
+          resolved_at?: string | null
+          severity?: string
+          source_key?: string
+          source_type?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cashflow_consultive_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_cashflow_health_snapshots: {
+        Row: {
+          client_id: string
+          critical_calendar_events: number
+          current_balance: number
+          generated_at: string
+          health_status: string
+          last_activity_at: string | null
+          metadata: Json
+          overdue_entries: number
+          pending_reconciliation_entries: number
+          pending_review_entries: number
+          projected_balance_15: number
+          projected_balance_30: number
+          projected_balance_7: number
+          projected_gap_date: string | null
+          review_coverage: number
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          critical_calendar_events?: number
+          current_balance?: number
+          generated_at?: string
+          health_status?: string
+          last_activity_at?: string | null
+          metadata?: Json
+          overdue_entries?: number
+          pending_reconciliation_entries?: number
+          pending_review_entries?: number
+          projected_balance_15?: number
+          projected_balance_30?: number
+          projected_balance_7?: number
+          projected_gap_date?: string | null
+          review_coverage?: number
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          critical_calendar_events?: number
+          current_balance?: number
+          generated_at?: string
+          health_status?: string
+          last_activity_at?: string | null
+          metadata?: Json
+          overdue_entries?: number
+          pending_reconciliation_entries?: number
+          pending_review_entries?: number
+          projected_balance_15?: number
+          projected_balance_30?: number
+          projected_balance_7?: number
+          projected_gap_date?: string | null
+          review_coverage?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cashflow_health_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]

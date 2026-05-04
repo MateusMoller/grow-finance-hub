@@ -3,6 +3,7 @@ import {
   Users,
   CalendarDays,
   BarChart3,
+  Wallet,
   FileSpreadsheet,
   Bell,
   Settings,
@@ -42,14 +43,15 @@ const operationalItems = [
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
-  { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
+  { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "Financeiro", url: "/app/financeiro", icon: Wallet },
+  { title: "Obrigacoes", url: "/app/obrigacoes", icon: FileSpreadsheet },
   { title: "E-continuo", url: "/app/econtinuo", icon: Send },
 ];
 
 const systemItems = [
   { title: "Notificacoes", url: "/app/notificacoes", icon: Bell },
-  { title: "Usuários", url: "/app/usuarios", icon: UserCog },
+  { title: "Usuarios", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestoes", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
   { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
@@ -118,6 +120,7 @@ export function AppSidebar() {
         (item) =>
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
+          item.url === "/app/financeiro" ||
           item.url === "/app/obrigacoes" ||
           item.url === "/app/econtinuo",
       )
