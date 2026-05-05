@@ -33,8 +33,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  growCompetenceReferenceLabel,
   growObligationStatusClass,
   growObligationStatusLabel,
+  growPeriodicityLabel,
   growPriorityLabel,
   invokeGrowObligations,
   type GrowObligationInstance,
@@ -56,14 +58,12 @@ interface GrowObligationsWorkspaceProps {
 
 interface TemplateFormState {
   id: string | null;
-  code: string;
   name: string;
   sector: string;
   periodicity: GrowObligationTemplate["periodicity"];
+  competence_reference: GrowObligationTemplate["competence_reference"];
   due_day: string;
-  yearly_due_month: string;
   legal_due_day: string;
-  sla_days: string;
   priority: GrowObligationInstance["priority"];
   expected_documents: string;
   is_active: boolean;
@@ -106,14 +106,12 @@ const statusOptions: GrowObligationInstance["status"][] = [
 
 const makeTemplateForm = (template?: GrowObligationTemplate | null): TemplateFormState => ({
   id: template?.id || null,
-  code: template?.code || "",
   name: template?.name || "",
   sector: template?.sector || "Geral",
   periodicity: template?.periodicity || "monthly",
+  competence_reference: template?.competence_reference || "vigente",
   due_day: String(template?.due_day ?? 10),
-  yearly_due_month: template?.yearly_due_month ? String(template.yearly_due_month) : "",
   legal_due_day: template?.legal_due_day ? String(template.legal_due_day) : "",
-  sla_days: String(template?.sla_days ?? 0),
   priority: template?.priority || "media",
   expected_documents: (template?.expected_documents || []).join(", "),
   is_active: template?.is_active ?? true,
@@ -193,7 +191,7 @@ export function GrowObligationsWorkspace({
     const token = templateSearch.trim().toLowerCase();
     if (!token) return items;
     return items.filter((template) =>
-      `${template.name} ${template.code} ${template.sector}`.toLowerCase().includes(token),
+      `${template.name} ${template.sector}`.toLowerCase().includes(token),
     );
   }, [overview?.templates, templateSearch]);
 
@@ -220,14 +218,12 @@ export function GrowObligationsWorkspace({
       invokeGrowObligations({
         action: "upsert_template",
         id: payload.id,
-        code: payload.code,
         name: payload.name,
         sector: payload.sector,
         periodicity: payload.periodicity,
+        competence_reference: payload.competence_reference,
         due_day: Number(payload.due_day || 10),
-        yearly_due_month: payload.yearly_due_month ? Number(payload.yearly_due_month) : null,
         legal_due_day: payload.legal_due_day ? Number(payload.legal_due_day) : null,
-        sla_days: Number(payload.sla_days || 0),
         priority: payload.priority,
         expected_documents: payload.expected_documents
           .split(",")
@@ -558,13 +554,12 @@ export function GrowObligationsWorkspace({
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-medium">{template.name}</p>
-                        <Badge variant="secondary">{template.code}</Badge>
                         <Badge variant="outline">{template.sector}</Badge>
                         {!template.is_active && <Badge variant="destructive">Inativa</Badge>}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {template.periodicity} · vencimento técnico no dia {template.due_day}
-                        {template.yearly_due_month ? ` · mês base ${template.yearly_due_month}` : ""}
+                        {growPeriodicityLabel[template.periodicity]} · vencimento técnico no dia {template.due_day}
+                        {` · mês base ${growCompetenceReferenceLabel[template.competence_reference]}`}
                         {template.legal_due_day ? ` · vencimento legal ${template.legal_due_day}` : ""}
                       </p>
                       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -864,10 +859,6 @@ export function GrowObligationsWorkspace({
               <Input value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>Código interno</Label>
-              <Input value={templateForm.code} onChange={(event) => setTemplateForm((prev) => ({ ...prev, code: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
               <Label>Setor</Label>
               <Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -878,7 +869,17 @@ export function GrowObligationsWorkspace({
               <Label>Periodicidade</Label>
               <Select value={templateForm.periodicity} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, periodicity: value as GrowObligationTemplate["periodicity"] }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{periodicity}</SelectItem>)}</SelectContent>
+                <SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Mês base</Label>
+              <Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vigente">{growCompetenceReferenceLabel.vigente}</SelectItem>
+                  <SelectItem value="anterior">{growCompetenceReferenceLabel.anterior}</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
@@ -893,16 +894,8 @@ export function GrowObligationsWorkspace({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Mês base anual</Label>
-              <Input value={templateForm.yearly_due_month} onChange={(event) => setTemplateForm((prev) => ({ ...prev, yearly_due_month: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
               <Label>Dia do vencimento legal</Label>
               <Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>SLA em dias</Label>
-              <Input value={templateForm.sla_days} onChange={(event) => setTemplateForm((prev) => ({ ...prev, sla_days: event.target.value }))} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Documentos esperados</Label>

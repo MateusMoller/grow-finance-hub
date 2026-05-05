@@ -6,10 +6,10 @@ export type GrowObligationTemplate = {
   name: string;
   sector: string;
   periodicity: "monthly" | "quarterly" | "yearly" | "custom";
+  competence_reference: "vigente" | "anterior";
   due_day: number;
   yearly_due_month: number | null;
   legal_due_day: number | null;
-  sla_days: number;
   priority: "baixa" | "media" | "alta" | "urgente";
   expected_documents: string[];
   is_active: boolean;
@@ -18,6 +18,18 @@ export type GrowObligationTemplate = {
   requires_protocol: boolean;
   requires_document: boolean;
   operational_notes: string | null;
+};
+
+export const growPeriodicityLabel: Record<GrowObligationTemplate["periodicity"], string> = {
+  monthly: "Mensal",
+  quarterly: "Trimestral",
+  yearly: "Anual",
+  custom: "Personalizada",
+};
+
+export const growCompetenceReferenceLabel: Record<GrowObligationTemplate["competence_reference"], string> = {
+  vigente: "Vigente",
+  anterior: "Anterior",
 };
 
 export type GrowClientSummary = {

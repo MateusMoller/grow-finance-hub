@@ -30,10 +30,10 @@ type TemplateRow = {
   name: string;
   sector: string;
   periodicity: string;
+  competence_reference: string;
   due_day: number;
   yearly_due_month: number | null;
   legal_due_day: number | null;
-  sla_days: number;
   priority: string;
   expected_documents: unknown;
   is_active: boolean;
@@ -166,28 +166,33 @@ function clampDay(day: number, year: number, monthIndex: number) {
   return Math.max(1, Math.min(day, lastDay));
 }
 
-function computeCompetenceDate(periodicity: string, cursor: Date, yearlyDueMonth?: number | null) {
+function computeCompetenceDate(
+  periodicity: string,
+  cursor: Date,
+  competenceReference: string,
+  yearlyDueMonth?: number | null,
+) {
+  let baseDate: Date;
+
   if (periodicity === "yearly") {
     const dueMonthIndex = Math.max(0, Math.min(11, (yearlyDueMonth || 1) - 1));
-    return new Date(Date.UTC(cursor.getUTCFullYear(), dueMonthIndex, 1));
+    baseDate = new Date(Date.UTC(cursor.getUTCFullYear(), dueMonthIndex, 1));
+  } else {
+    baseDate = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
   }
 
-  return new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
+  if (competenceReference === "anterior") {
+    baseDate.setUTCMonth(baseDate.getUTCMonth() - 1);
+  }
+
+  return baseDate;
 }
 
-function computeDueDate(
-  competenceDate: Date,
-  dueDay: number,
-  slaDays: number,
-) {
+function computeDueDate(competenceDate: Date, dueDay: number) {
   const year = competenceDate.getUTCFullYear();
   const monthIndex = competenceDate.getUTCMonth();
   const day = clampDay(dueDay, year, monthIndex);
-  const base = new Date(Date.UTC(year, monthIndex, day));
-
-  if (slaDays <= 0) return base;
-  base.setUTCDate(base.getUTCDate() + slaDays);
-  return base;
+  return new Date(Date.UTC(year, monthIndex, day));
 }
 
 async function buildAuthContext(req: Request) {
@@ -449,6 +454,7 @@ async function ensureInstancesForProfiles(
       const currentCompetenceDate = computeCompetenceDate(
         template.periodicity,
         cursor,
+        template.competence_reference,
         profile.yearly_due_month_override ?? template.yearly_due_month,
       );
 
@@ -481,10 +487,9 @@ async function ensureInstancesForProfiles(
         const technicalDueDate = computeDueDate(
           currentCompetenceDate,
           profile.due_day_override ?? template.due_day,
-          template.sla_days,
         );
         const legalDueDate = template.legal_due_day
-          ? computeDueDate(currentCompetenceDate, profile.legal_due_day_override ?? template.legal_due_day, 0)
+          ? computeDueDate(currentCompetenceDate, profile.legal_due_day_override ?? template.legal_due_day)
           : null;
 
         inserts.push({
@@ -698,10 +703,10 @@ async function handleUpsertTemplate(
     name,
     sector: asTrimmedString(payload.sector) || "Geral",
     periodicity: asTrimmedString(payload.periodicity) || "monthly",
+    competence_reference: asTrimmedString(payload.competence_reference) || "vigente",
     due_day: asInteger(payload.due_day, 10),
     yearly_due_month: asInteger(payload.yearly_due_month, null),
     legal_due_day: asInteger(payload.legal_due_day, null),
-    sla_days: asInteger(payload.sla_days, 0),
     priority: asTrimmedString(payload.priority) || "media",
     expected_documents: asStringArray(payload.expected_documents),
     is_active: asBoolean(payload.is_active, true),
