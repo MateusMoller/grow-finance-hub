@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -167,7 +167,7 @@ export default function FinanceiroPage() {
   const [referenceMonth, setReferenceMonth] = useState(initialMonth);
   const [periodStart, setPeriodStart] = useState(initialMonthBounds.startDate);
   const [periodEnd, setPeriodEnd] = useState(initialMonthBounds.endDate);
-  const [clientFilter, setClientFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("unselected");
   const [accountFilter, setAccountFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [entryTypeFilter, setEntryTypeFilter] = useState<PortalCashflowEntryType | "all">("all");
@@ -264,20 +264,57 @@ export default function FinanceiroPage() {
 
     return map;
   }, [consultiveAlerts]);
-  const categories = useMemo(() => getUniqueCashflowCategories(entries), [entries]);
+  const hasSelectedClient = clientFilter !== "unselected";
+  const selectedClient = useMemo(
+    () => (hasSelectedClient ? clientMap.get(clientFilter) || null : null),
+    [clientFilter, clientMap, hasSelectedClient],
+  );
+  const clientScopedEntries = useMemo(
+    () => (hasSelectedClient ? entries.filter((entry) => entry.client_id === clientFilter) : []),
+    [clientFilter, entries, hasSelectedClient],
+  );
+  const clientScopedAccounts = useMemo(
+    () => (hasSelectedClient ? accounts.filter((account) => account.client_id === clientFilter) : []),
+    [accounts, clientFilter, hasSelectedClient],
+  );
+  const categories = useMemo(() => getUniqueCashflowCategories(clientScopedEntries), [clientScopedEntries]);
   const duplicateEntryIds = useMemo(() => detectPotentialDuplicateEntryIds(entries), [entries]);
   const normalizedSearch = useMemo(() => normalizeCashflowText(search), [search]);
-  const criticalClientsCount = useMemo(
-    () => healthSnapshots.filter((snapshot) => snapshot.health_status === "critico").length,
-    [healthSnapshots],
+  const selectedClientSnapshot = useMemo(
+    () => (hasSelectedClient ? healthSnapshotMap.get(clientFilter) || null : null),
+    [clientFilter, hasSelectedClient, healthSnapshotMap],
   );
-  const attentionClientsCount = useMemo(
-    () => healthSnapshots.filter((snapshot) => snapshot.health_status === "atencao").length,
-    [healthSnapshots],
+  const selectedClientAlerts = useMemo(
+    () => (hasSelectedClient ? consultiveAlertsByClient.get(clientFilter) || [] : []),
+    [clientFilter, consultiveAlertsByClient, hasSelectedClient],
   );
-  const activeConsultiveAlertsCount = useMemo(() => consultiveAlerts.length, [consultiveAlerts]);
-  const activeRulesCount = useMemo(() => rules.filter((rule) => rule.is_active).length, [rules]);
-  const globalRulesCount = useMemo(() => rules.filter((rule) => !rule.client_id && rule.is_active).length, [rules]);
+  const selectedClientRules = useMemo(
+    () => (hasSelectedClient ? rules.filter((rule) => !rule.client_id || rule.client_id === clientFilter) : []),
+    [clientFilter, hasSelectedClient, rules],
+  );
+  const activeConsultiveAlertsCount = useMemo(() => selectedClientAlerts.length, [selectedClientAlerts]);
+  const activeRulesCount = useMemo(
+    () => selectedClientRules.filter((rule) => rule.is_active).length,
+    [selectedClientRules],
+  );
+  const globalRulesCount = useMemo(
+    () => selectedClientRules.filter((rule) => !rule.client_id && rule.is_active).length,
+    [selectedClientRules],
+  );
+
+  const handleClientChange = (value: string) => {
+    setClientFilter(value);
+    setActiveLayer("operational");
+    setQueueFilter("pending_review");
+    setSearch("");
+    setAccountFilter("all");
+    setCategoryFilter("all");
+    setEntryTypeFilter("all");
+    setOriginFilter("all");
+    setLifecycleFilter("all");
+    setReviewFilter("all");
+    setReconciliationFilter("all");
+  };
 
   const handleReferenceMonthChange = (value: string) => {
     setReferenceMonth(value);
@@ -287,9 +324,11 @@ export default function FinanceiroPage() {
   };
 
   const scopedEntries = useMemo(
-    () =>
-      entries
-        .filter((entry) => clientFilter === "all" || entry.client_id === clientFilter)
+    () => {
+      if (!hasSelectedClient) return [];
+
+      return entries
+        .filter((entry) => entry.client_id === clientFilter)
         .filter((entry) => accountFilter === "all" || entry.account_id === accountFilter)
         .filter((entry) => categoryFilter === "all" || entry.category === categoryFilter)
         .filter((entry) => entryTypeFilter === "all" || entry.entry_type === entryTypeFilter)
@@ -322,7 +361,8 @@ export default function FinanceiroPage() {
             .join(" ");
 
           return searchable.includes(normalizedSearch);
-        }),
+        });
+    },
     [
       accountFilter,
       accountMap,
@@ -331,6 +371,7 @@ export default function FinanceiroPage() {
       clientMap,
       entries,
       entryTypeFilter,
+      hasSelectedClient,
       lifecycleFilter,
       normalizedSearch,
       originFilter,
@@ -435,70 +476,6 @@ export default function FinanceiroPage() {
       ).slice(0, 6),
     [managerialEntries],
   );
-
-  const clientRiskRows = useMemo(
-    () =>
-      clients
-        .map((client) => {
-          const clientEntries = entries.filter((entry) => entry.client_id === client.id);
-          const snapshot = healthSnapshotMap.get(client.id);
-          const clientAlerts = consultiveAlertsByClient.get(client.id) || [];
-          const fallbackGapAlert = getCashflowGapAlert(clientEntries, 30, todayIso);
-          const pendingItems =
-            snapshot?.overdue_entries !== undefined
-              ? snapshot.overdue_entries + snapshot.pending_review_entries + snapshot.pending_reconciliation_entries
-              : clientEntries.filter(
-                  (entry) =>
-                    entry.review_status === "pending_review" ||
-                    entry.reconciliation_status === "pending" ||
-                    getEntryLifecycleStatus(entry) === "overdue",
-                ).length;
-          const projectedThirty = snapshot?.projected_balance_30 ?? getProjectedBalanceAtHorizon(clientEntries, 30, todayIso);
-          const healthStatus =
-            snapshot?.health_status ??
-            (fallbackGapAlert || projectedThirty < 0
-              ? "critico"
-              : pendingItems > 0 || clientAlerts.length > 0
-                ? "atencao"
-                : "em_dia");
-
-          return {
-            id: client.id,
-            name: client.name,
-            sector: client.sector || "Sem setor",
-            currentBalance: snapshot?.current_balance ?? getCurrentCashBalance(clientEntries, todayIso),
-            projectedThirty,
-            pendingItems,
-            gapAlert:
-              snapshot?.projected_gap_date || fallbackGapAlert
-                ? {
-                    date: snapshot?.projected_gap_date || fallbackGapAlert?.date || null,
-                    projectedBalance: snapshot?.projected_balance_30 ?? fallbackGapAlert?.projectedBalance ?? projectedThirty,
-                  }
-                : null,
-            healthStatus,
-            activeAlerts: clientAlerts.length,
-            topAlertTitle: clientAlerts[0]?.title || null,
-          };
-        })
-        .filter(
-          (row) =>
-            row.healthStatus !== "em_dia" || row.pendingItems > 0 || row.activeAlerts > 0 || row.gapAlert || row.projectedThirty < 0,
-        )
-        .sort((left, right) => {
-          const leftRisk = left.healthStatus === "critico" ? 3 : left.healthStatus === "atencao" ? 2 : 1;
-          const rightRisk = right.healthStatus === "critico" ? 3 : right.healthStatus === "atencao" ? 2 : 1;
-          if (leftRisk !== rightRisk) return rightRisk - leftRisk;
-          if (left.activeAlerts !== right.activeAlerts) return right.activeAlerts - left.activeAlerts;
-          return right.pendingItems - left.pendingItems;
-        })
-        .slice(0, 10),
-    [clients, consultiveAlertsByClient, entries, healthSnapshotMap, todayIso],
-  );
-  const clientsRequiringAttentionCount = useMemo(
-    () => (healthSnapshots.length > 0 ? criticalClientsCount + attentionClientsCount : clientRiskRows.length),
-    [attentionClientsCount, clientRiskRows.length, criticalClientsCount, healthSnapshots.length],
-  );
   const operationalCards = useMemo(
     () => [
       {
@@ -528,6 +505,28 @@ export default function FinanceiroPage() {
     ],
     [queueCounts],
   );
+  const selectedClientPendingCount = useMemo(
+    () => queueCounts.pendingReview + queueCounts.pendingReconciliation + queueCounts.overdue,
+    [queueCounts.overdue, queueCounts.pendingReconciliation, queueCounts.pendingReview],
+  );
+  const selectedClientGapAlert = useMemo(
+    () => (hasSelectedClient ? getCashflowGapAlert(clientScopedEntries, 30, todayIso) : null),
+    [clientScopedEntries, hasSelectedClient, todayIso],
+  );
+  const selectedClientHealthStatus = useMemo(() => {
+    if (!hasSelectedClient) return null;
+    if (selectedClientSnapshot?.health_status) return selectedClientSnapshot.health_status;
+    if (selectedClientGapAlert || dashboardMetrics.projectedThirty < 0) return "critico";
+    if (selectedClientPendingCount > 0 || selectedClientAlerts.length > 0) return "atencao";
+    return "em_dia";
+  }, [
+    dashboardMetrics.projectedThirty,
+    hasSelectedClient,
+    selectedClientAlerts.length,
+    selectedClientGapAlert,
+    selectedClientPendingCount,
+    selectedClientSnapshot?.health_status,
+  ]);
 
   const resetRuleForm = () => {
     setNewRuleClientId("global");
@@ -600,62 +599,75 @@ export default function FinanceiroPage() {
               <div className="max-w-3xl space-y-3">
                 <Badge className="w-fit bg-sky-400/20 text-sky-100 hover:bg-sky-400/20">Financeiro Grow</Badge>
                 <div>
-                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Operacao clara, gestao objetiva e acao consultiva no mesmo lugar.</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Analise um cliente por vez, com leitura mais limpa e decisao mais criteriosa.</h1>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
-                    Comece pela fila operacional, avance para a leitura gerencial e trate os riscos na aba consultiva.
+                    O modulo interno agora libera os dados somente depois da escolha do cliente, para manter foco operacional e reduzir poluicao visual.
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[430px]">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Saldo atual</p>
-                  <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.currentBalance >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                    {cashflowCurrencyFormatter.format(dashboardMetrics.currentBalance)}
-                  </p>
+              {hasSelectedClient && selectedClientHealthStatus ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[430px]">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Cliente em analise</p>
+                    <p className="mt-2 text-lg font-semibold text-white">{selectedClient?.name || "Cliente"}</p>
+                    <p className="mt-1 text-xs text-slate-300">{selectedClient?.sector || "Sem setor"}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Saldo atual</p>
+                    <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.currentBalance >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                      {cashflowCurrencyFormatter.format(dashboardMetrics.currentBalance)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Saude do caixa</p>
+                    <p className="mt-2 text-lg font-semibold text-white">{healthStatusMeta[selectedClientHealthStatus].label}</p>
+                    <p className="mt-1 text-xs text-slate-300">
+                      Projecao 30 dias: {cashflowCurrencyFormatter.format(dashboardMetrics.projectedThirty)}
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Projecao 30 dias</p>
-                  <p className={`mt-2 text-2xl font-semibold ${dashboardMetrics.projectedThirty >= 0 ? "text-sky-200" : "text-rose-300"}`}>
-                    {cashflowCurrencyFormatter.format(dashboardMetrics.projectedThirty)}
-                  </p>
+              ) : (
+                <div className="xl:min-w-[430px]">
+                  <div className="rounded-3xl border border-dashed border-white/20 bg-white/5 p-5">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Passo obrigatorio</p>
+                    <p className="mt-2 text-lg font-semibold text-white">Selecione um cliente para abrir a analise.</p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                      Operacao, gestao e consultivo ficam bloqueados ate essa escolha para forcar uma leitura dedicada por cliente.
+                    </p>
+                  </div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-300">Clientes em risco</p>
-                  <p className="mt-2 text-2xl font-semibold text-amber-200">{clientsRequiringAttentionCount}</p>
-                  <p className="mt-1 text-xs text-slate-300">
-                    {criticalClientsCount} criticos, {attentionClientsCount} em atencao
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard
-                title="Pendencias operacionais"
-                value={String(queueCounts.pendingReview + queueCounts.pendingReconciliation)}
-                helper="Tudo que precisa de revisao ou conciliacao agora."
-                tone={queueCounts.pendingReview + queueCounts.pendingReconciliation > 0 ? "warning" : "success"}
-              />
-              <MetricCard
-                title="Vencidos"
-                value={String(queueCounts.overdue)}
-                helper="Itens previstos com vencimento passado."
-                tone={queueCounts.overdue > 0 ? "warning" : "success"}
-              />
-              <MetricCard
-                title="Projecao 15 dias"
-                value={cashflowCurrencyFormatter.format(dashboardMetrics.projectedFifteen)}
-                helper="Janela curta para negociar prazo, aporte ou prioridade."
-                tone={dashboardMetrics.projectedFifteen >= 0 ? "success" : "danger"}
-              />
-              <MetricCard
-                title="Alertas consultivos"
-                value={String(activeConsultiveAlertsCount)}
-                helper="Casos que pedem acao da equipe com o cliente."
-                tone={activeConsultiveAlertsCount > 0 ? "warning" : "success"}
-              />
-            </div>
+            {hasSelectedClient ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <MetricCard
+                  title="Pendencias operacionais"
+                  value={String(queueCounts.pendingReview + queueCounts.pendingReconciliation)}
+                  helper="Tudo que precisa de revisao ou conciliacao agora."
+                  tone={queueCounts.pendingReview + queueCounts.pendingReconciliation > 0 ? "warning" : "success"}
+                />
+                <MetricCard
+                  title="Vencidos"
+                  value={String(queueCounts.overdue)}
+                  helper="Itens previstos com vencimento passado."
+                  tone={queueCounts.overdue > 0 ? "warning" : "success"}
+                />
+                <MetricCard
+                  title="Projecao 15 dias"
+                  value={cashflowCurrencyFormatter.format(dashboardMetrics.projectedFifteen)}
+                  helper="Janela curta para negociar prazo, aporte ou prioridade."
+                  tone={dashboardMetrics.projectedFifteen >= 0 ? "success" : "danger"}
+                />
+                <MetricCard
+                  title="Alertas consultivos"
+                  value={String(activeConsultiveAlertsCount)}
+                  helper="Casos que pedem acao da equipe com o cliente."
+                  tone={activeConsultiveAlertsCount > 0 ? "warning" : "success"}
+                />
+              </div>
+            ) : null}
 
           </CardContent>
         </Card>
@@ -664,9 +676,9 @@ export default function FinanceiroPage() {
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <CardTitle className="text-base">Recorte e busca</CardTitle>
+                <CardTitle className="text-base">Cliente e recorte</CardTitle>
                 <CardDescription>
-                  Use os filtros quando precisar investigar um cliente, conta ou periodo especifico.
+                  Escolha primeiro o cliente. Os demais filtros so sao liberados depois disso.
                 </CardDescription>
               </div>
               <Button type="button" variant="outline" className="gap-2" onClick={() => void fetchFinanceData()} disabled={refreshing}>
@@ -677,27 +689,32 @@ export default function FinanceiroPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1.5">
-              <Input placeholder="Buscar cliente, descricao, conta ou documento" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <Input
+                placeholder="Buscar descricao, conta ou documento"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                disabled={!hasSelectedClient}
+              />
             </div>
 
             <div className="space-y-1.5">
-              <Input type="month" value={referenceMonth} onChange={(event) => handleReferenceMonthChange(event.target.value)} />
+              <Input type="month" value={referenceMonth} onChange={(event) => handleReferenceMonthChange(event.target.value)} disabled={!hasSelectedClient} />
             </div>
 
             <div className="space-y-1.5">
-              <Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
+              <Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} disabled={!hasSelectedClient} />
             </div>
 
             <div className="space-y-1.5">
-              <Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
+              <Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} disabled={!hasSelectedClient} />
             </div>
 
-            <Select value={clientFilter} onValueChange={setClientFilter}>
+            <Select value={clientFilter} onValueChange={handleClientChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Cliente" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os clientes</SelectItem>
+                <SelectItem value="unselected">Escolha um cliente</SelectItem>
                 {clients.map((client) => (
                   <SelectItem key={client.id} value={client.id}>
                     {client.name}
@@ -707,12 +724,12 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={accountFilter} onValueChange={setAccountFilter}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Conta" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as contas</SelectItem>
-                {accounts.map((account) => (
+                {clientScopedAccounts.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
                     {formatCashflowAccountLabel(account)}
                   </SelectItem>
@@ -721,7 +738,7 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Categoria" />
               </SelectTrigger>
               <SelectContent>
@@ -735,7 +752,7 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={entryTypeFilter} onValueChange={(value) => setEntryTypeFilter(value as PortalCashflowEntryType | "all")}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -746,7 +763,7 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={originFilter} onValueChange={setOriginFilter}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Origem" />
               </SelectTrigger>
               <SelectContent>
@@ -760,7 +777,7 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={lifecycleFilter} onValueChange={setLifecycleFilter}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Situacao" />
               </SelectTrigger>
               <SelectContent>
@@ -773,7 +790,7 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={reviewFilter} onValueChange={setReviewFilter}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Revisao" />
               </SelectTrigger>
               <SelectContent>
@@ -785,7 +802,7 @@ export default function FinanceiroPage() {
             </Select>
 
             <Select value={reconciliationFilter} onValueChange={setReconciliationFilter}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!hasSelectedClient}>
                 <SelectValue placeholder="Conciliacao" />
               </SelectTrigger>
               <SelectContent>
@@ -797,10 +814,35 @@ export default function FinanceiroPage() {
                 <SelectItem value="ignored">Ignorado</SelectItem>
               </SelectContent>
             </Select>
+
+            <div className="md:col-span-2 xl:col-span-4">
+              {hasSelectedClient ? (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Cliente em foco</p>
+                    <p className="text-sm font-medium">{selectedClient?.name || "Cliente"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedClient?.sector || "Sem setor"} â€¢ {clientScopedAccounts.length} conta(s) disponivel(is)
+                    </p>
+                  </div>
+                  <Button type="button" variant="ghost" onClick={() => handleClientChange("unselected")}>
+                    Trocar cliente
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border/80 bg-muted/10 p-5">
+                  <p className="text-sm font-medium">Escolha um cliente para iniciar a leitura.</p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    A tela fica propositalmente vazia ate essa escolha para evitar comparacoes apressadas e ajudar a equipe a revisar cada operacao com mais criterio.
+                  </p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        <Tabs value={activeLayer} onValueChange={(value) => setActiveLayer(value as FinanceLayer)}>
+        {hasSelectedClient ? (
+          <Tabs value={activeLayer} onValueChange={(value) => setActiveLayer(value as FinanceLayer)}>
           <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-3">
             <TabsTrigger value="operational" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
               Operacao
@@ -909,7 +951,7 @@ export default function FinanceiroPage() {
                                   </div>
                                   <p className="text-[11px] text-muted-foreground">
                                     {entry.category}
-                                    {entry.counterparty_name ? ` • ${entry.counterparty_name}` : ""}
+                                    {entry.counterparty_name ? ` â€¢ ${entry.counterparty_name}` : ""}
                                   </p>
                                 </div>
                               </TableCell>
@@ -976,16 +1018,16 @@ export default function FinanceiroPage() {
                 tone="warning"
               />
               <MetricCard
-                title="Clientes criticos"
-                value={String(criticalClientsCount)}
-                helper="Caixa em situacao mais sensivel no curto prazo."
-                tone={criticalClientsCount > 0 ? "danger" : "success"}
+                title="Saude do caixa"
+                value={selectedClientHealthStatus ? healthStatusMeta[selectedClientHealthStatus].label : "-"}
+                helper="Leitura consolidada entre saldo projetado, alertas e pendencias."
+                tone={selectedClientHealthStatus === "critico" ? "danger" : selectedClientHealthStatus === "atencao" ? "warning" : "success"}
               />
               <MetricCard
-                title="Clientes em atencao"
-                value={String(attentionClientsCount)}
-                helper="Clientes que pedem acompanhamento antes de virar crise."
-                tone="warning"
+                title="Pendencias abertas"
+                value={String(selectedClientPendingCount)}
+                helper="Soma das filas que ainda exigem trabalho da equipe."
+                tone={selectedClientPendingCount > 0 ? "warning" : "success"}
               />
               <MetricCard
                 title="Regras ativas"
@@ -1006,14 +1048,13 @@ export default function FinanceiroPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {consultiveAlerts.length === 0 ? (
+                {selectedClientAlerts.length === 0 ? (
                   <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
                     Nenhum alerta consultivo ativo neste momento.
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {consultiveAlerts.slice(0, 8).map((alert) => {
-                      const client = clientMap.get(alert.client_id);
+                    {selectedClientAlerts.slice(0, 8).map((alert) => {
                       const severity = alertSeverityMeta[alert.severity];
 
                       return (
@@ -1029,7 +1070,7 @@ export default function FinanceiroPage() {
                               <p className="text-sm text-muted-foreground">{alert.message}</p>
                             </div>
                             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                              {client?.name || "Cliente"} • {formatDate(alert.created_at.slice(0, 10))}
+                              {selectedClient?.name || "Cliente"} • {formatDate(alert.created_at.slice(0, 10))}
                             </div>
                           </div>
                         </div>
@@ -1080,7 +1121,7 @@ export default function FinanceiroPage() {
                                 <p className="text-sm font-medium line-clamp-1">{entry.description}</p>
                                 <p className="text-[11px] text-muted-foreground">
                                   {entry.category}
-                                  {entry.document_ref ? ` • ${entry.document_ref}` : ""}
+                                  {entry.document_ref ? ` â€¢ ${entry.document_ref}` : ""}
                                 </p>
                               </div>
                             </TableCell>
@@ -1116,71 +1157,48 @@ export default function FinanceiroPage() {
 
             <Card className="border-border/70">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Clientes com maior atencao</CardTitle>
+                <CardTitle className="text-base">Resumo consultivo do cliente</CardTitle>
                 <CardDescription>
-                  Veja quem exige contato, acompanhamento ou reorganizacao antes de o risco aumentar.
+                  Leia rapidamente o nivel de risco, o gap projetado e o volume de acao necessario para este cliente.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {clientRiskRows.length === 0 ? (
-                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    Nenhum cliente com sinais de atencao no recorte atual.
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-border/70 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Cliente</p>
+                    <p className="mt-2 text-base font-semibold">{selectedClient?.name || "Cliente"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{selectedClient?.sector || "Sem setor"}</p>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border">
-                    <Table className="min-w-[1080px]">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Setor</TableHead>
-                          <TableHead>Saude</TableHead>
-                          <TableHead className="text-right">Saldo atual</TableHead>
-                          <TableHead className="text-right">Proj. 30 dias</TableHead>
-                          <TableHead className="text-right">Alertas</TableHead>
-                          <TableHead className="text-right">Pendencias</TableHead>
-                          <TableHead className="text-right">Risco</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {clientRiskRows.slice(0, 12).map((row) => {
-                          const healthMeta = healthStatusMeta[row.healthStatus];
-
-                          return (
-                            <TableRow key={row.clientId}>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <p className="text-sm font-medium">{row.clientName}</p>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Atualizado em {formatDate(row.latestActivityDate)}
-                                  </p>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">{row.sector}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={healthMeta.className}>
-                                  {healthMeta.label}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {cashflowCurrencyFormatter.format(row.currentBalance)}
-                              </TableCell>
-                              <TableCell
-                                className={`text-right font-medium ${row.projectedBalance30Days >= 0 ? "text-emerald-600" : "text-destructive"}`}
-                              >
-                                {cashflowCurrencyFormatter.format(row.projectedBalance30Days)}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">{row.alertCount}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">{row.pendingCount}</TableCell>
-                              <TableCell className="text-right">
-                                <Badge variant="secondary">{row.riskScore}</Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                  <div className="rounded-2xl border border-border/70 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Gap projetado</p>
+                    <p className={`mt-2 text-base font-semibold ${selectedClientGapAlert ? "text-destructive" : "text-emerald-600"}`}>
+                      {selectedClientGapAlert?.date ? formatDate(selectedClientGapAlert.date) : "Sem gap previsto"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {selectedClientGapAlert
+                        ? `Saldo projetado de ${cashflowCurrencyFormatter.format(selectedClientGapAlert.projectedBalance)}.`
+                        : "Nao ha ruptura de caixa prevista na janela atual."}
+                    </p>
                   </div>
-                )}
+                  <div className="rounded-2xl border border-border/70 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Ultima atividade</p>
+                    <p className="mt-2 text-base font-semibold">
+                      {formatDate(selectedClientSnapshot?.last_activity_at?.slice(0, 10))}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Cobertura de revisao: {Math.round((selectedClientSnapshot?.review_coverage || 0) * 100)}%
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border/70 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Alerta principal</p>
+                    <p className="mt-2 text-base font-semibold">
+                      {selectedClientAlerts[0]?.title || "Nenhum alerta ativo"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {selectedClientAlerts[0]?.message || "Cliente sem alerta consultivo aberto neste momento."}
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -1254,14 +1272,14 @@ export default function FinanceiroPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rules.length === 0 ? (
+                      {selectedClientRules.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
                             Nenhuma regra automatica cadastrada.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        rules.map((rule) => (
+                        selectedClientRules.map((rule) => (
                           <TableRow key={rule.id}>
                             <TableCell className="text-sm text-muted-foreground">
                               {rule.client_id ? clientMap.get(rule.client_id)?.name || "Cliente removido" : "Global Grow"}
@@ -1440,7 +1458,23 @@ export default function FinanceiroPage() {
 
           </TabsContent>
         </Tabs>
+        ) : (
+          <Card className="border-border/70">
+            <CardContent className="flex flex-col items-center justify-center gap-4 p-10 text-center">
+              <div className="rounded-2xl bg-primary/8 p-3 text-primary">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-lg font-semibold">Nenhum cliente selecionado</h2>
+                <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                  Escolha um cliente no filtro acima para liberar a fila operacional, a leitura gerencial e os alertas consultivos. Assim a equipe analisa cada caixa de forma isolada e sem excesso de informacao.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );
 }
+
