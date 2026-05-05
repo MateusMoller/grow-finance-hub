@@ -39,7 +39,18 @@ const UsuariosPage = lazy(() => import("./pages/UsuariosPage"));
 const SugestoesPage = lazy(() => import("./pages/SugestoesPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+      staleTime: 3 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      retry: 1,
+    },
+  },
+});
 
 const PwaModeSync = () => {
   const location = useLocation();

@@ -1,5 +1,7 @@
 const FUNCTIONAL_PWA_PATH_PREFIXES = ["/app"] as const;
 const MANIFEST_LINK_ID = "grow-functional-pwa-manifest";
+const SERVICE_WORKER_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
+let lastServiceWorkerUpdateCheckAt = 0;
 
 export const normalizePwaBasePath = () => {
   const base = String(import.meta.env.BASE_URL || "/").trim();
@@ -75,7 +77,12 @@ const ensureGrowServiceWorker = async () => {
     });
   }
 
-  await registration.update();
+  const now = Date.now();
+  if (now - lastServiceWorkerUpdateCheckAt >= SERVICE_WORKER_UPDATE_INTERVAL_MS) {
+    lastServiceWorkerUpdateCheckAt = now;
+    await registration.update();
+  }
+
   await navigator.serviceWorker.ready;
 };
 

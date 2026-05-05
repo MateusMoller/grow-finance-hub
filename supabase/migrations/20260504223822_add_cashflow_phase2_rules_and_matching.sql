@@ -107,7 +107,13 @@ IMMUTABLE
 AS $$
   SELECT trim(
     regexp_replace(
-      lower(unaccent(COALESCE(_value, ''))),
+      lower(
+        translate(
+          COALESCE(_value, ''),
+          'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇç',
+          'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCc'
+        )
+      ),
       '[^a-z0-9]+',
       ' ',
       'g'

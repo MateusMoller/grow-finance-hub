@@ -7,26 +7,37 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
+  FileSpreadsheet,
   FileText,
   Filter,
-  Headset,
+  History,
   LayoutDashboard,
+  MessageSquare,
   MessagesSquare,
   Newspaper,
+  Send,
   Settings,
   Target,
   TrendingUp,
+  UserCog,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
 const sectionClass = "rounded-xl border bg-card p-5 space-y-4";
 const blockClass = "rounded-lg border p-4 space-y-2";
 
+interface ContextScreen {
+  context: string;
+  objective: string;
+  mainScreens: string[];
+}
+
 interface GlossaryItem {
   term: string;
   meaning: string;
-  example: string;
+  whereUsed: string;
 }
 
 interface ModuleGuide {
@@ -35,49 +46,93 @@ interface ModuleGuide {
   access: string;
   icon: LucideIcon;
   objective: string;
-  practicalGoal: string;
-  nomenclatures: Array<{ term: string; meaning: string }>;
-  possibilities: string[];
-  stepByStep: string[];
+  features: string[];
+  flow: string[];
   carePoints: string[];
 }
 
-const platformGoals = [
-  "Centralizar a rotina de operação, comercial e atendimento em um unico lugar.",
-  "Dar visibilidade real de prazo, responsavel e prioridade para evitar retrabalho.",
-  "Padronizar a forma de trabalhar, para qualquer pessoa da equipe continuar o processo sem perda de contexto.",
+interface PortalGuideItem {
+  tab: string;
+  purpose: string;
+  actions: string[];
+}
+
+interface FlowGuide {
+  title: string;
+  steps: string[];
+}
+
+const contextMap: ContextScreen[] = [
+  {
+    context: "Site publico (institucional)",
+    objective: "Atrair leads e apresentar servicos.",
+    mainScreens: ["Inicio", "Sobre", "Solucoes", "Contato", "Newsletter publica"],
+  },
+  {
+    context: "App interno (operacao Grow)",
+    objective: "Executar rotina, controlar prazos e operar clientes.",
+    mainScreens: [
+      "Dashboard",
+      "Calendario",
+      "Tarefas (Kanban/Lista)",
+      "Clientes",
+      "CRM",
+      "Chat Interno",
+      "Relatorios",
+      "Financeiro",
+      "Obrigacoes",
+      "E-continuo",
+      "Notificacoes",
+      "Usuarios",
+      "Sugestoes",
+      "Configuracoes",
+    ],
+  },
+  {
+    context: "Portal do cliente",
+    objective: "Cliente abre solicitacoes, acompanha retorno e envia documentos no mesmo fluxo.",
+    mainScreens: [
+      "Painel geral",
+      "Solicitacoes",
+      "Historico",
+      "Obrigacoes (envios do e-continuo)",
+      "Controle de caixa",
+      "Manual do usuario",
+      "Configuracoes",
+    ],
+  },
 ];
 
-const glossaryItems: GlossaryItem[] = [
+const glossary: GlossaryItem[] = [
   {
-    term: "Empresa",
-    meaning: "Cliente/empresa usada como contexto principal de leitura dos dados.",
-    example: "Quando voce escolhe uma empresa no topo, as telas mostram apenas esse recorte.",
+    term: "Solicitacao",
+    meaning: "Pedido formal aberto no sistema para um setor.",
+    whereUsed: "Portal do cliente e acompanhamento interno",
   },
   {
-    term: "Competência",
-    meaning: "Período de referência (AAAA-MM) para análise e operação.",
-    example: "2026-03 representa marco de 2026.",
+    term: "Pendencia do portal",
+    meaning: "Demanda que a equipe envia ao cliente para retorno (documento, prazo ou acao).",
+    whereUsed: "Cliente > detalhe > aba Pendencias",
   },
   {
-    term: "Lead",
-    meaning: "Contato potencial vindo de formulario, site ou outra origem comercial.",
-    example: "Uma pessoa preencheu o formulario institucional e entrou como lead.",
+    term: "Solicitacao vinculada",
+    meaning: "Registro de solicitacao conectado a uma pendencia para manter historico e comunicacao.",
+    whereUsed: "Pendencias criadas para cliente no app interno",
   },
   {
-    term: "Pipeline",
-    meaning: "Funil do CRM com as etapas da negociação ate o fechamento.",
-    example: "Oportunidade Nova -> Diagnóstico -> Proposta -> Negociação -> Fechado.",
+    term: "Chat contextual",
+    meaning: "Troca de mensagens dentro da propria solicitacao, sem perder contexto.",
+    whereUsed: "Historico de solicitacoes no portal",
   },
   {
-    term: "Status da tarefa",
-    meaning: "Etapa de execucao de uma tarefa dentro da operação.",
-    example: "Backlog, A Fazer, Em Andamento, Revisão, Concluído.",
+    term: "Competencia",
+    meaning: "Periodo de referencia para leitura de dados e filtros globais.",
+    whereUsed: "Dashboard, relatorios e filtros de operacao",
   },
   {
-    term: "Prioridade",
-    meaning: "Nivel de urgencia para executar uma demanda.",
-    example: "Alta prioridade deve entrar primeiro no planejamento diario.",
+    term: "Open Finance",
+    meaning: "Conexao para leitura de dados bancarios no modulo de caixa, sem pagamento pelo portal.",
+    whereUsed: "Portal (controle de caixa) e financeiro",
   },
 ];
 
@@ -85,424 +140,407 @@ const moduleGuides: ModuleGuide[] = [
   {
     id: "mod-dashboard",
     title: "Dashboard",
-    access: "Todos os perfis",
+    access: "Todos os perfis internos",
     icon: LayoutDashboard,
-    objective: "Ler rapidamente a saúde da operação e decidir o que atacar primeiro no dia.",
-    practicalGoal: "Sair da tela com prioridades claras em menos de 3 minutos.",
-    nomenclatures: [
-      { term: "Widget", meaning: "Card visual com um indicador específico." },
-      { term: "Consólidado", meaning: "Visão somada da equipe (mais relevante para admin)." },
-      { term: "Indicador", meaning: "Número que mede desempenho, prazo ou carga de trabalho." },
+    objective: "Ler rapidamente volume, alertas e prioridades do dia.",
+    features: [
+      "Visao consolidada por filtros globais (empresa e competencia).",
+      "Entrada para identificar gargalos operacionais.",
+      "Atalho para abrir modulos de origem e agir sem trocar fluxo.",
     ],
-    possibilities: [
-      "Ver produtividade por recorte de empresa/competência.",
-      "Identificar tarefas atrasadas e concentracoes de risco.",
-      "Comparar tendencia de performance ao longo do período.",
-    ],
-    stepByStep: [
-      "Aplicar Empresa e Competência no topo da tela.",
-      "Ler primeiro os cards de alerta e volume.",
-      "Entrar nas paginas de origem para agir nos itens criticos.",
+    flow: [
+      "Ajustar filtros globais.",
+      "Ler cards de risco e carga de trabalho.",
+      "Abrir o modulo de origem para tratar o item critico.",
     ],
     carePoints: [
-      "Não tomar decisão sem conferir se os filtros globais estão corretos.",
-      "Se o número parecer estranho, revisar origem dos dados (tarefas/CRM/formulários).",
-    ],
-  },
-  {
-    id: "mod-tarefas-kanban",
-    title: "Tarefas e Kanban",
-    access: "Todos os perfis",
-    icon: ClipboardList,
-    objective: "Controlar execucao com clareza de dono, prazo e próximo passo.",
-    practicalGoal: "Toda tarefa deve ter responsavel, data e status atual.",
-    nomenclatures: [
-      { term: "Backlog", meaning: "Fila de itens ainda não iniciados." },
-      { term: "Subtarefa", meaning: "Quebra de uma entrega grande em etapas menores." },
-      { term: "Revisão", meaning: "Fase de conferência antes de concluir." },
-    ],
-    possibilities: [
-      "Criar tarefas detalhadas por cliente e prioridade.",
-      "Mover cards no Kanban para atualizar o fluxo rapidamente.",
-      "Registrar histórico de alterações para rastreabilidade.",
-      "Usar desfazer em ações sensiveis para reduzir erro operacional.",
-    ],
-    stepByStep: [
-      "Criar tarefa com titulo objetivo (cliente + entrega).",
-      "Definir responsavel, prazo e prioridade.",
-      "Adicionar subtarefas quando a entrega tiver varias etapas.",
-      "Mover status diariamente conforme evolução real.",
-    ],
-    carePoints: [
-      "Evitar tarefa sem responsavel: vira gargalo invisivel.",
-      "Evitar titulo generico: dificulta delegacao e auditoria.",
+      "Nao analisar numero sem confirmar filtro ativo.",
+      "Atualizar tarefas e status para manter indicadores confiaveis.",
     ],
   },
   {
     id: "mod-calendario",
     title: "Calendario",
-    access: "Todos os perfis",
+    access: "Todos os perfis internos",
     icon: CalendarDays,
-    objective: "Transformar prazos em agenda visual para reduzir esquecimentos.",
-    practicalGoal: "Enxergar semanas criticas antes do vencimento.",
-    nomenclatures: [
-      { term: "Compromisso", meaning: "Evento agendado com horario/data." },
-      { term: "Janela de entrega", meaning: "Período disponível para executar sem conflito." },
-      { term: "Conflito de agenda", meaning: "Sobreposicao de demandas no mesmo horario." },
+    objective: "Controlar prazos e distribuir agenda sem conflito.",
+    features: [
+      "Leitura por periodo para antecipar semanas criticas.",
+      "Apoio para balancear volume entre equipe e prioridades.",
+      "Visao de compromissos recorrentes da operacao.",
     ],
-    possibilities: [
-      "Visualizar compromissos por período.",
-      "Planejar semana com antecedencia.",
-      "Ajustar distribuicao de carga da equipe.",
-    ],
-    stepByStep: [
-      "Abrir semana atual e identificar picos de volume.",
-      "Priorizar itens com prazo mais curto.",
-      "Reorganizar o que não cabe no dia, sem perder prazo final.",
+    flow: [
+      "Abrir semana atual.",
+      "Priorizar vencimentos de curto prazo.",
+      "Reorganizar agenda com base em capacidade real.",
     ],
     carePoints: [
-      "Evitar deixar tudo para o ultimo dia de competência.",
-      "Revisar agenda no início e no fim do expediente.",
+      "Evitar concentrar entregas no ultimo dia.",
+      "Revisar calendario no inicio e no fim do expediente.",
+    ],
+  },
+  {
+    id: "mod-tarefas",
+    title: "Tarefas (Kanban + Lista)",
+    access: "Todos os perfis internos",
+    icon: ClipboardList,
+    objective: "Executar a operacao em uma unica entrada, com visao de quadro e lista.",
+    features: [
+      "Modo Kanban como leitura principal da rotina.",
+      "Modo Lista para detalhamento e filtros pontuais.",
+      "Criacao rapida de tarefa e atualizacao de status em fluxo continuo.",
+    ],
+    flow: [
+      "Abrir em Kanban para leitura geral.",
+      "Criar tarefa com responsavel, prazo e prioridade.",
+      "Mover status conforme execucao real.",
+      "Usar Lista quando precisar de busca e recorte mais fino.",
+    ],
+    carePoints: [
+      "Nao deixar tarefa sem dono ou prazo.",
+      "Evitar titulo generico sem contexto operacional.",
     ],
   },
   {
     id: "mod-clientes",
     title: "Clientes",
-    access: "Todos os perfis",
+    access: "Todos os perfis internos",
     icon: Users,
-    objective: "Concentrar informações cadastrais e operacionais de cada cliente.",
-    practicalGoal: "Ter contexto completo do cliente antes de qualquer atendimento.",
-    nomenclatures: [
-      { term: "Cliente ativo", meaning: "Cliente em operação no período." },
-      { term: "Responsavel interno", meaning: "Pessoa da equipe que conduz a conta." },
-      { term: "Histórico", meaning: "Registro cronológico de mudanças e interacoes." },
+    objective: "Centralizar cadastro, dados operacionais e comunicacao com o cliente.",
+    features: [
+      "Dados gerais, mensais, cadastrais e obrigacoes por cliente.",
+      "Aba Pendencias para enviar demandas diretamente ao portal do cliente.",
+      "Criacao de pendencia com solicitacao vinculada e chat contextual.",
     ],
-    possibilities: [
-      "Consultar base de clientes por filtro.",
-      "Abrir detalhes para entender andamento e pendencias.",
-      "Manter informações atualizadas para evitar retrabalho no atendimento.",
-    ],
-    stepByStep: [
-      "Buscar cliente pelo nome ou filtro global.",
-      "Abrir detalhes e validar dados principais.",
-      "Registrar atualizacoes sempre que houver mudanca relevante.",
+    flow: [
+      "Abrir cliente e validar contexto da conta.",
+      "Criar pendencia com titulo, descricao, setor, tipo e prazo.",
+      "Sistema gera solicitacao vinculada e inicia canal de comunicacao.",
+      "Cliente responde no portal em historico unificado da solicitacao.",
     ],
     carePoints: [
-      "Não operar cliente com dados desatualizados.",
-      "Sempre registrar mudanças que impactam equipe e prazo.",
-    ],
-  },
-  {
-    id: "mod-formulários",
-    title: "Formularios",
-    access: "Todos os perfis",
-    icon: FileText,
-    objective: "Controlar entradas vindas do site e transformar solicitações em ação.",
-    practicalGoal: "Nenhum envio deve ficar sem tratamento.",
-    nomenclatures: [
-      { term: "Envio", meaning: "Formulario recebido pelo sistema." },
-      { term: "Origem", meaning: "Pagina ou canal de onde veio o preenchimento." },
-      { term: "Tag de captação", meaning: "Marcador usado para identificar lead vindo do site." },
-    ],
-    possibilities: [
-      "Listar envios recentes por tipo de formulario.",
-      "Priorizar contatos com maior potencial de conversão.",
-      "Alimentar o CRM com dados captados via site.",
-    ],
-    stepByStep: [
-      "Revisar envios novos no início do dia.",
-      "Validar nome, empresa, e-mail e mensagem.",
-      "Encaminhar para CRM/atendimento conforme objetivo do contato.",
-    ],
-    carePoints: [
-      "Não deixar contato sem retorno inicial.",
-      "Padronizar classificação de origem para manter relatórios confiáveis.",
+      "Se portal do cliente estiver bloqueado, liberar acesso antes de criar pendencia.",
+      "Sempre usar titulo e descricao objetivos para acelerar retorno do cliente.",
     ],
   },
   {
     id: "mod-crm",
     title: "CRM",
-    access: "Todos os perfis",
-    icon: TrendingUp,
-    objective: "Acompanhar negociacoes por etapa e aumentar conversão com previsibilidade.",
-    practicalGoal: "Saber quantas oportunidades existem, em que etapa estão e quanto podem gerar.",
-    nomenclatures: [
-      { term: "Etapa", meaning: "Posicao atual da negociação no funil." },
-      { term: "Fechado ganho", meaning: "Negociação convertida em cliente." },
-      { term: "Fechado perdido", meaning: "Negociação encerrada sem conversão." },
-      { term: "Meta", meaning: "Alvo de receita, ganhos ou conversão no período." },
-    ],
-    possibilities: [
-      "Cadastrar novas negociacoes manualmente.",
-      "Acompanhar leads captados via site com tag dedicada.",
-      "Mover etapa com histórico e possibilidade de desfazer.",
-      "Cadastrar metas de receita, ganhos e conversão.",
-    ],
-    stepByStep: [
-      "Criar negociação com empresa, contato e valor estimado.",
-      "Atualizar etapa sempre que houver interação comercial.",
-      "Revisar bloco de metas e ajustar quando necessario.",
-      "Analisar top negociacoes por valor para priorizar follow-up.",
-    ],
-    carePoints: [
-      "Não pular etapas sem registrar contexto.",
-      "Evitar manter negociacoes antigas sem próximo passo definido.",
-    ],
-  },
-  {
-    id: "mod-solicitacoes",
-    title: "Atendimento Portal",
-    access: "Admin e equipe operacional",
-    icon: Headset,
-    objective: "Organizar demandas de clientes em fila rastreavel.",
-    practicalGoal: "Responder com qualidade e sem perder prazos de atendimento.",
-    nomenclatures: [
-      { term: "Solicitação", meaning: "Pedido aberto pelo cliente no portal." },
-      { term: "Fila", meaning: "Lista de atendimentos aguardando ação da equipe." },
-      { term: "Encaminhamento", meaning: "Transferencia para o setor correto." },
-    ],
-    possibilities: [
-      "Acompanhar novos pedidos em ordem de prioridade.",
-      "Registrar andamento de cada atendimento.",
-      "Direcionar para responsavel correto rapidamente.",
-    ],
-    stepByStep: [
-      "Abrir solicitações novas e classificar por urgencia.",
-      "Definir responsavel e prazo de retorno.",
-      "Atualizar status ate a conclusao.",
-    ],
-    carePoints: [
-      "Não deixar solicitação sem dono.",
-      "Registrar retorno ao cliente antes de encerrar o atendimento.",
-    ],
-  },
-  {
-    id: "mod-chat",
-    title: "Chat Interno",
     access: "Todos os perfis internos",
-    icon: MessagesSquare,
-    objective: "Acelerar alinhamentos entre colaboradores sem perder contexto do trabalho.",
-    practicalGoal: "Usar grupo geral para comunicados e conversas pessoais para tratativas 1:1.",
-    nomenclatures: [
-      { term: "Conversa interna", meaning: "Troca entre funcionários dentro do sistema." },
-      { term: "Mensagem contextual", meaning: "Mensagem com objetivo claro e ação esperada." },
-      { term: "Registro", meaning: "Histórico que pode ser consultado depois." },
+    icon: TrendingUp,
+    objective: "Controlar funil comercial com historico e previsibilidade.",
+    features: [
+      "Pipeline por etapas com leitura de evolucao comercial.",
+      "Registro de oportunidades e metas.",
+      "Acompanhamento de avancos sem perder contexto de negociacao.",
     ],
-    possibilities: [
-      "Usar o Grupo Geral para avisos e alinhamentos da equipe inteira.",
-      "Abrir conversa pessoal (1:1) com qualquer usuário interno.",
-      "Alinhar duvidas operacionais em tempo real.",
-      "Compartilhar contexto rápido para continuidade de tarefas.",
-      "Reduzir dependencia de canais externos para assuntos internos.",
-    ],
-    stepByStep: [
-      "Enviar mensagem objetiva com contexto mínimo necessario.",
-      "Indicar prazo ou urgencia quando houver impacto em entrega.",
-      "Confirmar conclusao para fechar o assunto.",
+    flow: [
+      "Cadastrar oportunidade com contexto minimo obrigatorio.",
+      "Atualizar etapa a cada interacao comercial.",
+      "Revisar metas e priorizar oportunidades de maior impacto.",
     ],
     carePoints: [
-      "Evitar mensagens vagas sem ação esperada.",
-      "Usar o chat para alinhamento, não para substituir registro formal de tarefa.",
+      "Nao pular etapa sem justificativa registrada.",
+      "Fechar itens parados para evitar funil inflado.",
+    ],
+  },
+  {
+    id: "mod-chat-interno",
+    title: "Chat Interno",
+    access: "Perfis internos",
+    icon: MessagesSquare,
+    objective: "Acelerar alinhamento entre equipe sem depender de canal externo.",
+    features: [
+      "Conversas para comunicacao operacional em tempo real.",
+      "Historico para rastrear combinados e retornos.",
+      "Apoio ao handoff entre pessoas e setores.",
+    ],
+    flow: [
+      "Enviar mensagem com contexto e acao esperada.",
+      "Indicar urgencia quando houver impacto em prazo.",
+      "Confirmar conclusao para encerrar assunto.",
+    ],
+    carePoints: [
+      "Nao substituir tarefa por mensagem de chat.",
+      "Evitar mensagens vagas sem dono e sem prazo.",
     ],
   },
   {
     id: "mod-newsletter",
-    title: "Newsletter",
+    title: "Newsletter (admin)",
     access: "Admin",
     icon: Newspaper,
-    objective: "Publicar comunicados e conteudos para base de assinantes.",
-    practicalGoal: "Transformar conteúdo em relacionamento recorrente com leads e clientes.",
-    nomenclatures: [
-      { term: "Assinante", meaning: "Pessoa que se cadastrou para receber newsletters." },
-      { term: "Edicao", meaning: "Newsletter publicada em uma data especifica." },
-      { term: "Disparo", meaning: "Envio de e-mail para a base cadastrada." },
+    objective: "Publicar conteudo e disparar comunicacao para a base.",
+    features: [
+      "Criacao e edicao de newsletters com slug publico.",
+      "Publicacao e envio de e-mails para assinantes.",
+      "Upload de imagens e midias (imagem, video e audio) no editor.",
     ],
-    possibilities: [
-      "Cadastrar e editar newsletters.",
-      "Controlar base de assinantes ativa.",
-      "Disparar comunicação quando houver nova publicação.",
-    ],
-    stepByStep: [
-      "Criar a nova edicao com titulo e conteúdo claro.",
-      "Revisar texto e links antes de publicar.",
-      "Publicar e acompanhar retorno da base.",
+    flow: [
+      "Criar nova newsletter com titulo, slug, resumo e conteudo.",
+      "Adicionar midias pelo bloco 'Imagens e midias'.",
+      "Publicar e depois disparar envio de e-mails.",
     ],
     carePoints: [
-      "Evitar publicação sem revisão final.",
-      "Manter periodicidade para não esfriar a base de assinantes.",
+      "Revisar links e conteudo antes de publicar.",
+      "Nao disparar e-mail com newsletter ainda em rascunho.",
     ],
   },
   {
     id: "mod-relatorios",
-    title: "Relatórios",
+    title: "Relatorios",
     access: "Admin e liderancas",
     icon: BarChart3,
-    objective: "Converter dados da operação em análise gerencial para decisão.",
-    practicalGoal: "Ter visão de resultado por cliente, equipe e processo.",
-    nomenclatures: [
-      { term: "Categoria", meaning: "Grupo de relatórios (clientes, CRM, tarefas, etc.)." },
-      { term: "Período", meaning: "Intervalo de dados analisado." },
-      { term: "Exportacao", meaning: "Saida em formato como PDF ou XLSX." },
+    objective: "Transformar operacao em leitura gerencial.",
+    features: [
+      "Relatorios por area e periodo.",
+      "Comparacao de desempenho e volume.",
+      "Apoio para tomada de decisao e reunioes de acompanhamento.",
     ],
-    possibilities: [
-      "Gerar relatórios por area.",
-      "Exportar para compartilhamento em reunioes.",
-      "Acompanhar tendencias de desempenho.",
-    ],
-    stepByStep: [
-      "Escolher categoria e período.",
-      "Gerar relatório e validar dados principais.",
-      "Exportar no formato adequado para apresentacao.",
+    flow: [
+      "Definir categoria e periodo.",
+      "Gerar relatorio e validar filtros.",
+      "Exportar quando necessario para compartilhamento.",
     ],
     carePoints: [
-      "Sempre conferir filtros antes de gerar.",
-      "Não comparar periodos diferentes sem ajuste de contexto.",
+      "Conferir recorte de periodo antes de comparar meses.",
+      "Padronizar leitura por categoria para evitar interpretacao incorreta.",
     ],
   },
   {
-    id: "mod-notificacoes",
-    title: "Notificacoes",
-    access: "Todos os perfis",
-    icon: Bell,
-    objective: "Avisar riscos operacionais para ação rápida.",
-    practicalGoal: "Tratar pendencias no momento certo e evitar atraso acumulado.",
-    nomenclatures: [
-      { term: "Alta prioridade", meaning: "Risco imediato de prazo ou operação." },
-      { term: "Media prioridade", meaning: "Atenção necessaria no curto prazo." },
-      { term: "Marcar como lida", meaning: "Sinaliza que o alerta ja foi avaliado." },
+    id: "mod-financeiro",
+    title: "Financeiro",
+    access: "Perfis internos habilitados",
+    icon: Wallet,
+    objective: "Controlar entradas, saidas, classificacoes e pendencias financeiras.",
+    features: [
+      "Gestao de movimentacoes e status de tratamento.",
+      "Classificacao por regras para acelerar operacao.",
+      "Leitura integrada de origem, incluindo Open Finance.",
     ],
-    possibilities: [
-      "Visualizar alertas por criticidade.",
-      "Ir direto para origem do problema.",
-      "Limpar fila de alertas ja tratados.",
-    ],
-    stepByStep: [
-      "Comecar por alertas de alta prioridade.",
-      "Abrir item de origem e executar ação corretiva.",
-      "Marcar como lida apos tratar o problema.",
+    flow: [
+      "Revisar movimentos por status e categoria.",
+      "Aplicar ajustes de classificacao e aprovacoes.",
+      "Tratar pendencias para manter caixa consistente.",
     ],
     carePoints: [
-      "Não usar marcar como lida sem ação real.",
-      "Reservar 2 momentos do dia para revisar alertas.",
+      "Separar claramente pendencia de conciliacao x pendencia operacional.",
+      "Manter categorias padronizadas para analise confiavel.",
     ],
   },
   {
-    id: "mod-configuracoes",
-    title: "Configuracoes",
-    access: "Todos os perfis",
+    id: "mod-obrigacoes",
+    title: "Obrigacoes",
+    access: "Perfis internos habilitados",
+    icon: FileSpreadsheet,
+    objective: "Controlar obrigacoes e seus desdobramentos operacionais.",
+    features: [
+      "Leitura de obrigacoes por cliente, status e prazo.",
+      "Acompanhamento de execucao em conjunto com tarefas e calendario.",
+      "Base para rotinas recorrentes e previsao de carga.",
+    ],
+    flow: [
+      "Filtrar por cliente e competencia.",
+      "Validar status e prazo tecnico.",
+      "Encaminhar tratativas para tarefa quando necessario.",
+    ],
+    carePoints: [
+      "Nao deixar obrigacao sem status atualizado.",
+      "Evitar processar fora de prioridade de prazo tecnico.",
+    ],
+  },
+  {
+    id: "mod-econtinuo",
+    title: "E-continuo",
+    access: "Perfis internos habilitados",
+    icon: Send,
+    objective: "Gerenciar envios operacionais e historico por cliente.",
+    features: [
+      "Envio de arquivos para rotinas e-continuo.",
+      "Historico de envios para auditoria operacional.",
+      "Rastreio de data e tipo de arquivo enviado.",
+    ],
+    flow: [
+      "Selecionar cliente e preparar envio.",
+      "Publicar arquivo no fluxo adequado.",
+      "Confirmar no historico o registro da acao.",
+    ],
+    carePoints: [
+      "Validar categoria e arquivo antes do envio final.",
+      "Nao enviar arquivo sem relacao clara com a demanda.",
+    ],
+  },
+  {
+    id: "mod-sistema",
+    title: "Notificacoes, Usuarios, Sugestoes e Configuracoes",
+    access: "Varia por permissao",
     icon: Settings,
-    objective: "Ajustar perfil e preferências para trabalhar com mais eficiência.",
-    practicalGoal: "Manter conta organizada e preparada para o uso diario.",
-    nomenclatures: [
-      { term: "Perfil", meaning: "Dados basicos do usuário logado." },
-      { term: "Preferência", meaning: "Ajuste individual de uso e exibicao." },
-      { term: "Permissão", meaning: "Nivel de acesso conforme papel no sistema." },
+    objective: "Sustentar governanca, seguranca e melhoria continua.",
+    features: [
+      "Notificacoes para leitura de risco e prioridade.",
+      "Usuarios para controle de acessos (admin).",
+      "Sugestoes para registrar melhorias e gerar pendencias internas.",
+      "Configuracoes para dados de conta e preferencias.",
     ],
-    possibilities: [
-      "Revisar dados da conta.",
-      "Ajustar preferências de uso interno.",
-      "Garantir que o acesso esteja correto para a função.",
-    ],
-    stepByStep: [
-      "Abrir configuracoes e conferir informações pessoais.",
-      "Atualizar preferências que impactam rotina.",
-      "Validar com admin se houver limitacao inesperada de acesso.",
+    flow: [
+      "Tratar alertas prioritarios no inicio do dia.",
+      "Ajustar acessos de usuarios quando necessario.",
+      "Registrar sugestoes com contexto e anexo quando existir evidencias.",
+      "Revisar configuracoes de conta periodicamente.",
     ],
     carePoints: [
-      "Não compartilhar credenciais.",
-      "Reportar qualquer acesso indevido imediatamente.",
+      "Nao marcar notificacao como lida sem acao.",
+      "Aplicar principio de menor privilegio em acessos.",
     ],
   },
 ];
 
-const practicalFlows = [
+const portalGuide: PortalGuideItem[] = [
   {
-    title: "Fluxo comercial completo (site -> CRM -> fechamento)",
-    steps: [
-      "Cliente preenche formulario no site.",
-      "Lead entra na base com origem de captação via site.",
-      "Equipe qualifica e acompanha no CRM por etapa.",
-      "Negociação evolui para fechado ganho ou perdido com histórico.",
+    tab: "Painel geral",
+    purpose: "Resumo rapido do que esta aguardando acao do cliente.",
+    actions: [
+      "Ver pendencias e atualizacoes recentes.",
+      "Abrir historico ou iniciar nova solicitacao sem trocar contexto.",
     ],
   },
   {
-    title: "Fluxo operacional diario (tarefas -> calendário -> notificações)",
-    steps: [
-      "Planejar o dia por tarefas prioritarias.",
-      "Distribuir agenda no calendário para evitar conflitos.",
-      "Executar e atualizar status no Kanban/Tarefas.",
-      "Tratar alertas de notificação para não acumular atraso.",
+    tab: "Solicitacoes",
+    purpose: "Abrir pedido com setor, motivo e campos guiados.",
+    actions: [
+      "Selecionar setor e motivo para liberar campos corretos.",
+      "Adicionar contexto adicional e anexar arquivos.",
+      "Enviar solicitacao com rastreio de status no historico.",
     ],
   },
   {
-    title: "Fluxo de atendimento (portal -> responsavel -> retorno)",
-    steps: [
-      "Nova solicitação chega no Atendimento Portal.",
-      "Responsavel e prazo sao definidos.",
-      "Atendimento e atualizado ate conclusao.",
-      "Retorno final ao cliente e registro interno do encerramento.",
+    tab: "Historico",
+    purpose: "Acompanhar cada pedido com status, mensagens e documentos.",
+    actions: [
+      "Buscar solicitacao por titulo/categoria/setor.",
+      "Abrir detalhe e responder no chat da propria solicitacao.",
+      "Enviar documentos vinculados ao pedido em andamento.",
+    ],
+  },
+  {
+    tab: "Obrigacoes",
+    purpose: "Consultar envios de e-continuo disponibilizados para o cliente.",
+    actions: [
+      "Visualizar historico automatico de envios.",
+      "Baixar documentos enviados pela equipe.",
+    ],
+  },
+  {
+    tab: "Controle de caixa",
+    purpose: "Gerir caixa e conectores financeiros quando o modulo estiver liberado.",
+    actions: [
+      "Registrar entradas e saidas.",
+      "Acompanhar saude financeira e pendencias de conciliacao.",
+      "Conectar Open Finance para leitura de extratos (sem pagamento no portal).",
+    ],
+  },
+  {
+    tab: "Configuracoes",
+    purpose: "Manter dados da conta e seguranca de acesso.",
+    actions: [
+      "Atualizar senha do portal.",
+      "Solicitar atualizacao cadastral e suporte de acesso.",
+      "Ver status de liberacao do modulo de caixa.",
     ],
   },
 ];
 
-const dailyChecklist = [
-  "5 min - Revisar notificações de alta prioridade.",
-  "5 min - Atualizar status de tarefas e Kanban com o que foi executado.",
-  "3 min - Revisar CRM e registrar avancos comerciais do dia.",
-  "2 min - Garantir que próximas ações de amanha estão claras.",
+const practicalFlows: FlowGuide[] = [
+  {
+    title: "Fluxo novo: pendencia do cliente com chat vinculado",
+    steps: [
+      "Equipe interna cria pendencia em Cliente > aba Pendencias.",
+      "Sistema cria solicitacao vinculada automaticamente.",
+      "Descricao inicial vira primeira mensagem do chat contextual.",
+      "Cliente responde no Portal > Historico da solicitacao, com anexos no mesmo registro.",
+    ],
+  },
+  {
+    title: "Fluxo de solicitacao do portal (fim a fim)",
+    steps: [
+      "Cliente abre Portal > Solicitacoes e escolhe setor + motivo.",
+      "Portal mostra campos estruturados do motivo selecionado.",
+      "Pedido entra no Historico com status e arquivos vinculados.",
+      "Equipe responde e cliente acompanha no mesmo card de solicitacao.",
+    ],
+  },
+  {
+    title: "Fluxo de newsletter com midias",
+    steps: [
+      "Admin abre Newsletter, cria ou edita edicao.",
+      "Envia imagem/video/audio no bloco de midias do editor.",
+      "Publica newsletter e dispara envio de e-mails quando aprovado.",
+    ],
+  },
+];
+
+const internalDailyChecklist = [
+  "Revisar notificacoes de alta prioridade.",
+  "Atualizar status de tarefas (kanban/lista) com o que foi executado.",
+  "Conferir pendencias de clientes que aguardam retorno.",
+  "Registrar avancos comerciais no CRM.",
+  "Encerrar dia com proximas acoes claras para amanha.",
+];
+
+const portalDailyChecklist = [
+  "Abrir Painel geral para ver o que esta pendente.",
+  "Responder solicitacoes em andamento no Historico.",
+  "Anexar documentos sempre vinculando ao pedido correto.",
+  "Acompanhar status de retorno da equipe antes de abrir novo pedido repetido.",
 ];
 
 export default function ManualPage() {
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-6xl">
+      <div className="max-w-6xl space-y-6">
         <div className="rounded-2xl border bg-card p-6 space-y-4">
           <div className="flex items-start gap-3">
             <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
               <BookOpenText className="h-5 w-5 text-primary" />
             </div>
             <div className="space-y-1">
-              <h1 className="font-heading text-2xl font-bold">Manual de uso da plataforma</h1>
+              <h1 className="font-heading text-2xl font-bold">Manual de uso - Grow Finance Hub</h1>
               <p className="text-sm text-muted-foreground">
-                Versao mastigada: o que cada area faz, para que serve, como chamar as coisas e quais resultados voce consegue gerar.
+                Versao atualizada com as telas e fluxos ativos do sistema, incluindo portal do cliente, pendencias vinculadas e newsletter com midias.
               </p>
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
-            <a href="#objetivos" className="rounded-lg border p-3 hover:bg-muted">
-              1. Objetivos
-            </a>
-            <a href="#nomenclaturas" className="rounded-lg border p-3 hover:bg-muted">
-              2. Nomenclaturas
-            </a>
-            <a href="#funcionalidades" className="rounded-lg border p-3 hover:bg-muted">
-              3. Funcionalidades
-            </a>
-            <a href="#fluxos" className="rounded-lg border p-3 hover:bg-muted">
-              4. Fluxos prontos
-            </a>
-            <a href="#rotina" className="rounded-lg border p-3 hover:bg-muted">
-              5. Rotina diaria
-            </a>
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+            <a href="#mapa" className="rounded-lg border p-3 hover:bg-muted">1. Mapa do sistema</a>
+            <a href="#nomenclaturas" className="rounded-lg border p-3 hover:bg-muted">2. Nomenclaturas</a>
+            <a href="#modulos" className="rounded-lg border p-3 hover:bg-muted">3. Modulos internos</a>
+            <a href="#portal" className="rounded-lg border p-3 hover:bg-muted">4. Portal do cliente</a>
+            <a href="#fluxos" className="rounded-lg border p-3 hover:bg-muted">5. Fluxos ponta a ponta</a>
           </div>
 
           <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-            Como usar este manual: leia primeiro Objetivos e Nomenclaturas. Depois abra apenas os modulos que fazem parte da sua rotina.
+            Regra de uso: sempre trabalhe no modulo dono do fluxo. Evite tirar a demanda do contexto original.
           </div>
         </div>
 
-        <section id="objetivos" className={sectionClass}>
+        <section id="mapa" className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" /> 1) Objetivos da plataforma
+            <Target className="h-5 w-5 text-primary" /> 1) Mapa atual do sistema
           </h2>
           <p className="text-sm text-muted-foreground">
-            Objetivo central: transformar trabalho disperso em processo previsivel, com dono, prazo e histórico.
+            O produto esta separado por contexto para reduzir friccao e manter seguranca operacional.
           </p>
-          <div className="grid md:grid-cols-3 gap-3">
-            {platformGoals.map((goal) => (
-              <div key={goal} className={blockClass}>
-                <p className="text-sm">{goal}</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {contextMap.map((item) => (
+              <div key={item.context} className={blockClass}>
+                <p className="text-sm font-semibold">{item.context}</p>
+                <p className="text-sm text-muted-foreground">{item.objective}</p>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                  {item.mainScreens.map((screen) => (
+                    <li key={screen}>{screen}</li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
@@ -510,32 +548,30 @@ export default function ManualPage() {
 
         <section id="nomenclaturas" className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <Filter className="h-5 w-5 text-primary" /> 2) Nomenclaturas (dicionario rapido)
+            <Filter className="h-5 w-5 text-primary" /> 2) Nomenclaturas operacionais
           </h2>
           <p className="text-sm text-muted-foreground">
-            Esta secao traduz os nomes mais usados no sistema para evitar duvida entre equipe e lideranca.
+            Use estes termos como padrao para alinhar atendimento, operacao e cliente no mesmo idioma.
           </p>
-          <div className="grid md:grid-cols-2 gap-3">
-            {glossaryItems.map((item) => (
+          <div className="grid gap-3 md:grid-cols-2">
+            {glossary.map((item) => (
               <div key={item.term} className={blockClass}>
                 <p className="text-sm font-semibold">{item.term}</p>
                 <p className="text-sm text-muted-foreground">{item.meaning}</p>
-                <p className="text-xs text-muted-foreground">
-                  Exemplo prático: {item.example}
-                </p>
+                <p className="text-xs text-muted-foreground">Onde aparece: {item.whereUsed}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="funcionalidades" className={sectionClass}>
+        <section id="modulos" className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-primary" /> 3) Funcionalidades separadas por modulo
+            <CheckCircle2 className="h-5 w-5 text-primary" /> 3) Guia dos modulos internos
           </h2>
           <p className="text-sm text-muted-foreground">
-            Cada modulo abaixo esta separado com objetivo, nomenclaturas, possibilidades e passo a passo.
+            Este bloco cobre as telas da barra lateral interna e o fluxo recomendado de uso por modulo.
           </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+          <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {moduleGuides.map((module, index) => (
               <a
                 key={module.id}
@@ -556,74 +592,80 @@ export default function ManualPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Icon className="h-5 w-5 text-primary" />
                 <h3 className="font-heading text-lg font-semibold">{module.title}</h3>
-                <Badge variant="secondary" className="text-[11px]">
-                  {module.access}
-                </Badge>
+                <Badge variant="secondary" className="text-[11px]">{module.access}</Badge>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className={blockClass}>
                   <p className="text-sm font-semibold">Objetivo do modulo</p>
                   <p className="text-sm text-muted-foreground">{module.objective}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Resultado esperado: {module.practicalGoal}
-                  </p>
                 </div>
 
                 <div className={blockClass}>
-                  <p className="text-sm font-semibold">Nomenclaturas do modulo</p>
-                  <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                    {module.nomenclatures.map((item) => (
-                      <li key={item.term}>
-                        <span className="font-medium text-foreground">{item.term}:</span> {item.meaning}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className={blockClass}>
-                  <p className="text-sm font-semibold">Possibilidades (o que voce consegue fazer)</p>
-                  <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                    {module.possibilities.map((item) => (
+                  <p className="text-sm font-semibold">O que voce consegue fazer</p>
+                  <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                    {module.features.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
                 </div>
 
                 <div className={blockClass}>
-                  <p className="text-sm font-semibold">Passo a passo recomendado</p>
-                  <ol className="list-decimal pl-5 space-y-1 text-sm text-muted-foreground">
-                    {module.stepByStep.map((item) => (
+                  <p className="text-sm font-semibold">Fluxo recomendado</p>
+                  <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+                    {module.flow.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ol>
                 </div>
-              </div>
 
-              <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-1">Pontos de atencao</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {module.carePoints.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+                <div className={blockClass}>
+                  <p className="text-sm font-semibold">Pontos de atencao</p>
+                  <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                    {module.carePoints.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </section>
           );
         })}
 
-        <section id="fluxos" className={sectionClass}>
+        <section id="portal" className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" /> 4) Fluxos prontos (de ponta a ponta)
+            <Users className="h-5 w-5 text-primary" /> 4) Portal do cliente - abas e uso
           </h2>
           <p className="text-sm text-muted-foreground">
-            Use estes roteiros como padrão inicial para manter consistencia entre pessoas e setores.
+            O portal foi organizado para cliente resolver solicitacoes, documentos e retorno no mesmo ambiente.
           </p>
-          <div className="grid lg:grid-cols-3 gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            {portalGuide.map((item) => (
+              <div key={item.tab} className={blockClass}>
+                <p className="text-sm font-semibold">{item.tab}</p>
+                <p className="text-sm text-muted-foreground">{item.purpose}</p>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                  {item.actions.map((action) => (
+                    <li key={action}>{action}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="fluxos" className={sectionClass}>
+          <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
+            <History className="h-5 w-5 text-primary" /> 5) Fluxos ponta a ponta (atualizados)
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Estes fluxos refletem o comportamento atual das telas e sao o padrao recomendado de operacao.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-3">
             {practicalFlows.map((flow) => (
               <div key={flow.title} className={blockClass}>
                 <p className="text-sm font-semibold">{flow.title}</p>
-                <ol className="list-decimal pl-5 space-y-1 text-sm text-muted-foreground">
+                <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
                   {flow.steps.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
@@ -633,36 +675,83 @@ export default function ManualPage() {
           </div>
         </section>
 
-        <section id="rotina" className={sectionClass}>
+        <section className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <CalendarDays className="h-5 w-5 text-primary" /> 5) Rotina diaria recomendada (15 minutos)
+            <CalendarDays className="h-5 w-5 text-primary" /> Rotina diaria recomendada
           </h2>
-          <ol className="list-decimal pl-5 space-y-2 text-sm">
-            {dailyChecklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ol>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className={blockClass}>
+              <p className="text-sm font-semibold">Time interno</p>
+              <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+                {internalDailyChecklist.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ol>
+            </div>
+            <div className={blockClass}>
+              <p className="text-sm font-semibold">Cliente no portal</p>
+              <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+                {portalDailyChecklist.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ol>
+            </div>
+          </div>
           <div className="rounded-lg border bg-primary/5 p-3 text-sm">
-            Resultado esperado: mais previsibilidade, menos urgencia de ultima hora e melhor continuidade entre colaboradores.
+            Resultado esperado: menos retrabalho, historico completo por demanda e retorno mais rapido entre cliente e equipe.
           </div>
         </section>
 
         <section className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary" /> Guia rapido para novos usuários
+            <Bell className="h-5 w-5 text-primary" /> Referencia rapida de telas
           </h2>
-          <p className="text-sm text-muted-foreground">
-            Se a pessoa entrou hoje na equipe, este e o caminho mais simples para onboarding:
+          <div className="grid gap-2 text-sm md:grid-cols-2">
+            <div className="rounded-lg border p-3">Dashboard e indicadores: <span className="text-muted-foreground">/app</span></div>
+            <div className="rounded-lg border p-3">Calendario: <span className="text-muted-foreground">/app/calendario</span></div>
+            <div className="rounded-lg border p-3">Tarefas (kanban/lista): <span className="text-muted-foreground">/app/tarefas</span></div>
+            <div className="rounded-lg border p-3">Clientes e pendencias: <span className="text-muted-foreground">/app/clientes</span></div>
+            <div className="rounded-lg border p-3">CRM: <span className="text-muted-foreground">/app/crm</span></div>
+            <div className="rounded-lg border p-3">Chat interno: <span className="text-muted-foreground">/app/chat-interno</span></div>
+            <div className="rounded-lg border p-3">Newsletter admin: <span className="text-muted-foreground">/app/newsletter</span></div>
+            <div className="rounded-lg border p-3">Relatorios: <span className="text-muted-foreground">/app/relatorios</span></div>
+            <div className="rounded-lg border p-3">Financeiro: <span className="text-muted-foreground">/app/financeiro</span></div>
+            <div className="rounded-lg border p-3">Obrigacoes: <span className="text-muted-foreground">/app/obrigacoes</span></div>
+            <div className="rounded-lg border p-3">E-continuo: <span className="text-muted-foreground">/app/econtinuo</span></div>
+            <div className="rounded-lg border p-3">Portal do cliente: <span className="text-muted-foreground">/app/portal</span></div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Observacao: atalhos antigos como /app/solicitacoes, /app/kanban, /app/comercial e /app/acessorias redirecionam para os modulos atuais.
           </p>
-          <ol className="list-decimal pl-5 space-y-2 text-sm">
-            <li>Ler Objetivos e Nomenclaturas do manual.</li>
-            <li>Treinar Tarefas/Kanban e Notificacoes no primeiro dia.</li>
-            <li>Treinar modulo principal da função no segundo dia (CRM, Atendimento ou Clientes).</li>
-            <li>Validar entendimento com um fluxo real supervisionado.</li>
+        </section>
+
+        <section className={sectionClass}>
+          <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" /> Onboarding rapido (novo usuario)
+          </h2>
+          <ol className="list-decimal pl-5 text-sm space-y-2">
+            <li>Comecar por Dashboard, Tarefas e Clientes para entender o fluxo central.</li>
+            <li>Treinar criacao de pendencia no cliente com solicitacao vinculada.</li>
+            <li>Treinar resposta no historico do portal para fechar o ciclo cliente x equipe.</li>
+            <li>Se for admin, validar tambem Newsletter com upload de midias e modulo de Usuarios.</li>
           </ol>
-          <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground flex items-start gap-2">
-            <Bell className="h-4 w-4 shrink-0 mt-0.5" />
-            Sempre que surgir duvida de termo ou processo, atualize este manual para manter o mesmo idioma operacional em toda a empresa.
+          <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+            Sempre que uma tela mudar, atualize este manual junto da entrega para manter processo, linguagem e treinamento alinhados.
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-card p-5">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline" className="gap-1"><LayoutDashboard className="h-3 w-3" /> Dashboard</Badge>
+            <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" /> Clientes</Badge>
+            <Badge variant="outline" className="gap-1"><Newspaper className="h-3 w-3" /> Newsletter</Badge>
+            <Badge variant="outline" className="gap-1"><Wallet className="h-3 w-3" /> Financeiro</Badge>
+            <Badge variant="outline" className="gap-1"><UserCog className="h-3 w-3" /> Usuarios</Badge>
+            <Badge variant="outline" className="gap-1"><MessagesSquare className="h-3 w-3" /> Chat</Badge>
+            <Badge variant="outline" className="gap-1"><BarChart3 className="h-3 w-3" /> Relatorios</Badge>
+            <Badge variant="outline" className="gap-1"><TrendingUp className="h-3 w-3" /> CRM</Badge>
+            <Badge variant="outline" className="gap-1"><Send className="h-3 w-3" /> E-continuo</Badge>
+            <Badge variant="outline" className="gap-1"><Settings className="h-3 w-3" /> Configuracoes</Badge>
           </div>
         </section>
       </div>

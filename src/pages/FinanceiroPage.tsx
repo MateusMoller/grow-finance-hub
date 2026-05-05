@@ -56,7 +56,7 @@ import {
 } from "@/lib/cashflow";
 
 type QueueFilter = "all" | "pending_review" | "pending_reconciliation" | "overdue" | "without_account" | "possible_duplicates";
-type FinanceLayer = "operational" | "conciliation" | "managerial";
+type FinanceLayer = "operational" | "managerial" | "consultive";
 
 type ClientFinanceRow = Pick<Tables<"clients">, "id" | "name" | "sector" | "status" | "portal_cashflow_enabled">;
 
@@ -276,7 +276,8 @@ export default function FinanceiroPage() {
     [healthSnapshots],
   );
   const activeConsultiveAlertsCount = useMemo(() => consultiveAlerts.length, [consultiveAlerts]);
-  const highlightedConsultiveAlerts = useMemo(() => consultiveAlerts.slice(0, 3), [consultiveAlerts]);
+  const activeRulesCount = useMemo(() => rules.filter((rule) => rule.is_active).length, [rules]);
+  const globalRulesCount = useMemo(() => rules.filter((rule) => !rule.client_id && rule.is_active).length, [rules]);
 
   const handleReferenceMonthChange = (value: string) => {
     setReferenceMonth(value);
@@ -498,6 +499,35 @@ export default function FinanceiroPage() {
     () => (healthSnapshots.length > 0 ? criticalClientsCount + attentionClientsCount : clientRiskRows.length),
     [attentionClientsCount, clientRiskRows.length, criticalClientsCount, healthSnapshots.length],
   );
+  const operationalCards = useMemo(
+    () => [
+      {
+        key: "pending_review" as QueueFilter,
+        title: "Revisao",
+        value: queueCounts.pendingReview,
+        helper: "Classificar e aprovar o que ainda esta sem decisao.",
+      },
+      {
+        key: "pending_reconciliation" as QueueFilter,
+        title: "Conciliacao",
+        value: queueCounts.pendingReconciliation,
+        helper: "Tratar extratos e importacoes que ainda nao fecharam.",
+      },
+      {
+        key: "overdue" as QueueFilter,
+        title: "Vencidos",
+        value: queueCounts.overdue,
+        helper: "Prioridade alta para revisar o que ficou em aberto.",
+      },
+      {
+        key: "possible_duplicates" as QueueFilter,
+        title: "Duplicidade",
+        value: queueCounts.possibleDuplicates,
+        helper: "Conferir itens suspeitos antes de distorcer o caixa.",
+      },
+    ],
+    [queueCounts],
+  );
 
   const resetRuleForm = () => {
     setNewRuleClientId("global");
@@ -570,9 +600,9 @@ export default function FinanceiroPage() {
               <div className="max-w-3xl space-y-3">
                 <Badge className="w-fit bg-sky-400/20 text-sky-100 hover:bg-sky-400/20">Financeiro Grow</Badge>
                 <div>
-                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Operacao, conciliacao e visao gerencial em uma unica fila.</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Operacao clara, gestao objetiva e acao consultiva no mesmo lugar.</h1>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
-                    Use esta tela para revisar o caixa multi-cliente, detectar risco com antecedencia e sustentar o acompanhamento consultivo.
+                    Comece pela fila operacional, avance para a leitura gerencial e trate os riscos na aba consultiva.
                   </p>
                 </div>
               </div>
@@ -600,68 +630,33 @@ export default function FinanceiroPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
-                title="Pendentes de revisao"
-                value={String(queueCounts.pendingReview)}
-                helper="Lancamentos aguardando classificacao ou aprovacao."
-                tone={queueCounts.pendingReview > 0 ? "warning" : "success"}
-              />
-              <MetricCard
-                title="Pendentes de conciliacao"
-                value={String(queueCounts.pendingReconciliation)}
-                helper="Itens bancarios ainda nao tratados operacionalmente."
-                tone={queueCounts.pendingReconciliation > 0 ? "warning" : "success"}
+                title="Pendencias operacionais"
+                value={String(queueCounts.pendingReview + queueCounts.pendingReconciliation)}
+                helper="Tudo que precisa de revisao ou conciliacao agora."
+                tone={queueCounts.pendingReview + queueCounts.pendingReconciliation > 0 ? "warning" : "success"}
               />
               <MetricCard
                 title="Vencidos"
                 value={String(queueCounts.overdue)}
-                helper="Previstos com vencimento passado."
+                helper="Itens previstos com vencimento passado."
                 tone={queueCounts.overdue > 0 ? "warning" : "success"}
-              />
-              <MetricCard
-                title="Duplicidade suspeita"
-                value={String(queueCounts.possibleDuplicates)}
-                helper="Mesmo cliente, conta, valor, origem e descricao."
-                tone={queueCounts.possibleDuplicates > 0 ? "warning" : "success"}
-              />
-              <MetricCard
-                title="Projecao 7 dias"
-                value={cashflowCurrencyFormatter.format(dashboardMetrics.projectedSeven)}
-                helper="Saldo projetado de curtissimo prazo."
-                tone={dashboardMetrics.projectedSeven >= 0 ? "success" : "danger"}
               />
               <MetricCard
                 title="Projecao 15 dias"
                 value={cashflowCurrencyFormatter.format(dashboardMetrics.projectedFifteen)}
-                helper="Janela intermediaria para acao consultiva."
+                helper="Janela curta para negociar prazo, aporte ou prioridade."
                 tone={dashboardMetrics.projectedFifteen >= 0 ? "success" : "danger"}
+              />
+              <MetricCard
+                title="Alertas consultivos"
+                value={String(activeConsultiveAlertsCount)}
+                helper="Casos que pedem acao da equipe com o cliente."
+                tone={activeConsultiveAlertsCount > 0 ? "warning" : "success"}
               />
             </div>
 
-            {highlightedConsultiveAlerts.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-                {highlightedConsultiveAlerts.map((alert) => {
-                  const client = clientMap.get(alert.client_id);
-                  const severity = alertSeverityMeta[alert.severity];
-
-                  return (
-                    <div key={alert.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-slate-50">{alert.title}</p>
-                        <Badge variant="outline" className={severity.className}>
-                          {severity.label}
-                        </Badge>
-                      </div>
-                      <p className="mt-2 text-xs leading-relaxed text-slate-300">{alert.message}</p>
-                      <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                        {client?.name || "Cliente"} • {formatDate(alert.created_at.slice(0, 10))}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 
@@ -669,9 +664,9 @@ export default function FinanceiroPage() {
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <CardTitle className="text-base">Filtros e recorte</CardTitle>
+                <CardTitle className="text-base">Recorte e busca</CardTitle>
                 <CardDescription>
-                  Controle periodo, cliente, conta, tipo, origem, categoria, situacao e conciliacao.
+                  Use os filtros quando precisar investigar um cliente, conta ou periodo especifico.
                 </CardDescription>
               </div>
               <Button type="button" variant="outline" className="gap-2" onClick={() => void fetchFinanceData()} disabled={refreshing}>
@@ -808,22 +803,43 @@ export default function FinanceiroPage() {
         <Tabs value={activeLayer} onValueChange={(value) => setActiveLayer(value as FinanceLayer)}>
           <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-3">
             <TabsTrigger value="operational" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
-              Operacional
+              Operacao
             </TabsTrigger>
-            <TabsTrigger value="conciliation" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
-              Conciliacao
+            <TabsTrigger value="consultive" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
+              Consultivo
             </TabsTrigger>
             <TabsTrigger value="managerial" className="rounded-xl border px-4 py-3 data-[state=active]:border-primary">
-              Visao gerencial
+              Gestao
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="operational" className="space-y-6">
             <Card className="border-border/70">
               <CardHeader className="pb-3">
+                <CardTitle className="text-base">Comece por aqui</CardTitle>
+                <CardDescription>Escolha a fila principal do dia e entre direto no trabalho operacional.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {operationalCards.map((card) => (
+                  <button
+                    key={card.key}
+                    type="button"
+                    onClick={() => setQueueFilter(card.key)}
+                    className={`rounded-2xl border p-4 text-left transition ${queueFilter === card.key ? "border-primary bg-primary/5" : "border-border/70 hover:border-primary/40"}`}
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{card.title}</p>
+                    <p className={`mt-2 text-2xl font-semibold ${card.value > 0 ? "text-amber-600" : "text-emerald-600"}`}>{card.value}</p>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{card.helper}</p>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70">
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">Fila operacional</CardTitle>
                 <CardDescription>
-                  Use as filas para tratar revisao, conciliacao, vencidos, sem conta e suspeitas de duplicidade.
+                  Trate revisao, conciliacao, vencidos, sem conta e duplicidade sem sair da mesma fila.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -951,31 +967,31 @@ export default function FinanceiroPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="conciliation" className="space-y-6">
+          <TabsContent value="consultive" className="space-y-6">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
-                title="Pendentes de revisao"
-                value={String(conciliationEntries.filter((entry) => entry.review_status === "pending_review").length)}
-                helper="Itens que ainda precisam de classificacao ou aprovacao."
+                title="Alertas ativos"
+                value={String(activeConsultiveAlertsCount)}
+                helper="Casos com risco, falha de processo ou necessidade de contato."
                 tone="warning"
               />
               <MetricCard
-                title="Classificados"
-                value={String(conciliationEntries.filter((entry) => entry.review_status === "classified").length)}
-                helper="Sugestoes geradas, aguardando confirmacao da equipe."
+                title="Clientes criticos"
+                value={String(criticalClientsCount)}
+                helper="Caixa em situacao mais sensivel no curto prazo."
+                tone={criticalClientsCount > 0 ? "danger" : "success"}
+              />
+              <MetricCard
+                title="Clientes em atencao"
+                value={String(attentionClientsCount)}
+                helper="Clientes que pedem acompanhamento antes de virar crise."
                 tone="warning"
               />
               <MetricCard
-                title="Pendentes de conciliacao"
-                value={String(conciliationEntries.filter((entry) => entry.reconciliation_status === "pending").length)}
-                helper="Extratos e importacoes aguardando tratamento."
-                tone="warning"
-              />
-              <MetricCard
-                title="Sugeridos"
-                value={String(conciliationEntries.filter((entry) => entry.reconciliation_status === "suggested").length)}
-                helper="Casos com indicio de conciliacao automatica."
-                tone="warning"
+                title="Regras ativas"
+                value={String(activeRulesCount)}
+                helper={`${globalRulesCount} globais e ${Math.max(activeRulesCount - globalRulesCount, 0)} por cliente.`}
+                tone={activeRulesCount > 0 ? "success" : "default"}
               />
             </div>
 
@@ -983,10 +999,55 @@ export default function FinanceiroPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <ShieldCheck className="h-4 w-4 text-primary" />
-                  Fila de conciliacao
+                  Alertas e proximos passos
                 </CardTitle>
                 <CardDescription>
-                  Itens importados ou bancarios que ainda precisam de revisao operacional.
+                  O consultivo resume onde a equipe precisa agir com prioridade e contexto.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {consultiveAlerts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    Nenhum alerta consultivo ativo neste momento.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {consultiveAlerts.slice(0, 8).map((alert) => {
+                      const client = clientMap.get(alert.client_id);
+                      const severity = alertSeverityMeta[alert.severity];
+
+                      return (
+                        <div key={alert.id} className="rounded-2xl border border-border/70 p-4">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-medium">{alert.title}</p>
+                                <Badge variant="outline" className={severity.className}>
+                                  {severity.label}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{alert.message}</p>
+                            </div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                              {client?.name || "Cliente"} • {formatDate(alert.created_at.slice(0, 10))}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Itens bancarios que ainda afetam a operacao
+                </CardTitle>
+                <CardDescription>
+                  Importacoes e Open Finance que seguem exigindo tratamento antes de estabilizar o processo.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1055,9 +1116,79 @@ export default function FinanceiroPage() {
 
             <Card className="border-border/70">
               <CardHeader className="pb-3">
+                <CardTitle className="text-base">Clientes com maior atencao</CardTitle>
+                <CardDescription>
+                  Veja quem exige contato, acompanhamento ou reorganizacao antes de o risco aumentar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {clientRiskRows.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    Nenhum cliente com sinais de atencao no recorte atual.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border">
+                    <Table className="min-w-[1080px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Setor</TableHead>
+                          <TableHead>Saude</TableHead>
+                          <TableHead className="text-right">Saldo atual</TableHead>
+                          <TableHead className="text-right">Proj. 30 dias</TableHead>
+                          <TableHead className="text-right">Alertas</TableHead>
+                          <TableHead className="text-right">Pendencias</TableHead>
+                          <TableHead className="text-right">Risco</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {clientRiskRows.slice(0, 12).map((row) => {
+                          const healthMeta = healthStatusMeta[row.healthStatus];
+
+                          return (
+                            <TableRow key={row.clientId}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium">{row.clientName}</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Atualizado em {formatDate(row.latestActivityDate)}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{row.sector}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={healthMeta.className}>
+                                  {healthMeta.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {cashflowCurrencyFormatter.format(row.currentBalance)}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-medium ${row.projectedBalance30Days >= 0 ? "text-emerald-600" : "text-destructive"}`}
+                              >
+                                {cashflowCurrencyFormatter.format(row.projectedBalance30Days)}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">{row.alertCount}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">{row.pendingCount}</TableCell>
+                              <TableCell className="text-right">
+                                <Badge variant="secondary">{row.riskScore}</Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70">
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">Regras automaticas</CardTitle>
                 <CardDescription>
-                  Regras por cliente ou globais para classificar importacoes e Open Finance, com aprovacao automatica por confianca.
+                  Configure automacoes depois que a operacao estiver estavel e a classificacao estiver clara.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -1307,74 +1438,6 @@ export default function FinanceiroPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/70">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Clientes com maior atencao</CardTitle>
-                <CardDescription>
-                  Leitura consultiva unificando saude do caixa, alertas ativos e desorganizacao operacional.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {clientRiskRows.length === 0 ? (
-                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    Nenhum cliente critico no momento.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border">
-                    <Table className="min-w-[980px]">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Setor</TableHead>
-                          <TableHead>Saude</TableHead>
-                          <TableHead className="text-right">Saldo atual</TableHead>
-                          <TableHead className="text-right">Proj. 30 dias</TableHead>
-                          <TableHead className="text-right">Alertas</TableHead>
-                          <TableHead className="text-right">Pendencias</TableHead>
-                          <TableHead>Risco</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {clientRiskRows.map((client) => (
-                          <TableRow key={client.id}>
-                            <TableCell className="font-medium">{client.name}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{client.sector}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={healthStatusMeta[client.healthStatus].className}>
-                                {healthStatusMeta[client.healthStatus].label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className={`text-right font-medium ${client.currentBalance >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                              {cashflowCurrencyFormatter.format(client.currentBalance)}
-                            </TableCell>
-                            <TableCell className={`text-right font-medium ${client.projectedThirty >= 0 ? "text-foreground" : "text-destructive"}`}>
-                              {cashflowCurrencyFormatter.format(client.projectedThirty)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">{client.activeAlerts}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{client.pendingItems}</TableCell>
-                            <TableCell>
-                              {client.gapAlert ? (
-                                <Badge variant="destructive">Gap em {formatDate(client.gapAlert.date)}</Badge>
-                              ) : client.topAlertTitle ? (
-                                <Badge variant="outline" className="text-amber-700">
-                                  {client.topAlertTitle}
-                                </Badge>
-                              ) : client.projectedThirty < 0 ? (
-                                <Badge variant="outline" className="text-amber-600">
-                                  Saldo negativo
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">Atencao operacional</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>

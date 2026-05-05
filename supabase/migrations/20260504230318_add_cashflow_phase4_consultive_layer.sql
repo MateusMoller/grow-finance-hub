@@ -479,6 +479,7 @@ DECLARE
   health_reasons text[] := '{}'::text[];
   active_alert_keys text[] := '{}'::text[];
   active_task_ids text[] := '{}'::text[];
+  calendar_has_client_name boolean := false;
 BEGIN
   SELECT c.name
   INTO client_name_value
@@ -603,15 +604,29 @@ BEGIN
   ORDER BY due_date_resolved
   LIMIT 1;
 
-  SELECT count(*)
-  INTO critical_calendar_count
-  FROM public.calendar_events ce
-  JOIN public.clients c
-    ON c.name = ce.client_name
-  WHERE c.id = _client_id
-    AND ce.status = 'pending'
-    AND ce.priority IN ('alta', 'urgente')
-    AND ce.due_at::date BETWEEN today_date AND horizon_30;
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'calendar_events'
+      AND column_name = 'client_name'
+  )
+  INTO calendar_has_client_name;
+
+  IF calendar_has_client_name THEN
+    EXECUTE $calendar$
+      SELECT count(*)
+      FROM public.calendar_events ce
+      WHERE ce.client_name = $1
+        AND ce.status = 'pending'
+        AND ce.priority IN ('alta', 'urgente')
+        AND ce.due_at::date BETWEEN $2 AND $3
+    $calendar$
+    INTO critical_calendar_count
+    USING client_name_value, today_date, horizon_30;
+  ELSE
+    critical_calendar_count := 0;
+  END IF;
 
   IF projected_balance_30_value < 0 OR overdue_count >= 5 THEN
     health_status_value := 'critico';
@@ -924,7 +939,10 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  affected_client_name text := coalesce(NEW.client_name, OLD.client_name);
+  affected_client_name text := coalesce(
+    to_jsonb(NEW) ->> 'client_name',
+    to_jsonb(OLD) ->> 'client_name'
+  );
   affected_client_id uuid;
 BEGIN
   IF affected_client_name IS NULL OR btrim(affected_client_name) = '' THEN

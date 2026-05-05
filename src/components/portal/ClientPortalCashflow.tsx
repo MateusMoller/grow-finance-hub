@@ -294,18 +294,18 @@ export function ClientPortalCashflow({
     if (healthSnapshot?.health_status === "critico") {
       return {
         label: "Critico",
-        className: "bg-rose-400/15 text-rose-100 border-rose-300/20",
+        className: "border-rose-200 bg-rose-50 text-rose-700",
       };
     }
     if (healthSnapshot?.health_status === "atencao") {
       return {
         label: "Atencao",
-        className: "bg-amber-400/15 text-amber-100 border-amber-300/20",
+        className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     }
     return {
       label: "Em dia",
-      className: "bg-emerald-400/15 text-emerald-100 border-emerald-300/20",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
     };
   }, [healthSnapshot]);
 
@@ -445,20 +445,6 @@ export function ClientPortalCashflow({
     () => entries.filter((entry) => toMonthKey(getEntryReferenceDate(entry)) === referenceMonth),
     [entries, referenceMonth],
   );
-
-  const reviewSummary = useMemo(() => {
-    const pendingReview = conciliationEntries.filter((entry) => entry.review_status === "pending_review").length;
-    const classified = conciliationEntries.filter((entry) => entry.review_status === "classified").length;
-    const pendingReconciliation = conciliationEntries.filter((entry) => entry.reconciliation_status === "pending").length;
-    const suggestedReconciliation = conciliationEntries.filter((entry) => entry.reconciliation_status === "suggested").length;
-
-    return {
-      pendingReview,
-      classified,
-      pendingReconciliation,
-      suggestedReconciliation,
-    };
-  }, [conciliationEntries]);
 
   const selectedDrafts = useMemo(() => importDrafts.filter((draft) => draft.selected), [importDrafts]);
 
@@ -1587,33 +1573,6 @@ export function ClientPortalCashflow({
         </TabsContent>
 
         <TabsContent value="conciliation" className="space-y-6">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
-              title="Pendentes de revisao"
-              value={String(reviewSummary.pendingReview)}
-              helper="Itens aguardando classificacao ou aprovacao pela equipe."
-              tone={reviewSummary.pendingReview > 0 ? "warning" : "success"}
-            />
-            <MetricCard
-              title="Classificados"
-              value={String(reviewSummary.classified)}
-              helper="Lancamentos com sugestao aplicada, mas ainda sem aprovacao final."
-              tone={reviewSummary.classified > 0 ? "warning" : "success"}
-            />
-            <MetricCard
-              title="Pendentes de conciliacao"
-              value={String(reviewSummary.pendingReconciliation)}
-              helper="Itens bancarios ainda nao conciliados operacionalmente."
-              tone={reviewSummary.pendingReconciliation > 0 ? "warning" : "success"}
-            />
-            <MetricCard
-              title="Sugeridos"
-              value={String(reviewSummary.suggestedReconciliation)}
-              helper="Casos com indicio de conciliacao, aguardando confirmacao."
-              tone={reviewSummary.suggestedReconciliation > 0 ? "warning" : "success"}
-            />
-          </div>
-
           <Card className="border-border/70">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">

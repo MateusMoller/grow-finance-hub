@@ -1827,20 +1827,6 @@ export default function PortalClientePage() {
                           </div>
                         </div>
 
-                        {selectedRequestReason ? (
-                          <div className="rounded-2xl border bg-white px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="bg-white text-primary">
-                                {selectedRequestReason.sector}
-                              </Badge>
-                              <p className="text-sm font-medium">{selectedRequestReason.label}</p>
-                            </div>
-                            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                              {selectedRequestReason.description}
-                            </p>
-                          </div>
-                        ) : null}
-
                         {activeStructuredFields.length > 0 ? (
                           <div className="space-y-3 rounded-2xl border bg-white p-4">
                             <div className="space-y-1">
@@ -2424,12 +2410,6 @@ export default function PortalClientePage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Dica: use uma senha forte com letras, numeros e simbolos.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
-                    <p className="text-sm font-medium">Controle de acesso</p>
-                    <p className="text-sm text-muted-foreground">
-                      Alterações de usuários e permissões são feitas pela equipe para garantir segurança no processo.
                     </p>
                   </div>
                   <div className="rounded-lg border bg-muted/20 px-3 py-2">
