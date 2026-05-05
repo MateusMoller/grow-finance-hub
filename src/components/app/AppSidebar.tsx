@@ -46,7 +46,7 @@ const operationalItems = [
   { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
   { title: "Financeiro", url: "/app/financeiro", icon: Wallet },
   { title: "Obrigacoes", url: "/app/obrigacoes", icon: FileSpreadsheet },
-  { title: "E-continuo", url: "/app/econtinuo", icon: Send },
+  { title: "Central de Documentos", url: "/app/econtinuo", icon: Send },
 ];
 
 const systemItems = [

@@ -1,0 +1,157 @@
+import { supabase } from "@/integrations/supabase/client";
+
+export type GrowObligationTemplate = {
+  id: string;
+  code: string;
+  name: string;
+  sector: string;
+  periodicity: "monthly" | "quarterly" | "yearly" | "custom";
+  due_day: number;
+  yearly_due_month: number | null;
+  legal_due_day: number | null;
+  sla_days: number;
+  priority: "baixa" | "media" | "alta" | "urgente";
+  expected_documents: string[];
+  is_active: boolean;
+  generates_calendar: boolean;
+  generates_kanban: boolean;
+  requires_protocol: boolean;
+  requires_document: boolean;
+  operational_notes: string | null;
+};
+
+export type GrowClientSummary = {
+  id: string;
+  name: string;
+  sector: string;
+  status: string;
+};
+
+export type GrowObligationProfile = {
+  id: string;
+  client_id: string;
+  template_id: string;
+  assigned_to: string | null;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  due_day_override: number | null;
+  yearly_due_month_override: number | null;
+  legal_due_day_override: number | null;
+  expected_documents_override: string[] | null;
+  notes: string | null;
+  template: GrowObligationTemplate | null;
+  client: GrowClientSummary | null;
+};
+
+export type GrowObligationInstance = {
+  id: string;
+  client_id: string;
+  profile_id: string;
+  template_id: string;
+  competence_label: string;
+  competence_date: string;
+  competence_key: string;
+  technical_due_date: string;
+  legal_due_date: string | null;
+  status: "pendente" | "em_andamento" | "aguardando_documento" | "em_revisao" | "concluida" | "atrasada" | "cancelada";
+  priority: "baixa" | "media" | "alta" | "urgente";
+  current_assignee: string | null;
+  protocol: string | null;
+  completion_notes: string | null;
+  document_required: boolean;
+  protocol_required: boolean;
+  completed_at: string | null;
+  updated_at: string;
+  created_at: string;
+  template: GrowObligationTemplate | null;
+  client: GrowClientSummary | null;
+  profile: GrowObligationProfile | null;
+};
+
+export type GrowDocumentInboxItem = {
+  id: string;
+  client_id: string | null;
+  suggested_client_id: string | null;
+  suggested_template_id: string | null;
+  suggested_instance_id: string | null;
+  linked_instance_id: string | null;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+  file_size: number | null;
+  suggested_competence_label: string | null;
+  identification_confidence: number;
+  status: "pending_review" | "linked" | "rejected";
+  blocking_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  client: GrowClientSummary | null;
+  template: GrowObligationTemplate | null;
+  linked_instance: GrowObligationInstance | null;
+};
+
+export type GrowObligationsOverviewPayload = {
+  ok: boolean;
+  summary: {
+    templates_total: number;
+    templates_active: number;
+    active_profiles: number;
+    pending_instances: number;
+    overdue_instances: number;
+    waiting_documents: number;
+    done_instances: number;
+    inbox_pending: number;
+  };
+  clients: GrowClientSummary[];
+  templates: GrowObligationTemplate[];
+  profiles: GrowObligationProfile[];
+  instances: GrowObligationInstance[];
+  documents: GrowDocumentInboxItem[];
+};
+
+export type GrowClientSnapshotPayload = {
+  ok: boolean;
+  client_id: string;
+  profiles: GrowObligationProfile[];
+  instances: GrowObligationInstance[];
+  templates: GrowObligationTemplate[];
+};
+
+export async function invokeGrowObligations<T>(body: Record<string, unknown>) {
+  const { data, error } = await supabase.functions.invoke<T>("grow-obligations-module", { body });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as T;
+}
+
+export const growObligationStatusLabel: Record<GrowObligationInstance["status"], string> = {
+  pendente: "Pendente",
+  em_andamento: "Em andamento",
+  aguardando_documento: "Aguardando documento",
+  em_revisao: "Em revisão",
+  concluida: "Concluída",
+  atrasada: "Atrasada",
+  cancelada: "Cancelada",
+};
+
+export const growObligationStatusClass: Record<GrowObligationInstance["status"], string> = {
+  pendente: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
+  em_andamento: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
+  aguardando_documento: "bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300",
+  em_revisao: "bg-violet-100 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300",
+  concluida: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
+  atrasada: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300",
+  cancelada: "bg-muted text-muted-foreground",
+};
+
+export const growPriorityLabel: Record<GrowObligationInstance["priority"], string> = {
+  baixa: "Baixa",
+  media: "Média",
+  alta: "Alta",
+  urgente: "Urgente",
+};

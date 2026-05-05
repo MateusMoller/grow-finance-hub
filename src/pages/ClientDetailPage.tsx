@@ -25,6 +25,7 @@ import {
   validateSecureDocument,
 } from "@/lib/fileUploadSecurity";
 import { sectorOptions } from "@/components/portal/types";
+import { ClientObligationsPanel } from "@/components/obligations/ClientObligationsPanel";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -1018,10 +1019,20 @@ export default function ClientDetailPage() {
     setLoadingAcessoriasObligations(true);
 
     const { data, error } = await supabase.functions.invoke<{
-      obligations?: ClientAcessoriasObligation[];
-    }>("acessorias-module", {
+      instances?: Array<{
+        id: string;
+        competence_label: string;
+        technical_due_date: string;
+        status: string;
+        protocol: string | null;
+        completion_notes: string | null;
+        completed_at: string | null;
+        updated_at: string;
+        template: { name: string | null } | null;
+      }>;
+    }>("grow-obligations-module", {
       body: {
-        action: "list_obligations",
+        action: "list_client_snapshot",
         client_id: id,
       },
     });
@@ -1033,7 +1044,19 @@ export default function ClientDetailPage() {
       return;
     }
 
-    const rows = Array.isArray(data?.obligations) ? data.obligations : [];
+    const rows = Array.isArray(data?.instances)
+      ? data.instances.map((instance) => ({
+          id: instance.id,
+          obligation_name: instance.template?.name || "Obrigação",
+          obligation_period: instance.competence_label || null,
+          due_date: instance.technical_due_date || null,
+          delivered_at: instance.completed_at || null,
+          status: instance.status || null,
+          protocol: instance.protocol || null,
+          notes: instance.completion_notes || null,
+          last_synced_at: instance.updated_at || null,
+        }))
+      : [];
     setAcessoriasObligations(rows);
   }, [id]);
 
@@ -2337,6 +2360,7 @@ export default function ClientDetailPage() {
           </TabsContent>
 
           <TabsContent value="dados_mensais" className="space-y-4">
+            <ClientObligationsPanel clientId={client.id} />
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="space-y-1">
