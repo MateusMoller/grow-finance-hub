@@ -190,7 +190,26 @@ export async function invokeGrowObligations<T>(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke<T>("grow-obligations-module", { body });
 
   if (error) {
-    throw error;
+    const errorWithContext = error as Error & { context?: Response };
+    const response = errorWithContext.context;
+    if (response) {
+      try {
+        const payload = await response.clone().json() as { error?: string };
+        if (payload?.error) {
+          throw new Error(payload.error);
+        }
+      } catch {
+        try {
+          const text = await response.clone().text();
+          if (text) {
+            throw new Error(text);
+          }
+        } catch {
+          // fall through to original error
+        }
+      }
+    }
+    throw errorWithContext;
   }
 
   return data as T;

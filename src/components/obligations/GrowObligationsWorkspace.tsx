@@ -235,6 +235,28 @@ function sanitizeExpectedDocuments(documents: TemplateExpectedDocumentDraft[]): 
     });
 }
 
+function validateTemplateForm(form: TemplateFormState) {
+  if (!form.name.trim()) return "Informe o nome da obrigacao.";
+  const documents = sanitizeExpectedDocuments(form.expected_documents);
+  if (documents.length === 0) return "Cadastre pelo menos um documento esperado.";
+  return null;
+}
+
+function validateUploadQueueItem(item: UploadQueueItem) {
+  const validationError = validateSecureDocument(item.file);
+  if (validationError) return validationError;
+  if (!item.file?.name) return "Existe um arquivo invalido na fila.";
+  if (!item.analysis) return `O arquivo ${item.file.name} ainda nao foi analisado.`;
+  if (item.isPreviewing) return `Aguarde o preview do arquivo ${item.file.name} terminar.`;
+  if (item.document_type_key && !item.template_id) {
+    return `O arquivo ${item.file.name} esta com documento esperado sem template vinculado.`;
+  }
+  if (item.template_id && !item.document_type_key) {
+    return `Selecione o documento esperado do arquivo ${item.file.name}.`;
+  }
+  return null;
+}
+
 function matchStrategyLabel(strategy: MatchStrategy | null | undefined) {
   switch (strategy) {
     case "manual_instance":
@@ -287,8 +309,10 @@ export function GrowObligationsWorkspace({
   const overview = overviewQuery.data;
 
   const templateMutation = useMutation({
-    mutationFn: (payload: TemplateFormState) =>
-      invokeGrowObligations({
+    mutationFn: (payload: TemplateFormState) => {
+      const validationError = validateTemplateForm(payload);
+      if (validationError) throw new Error(validationError);
+      return invokeGrowObligations({
         action: "upsert_template",
         id: payload.id,
         name: payload.name,
@@ -304,7 +328,8 @@ export function GrowObligationsWorkspace({
         generates_kanban: payload.generates_kanban,
         requires_document: payload.requires_document,
         operational_notes: payload.operational_notes,
-      }),
+      });
+    },
     onSuccess: async () => {
       toast.success("Obrigacao mestre salva.");
       setTemplateDialogOpen(false);
@@ -376,6 +401,8 @@ export function GrowObligationsWorkspace({
       documentTypeKey: string;
       file: File;
     }) => {
+      if (!templateId) throw new Error("Salve o template antes de anexar documentos modelo.");
+      if (!documentTypeKey) throw new Error("Defina o documento esperado antes de anexar o modelo.");
       const validationError = validateSecureDocument(file);
       if (validationError) throw new Error(validationError);
       const analysis = await analyzePdfDocument(file);
@@ -445,9 +472,12 @@ export function GrowObligationsWorkspace({
 
   const uploadQueueMutation = useMutation({
     mutationFn: async () => {
+      if (uploadQueue.length === 0) {
+        throw new Error("Adicione pelo menos um PDF antes de enviar.");
+      }
       const results = [];
       for (const item of uploadQueue) {
-        const validationError = validateSecureDocument(item.file);
+        const validationError = validateUploadQueueItem(item);
         if (validationError) throw new Error(validationError);
 
         const path = buildSecureStoragePath(
@@ -491,6 +521,12 @@ export function GrowObligationsWorkspace({
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao enviar lote de documentos."),
   });
+
+  const templateValidationError = useMemo(() => validateTemplateForm(templateForm), [templateForm]);
+  const uploadQueueValidationError = useMemo(
+    () => uploadQueue.map((item) => validateUploadQueueItem(item)).find(Boolean) || null,
+    [uploadQueue],
+  );
 
   const filteredTemplates = useMemo(() => {
     const items = overview?.templates || [];
@@ -546,6 +582,10 @@ export function GrowObligationsWorkspace({
   );
 
   async function runPreview(item: UploadQueueItem) {
+    if (!item.file?.name) {
+      setUploadQueue((prev) => prev.map((current) => (current.id === item.id ? { ...current, preview: null, previewError: "Arquivo invalido.", isPreviewing: false } : current)));
+      return;
+    }
     try {
       const preview = await invokeGrowObligations<ReferenceMatchPreview>({
         action: "preview_reference_match",
@@ -857,7 +897,14 @@ export function GrowObligationsWorkspace({
                   })}
                 </div>
 
-                <Button className="rounded-2xl" onClick={() => uploadQueueMutation.mutate()} disabled={uploadQueueMutation.isPending || uploadQueue.length === 0}>
+                {uploadQueueValidationError && (
+                  <p className="text-sm text-orange-600">{uploadQueueValidationError}</p>
+                )}
+                <Button
+                  className="rounded-2xl"
+                  onClick={() => uploadQueueMutation.mutate()}
+                  disabled={uploadQueueMutation.isPending || uploadQueue.length === 0 || Boolean(uploadQueueValidationError)}
+                >
                   {uploadQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderUp className="mr-2 h-4 w-4" />}
                   Enviar lote para a central
                 </Button>
@@ -1009,7 +1056,8 @@ export function GrowObligationsWorkspace({
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => templateMutation.mutate(templateForm)} disabled={templateMutation.isPending}>{templateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar template</Button>
+            {templateValidationError && <p className="mr-auto text-sm text-orange-600">{templateValidationError}</p>}
+            <Button onClick={() => templateMutation.mutate(templateForm)} disabled={templateMutation.isPending || Boolean(templateValidationError)}>{templateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar template</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
