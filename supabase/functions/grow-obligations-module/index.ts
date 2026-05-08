@@ -23,6 +23,37 @@ const templateManagerRoles = new Set(["admin", "director", "manager"]);
 
 type JsonRecord = Record<string, unknown>;
 type SupabaseAdmin = ReturnType<typeof createClient>;
+type MatchStrategy =
+  | "manual_instance"
+  | "direct_expected_doc"
+  | "alias_match"
+  | "single_open_instance"
+  | "manual_review";
+
+type ExpectedDocumentDefinition = {
+  document_type_key: string;
+  label: string;
+  aliases: string[];
+  required: boolean;
+  active: boolean;
+};
+
+type MatchCandidate = {
+  template: TemplateRow;
+  document: ExpectedDocumentDefinition;
+};
+
+type MatchResult = {
+  resolvedInstanceId: string | null;
+  suggestedTemplateId: string | null;
+  documentTypeKey: string | null;
+  strategy: MatchStrategy;
+  score: number;
+  reasons: string[];
+  reviewRequired: boolean;
+  documentDefinition: ExpectedDocumentDefinition | null;
+  candidateInstanceIds: string[];
+};
 
 type TemplateRow = {
   id: string;
@@ -39,7 +70,6 @@ type TemplateRow = {
   is_active: boolean;
   generates_calendar: boolean;
   generates_kanban: boolean;
-  requires_protocol: boolean;
   requires_document: boolean;
   operational_notes: string | null;
 };
@@ -73,13 +103,39 @@ type InstanceRow = {
   status: string;
   priority: string;
   current_assignee: string | null;
-  protocol: string | null;
   completion_notes: string | null;
   document_required: boolean;
-  protocol_required: boolean;
   completed_at: string | null;
   updated_at: string;
   created_at: string;
+};
+
+type InboxRow = {
+  id: string;
+  client_id: string | null;
+  suggested_client_id: string | null;
+  suggested_template_id: string | null;
+  suggested_instance_id: string | null;
+  linked_instance_id: string | null;
+  document_type_key: string | null;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+  file_size: number | null;
+  suggested_competence_label: string | null;
+  identification_confidence: number;
+  matched_by: MatchStrategy | null;
+  match_score: number;
+  match_reasons: unknown;
+  review_required: boolean;
+  status: string;
+  blocking_reason: string | null;
+  notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 function jsonResponse(data: unknown, status = 200) {
@@ -105,6 +161,40 @@ function asStringArray(value: unknown): string[] {
   return value
     .map((item) => asTrimmedString(item))
     .filter((item): item is string => Boolean(item));
+}
+
+function asExpectedDocuments(value: unknown): ExpectedDocumentDefinition[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        const label = asTrimmedString(item);
+        if (!label) return null;
+        return {
+          document_type_key: normalizeToken(label),
+          label,
+          aliases: [],
+          required: true,
+          active: true,
+        } satisfies ExpectedDocumentDefinition;
+      }
+
+      const record = asRecord(item);
+      if (!record) return null;
+      const label = asTrimmedString(record.label) || asTrimmedString(record.document_type_key) || "Documento";
+      const key = asTrimmedString(record.document_type_key) || normalizeToken(label);
+      if (!key) return null;
+
+      return {
+        document_type_key: key,
+        label,
+        aliases: asStringArray(record.aliases),
+        required: asBoolean(record.required, true),
+        active: asBoolean(record.active, true),
+      } satisfies ExpectedDocumentDefinition;
+    })
+    .filter((item): item is ExpectedDocumentDefinition => Boolean(item));
 }
 
 function asBoolean(value: unknown, fallback = false) {
@@ -133,6 +223,48 @@ function normalizeToken(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return normalizeToken(value).replace(/_+/g, "-");
+}
+
+function buildDocumentLookupKey(templateId: string, documentTypeKey: string) {
+  return `${templateId}::${documentTypeKey}`;
+}
+
+function buildCompetenceCandidates(value: string | null) {
+  const token = normalizeToken(value || "");
+  if (!token) return [];
+
+  const normalized = token.replace(/_/g, "-");
+  const compactMatch = token.match(/(\d{1,2})_(\d{4})/);
+  if (compactMatch) {
+    const month = compactMatch[1].padStart(2, "0");
+    const year = compactMatch[2];
+    return Array.from(new Set([
+      `${month}/${year}`,
+      `${year}-${month}`,
+      normalized,
+    ]));
+  }
+
+  return Array.from(new Set([normalized]));
+}
+
+function toMonthWindowStart(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function toMonthWindowEnd(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+}
+
+function isInstanceEligibleWithoutExactCompetence(instance: InstanceRow, windowStart: Date, windowEnd: Date) {
+  if (instance.document_required !== true) return false;
+  if (instance.status === "cancelada" || instance.status === "concluida") return false;
+  const competenceDate = new Date(`${instance.competence_date}T00:00:00.000Z`);
+  return competenceDate >= windowStart && competenceDate <= windowEnd;
+}
+
+function isInstanceEligibleWithExactCompetence(instance: InstanceRow) {
+  return instance.document_required === true && instance.status !== "cancelada";
 }
 
 function extractBearerToken(req: Request) {
@@ -281,6 +413,263 @@ async function loadProfilesMap(supabaseAdmin: SupabaseAdmin) {
 
   if (error) throw error;
   return new Map((data || []).map((row) => [String((row as JsonRecord).id), row as ProfileRow]));
+}
+
+function resolveExpectedDocument(
+  template: TemplateRow | null | undefined,
+  documentTypeKey: string | null | undefined,
+) {
+  if (!template || !documentTypeKey) return null;
+  return asExpectedDocuments(template.expected_documents).find(
+    (item) => item.document_type_key === documentTypeKey,
+  ) || null;
+}
+
+async function loadInstancesForClient(supabaseAdmin: SupabaseAdmin, clientId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("technical_due_date", { ascending: true });
+
+  if (error) throw error;
+  return (data || []) as InstanceRow[];
+}
+
+function buildClientDocumentCandidates(
+  clientId: string,
+  templatesMap: Map<string, TemplateRow>,
+  profiles: ProfileRow[],
+) {
+  const matches: MatchCandidate[] = [];
+
+  for (const profile of profiles) {
+    if (profile.client_id !== clientId || !profile.is_active) continue;
+    const template = templatesMap.get(profile.template_id);
+    if (!template || !template.is_active) continue;
+
+    for (const document of asExpectedDocuments(template.expected_documents).filter((item) => item.active)) {
+      matches.push({
+        template,
+        document,
+      });
+    }
+  }
+
+  return matches;
+}
+
+function matchDocumentsByAlias(
+  fileName: string | null,
+  clientDocuments: MatchCandidate[],
+) {
+  if (!fileName) return [];
+  const normalizedFileName = normalizeToken(fileName);
+  if (!normalizedFileName) return [];
+
+  return clientDocuments.filter(({ document }) => {
+    const aliasTokens = [document.label, ...document.aliases]
+      .map((value) => normalizeToken(value))
+      .filter(Boolean);
+
+    return aliasTokens.some((alias) => normalizedFileName.includes(alias));
+  });
+}
+
+function buildEligibleInstanceCandidates(
+  instances: InstanceRow[],
+  templatesMap: Map<string, TemplateRow>,
+  profilesMap: Map<string, ProfileRow>,
+  {
+    clientId,
+    exactCompetence,
+    templateIds,
+  }: {
+    clientId: string;
+    exactCompetence: string | null;
+    templateIds?: Set<string>;
+  },
+) {
+  const competenceCandidates = buildCompetenceCandidates(exactCompetence);
+  const now = new Date();
+  const windowStart = toMonthWindowStart(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
+  const windowEnd = toMonthWindowEnd(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1)));
+
+  return instances.filter((instance) => {
+    if (instance.client_id !== clientId) return false;
+    if (templateIds && !templateIds.has(instance.template_id)) return false;
+
+    if (competenceCandidates.length > 0) {
+      const instanceCandidates = new Set([
+        ...buildCompetenceCandidates(instance.competence_label),
+        ...buildCompetenceCandidates(instance.competence_key),
+      ]);
+
+      return isInstanceEligibleWithExactCompetence(instance)
+        && competenceCandidates.some((item) => instanceCandidates.has(item));
+    }
+
+    return isInstanceEligibleWithoutExactCompetence(instance, windowStart, windowEnd);
+  }).map((instance) => ({
+    instance,
+    template: templatesMap.get(instance.template_id) || null,
+    profile: profilesMap.get(instance.profile_id) || null,
+  })).filter((item): item is { instance: InstanceRow; template: TemplateRow; profile: ProfileRow | null } => Boolean(item.template));
+}
+
+async function resolveDocumentMatch(
+  supabaseAdmin: SupabaseAdmin,
+  payload: {
+    clientId: string | null;
+    instanceId: string | null;
+    templateId: string | null;
+    documentTypeKey: string | null;
+    suggestedCompetenceLabel: string | null;
+    fileName: string | null;
+  },
+) {
+  const { clientId, instanceId, templateId, documentTypeKey, suggestedCompetenceLabel, fileName } = payload;
+  const emptyResult: MatchResult = {
+    resolvedInstanceId: null,
+    suggestedTemplateId: templateId,
+    documentTypeKey,
+    strategy: "manual_review",
+    score: 0.45,
+    reasons: ["Aguardando validação humana para vincular o arquivo."],
+    reviewRequired: true,
+    documentDefinition: null,
+    candidateInstanceIds: [],
+  };
+
+  if (!clientId && !instanceId) {
+    return emptyResult;
+  }
+
+  const templatesMap = await loadTemplatesMap(supabaseAdmin);
+  const profilesMap = await loadProfilesMap(supabaseAdmin);
+  const instances = clientId ? await loadInstancesForClient(supabaseAdmin, clientId) : [];
+
+  if (instanceId) {
+    const instance = instances.find((item) => item.id === instanceId) || null;
+    const template = (instance && templatesMap.get(instance.template_id)) || (templateId ? templatesMap.get(templateId) : null) || null;
+    return {
+      resolvedInstanceId: instanceId,
+      suggestedTemplateId: template?.id || templateId,
+      documentTypeKey,
+      strategy: "manual_instance",
+      score: 1,
+      reasons: ["Instância definida manualmente pelo usuário."],
+      reviewRequired: false,
+      documentDefinition: resolveExpectedDocument(template, documentTypeKey),
+      candidateInstanceIds: instance ? [instance.id] : [],
+    };
+  }
+
+  if (!clientId) {
+    return emptyResult;
+  }
+
+  const clientProfiles = Array.from(profilesMap.values()).filter((profile) => profile.client_id === clientId && profile.is_active);
+  const clientDocumentDefs = buildClientDocumentCandidates(clientId, templatesMap, clientProfiles);
+
+  const targetDocumentMatches = documentTypeKey
+    ? clientDocumentDefs.filter(({ template, document }) =>
+        document.document_type_key === documentTypeKey && (!templateId || template.id === templateId),
+      )
+    : [];
+
+  if (targetDocumentMatches.length > 0) {
+    const templateIds = new Set(targetDocumentMatches.map((item) => item.template.id));
+    const exactCandidates = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
+      clientId,
+      exactCompetence: suggestedCompetenceLabel,
+      templateIds,
+    });
+
+    if (suggestedCompetenceLabel && exactCandidates.length === 1) {
+      return {
+        resolvedInstanceId: exactCandidates[0].instance.id,
+        suggestedTemplateId: exactCandidates[0].template.id,
+        documentTypeKey,
+        strategy: "direct_expected_doc",
+        score: 0.95,
+        reasons: [
+          "Documento esperado informado pelo usuário.",
+          `Competência compatível: ${exactCandidates[0].instance.competence_label}.`,
+        ],
+        reviewRequired: false,
+        documentDefinition: resolveExpectedDocument(exactCandidates[0].template, documentTypeKey),
+        candidateInstanceIds: exactCandidates.map((item) => item.instance.id),
+      };
+    }
+
+    if (!suggestedCompetenceLabel) {
+      const openCandidates = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
+        clientId,
+        exactCompetence: null,
+        templateIds,
+      });
+
+      if (openCandidates.length === 1) {
+        return {
+          resolvedInstanceId: openCandidates[0].instance.id,
+          suggestedTemplateId: openCandidates[0].template.id,
+          documentTypeKey,
+          strategy: "single_open_instance",
+          score: 0.75,
+          reasons: ["Documento esperado informado e apenas uma instância elegível aberta encontrada."],
+          reviewRequired: true,
+          documentDefinition: resolveExpectedDocument(openCandidates[0].template, documentTypeKey),
+          candidateInstanceIds: openCandidates.map((item) => item.instance.id),
+        };
+      }
+    }
+  }
+
+  const aliasDocumentMatches = matchDocumentsByAlias(fileName, clientDocumentDefs).filter(({ template }) => !templateId || template.id === templateId);
+  if (aliasDocumentMatches.length > 0 && suggestedCompetenceLabel) {
+    const templateIds = new Set(aliasDocumentMatches.map((item) => item.template.id));
+    const exactCandidates = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
+      clientId,
+      exactCompetence: suggestedCompetenceLabel,
+      templateIds,
+    });
+
+    if (exactCandidates.length === 1) {
+      const aliasDefinition = aliasDocumentMatches.find((item) => item.template.id === exactCandidates[0].template.id)?.document || aliasDocumentMatches[0].document;
+      return {
+        resolvedInstanceId: exactCandidates[0].instance.id,
+        suggestedTemplateId: exactCandidates[0].template.id,
+        documentTypeKey: aliasDefinition.document_type_key,
+        strategy: "alias_match",
+        score: 0.9,
+        reasons: [
+          "Documento identificado pelos apelidos no nome do arquivo.",
+          `Competência compatível: ${exactCandidates[0].instance.competence_label}.`,
+        ],
+        reviewRequired: false,
+        documentDefinition: aliasDefinition,
+        candidateInstanceIds: exactCandidates.map((item) => item.instance.id),
+      };
+    }
+  }
+
+  const candidateInstanceIds = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
+    clientId,
+    exactCompetence: suggestedCompetenceLabel,
+    templateIds: templateId ? new Set([templateId]) : undefined,
+  }).map((item) => item.instance.id);
+
+  return {
+    ...emptyResult,
+    suggestedTemplateId: templateId,
+    documentTypeKey,
+    candidateInstanceIds,
+    documentDefinition: templateId ? resolveExpectedDocument(templatesMap.get(templateId) || null, documentTypeKey) : null,
+    reasons: candidateInstanceIds.length > 1
+      ? ["Mais de uma instância elegível encontrada. Revisão humana necessária."]
+      : emptyResult.reasons,
+  };
 }
 
 async function createInstanceEvent(
@@ -506,7 +895,6 @@ async function ensureInstancesForProfiles(
           current_assignee: profile.assigned_to,
           origin: "grow_native",
           document_required: template.requires_document,
-          protocol_required: template.requires_protocol,
           created_by: actorId,
         });
         existingKeys.add(uniqueKey);
@@ -633,11 +1021,14 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
 
   const templates = Array.from(templatesMap.values()).map((template) => ({
     ...template,
-    expected_documents: Array.isArray(template.expected_documents) ? template.expected_documents : [],
+    expected_documents: asExpectedDocuments(template.expected_documents),
   }));
 
   const profiles = Array.from(profilesMap.values()).map((profile) => ({
     ...profile,
+    expected_documents_override: profile.expected_documents_override
+      ? asExpectedDocuments(profile.expected_documents_override)
+      : null,
     template: templatesMap.get(profile.template_id) || null,
     client: clientsMap.get(profile.client_id) || null,
   }));
@@ -656,6 +1047,14 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
       client: clientsMap.get(String(row.client_id || row.suggested_client_id || "")) || null,
       template: templatesMap.get(String(row.suggested_template_id || "")) || null,
       linked_instance: instances.find((instance) => instance.id === String(row.linked_instance_id || row.suggested_instance_id || "")) || null,
+      document_definition: resolveExpectedDocument(
+        templatesMap.get(String(row.suggested_template_id || "")) || null,
+        asTrimmedString(row.document_type_key),
+      ),
+      match_reasons: asStringArray(row.match_reasons),
+      matched_by: asTrimmedString(row.matched_by),
+      match_score: Number(row.match_score || 0),
+      review_required: asBoolean(row.review_required, true),
     };
   });
 
@@ -708,11 +1107,10 @@ async function handleUpsertTemplate(
     yearly_due_month: asInteger(payload.yearly_due_month, null),
     legal_due_day: asInteger(payload.legal_due_day, null),
     priority: asTrimmedString(payload.priority) || "media",
-    expected_documents: asStringArray(payload.expected_documents),
+    expected_documents: asExpectedDocuments(payload.expected_documents),
     is_active: asBoolean(payload.is_active, true),
     generates_calendar: asBoolean(payload.generates_calendar, true),
     generates_kanban: asBoolean(payload.generates_kanban, false),
-    requires_protocol: asBoolean(payload.requires_protocol, false),
     requires_document: asBoolean(payload.requires_document, true),
     operational_notes: asTrimmedString(payload.operational_notes),
     created_by: actorId,
@@ -750,7 +1148,9 @@ async function handleUpsertProfile(
     due_day_override: asInteger(payload.due_day_override, null),
     yearly_due_month_override: asInteger(payload.yearly_due_month_override, null),
     legal_due_day_override: asInteger(payload.legal_due_day_override, null),
-    expected_documents_override: asStringArray(payload.expected_documents_override),
+    expected_documents_override: payload.expected_documents_override
+      ? asExpectedDocuments(payload.expected_documents_override)
+      : null,
     notes: asTrimmedString(payload.notes),
     parameters: asRecord(payload.parameters) || {},
     created_by: actorId,
@@ -836,7 +1236,6 @@ async function handleUpdateInstance(
     status: nextStatus,
     priority: asTrimmedString(payload.priority) || current.priority,
     current_assignee: asTrimmedString(payload.current_assignee) ?? current.current_assignee,
-    protocol: asTrimmedString(payload.protocol) ?? current.protocol,
     completion_notes: asTrimmedString(payload.completion_notes) ?? current.completion_notes,
     completed_at: nextStatus === "concluida" ? new Date().toISOString() : null,
     last_status_at: current.status !== nextStatus ? new Date().toISOString() : current.updated_at,
@@ -1043,6 +1442,191 @@ async function handleResolveDocument(
   return jsonResponse({ ok: true });
 }
 
+async function handleRegisterDocumentUploadNative(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  payload: JsonRecord,
+) {
+  const fileName = asTrimmedString(payload.file_name);
+  const storagePath = asTrimmedString(payload.storage_path);
+  const storageBucket = asTrimmedString(payload.storage_bucket) || "obligation-files";
+  if (!fileName || !storagePath) {
+    return jsonResponse({ error: "Arquivo e caminho de storage sÃ£o obrigatÃ³rios." }, 400);
+  }
+
+  const clientId = asTrimmedString(payload.client_id);
+  const match = await resolveDocumentMatch(supabaseAdmin, {
+    clientId,
+    instanceId: asTrimmedString(payload.instance_id),
+    templateId: asTrimmedString(payload.template_id),
+    documentTypeKey: asTrimmedString(payload.document_type_key),
+    suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
+    fileName,
+  });
+  const autoLinked = Boolean(match.resolvedInstanceId && !match.reviewRequired && match.score >= 0.9);
+
+  const inboxRow = {
+    client_id: clientId,
+    suggested_client_id: clientId,
+    suggested_template_id: match.suggestedTemplateId,
+    suggested_instance_id: match.resolvedInstanceId,
+    linked_instance_id: autoLinked ? match.resolvedInstanceId : null,
+    document_type_key: match.documentTypeKey,
+    file_name: fileName,
+    storage_bucket: storageBucket,
+    storage_path: storagePath,
+    content_type: asTrimmedString(payload.content_type),
+    file_size: asInteger(payload.file_size, null),
+    suggested_competence_label: asTrimmedString(payload.suggested_competence_label),
+    identification_confidence: match.score,
+    matched_by: match.strategy,
+    match_score: match.score,
+    match_reasons: match.reasons,
+    review_required: match.reviewRequired,
+    status: autoLinked ? "linked" : "pending_review",
+    blocking_reason: autoLinked ? null : "Aguardando validaÃ§Ã£o humana para vincular o arquivo.",
+    notes: asTrimmedString(payload.notes),
+    created_by: actorId,
+    reviewed_by: autoLinked ? actorId : null,
+    reviewed_at: autoLinked ? new Date().toISOString() : null,
+  };
+
+  const { data: inboxItem, error: inboxError } = await supabaseAdmin
+    .from("document_inbox_items")
+    .insert(inboxRow)
+    .select("*")
+    .single();
+
+  if (inboxError || !inboxItem) {
+    return jsonResponse({ error: inboxError?.message || "Falha ao registrar documento." }, 400);
+  }
+
+  if (autoLinked && match.resolvedInstanceId) {
+    const { error: fileError } = await supabaseAdmin
+      .from("obligation_instance_files")
+      .insert({
+        instance_id: match.resolvedInstanceId,
+        inbox_item_id: String((inboxItem as JsonRecord).id),
+        file_name: fileName,
+        storage_bucket: storageBucket,
+        storage_path: storagePath,
+        content_type: asTrimmedString(payload.content_type),
+        file_size: asInteger(payload.file_size, null),
+        triage_status: "accepted",
+        source: match.strategy,
+        uploaded_by: actorId,
+        identification_confidence: match.score,
+      });
+
+    if (fileError) throw fileError;
+  }
+
+  return jsonResponse({ ok: true, inbox_item: inboxItem, match });
+}
+
+async function handleResolveDocumentNative(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  payload: JsonRecord,
+) {
+  const inboxItemId = asTrimmedString(payload.inbox_item_id);
+  const decision = asTrimmedString(payload.decision);
+  if (!inboxItemId || !decision) {
+    return jsonResponse({ error: "Documento e decisÃ£o sÃ£o obrigatÃ³rios." }, 400);
+  }
+
+  const { data: inboxItem, error: inboxError } = await supabaseAdmin
+    .from("document_inbox_items")
+    .select("*")
+    .eq("id", inboxItemId)
+    .single();
+
+  if (inboxError || !inboxItem) {
+    return jsonResponse({ error: "Documento nÃ£o encontrado." }, 404);
+  }
+
+  if (decision === "reject") {
+    const { error } = await supabaseAdmin
+      .from("document_inbox_items")
+      .update({
+        status: "rejected",
+        matched_by: "manual_review",
+        review_required: true,
+        blocking_reason: asTrimmedString(payload.blocking_reason) || "Documento rejeitado manualmente.",
+        notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
+        reviewed_by: actorId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", inboxItemId);
+
+    if (error) throw error;
+    return jsonResponse({ ok: true });
+  }
+
+  const instanceId = asTrimmedString(payload.instance_id);
+  if (!instanceId) {
+    return jsonResponse({ error: "Selecione a instÃ¢ncia de obrigaÃ§Ã£o para vincular o documento." }, 400);
+  }
+
+  const { error: inboxUpdateError } = await supabaseAdmin
+    .from("document_inbox_items")
+    .update({
+      status: "linked",
+      linked_instance_id: instanceId,
+      matched_by: "manual_review",
+      review_required: false,
+      blocking_reason: null,
+      notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
+      reviewed_by: actorId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", inboxItemId);
+
+  if (inboxUpdateError) throw inboxUpdateError;
+
+  const { error: fileError } = await supabaseAdmin
+    .from("obligation_instance_files")
+    .upsert({
+      instance_id: instanceId,
+      inbox_item_id: inboxItemId,
+      file_name: asTrimmedString((inboxItem as JsonRecord).file_name),
+      storage_bucket: asTrimmedString((inboxItem as JsonRecord).storage_bucket) || "obligation-files",
+      storage_path: asTrimmedString((inboxItem as JsonRecord).storage_path),
+      content_type: asTrimmedString((inboxItem as JsonRecord).content_type),
+      file_size: asInteger((inboxItem as JsonRecord).file_size, null),
+      triage_status: "reviewed",
+      source: "manual_review",
+      uploaded_by: actorId,
+      identification_confidence: Number((inboxItem as JsonRecord).match_score || (inboxItem as JsonRecord).identification_confidence || 1),
+    }, { onConflict: "storage_bucket,storage_path" });
+
+  if (fileError) throw fileError;
+
+  return jsonResponse({ ok: true });
+}
+
+async function handlePreviewDocumentMatch(
+  supabaseAdmin: SupabaseAdmin,
+  payload: JsonRecord,
+) {
+  const fileName = asTrimmedString(payload.file_name);
+  const clientId = asTrimmedString(payload.client_id);
+  if (!fileName || !clientId) {
+    return jsonResponse({ error: "Cliente e nome do arquivo sÃ£o obrigatÃ³rios para o preview." }, 400);
+  }
+
+  const match = await resolveDocumentMatch(supabaseAdmin, {
+    clientId,
+    instanceId: asTrimmedString(payload.instance_id),
+    templateId: asTrimmedString(payload.template_id),
+    documentTypeKey: asTrimmedString(payload.document_type_key),
+    suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
+    fileName,
+  });
+
+  return jsonResponse({ ok: true, match });
+}
+
 async function handleClientSnapshot(supabaseAdmin: SupabaseAdmin, actorId: string, clientId: string) {
   const overview = await buildOverview(supabaseAdmin, actorId);
   return jsonResponse({
@@ -1096,11 +1680,15 @@ Deno.serve(async (req) => {
     }
 
     if (action === "register_document_upload") {
-      return await handleRegisterDocumentUpload(supabaseAdmin, user.id, payload);
+      return await handleRegisterDocumentUploadNative(supabaseAdmin, user.id, payload);
     }
 
     if (action === "resolve_document") {
-      return await handleResolveDocument(supabaseAdmin, user.id, payload);
+      return await handleResolveDocumentNative(supabaseAdmin, user.id, payload);
+    }
+
+    if (action === "preview_document_match") {
+      return await handlePreviewDocumentMatch(supabaseAdmin, payload);
     }
 
     if (action === "list_client_snapshot") {

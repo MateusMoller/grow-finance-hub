@@ -1,5 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export type GrowExpectedDocument = {
+  document_type_key: string;
+  label: string;
+  aliases: string[];
+  required: boolean;
+  active: boolean;
+};
+
 export type GrowObligationTemplate = {
   id: string;
   code: string;
@@ -11,11 +19,10 @@ export type GrowObligationTemplate = {
   yearly_due_month: number | null;
   legal_due_day: number | null;
   priority: "baixa" | "media" | "alta" | "urgente";
-  expected_documents: string[];
+  expected_documents: GrowExpectedDocument[];
   is_active: boolean;
   generates_calendar: boolean;
   generates_kanban: boolean;
-  requires_protocol: boolean;
   requires_document: boolean;
   operational_notes: string | null;
 };
@@ -50,7 +57,7 @@ export type GrowObligationProfile = {
   due_day_override: number | null;
   yearly_due_month_override: number | null;
   legal_due_day_override: number | null;
-  expected_documents_override: string[] | null;
+  expected_documents_override: GrowExpectedDocument[] | null;
   notes: string | null;
   template: GrowObligationTemplate | null;
   client: GrowClientSummary | null;
@@ -69,10 +76,8 @@ export type GrowObligationInstance = {
   status: "pendente" | "em_andamento" | "aguardando_documento" | "em_revisao" | "concluida" | "atrasada" | "cancelada";
   priority: "baixa" | "media" | "alta" | "urgente";
   current_assignee: string | null;
-  protocol: string | null;
   completion_notes: string | null;
   document_required: boolean;
-  protocol_required: boolean;
   completed_at: string | null;
   updated_at: string;
   created_at: string;
@@ -88,6 +93,7 @@ export type GrowDocumentInboxItem = {
   suggested_template_id: string | null;
   suggested_instance_id: string | null;
   linked_instance_id: string | null;
+  document_type_key: string | null;
   file_name: string;
   storage_bucket: string;
   storage_path: string;
@@ -95,6 +101,16 @@ export type GrowDocumentInboxItem = {
   file_size: number | null;
   suggested_competence_label: string | null;
   identification_confidence: number;
+  matched_by:
+    | "manual_instance"
+    | "direct_expected_doc"
+    | "alias_match"
+    | "single_open_instance"
+    | "manual_review"
+    | null;
+  match_score: number;
+  match_reasons: string[];
+  review_required: boolean;
   status: "pending_review" | "linked" | "rejected";
   blocking_reason: string | null;
   notes: string | null;
@@ -102,6 +118,7 @@ export type GrowDocumentInboxItem = {
   client: GrowClientSummary | null;
   template: GrowObligationTemplate | null;
   linked_instance: GrowObligationInstance | null;
+  document_definition: GrowExpectedDocument | null;
 };
 
 export type GrowObligationsOverviewPayload = {

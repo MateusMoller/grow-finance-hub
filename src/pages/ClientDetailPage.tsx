@@ -58,7 +58,6 @@ type ClientAcessoriasObligation = {
   due_date: string | null;
   delivered_at: string | null;
   status: string | null;
-  protocol: string | null;
   notes: string | null;
   last_synced_at: string | null;
 };
@@ -1024,7 +1023,6 @@ export default function ClientDetailPage() {
         competence_label: string;
         technical_due_date: string;
         status: string;
-        protocol: string | null;
         completion_notes: string | null;
         completed_at: string | null;
         updated_at: string;
@@ -1052,7 +1050,6 @@ export default function ClientDetailPage() {
           due_date: instance.technical_due_date || null,
           delivered_at: instance.completed_at || null,
           status: instance.status || null,
-          protocol: instance.protocol || null,
           notes: instance.completion_notes || null,
           last_synced_at: instance.updated_at || null,
         }))
@@ -2521,10 +2518,8 @@ export default function ClientDetailPage() {
                                     </span>
                                   )}
                                 </div>
-                                {(row.protocol || row.notes) && (
+                                {row.notes && (
                                   <p className="text-[11px] text-muted-foreground">
-                                    {row.protocol ? `Protocolo: ${row.protocol}` : ""}
-                                    {row.protocol && row.notes ? " • " : ""}
                                     {row.notes ? `Obs.: ${row.notes}` : ""}
                                   </p>
                                 )}
@@ -2725,4 +2720,3 @@ export default function ClientDetailPage() {
     </AppLayout>
   );
 }
-

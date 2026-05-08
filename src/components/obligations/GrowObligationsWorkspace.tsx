@@ -12,6 +12,8 @@ import {
   Plus,
   RefreshCcw,
   ShieldCheck,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,6 +41,8 @@ import {
   growPeriodicityLabel,
   growPriorityLabel,
   invokeGrowObligations,
+  type GrowDocumentInboxItem,
+  type GrowExpectedDocument,
   type GrowObligationInstance,
   type GrowObligationTemplate,
   type GrowObligationsOverviewPayload,
@@ -50,10 +54,24 @@ import {
 } from "@/lib/fileUploadSecurity";
 
 type WorkspaceTab = "catalogo" | "execucao" | "documentos";
+type MatchStrategy =
+  | "manual_instance"
+  | "direct_expected_doc"
+  | "alias_match"
+  | "single_open_instance"
+  | "manual_review";
 
 interface GrowObligationsWorkspaceProps {
   defaultTab?: WorkspaceTab;
   initialClientId?: string | null;
+}
+
+interface TemplateExpectedDocumentDraft {
+  document_type_key: string;
+  label: string;
+  aliases: string;
+  required: boolean;
+  active: boolean;
 }
 
 interface TemplateFormState {
@@ -65,11 +83,10 @@ interface TemplateFormState {
   due_day: string;
   legal_due_day: string;
   priority: GrowObligationInstance["priority"];
-  expected_documents: string;
+  expected_documents: TemplateExpectedDocumentDraft[];
   is_active: boolean;
   generates_calendar: boolean;
   generates_kanban: boolean;
-  requires_protocol: boolean;
   requires_document: boolean;
   operational_notes: string;
 }
@@ -78,7 +95,6 @@ interface InstanceFormState {
   instanceId: string;
   status: GrowObligationInstance["status"];
   priority: GrowObligationInstance["priority"];
-  protocol: string;
   completion_notes: string;
   event_comment: string;
 }
@@ -86,12 +102,33 @@ interface InstanceFormState {
 interface UploadDraft {
   client_id: string;
   template_id: string;
+  document_type_key: string;
   instance_id: string;
   suggested_competence_label: string;
   notes: string;
 }
 
-const sectors = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
+interface DocumentOption {
+  optionKey: string;
+  templateId: string;
+  templateName: string;
+  document: GrowExpectedDocument;
+}
+
+interface MatchPreviewPayload {
+  ok: true;
+  match: {
+    suggestedTemplateId: string | null;
+    resolvedInstanceId: string | null;
+    documentTypeKey: string | null;
+    strategy: MatchStrategy;
+    score: number;
+    reviewRequired: boolean;
+    reasons: string[];
+  };
+}
+
+const sectors = ["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societario", "Geral"];
 const periodicities: GrowObligationTemplate["periodicity"][] = ["monthly", "quarterly", "yearly", "custom"];
 const priorities: GrowObligationInstance["priority"][] = ["baixa", "media", "alta", "urgente"];
 const statusOptions: GrowObligationInstance["status"][] = [
@@ -104,6 +141,25 @@ const statusOptions: GrowObligationInstance["status"][] = [
   "cancelada",
 ];
 
+function slugifyDocumentKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function makeExpectedDocumentDraft(document?: GrowExpectedDocument): TemplateExpectedDocumentDraft {
+  return {
+    document_type_key: document?.document_type_key || "",
+    label: document?.label || "",
+    aliases: (document?.aliases || []).join(", "),
+    required: document?.required ?? true,
+    active: document?.active ?? true,
+  };
+}
+
 const makeTemplateForm = (template?: GrowObligationTemplate | null): TemplateFormState => ({
   id: template?.id || null,
   name: template?.name || "",
@@ -113,11 +169,13 @@ const makeTemplateForm = (template?: GrowObligationTemplate | null): TemplateFor
   due_day: String(template?.due_day ?? 10),
   legal_due_day: template?.legal_due_day ? String(template.legal_due_day) : "",
   priority: template?.priority || "media",
-  expected_documents: (template?.expected_documents || []).join(", "),
+  expected_documents:
+    template?.expected_documents?.length
+      ? template.expected_documents.map((item) => makeExpectedDocumentDraft(item))
+      : [makeExpectedDocumentDraft()],
   is_active: template?.is_active ?? true,
   generates_calendar: template?.generates_calendar ?? true,
   generates_kanban: template?.generates_kanban ?? false,
-  requires_protocol: template?.requires_protocol ?? false,
   requires_document: template?.requires_document ?? true,
   operational_notes: template?.operational_notes || "",
 });
@@ -126,7 +184,6 @@ const makeInstanceForm = (instance: GrowObligationInstance): InstanceFormState =
   instanceId: instance.id,
   status: instance.status,
   priority: instance.priority,
-  protocol: instance.protocol || "",
   completion_notes: instance.completion_notes || "",
   event_comment: "",
 });
@@ -149,8 +206,57 @@ function formatDateTime(value: string | null | undefined) {
 
 function buildInstanceLabel(instance: GrowObligationInstance) {
   const clientName = instance.client?.name || "Cliente";
-  const templateName = instance.template?.name || "Obrigação";
+  const templateName = instance.template?.name || "Obrigacao";
   return `${clientName} · ${templateName} · ${instance.competence_label}`;
+}
+
+function matchStrategyLabel(strategy: MatchStrategy | null | undefined) {
+  switch (strategy) {
+    case "manual_instance":
+      return "Instancia definida manualmente";
+    case "direct_expected_doc":
+      return "Documento esperado + competencia";
+    case "alias_match":
+      return "Alias do documento + competencia";
+    case "single_open_instance":
+      return "Unica instancia aberta";
+    case "manual_review":
+      return "Revisao manual";
+    default:
+      return "Sem estrategia";
+  }
+}
+
+function documentTriageLabel(status: GrowDocumentInboxItem["status"]) {
+  if (status === "linked") return "Vinculado";
+  if (status === "rejected") return "Rejeitado";
+  return "Em revisao";
+}
+
+function sanitizeExpectedDocuments(documents: TemplateExpectedDocumentDraft[]) {
+  const uniqueKeys = new Set<string>();
+  return documents
+    .map((document) => {
+      const label = document.label.trim();
+      const inferredKey = slugifyDocumentKey(document.document_type_key || label);
+      const aliases = document.aliases
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      return {
+        document_type_key: inferredKey,
+        label,
+        aliases,
+        required: document.required,
+        active: document.active,
+      };
+    })
+    .filter((document) => {
+      if (!document.label || !document.document_type_key) return false;
+      if (uniqueKeys.has(document.document_type_key)) return false;
+      uniqueKeys.add(document.document_type_key);
+      return true;
+    });
 }
 
 export function GrowObligationsWorkspace({
@@ -170,13 +276,14 @@ export function GrowObligationsWorkspace({
   const [uploadDraft, setUploadDraft] = useState<UploadDraft>({
     client_id: initialClientId || "",
     template_id: "",
+    document_type_key: "",
     instance_id: "",
     suggested_competence_label: "",
     notes: "",
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentResolutionId, setDocumentResolutionId] = useState<string | null>(null);
-  const [documentResolutionInstanceId, setDocumentResolutionInstanceId] = useState<string>("");
+  const [documentResolutionInstanceId, setDocumentResolutionInstanceId] = useState("");
   const [documentResolutionNotes, setDocumentResolutionNotes] = useState("");
 
   const overviewQuery = useQuery({
@@ -190,9 +297,7 @@ export function GrowObligationsWorkspace({
     const items = overview?.templates || [];
     const token = templateSearch.trim().toLowerCase();
     if (!token) return items;
-    return items.filter((template) =>
-      `${template.name} ${template.sector}`.toLowerCase().includes(token),
-    );
+    return items.filter((template) => `${template.name} ${template.sector}`.toLowerCase().includes(token));
   }, [overview?.templates, templateSearch]);
 
   const filteredInstances = useMemo(() => {
@@ -213,6 +318,95 @@ export function GrowObligationsWorkspace({
     [overview?.documents],
   );
 
+  const selectedProfiles = useMemo(
+    () =>
+      (overview?.profiles || []).filter(
+        (profile) => profile.client_id === uploadDraft.client_id && profile.is_active && profile.template?.is_active !== false,
+      ),
+    [overview?.profiles, uploadDraft.client_id],
+  );
+
+  const selectedClientDocumentOptions = useMemo<DocumentOption[]>(() => {
+    const options: DocumentOption[] = [];
+    for (const profile of selectedProfiles) {
+      const template = profile.template || overview?.templates.find((item) => item.id === profile.template_id) || null;
+      if (!template) continue;
+      const sourceDocuments = (profile.expected_documents_override?.length
+        ? profile.expected_documents_override
+        : template.expected_documents
+      ).filter((document) => document.active);
+      for (const document of sourceDocuments) {
+        options.push({
+          optionKey: `${template.id}::${document.document_type_key}`,
+          templateId: template.id,
+          templateName: template.name,
+          document,
+        });
+      }
+    }
+    return options;
+  }, [overview?.templates, selectedProfiles]);
+
+  const selectedDocumentOption = useMemo(
+    () =>
+      selectedClientDocumentOptions.find(
+        (option) =>
+          option.templateId === uploadDraft.template_id &&
+          option.document.document_type_key === uploadDraft.document_type_key,
+      ) || null,
+    [selectedClientDocumentOptions, uploadDraft.document_type_key, uploadDraft.template_id],
+  );
+
+  const selectedClientInstances = useMemo(
+    () =>
+      (overview?.instances || []).filter((instance) => {
+        if (uploadDraft.client_id && instance.client_id !== uploadDraft.client_id) return false;
+        if (uploadDraft.template_id && instance.template_id !== uploadDraft.template_id) return false;
+        return true;
+      }),
+    [overview?.instances, uploadDraft.client_id, uploadDraft.template_id],
+  );
+
+  const documentInResolution = useMemo(
+    () => pendingDocuments.find((item) => item.id === documentResolutionId) || null,
+    [documentResolutionId, pendingDocuments],
+  );
+
+  const documentResolutionOptions = useMemo(() => {
+    if (!documentInResolution) return overview?.instances || [];
+    return (overview?.instances || []).filter((instance) => {
+      if (documentInResolution.client_id && instance.client_id !== documentInResolution.client_id) return false;
+      if (documentInResolution.suggested_template_id && instance.template_id !== documentInResolution.suggested_template_id) return false;
+      return true;
+    });
+  }, [documentInResolution, overview?.instances]);
+
+  const previewFileName = selectedFile?.name || selectedDocumentOption?.document.label || uploadDraft.document_type_key;
+  const previewEnabled = Boolean(uploadDraft.client_id && uploadDraft.document_type_key && previewFileName);
+
+  const previewQuery = useQuery({
+    queryKey: [
+      "grow-obligations-preview",
+      uploadDraft.client_id,
+      uploadDraft.template_id,
+      uploadDraft.document_type_key,
+      uploadDraft.instance_id,
+      uploadDraft.suggested_competence_label,
+      previewFileName,
+    ],
+    enabled: previewEnabled,
+    queryFn: () =>
+      invokeGrowObligations<MatchPreviewPayload>({
+        action: "preview_document_match",
+        client_id: uploadDraft.client_id,
+        template_id: uploadDraft.template_id || null,
+        document_type_key: uploadDraft.document_type_key,
+        instance_id: uploadDraft.instance_id || null,
+        suggested_competence_label: uploadDraft.suggested_competence_label || null,
+        file_name: previewFileName,
+      }),
+  });
+
   const templateMutation = useMutation({
     mutationFn: (payload: TemplateFormState) =>
       invokeGrowObligations({
@@ -225,25 +419,21 @@ export function GrowObligationsWorkspace({
         due_day: Number(payload.due_day || 10),
         legal_due_day: payload.legal_due_day ? Number(payload.legal_due_day) : null,
         priority: payload.priority,
-        expected_documents: payload.expected_documents
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
+        expected_documents: sanitizeExpectedDocuments(payload.expected_documents),
         is_active: payload.is_active,
         generates_calendar: payload.generates_calendar,
         generates_kanban: payload.generates_kanban,
-        requires_protocol: payload.requires_protocol,
         requires_document: payload.requires_document,
         operational_notes: payload.operational_notes,
       }),
     onSuccess: async () => {
-      toast.success("Obrigação mestre salva.");
+      toast.success("Obrigacao mestre salva.");
       setTemplateDialogOpen(false);
       setTemplateForm(makeTemplateForm());
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigação.");
+      toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigacao.");
     },
   });
 
@@ -254,11 +444,11 @@ export function GrowObligationsWorkspace({
         client_id: instanceClientFilter !== "all" ? instanceClientFilter : null,
       }),
     onSuccess: async () => {
-      toast.success("Competências sincronizadas.");
+      toast.success("Competencias sincronizadas.");
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Falha ao gerar competências.");
+      toast.error(error instanceof Error ? error.message : "Falha ao gerar competencias.");
     },
   });
 
@@ -269,18 +459,17 @@ export function GrowObligationsWorkspace({
         instance_id: payload.instanceId,
         status: payload.status,
         priority: payload.priority,
-        protocol: payload.protocol,
         completion_notes: payload.completion_notes,
         event_comment: payload.event_comment,
       }),
     onSuccess: async () => {
-      toast.success("Instância atualizada.");
+      toast.success("Instancia atualizada.");
       setInstanceDialogOpen(false);
       setInstanceForm(null);
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Falha ao atualizar instância.");
+      toast.error(error instanceof Error ? error.message : "Falha ao atualizar instancia.");
     },
   });
 
@@ -318,17 +507,15 @@ export function GrowObligationsWorkspace({
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedFile) {
-        throw new Error("Selecione um arquivo.");
-      }
+      if (!selectedFile) throw new Error("Selecione um arquivo.");
+      if (!uploadDraft.client_id) throw new Error("Selecione o cliente.");
+      if (!uploadDraft.document_type_key) throw new Error("Selecione o documento esperado.");
 
       const validationError = validateSecureDocument(selectedFile);
-      if (validationError) {
-        throw new Error(validationError);
-      }
+      if (validationError) throw new Error(validationError);
 
       const path = buildSecureStoragePath(
-        ["grow-obligations", uploadDraft.client_id || "sem-cliente", new Date().toISOString().slice(0, 7)],
+        ["grow-obligations", uploadDraft.client_id, new Date().toISOString().slice(0, 7)],
         selectedFile.name,
       );
 
@@ -339,14 +526,16 @@ export function GrowObligationsWorkspace({
           upsert: false,
         });
 
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
-      return invokeGrowObligations({
+      return invokeGrowObligations<{
+        ok: true;
+        match: MatchPreviewPayload["match"];
+      }>({
         action: "register_document_upload",
-        client_id: uploadDraft.client_id || null,
+        client_id: uploadDraft.client_id,
         template_id: uploadDraft.template_id || null,
+        document_type_key: uploadDraft.document_type_key,
         instance_id: uploadDraft.instance_id || null,
         suggested_competence_label: uploadDraft.suggested_competence_label || null,
         notes: uploadDraft.notes || null,
@@ -357,12 +546,15 @@ export function GrowObligationsWorkspace({
         file_size: selectedFile.size,
       });
     },
-    onSuccess: async () => {
-      toast.success("Documento enviado para a central da Grow.");
+    onSuccess: async (response) => {
+      toast.success(
+        response.match.reviewRequired ? "Documento enviado para revisao humana." : "Documento vinculado automaticamente.",
+      );
       setSelectedFile(null);
       setUploadDraft({
         client_id: initialClientId || "",
         template_id: "",
+        document_type_key: "",
         instance_id: "",
         suggested_competence_label: "",
         notes: "",
@@ -373,35 +565,6 @@ export function GrowObligationsWorkspace({
       toast.error(error instanceof Error ? error.message : "Falha ao enviar documento.");
     },
   });
-
-  const documentResolutionOptions = useMemo(() => {
-    const document = pendingDocuments.find((item) => item.id === documentResolutionId);
-    if (!document) return overview?.instances || [];
-
-    return (overview?.instances || []).filter((instance) => {
-      if (document.client_id && instance.client_id !== document.client_id) return false;
-      if (document.suggested_template_id && instance.template_id !== document.suggested_template_id) return false;
-      return true;
-    });
-  }, [documentResolutionId, overview?.instances, pendingDocuments]);
-
-  const selectedClientTemplates = useMemo(() => {
-    if (!uploadDraft.client_id) return overview?.templates || [];
-    const templateIds = new Set(
-      (overview?.profiles || [])
-        .filter((profile) => profile.client_id === uploadDraft.client_id && profile.is_active)
-        .map((profile) => profile.template_id),
-    );
-    return (overview?.templates || []).filter((template) => templateIds.has(template.id));
-  }, [overview?.profiles, overview?.templates, uploadDraft.client_id]);
-
-  const selectedClientInstances = useMemo(() => {
-    return (overview?.instances || []).filter((instance) => {
-      if (uploadDraft.client_id && instance.client_id !== uploadDraft.client_id) return false;
-      if (uploadDraft.template_id && instance.template_id !== uploadDraft.template_id) return false;
-      return true;
-    });
-  }, [overview?.instances, uploadDraft.client_id, uploadDraft.template_id]);
 
   const openTemplateDialog = (template?: GrowObligationTemplate) => {
     setTemplateForm(makeTemplateForm(template));
@@ -414,11 +577,69 @@ export function GrowObligationsWorkspace({
   };
 
   const handleSelectClient = (clientId: string) => {
-    setUploadDraft((prev) => ({
-      ...prev,
+    setUploadDraft({
       client_id: clientId,
       template_id: "",
+      document_type_key: "",
       instance_id: "",
+      suggested_competence_label: "",
+      notes: "",
+    });
+    setSelectedFile(null);
+  };
+
+  const handleSelectDocumentOption = (value: string) => {
+    if (value === "none") {
+      setUploadDraft((prev) => ({
+        ...prev,
+        template_id: "",
+        document_type_key: "",
+        instance_id: "",
+      }));
+      return;
+    }
+    const option = selectedClientDocumentOptions.find((item) => item.optionKey === value);
+    if (!option) return;
+    setUploadDraft((prev) => ({
+      ...prev,
+      template_id: option.templateId,
+      document_type_key: option.document.document_type_key,
+      instance_id: "",
+    }));
+  };
+
+  const updateExpectedDocument = (
+    index: number,
+    field: keyof TemplateExpectedDocumentDraft,
+    value: string | boolean,
+  ) => {
+    setTemplateForm((prev) => ({
+      ...prev,
+      expected_documents: prev.expected_documents.map((document, currentIndex) => {
+        if (currentIndex !== index) return document;
+        const nextDocument = { ...document, [field]: value } as TemplateExpectedDocumentDraft;
+        if (field === "label" && !document.document_type_key) {
+          nextDocument.document_type_key = slugifyDocumentKey(String(value));
+        }
+        return nextDocument;
+      }),
+    }));
+  };
+
+  const addExpectedDocumentRow = () => {
+    setTemplateForm((prev) => ({
+      ...prev,
+      expected_documents: [...prev.expected_documents, makeExpectedDocumentDraft()],
+    }));
+  };
+
+  const removeExpectedDocumentRow = (index: number) => {
+    setTemplateForm((prev) => ({
+      ...prev,
+      expected_documents:
+        prev.expected_documents.length <= 1
+          ? [makeExpectedDocumentDraft()]
+          : prev.expected_documents.filter((_, currentIndex) => currentIndex !== index),
     }));
   };
 
@@ -434,9 +655,11 @@ export function GrowObligationsWorkspace({
     return (
       <Card className="rounded-3xl border-destructive/30">
         <CardHeader>
-          <CardTitle>Falha ao carregar o módulo</CardTitle>
+          <CardTitle>Falha ao carregar o modulo</CardTitle>
           <CardDescription>
-            {overviewQuery.error instanceof Error ? overviewQuery.error.message : "Não foi possível consultar o domínio nativo da Grow."}
+            {overviewQuery.error instanceof Error
+              ? overviewQuery.error.message
+              : "Nao foi possivel consultar o dominio nativo da Grow."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -453,9 +676,9 @@ export function GrowObligationsWorkspace({
               Grow Native
             </Badge>
             <div className="space-y-2">
-              <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigações Grow</h1>
+              <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigacoes Grow</h1>
               <p className="max-w-3xl text-sm text-muted-foreground">
-                Domínio interno de obrigações, execução operacional e central de documentos sem dependência do Acessórias.
+                Dominio interno de obrigacoes, execucao operacional e central de documentos sem dependencia do Acessorias.
               </p>
             </div>
           </div>
@@ -463,41 +686,21 @@ export function GrowObligationsWorkspace({
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" className="rounded-2xl" onClick={() => overviewQuery.refetch()}>
               <RefreshCcw className="mr-2 h-4 w-4" />
-              Atualizar visão
+              Atualizar visao
             </Button>
             <Button className="rounded-2xl" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
               {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
-              Gerar competências
+              Gerar competencias
             </Button>
           </div>
         </div>
 
         <div className="relative mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
-            {
-              label: "Pendentes",
-              value: overview.summary.pending_instances,
-              icon: ClipboardList,
-              accent: "text-amber-600",
-            },
-            {
-              label: "Atrasadas",
-              value: overview.summary.overdue_instances,
-              icon: AlertTriangle,
-              accent: "text-red-600",
-            },
-            {
-              label: "Aguardando documento",
-              value: overview.summary.waiting_documents + overview.summary.inbox_pending,
-              icon: FileArchive,
-              accent: "text-orange-600",
-            },
-            {
-              label: "Templates ativos",
-              value: overview.summary.templates_active,
-              icon: ShieldCheck,
-              accent: "text-primary",
-            },
+            { label: "Pendentes", value: overview.summary.pending_instances, icon: ClipboardList, accent: "text-amber-600" },
+            { label: "Atrasadas", value: overview.summary.overdue_instances, icon: AlertTriangle, accent: "text-red-600" },
+            { label: "Aguardando documento", value: overview.summary.waiting_documents + overview.summary.inbox_pending, icon: FileArchive, accent: "text-orange-600" },
+            { label: "Templates ativos", value: overview.summary.templates_active, icon: ShieldCheck, accent: "text-primary" },
           ].map((item) => (
             <motion.div
               key={item.label}
@@ -520,8 +723,8 @@ export function GrowObligationsWorkspace({
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-muted/50 p-1">
-          <TabsTrigger value="catalogo" className="rounded-xl">Catálogo</TabsTrigger>
-          <TabsTrigger value="execucao" className="rounded-xl">Execução</TabsTrigger>
+          <TabsTrigger value="catalogo" className="rounded-xl">Catalogo</TabsTrigger>
+          <TabsTrigger value="execucao" className="rounded-xl">Execucao</TabsTrigger>
           <TabsTrigger value="documentos" className="rounded-xl">Central de Documentos</TabsTrigger>
         </TabsList>
 
@@ -529,21 +732,19 @@ export function GrowObligationsWorkspace({
           <Card className="rounded-3xl">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <CardTitle>Catálogo mestre</CardTitle>
-                <CardDescription>
-                  Defina a obrigação uma vez e use o mesmo template em todos os clientes.
-                </CardDescription>
+                <CardTitle>Catalogo mestre</CardTitle>
+                <CardDescription>Defina a obrigacao uma vez e use o mesmo template em todos os clientes.</CardDescription>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input
                   value={templateSearch}
                   onChange={(event) => setTemplateSearch(event.target.value)}
-                  placeholder="Buscar por nome, código ou setor"
+                  placeholder="Buscar por nome ou setor"
                   className="w-full sm:w-72"
                 />
                 <Button className="rounded-2xl" onClick={() => openTemplateDialog()}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Nova obrigação
+                  Nova obrigacao
                 </Button>
               </div>
             </CardHeader>
@@ -558,25 +759,25 @@ export function GrowObligationsWorkspace({
                         {!template.is_active && <Badge variant="destructive">Inativa</Badge>}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {growPeriodicityLabel[template.periodicity]} · vencimento técnico no dia {template.due_day}
-                        {` · mês base ${growCompetenceReferenceLabel[template.competence_reference]}`}
+                        {growPeriodicityLabel[template.periodicity]} · vencimento tecnico no dia {template.due_day}
+                        {` · mes base ${growCompetenceReferenceLabel[template.competence_reference]}`}
                         {template.legal_due_day ? ` · vencimento legal ${template.legal_due_day}` : ""}
                       </p>
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span>Calendário: {template.generates_calendar ? "sim" : "não"}</span>
-                        <span>Kanban: {template.generates_kanban ? "sim" : "não"}</span>
-                        <span>Protocolo: {template.requires_protocol ? "obrigatório" : "opcional"}</span>
-                        <span>Documento: {template.requires_document ? "obrigatório" : "opcional"}</span>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Calendario: {template.generates_calendar ? "sim" : "nao"}</span>
+                        <span>Kanban: {template.generates_kanban ? "sim" : "nao"}</span>
+                        <span>Documento: {template.requires_document ? "obrigatorio" : "opcional"}</span>
                       </div>
                       {template.expected_documents.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                           {template.expected_documents.map((item) => (
-                            <Badge key={item} variant="outline">{item}</Badge>
+                            <Badge key={`${template.id}-${item.document_type_key}`} variant="outline">
+                              {item.label}
+                            </Badge>
                           ))}
                         </div>
                       )}
                     </div>
-
                     <Button variant="outline" className="rounded-2xl" onClick={() => openTemplateDialog(template)}>
                       Editar
                     </Button>
@@ -594,14 +795,14 @@ export function GrowObligationsWorkspace({
                 <div>
                   <CardTitle>Fila operacional</CardTitle>
                   <CardDescription>
-                    Competências geradas por cliente com integração automática ao calendário e ao kanban quando configurado.
+                    Competencias geradas por cliente com integracao automatica ao calendario e ao kanban quando configurado.
                   </CardDescription>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Input
                     value={instanceSearch}
                     onChange={(event) => setInstanceSearch(event.target.value)}
-                    placeholder="Buscar cliente, obrigação ou competência"
+                    placeholder="Buscar cliente, obrigacao ou competencia"
                     className="sm:w-72"
                   />
                   <Select value={instanceStatusFilter} onValueChange={setInstanceStatusFilter}>
@@ -637,23 +838,23 @@ export function GrowObligationsWorkspace({
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{instance.template?.name || "Obrigação"}</p>
+                        <p className="font-medium">{instance.template?.name || "Obrigacao"}</p>
                         <Badge className={`border-0 ${growObligationStatusClass[instance.status]}`}>
                           {growObligationStatusLabel[instance.status]}
                         </Badge>
                         <Badge variant="outline">{growPriorityLabel[instance.priority]}</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {instance.client?.name || "Cliente"} · competência {instance.competence_label}
+                        {instance.client?.name || "Cliente"} · competencia {instance.competence_label}
                       </p>
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                        <span>Vencimento técnico: {formatDate(instance.technical_due_date)}</span>
+                        <span>Vencimento tecnico: {formatDate(instance.technical_due_date)}</span>
                         <span>Vencimento legal: {formatDate(instance.legal_due_date)}</span>
-                        <span>Protocolo: {instance.protocol || "-"}</span>
+                        <span>Documento: {instance.document_required ? "obrigatorio" : "opcional"}</span>
                       </div>
                     </div>
                     <Button variant="outline" className="rounded-2xl" onClick={() => openInstanceDialog(instance)}>
-                      Atualizar execução
+                      Atualizar execucao
                     </Button>
                   </div>
                 </div>
@@ -667,7 +868,7 @@ export function GrowObligationsWorkspace({
             <CardHeader>
               <CardTitle>Central de Documentos</CardTitle>
               <CardDescription>
-                Envie arquivos direto para a Grow, vincule manualmente quando necessário e mantenha rastreabilidade no histórico da obrigação.
+                O envio inteligente usa o documento esperado da obrigacao para tentar vincular cada arquivo na instancia correta antes da triagem humana.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -675,7 +876,7 @@ export function GrowObligationsWorkspace({
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Novo envio</p>
                   <p className="text-xs text-muted-foreground">
-                    Associação manual direta quando você já sabe a competência, ou triagem assistida quando ainda precisa revisar.
+                    Se o match for seguro, o documento ja entra vinculado. Quando houver duvida, ele cai na fila de revisao.
                   </p>
                 </div>
 
@@ -696,37 +897,47 @@ export function GrowObligationsWorkspace({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Obrigação sugerida</Label>
-                    <Select value={uploadDraft.template_id || "none"} onValueChange={(value) => setUploadDraft((prev) => ({ ...prev, template_id: value === "none" ? "" : value, instance_id: "" }))}>
+                    <Label>Documento esperado</Label>
+                    <Select
+                      value={selectedDocumentOption?.optionKey || "none"}
+                      onValueChange={handleSelectDocumentOption}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione a obrigação" />
+                        <SelectValue placeholder="Selecione o documento esperado" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Sem obrigação definida</SelectItem>
-                        {selectedClientTemplates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>
+                        <SelectItem value="none">Sem documento definido</SelectItem>
+                        {selectedClientDocumentOptions.map((option) => (
+                          <SelectItem key={option.optionKey} value={option.optionKey}>
+                            {option.templateName} · {option.document.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Vincular direto a uma competência</Label>
-                    <Select value={uploadDraft.instance_id || "none"} onValueChange={(value) => setUploadDraft((prev) => ({ ...prev, instance_id: value === "none" ? "" : value }))}>
+                    <Label>Instancia opcional</Label>
+                    <Select
+                      value={uploadDraft.instance_id || "none"}
+                      onValueChange={(value) => setUploadDraft((prev) => ({ ...prev, instance_id: value === "none" ? "" : value }))}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma competência para anexação imediata" />
+                        <SelectValue placeholder="Selecione a competencia para vinculo direto" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Sem vínculo direto</SelectItem>
+                        <SelectItem value="none">Sem vinculo direto</SelectItem>
                         {selectedClientInstances.map((instance) => (
-                          <SelectItem key={instance.id} value={instance.id}>{buildInstanceLabel(instance)}</SelectItem>
+                          <SelectItem key={instance.id} value={instance.id}>
+                            {buildInstanceLabel(instance)}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Competência sugerida</Label>
+                    <Label>Competencia sugerida</Label>
                     <Input
                       value={uploadDraft.suggested_competence_label}
                       onChange={(event) => setUploadDraft((prev) => ({ ...prev, suggested_competence_label: event.target.value }))}
@@ -744,12 +955,46 @@ export function GrowObligationsWorkspace({
                   </div>
                 </div>
 
+                <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="mt-0.5 h-4 w-4 text-primary" />
+                    <div className="space-y-2 text-sm">
+                      <p className="font-medium">Roteamento provavel</p>
+                      {previewEnabled ? (
+                        previewQuery.isLoading ? (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Calculando melhor destino...
+                          </div>
+                        ) : previewQuery.data ? (
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={previewQuery.data.match.reviewRequired ? "secondary" : "default"}>
+                                {previewQuery.data.match.reviewRequired ? "Aguardando revisao" : "Vinculo automatico"}
+                              </Badge>
+                              <Badge variant="outline">{matchStrategyLabel(previewQuery.data.match.strategy)}</Badge>
+                              <Badge variant="outline">Score {previewQuery.data.match.score.toFixed(2)}</Badge>
+                            </div>
+                            <p className="text-muted-foreground">
+                              {previewQuery.data.match.reasons.join(" · ") || "Sem explicacao adicional."}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-muted-foreground">Preencha cliente e documento esperado para prever o roteamento.</p>
+                        )
+                      ) : (
+                        <p className="text-muted-foreground">Selecione cliente e documento esperado para prever o roteamento.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label>Observações</Label>
+                  <Label>Observacoes</Label>
                   <Textarea
                     value={uploadDraft.notes}
                     onChange={(event) => setUploadDraft((prev) => ({ ...prev, notes: event.target.value }))}
-                    placeholder="Contexto do envio, pendência ou observação interna"
+                    placeholder="Contexto do envio, pendencia ou observacao interna"
                     rows={4}
                   />
                 </div>
@@ -765,7 +1010,7 @@ export function GrowObligationsWorkspace({
                   <div className="mb-4 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">Triagem pendente</p>
-                      <p className="text-xs text-muted-foreground">{pendingDocuments.length} documentos aguardando análise</p>
+                      <p className="text-xs text-muted-foreground">{pendingDocuments.length} documentos aguardando analise</p>
                     </div>
                     <Badge variant="secondary">{overview.summary.inbox_pending}</Badge>
                   </div>
@@ -776,11 +1021,15 @@ export function GrowObligationsWorkspace({
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-medium">{item.file_name}</p>
-                            <Badge variant="outline">{Math.round((item.identification_confidence || 0) * 100) / 100}</Badge>
+                            <Badge variant="outline">Score {item.match_score.toFixed(2)}</Badge>
+                            <Badge variant="outline">{matchStrategyLabel(item.matched_by)}</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Cliente: {item.client?.name || "não identificado"} · Obrigação: {item.template?.name || "não identificada"} · Competência: {item.suggested_competence_label || "-"}
+                            Cliente: {item.client?.name || "nao identificado"} · Documento: {item.document_definition?.label || item.document_type_key || "nao identificado"} · Competencia: {item.suggested_competence_label || "-"}
                           </p>
+                          {item.match_reasons.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground">{item.match_reasons.join(" · ")}</p>
+                          )}
                           <div className="flex flex-wrap gap-2">
                             <Button
                               variant="outline"
@@ -792,13 +1041,19 @@ export function GrowObligationsWorkspace({
                                 setDocumentResolutionNotes(item.notes || "");
                               }}
                             >
-                              Revisar vínculo
+                              Revisar vinculo
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               className="rounded-xl text-destructive"
-                              onClick={() => documentResolveMutation.mutate({ inboxItemId: item.id, decision: "reject", notes: "Documento rejeitado manualmente." })}
+                              onClick={() =>
+                                documentResolveMutation.mutate({
+                                  inboxItemId: item.id,
+                                  decision: "reject",
+                                  notes: "Documento rejeitado manualmente.",
+                                })
+                              }
                             >
                               Rejeitar
                             </Button>
@@ -812,8 +1067,8 @@ export function GrowObligationsWorkspace({
                 <div className="rounded-3xl border p-5">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Últimos documentos</p>
-                      <p className="text-xs text-muted-foreground">Histórico recente da central interna</p>
+                      <p className="text-sm font-medium">Ultimos documentos</p>
+                      <p className="text-xs text-muted-foreground">Historico recente da central interna</p>
                     </div>
                     <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -824,14 +1079,15 @@ export function GrowObligationsWorkspace({
                           <div className="space-y-1">
                             <p className="text-sm font-medium">{item.file_name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {item.linked_instance ? buildInstanceLabel(item.linked_instance) : item.client?.name || "Sem cliente"}
+                              {(item.linked_instance && buildInstanceLabel(item.linked_instance)) || item.client?.name || "Sem cliente"}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              {formatDateTime(item.created_at)}
+                              {item.document_definition?.label || item.document_type_key || "Sem documento definido"} · {matchStrategyLabel(item.matched_by)}
                             </p>
+                            <p className="text-[11px] text-muted-foreground">{formatDateTime(item.created_at)}</p>
                           </div>
                           <Badge variant={item.status === "linked" ? "default" : item.status === "rejected" ? "destructive" : "secondary"}>
-                            {item.status === "linked" ? "Vinculado" : item.status === "rejected" ? "Rejeitado" : "Em revisão"}
+                            {documentTriageLabel(item.status)}
                           </Badge>
                         </div>
                       </div>
@@ -845,12 +1101,10 @@ export function GrowObligationsWorkspace({
       </Tabs>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>{templateForm.id ? "Editar obrigação" : "Nova obrigação"}</DialogTitle>
-            <DialogDescription>
-              O template define a regra central da obrigação para todos os clientes.
-            </DialogDescription>
+            <DialogTitle>{templateForm.id ? "Editar obrigacao" : "Nova obrigacao"}</DialogTitle>
+            <DialogDescription>O template define a regra central da obrigacao para todos os clientes.</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-2 md:grid-cols-2">
@@ -873,7 +1127,7 @@ export function GrowObligationsWorkspace({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Mês base</Label>
+              <Label>Mes base</Label>
               <Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -883,7 +1137,7 @@ export function GrowObligationsWorkspace({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Dia do vencimento técnico</Label>
+              <Label>Dia do vencimento tecnico</Label>
               <Input value={templateForm.due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_day: event.target.value }))} />
             </div>
             <div className="space-y-2">
@@ -899,24 +1153,77 @@ export function GrowObligationsWorkspace({
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Documentos esperados</Label>
-              <Input
-                value={templateForm.expected_documents}
-                onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: event.target.value }))}
-                placeholder="Ex.: extrato bancário, relatório fiscal, folha de pagamento"
-              />
+              <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+                {templateForm.expected_documents.map((document, index) => (
+                  <div key={`${document.document_type_key || "novo"}-${index}`} className="grid gap-3 rounded-2xl border border-border/60 p-3 md:grid-cols-[1.1fr_1fr_140px_auto]">
+                    <div className="space-y-2">
+                      <Label>Nome do documento</Label>
+                      <Input
+                        value={document.label}
+                        onChange={(event) => updateExpectedDocument(index, "label", event.target.value)}
+                        placeholder="Ex.: Relatorio fiscal"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Apelidos de identificacao</Label>
+                      <Input
+                        value={document.aliases}
+                        onChange={(event) => updateExpectedDocument(index, "aliases", event.target.value)}
+                        placeholder="Ex.: rel fiscal, fiscal"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between gap-4 text-sm">
+                        <span>Obrigatorio</span>
+                        <input
+                          type="checkbox"
+                          checked={document.required}
+                          onChange={(event) => updateExpectedDocument(index, "required", event.target.checked)}
+                        />
+                      </label>
+                      <label className="flex items-center justify-between gap-4 text-sm">
+                        <span>Ativo</span>
+                        <input
+                          type="checkbox"
+                          checked={document.active}
+                          onChange={(event) => updateExpectedDocument(index, "active", event.target.checked)}
+                        />
+                      </label>
+                    </div>
+                    <div className="flex items-end justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-xl text-destructive"
+                        onClick={() => removeExpectedDocumentRow(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" className="rounded-2xl" onClick={addExpectedDocumentRow}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar documento esperado
+                </Button>
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Observações operacionais</Label>
-              <Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={4} />
+              <Label>Observacoes operacionais</Label>
+              <Textarea
+                value={templateForm.operational_notes}
+                onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))}
+                rows={4}
+              />
             </div>
           </div>
 
           <div className="grid gap-3 rounded-2xl border border-border/70 p-4 md:grid-cols-2">
             {[
               ["is_active", "Template ativo"],
-              ["generates_calendar", "Gerar no calendário"],
+              ["generates_calendar", "Gerar no calendario"],
               ["generates_kanban", "Gerar no kanban"],
-              ["requires_protocol", "Exigir protocolo"],
               ["requires_document", "Exigir documento"],
             ].map(([field, label]) => (
               <label key={field} className="flex items-center justify-between gap-4 text-sm">
@@ -945,15 +1252,15 @@ export function GrowObligationsWorkspace({
       <Dialog open={instanceDialogOpen} onOpenChange={setInstanceDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Atualizar execução</DialogTitle>
-            <DialogDescription>Altere o status operacional, protocolo e observações da competência.</DialogDescription>
+            <DialogTitle>Atualizar execucao</DialogTitle>
+            <DialogDescription>Altere o status operacional e as observacoes da competencia.</DialogDescription>
           </DialogHeader>
           {instanceForm && (
             <div className="space-y-4 py-2">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Select value={instanceForm.status} onValueChange={(value) => setInstanceForm((prev) => prev ? { ...prev, status: value as GrowObligationInstance["status"] } : prev)}>
+                  <Select value={instanceForm.status} onValueChange={(value) => setInstanceForm((prev) => (prev ? { ...prev, status: value as GrowObligationInstance["status"] } : prev))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {statusOptions.map((status) => (
@@ -964,7 +1271,7 @@ export function GrowObligationsWorkspace({
                 </div>
                 <div className="space-y-2">
                   <Label>Prioridade</Label>
-                  <Select value={instanceForm.priority} onValueChange={(value) => setInstanceForm((prev) => prev ? { ...prev, priority: value as GrowObligationInstance["priority"] } : prev)}>
+                  <Select value={instanceForm.priority} onValueChange={(value) => setInstanceForm((prev) => (prev ? { ...prev, priority: value as GrowObligationInstance["priority"] } : prev))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {priorities.map((priority) => (
@@ -975,16 +1282,12 @@ export function GrowObligationsWorkspace({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Protocolo</Label>
-                <Input value={instanceForm.protocol} onChange={(event) => setInstanceForm((prev) => prev ? { ...prev, protocol: event.target.value } : prev)} />
+                <Label>Notas de conclusao</Label>
+                <Textarea value={instanceForm.completion_notes} onChange={(event) => setInstanceForm((prev) => (prev ? { ...prev, completion_notes: event.target.value } : prev))} rows={3} />
               </div>
               <div className="space-y-2">
-                <Label>Notas de conclusão</Label>
-                <Textarea value={instanceForm.completion_notes} onChange={(event) => setInstanceForm((prev) => prev ? { ...prev, completion_notes: event.target.value } : prev)} rows={3} />
-              </div>
-              <div className="space-y-2">
-                <Label>Comentário do histórico</Label>
-                <Textarea value={instanceForm.event_comment} onChange={(event) => setInstanceForm((prev) => prev ? { ...prev, event_comment: event.target.value } : prev)} rows={2} />
+                <Label>Comentario do historico</Label>
+                <Textarea value={instanceForm.event_comment} onChange={(event) => setInstanceForm((prev) => (prev ? { ...prev, event_comment: event.target.value } : prev))} rows={2} />
               </div>
             </div>
           )}
@@ -992,7 +1295,7 @@ export function GrowObligationsWorkspace({
             <Button variant="outline" onClick={() => setInstanceDialogOpen(false)}>Cancelar</Button>
             <Button onClick={() => instanceForm && instanceMutation.mutate(instanceForm)} disabled={instanceMutation.isPending}>
               {instanceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Salvar execução
+              Salvar execucao
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1001,39 +1304,53 @@ export function GrowObligationsWorkspace({
       <Dialog open={Boolean(documentResolutionId)} onOpenChange={(open) => !open && setDocumentResolutionId(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Revisar vínculo do documento</DialogTitle>
-            <DialogDescription>
-              Selecione a competência correta para concluir a triagem e anexar o arquivo ao histórico operacional.
-            </DialogDescription>
+            <DialogTitle>Revisar vinculo do documento</DialogTitle>
+            <DialogDescription>Selecione a competencia correta para concluir a triagem e anexar o arquivo ao historico operacional.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Competência</Label>
-              <Select value={documentResolutionInstanceId || "none"} onValueChange={(value) => setDocumentResolutionInstanceId(value === "none" ? "" : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a competência" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Selecione</SelectItem>
-                  {documentResolutionOptions.map((instance) => (
-                    <SelectItem key={instance.id} value={instance.id}>
-                      {buildInstanceLabel(instance)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {documentInResolution && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 text-sm">
+                <p className="font-medium">{documentInResolution.file_name}</p>
+                <p className="mt-1 text-muted-foreground">
+                  Cliente: {documentInResolution.client?.name || "nao identificado"} · Documento: {documentInResolution.document_definition?.label || documentInResolution.document_type_key || "nao identificado"}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {matchStrategyLabel(documentInResolution.matched_by)} · Score {documentInResolution.match_score.toFixed(2)}
+                </p>
+                {documentInResolution.match_reasons.length > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">{documentInResolution.match_reasons.join(" · ")}</p>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label>Observações</Label>
-              <Textarea value={documentResolutionNotes} onChange={(event) => setDocumentResolutionNotes(event.target.value)} rows={3} />
+              <div className="space-y-2">
+                <Label>Competencia</Label>
+                <Select value={documentResolutionInstanceId || "none"} onValueChange={(value) => setDocumentResolutionInstanceId(value === "none" ? "" : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a competencia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Selecione</SelectItem>
+                    {documentResolutionOptions.map((instance) => (
+                      <SelectItem key={instance.id} value={instance.id}>
+                        {buildInstanceLabel(instance)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Observacoes</Label>
+                <Textarea value={documentResolutionNotes} onChange={(event) => setDocumentResolutionNotes(event.target.value)} rows={3} />
+              </div>
             </div>
-          </div>
+          )}
 
           <DialogFooter>
+            <Button variant="outline" onClick={() => setDocumentResolutionId(null)}>Cancelar</Button>
             <Button
-              variant="outline"
+              variant="ghost"
               className="text-destructive"
               onClick={() =>
                 documentResolutionId &&
@@ -1043,6 +1360,7 @@ export function GrowObligationsWorkspace({
                   notes: documentResolutionNotes || "Documento rejeitado manualmente.",
                 })
               }
+              disabled={documentResolveMutation.isPending}
             >
               Rejeitar
             </Button>
@@ -1056,10 +1374,10 @@ export function GrowObligationsWorkspace({
                   notes: documentResolutionNotes,
                 })
               }
-              disabled={!documentResolutionInstanceId || documentResolveMutation.isPending}
+              disabled={documentResolveMutation.isPending}
             >
               {documentResolveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Vincular documento
+              Confirmar vinculo
             </Button>
           </DialogFooter>
         </DialogContent>
