@@ -6,6 +6,31 @@ export type GrowExpectedDocument = {
   aliases: string[];
   required: boolean;
   active: boolean;
+  reference_files_count?: number;
+  has_active_reference?: boolean;
+  reference_files?: GrowExpectedDocumentReferenceFile[];
+};
+
+export type GrowExpectedDocumentReferenceFile = {
+  id: string;
+  template_id: string;
+  profile_id: string | null;
+  document_type_key: string;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+  file_size: number | null;
+  is_active: boolean;
+  source_kind: "template_reference" | "profile_override";
+  extracted_text_preview: string | null;
+  text_extraction_status: "pending" | "completed" | "failed";
+  ocr_status: "pending" | "not_needed" | "completed" | "failed";
+  fingerprint_version: number;
+  fingerprint_payload: Record<string, unknown>;
+  keywords: string[];
+  primary_cues: string[];
+  created_at: string;
 };
 
 export type GrowObligationTemplate = {
@@ -42,6 +67,7 @@ export const growCompetenceReferenceLabel: Record<GrowObligationTemplate["compet
 export type GrowClientSummary = {
   id: string;
   name: string;
+  cnpj: string | null;
   sector: string;
   status: string;
 };
@@ -90,6 +116,7 @@ export type GrowDocumentInboxItem = {
   id: string;
   client_id: string | null;
   suggested_client_id: string | null;
+  detected_client_id: string | null;
   suggested_template_id: string | null;
   suggested_instance_id: string | null;
   linked_instance_id: string | null;
@@ -100,6 +127,8 @@ export type GrowDocumentInboxItem = {
   content_type: string | null;
   file_size: number | null;
   suggested_competence_label: string | null;
+  detected_cnpj: string | null;
+  competence_detected: string | null;
   identification_confidence: number;
   matched_by:
     | "manual_instance"
@@ -110,15 +139,24 @@ export type GrowDocumentInboxItem = {
     | null;
   match_score: number;
   match_reasons: string[];
+  reference_file_id: string | null;
+  reference_match_score: number;
+  reference_match_reasons: string[];
   review_required: boolean;
   status: "pending_review" | "linked" | "rejected";
   blocking_reason: string | null;
+  text_extraction_status: "pending" | "completed" | "failed";
+  ocr_status: "pending" | "not_needed" | "completed" | "failed";
+  extracted_text_preview: string | null;
+  auto_link_block_reason: string | null;
   notes: string | null;
   created_at: string;
   client: GrowClientSummary | null;
+  detected_client: GrowClientSummary | null;
   template: GrowObligationTemplate | null;
   linked_instance: GrowObligationInstance | null;
   document_definition: GrowExpectedDocument | null;
+  reference_file: GrowExpectedDocumentReferenceFile | null;
 };
 
 export type GrowObligationsOverviewPayload = {

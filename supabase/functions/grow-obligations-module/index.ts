@@ -53,6 +53,52 @@ type MatchResult = {
   reviewRequired: boolean;
   documentDefinition: ExpectedDocumentDefinition | null;
   candidateInstanceIds: string[];
+  detectedClientId?: string | null;
+  detectedCnpj?: string | null;
+  competenceDetected?: string | null;
+  referenceFileId?: string | null;
+  referenceMatchScore?: number;
+  referenceMatchReasons?: string[];
+  textExtractionStatus?: string;
+  ocrStatus?: string;
+  extractedTextPreview?: string | null;
+  fingerprintPayload?: JsonRecord;
+  autoLinkBlockReason?: string | null;
+};
+
+type ReferenceFileRow = {
+  id: string;
+  template_id: string;
+  profile_id: string | null;
+  document_type_key: string;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+  file_size: number | null;
+  is_active: boolean;
+  source_kind: string;
+  extracted_text: string | null;
+  extracted_text_preview: string | null;
+  text_extraction_status: string;
+  ocr_status: string;
+  fingerprint_version: number;
+  fingerprint_payload: unknown;
+  keywords: unknown;
+  primary_cues: unknown;
+  created_at: string;
+};
+
+type DocumentAnalysisPayload = {
+  extracted_text: string | null;
+  extracted_text_preview: string | null;
+  detected_cnpj: string | null;
+  competence_detected: string | null;
+  text_extraction_status: string;
+  ocr_status: string;
+  fingerprint_payload: JsonRecord;
+  keywords: string[];
+  primary_cues: string[];
 };
 
 type TemplateRow = {
@@ -114,6 +160,7 @@ type InboxRow = {
   id: string;
   client_id: string | null;
   suggested_client_id: string | null;
+  detected_client_id: string | null;
   suggested_template_id: string | null;
   suggested_instance_id: string | null;
   linked_instance_id: string | null;
@@ -124,13 +171,23 @@ type InboxRow = {
   content_type: string | null;
   file_size: number | null;
   suggested_competence_label: string | null;
+  detected_cnpj: string | null;
+  competence_detected: string | null;
   identification_confidence: number;
   matched_by: MatchStrategy | null;
   match_score: number;
   match_reasons: unknown;
+  reference_file_id: string | null;
+  reference_match_score: number;
+  reference_match_reasons: unknown;
   review_required: boolean;
   status: string;
   blocking_reason: string | null;
+  text_extraction_status: string;
+  ocr_status: string;
+  extracted_text_preview: string | null;
+  fingerprint_payload: unknown;
+  auto_link_block_reason: string | null;
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -212,6 +269,12 @@ function asInteger(value: unknown, fallback: number | null = null) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
 
+function normalizeCnpj(value: string | null | undefined) {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 14 ? digits : null;
+}
+
 function normalizeToken(value: string) {
   return value
     .normalize("NFD")
@@ -223,6 +286,25 @@ function normalizeToken(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return normalizeToken(value).replace(/_+/g, "-");
+}
+
+function asJsonRecord(value: unknown) {
+  return asRecord(value) || {};
+}
+
+function parseDocumentAnalysisPayload(value: unknown): DocumentAnalysisPayload {
+  const record = asRecord(value) || {};
+  return {
+    extracted_text: asTrimmedString(record.extracted_text),
+    extracted_text_preview: asTrimmedString(record.extracted_text_preview),
+    detected_cnpj: normalizeCnpj(asTrimmedString(record.detected_cnpj)),
+    competence_detected: asTrimmedString(record.competence_detected),
+    text_extraction_status: asTrimmedString(record.text_extraction_status) || "pending",
+    ocr_status: asTrimmedString(record.ocr_status) || "pending",
+    fingerprint_payload: asJsonRecord(record.fingerprint_payload),
+    keywords: asStringArray(record.keywords),
+    primary_cues: asStringArray(record.primary_cues),
+  };
 }
 
 function buildDocumentLookupKey(templateId: string, documentTypeKey: string) {
@@ -377,7 +459,7 @@ async function buildAuthContext(req: Request) {
 async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, sector, status")
+    .select("id, name, cnpj, sector, status")
     .order("name");
 
   if (error) throw error;
@@ -388,6 +470,7 @@ async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
       {
         id: String((row as JsonRecord).id),
         name: String((row as JsonRecord).name || ""),
+        cnpj: normalizeCnpj(asTrimmedString((row as JsonRecord).cnpj)),
         sector: asTrimmedString((row as JsonRecord).sector) || "Geral",
         status: asTrimmedString((row as JsonRecord).status) || "Ativo",
       },
@@ -413,6 +496,52 @@ async function loadProfilesMap(supabaseAdmin: SupabaseAdmin) {
 
   if (error) throw error;
   return new Map((data || []).map((row) => [String((row as JsonRecord).id), row as ProfileRow]));
+}
+
+async function loadReferenceFilesMap(supabaseAdmin: SupabaseAdmin) {
+  const { data, error } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .select("*")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const rows = (data || []) as ReferenceFileRow[];
+  const byTemplateDocument = new Map<string, ReferenceFileRow[]>();
+  const byId = new Map<string, ReferenceFileRow>();
+
+  for (const row of rows) {
+    byId.set(row.id, row);
+    const key = `${row.template_id}::${row.document_type_key}`;
+    const current = byTemplateDocument.get(key) || [];
+    current.push(row);
+    byTemplateDocument.set(key, current);
+  }
+
+  return { byTemplateDocument, byId, rows };
+}
+
+function enrichExpectedDocuments(
+  template: TemplateRow,
+  referenceFilesMap: Map<string, ReferenceFileRow[]>,
+) {
+  return asExpectedDocuments(template.expected_documents).map((document) => {
+    const key = `${template.id}::${document.document_type_key}`;
+    const references = (referenceFilesMap.get(key) || []).map((reference) => ({
+      ...reference,
+      fingerprint_payload: asJsonRecord(reference.fingerprint_payload),
+      keywords: asStringArray(reference.keywords),
+      primary_cues: asStringArray(reference.primary_cues),
+    }));
+
+    return {
+      ...document,
+      reference_files_count: references.length,
+      has_active_reference: references.length > 0,
+      reference_files: references,
+    };
+  });
 }
 
 function resolveExpectedDocument(
@@ -669,6 +798,245 @@ async function resolveDocumentMatch(
     reasons: candidateInstanceIds.length > 1
       ? ["Mais de uma instância elegível encontrada. Revisão humana necessária."]
       : emptyResult.reasons,
+  };
+}
+
+function overlapRatio(source: string[], target: string[]) {
+  if (source.length === 0 || target.length === 0) return 0;
+  const sourceSet = new Set(source.map((item) => normalizeToken(item)).filter(Boolean));
+  const targetSet = new Set(target.map((item) => normalizeToken(item)).filter(Boolean));
+  if (sourceSet.size === 0 || targetSet.size === 0) return 0;
+
+  let matches = 0;
+  for (const token of sourceSet) {
+    if (targetSet.has(token)) matches += 1;
+  }
+
+  return matches / Math.max(targetSet.size, sourceSet.size);
+}
+
+function buildReferenceDocumentCandidates(
+  clientId: string,
+  templatesMap: Map<string, TemplateRow>,
+  profiles: ProfileRow[],
+  referenceFilesMap: Map<string, ReferenceFileRow[]>,
+) {
+  const matches: Array<MatchCandidate & { reference: ReferenceFileRow }> = [];
+
+  for (const profile of profiles) {
+    if (profile.client_id !== clientId || !profile.is_active) continue;
+    const template = templatesMap.get(profile.template_id);
+    if (!template || !template.is_active) continue;
+
+    for (const document of asExpectedDocuments(template.expected_documents).filter((item) => item.active)) {
+      const key = `${template.id}::${document.document_type_key}`;
+      for (const reference of referenceFilesMap.get(key) || []) {
+        matches.push({ template, document, reference });
+      }
+    }
+  }
+
+  return matches;
+}
+
+async function resolveDocumentReferenceMatch(
+  supabaseAdmin: SupabaseAdmin,
+  payload: {
+    clientId: string | null;
+    instanceId: string | null;
+    templateId: string | null;
+    documentTypeKey: string | null;
+    suggestedCompetenceLabel: string | null;
+    fileName: string | null;
+    analysis: DocumentAnalysisPayload;
+  },
+) {
+  const { clientId, instanceId, templateId, documentTypeKey, suggestedCompetenceLabel, fileName, analysis } = payload;
+  const emptyResult: MatchResult = {
+    resolvedInstanceId: null,
+    suggestedTemplateId: templateId,
+    documentTypeKey,
+    strategy: "manual_review",
+    score: 0.35,
+    reasons: ["Aguardando validacao humana para vincular o arquivo."],
+    reviewRequired: true,
+    documentDefinition: null,
+    candidateInstanceIds: [],
+    detectedClientId: clientId,
+    detectedCnpj: analysis.detected_cnpj,
+    competenceDetected: analysis.competence_detected,
+    referenceFileId: null,
+    referenceMatchScore: 0,
+    referenceMatchReasons: [],
+    textExtractionStatus: analysis.text_extraction_status,
+    ocrStatus: analysis.ocr_status,
+    extractedTextPreview: analysis.extracted_text_preview,
+    fingerprintPayload: analysis.fingerprint_payload,
+    autoLinkBlockReason: "Candidato insuficiente para auto-vinculo.",
+  };
+
+  const templatesMap = await loadTemplatesMap(supabaseAdmin);
+  const profilesMap = await loadProfilesMap(supabaseAdmin);
+  const clientsMap = await loadClientsMap(supabaseAdmin);
+  const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
+
+  const detectedClientByCnpj = analysis.detected_cnpj
+    ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === analysis.detected_cnpj) || null
+    : null;
+
+  const effectiveClientId = detectedClientByCnpj?.id || clientId || null;
+  const effectiveCompetence = analysis.competence_detected || suggestedCompetenceLabel || null;
+
+  if (instanceId && effectiveClientId) {
+    const instances = await loadInstancesForClient(supabaseAdmin, effectiveClientId);
+    const instance = instances.find((item) => item.id === instanceId) || null;
+    const template = (instance && templatesMap.get(instance.template_id)) || (templateId ? templatesMap.get(templateId) : null) || null;
+    return {
+      ...emptyResult,
+      resolvedInstanceId: instanceId,
+      suggestedTemplateId: template?.id || templateId,
+      documentTypeKey,
+      strategy: "manual_instance",
+      score: 1,
+      reasons: ["Instancia definida manualmente pelo usuario."],
+      reviewRequired: false,
+      documentDefinition: resolveExpectedDocument(template, documentTypeKey),
+      candidateInstanceIds: instance ? [instance.id] : [],
+      detectedClientId: effectiveClientId,
+      autoLinkBlockReason: null,
+    };
+  }
+
+  if (!effectiveClientId) {
+    return {
+      ...emptyResult,
+      reasons: analysis.detected_cnpj
+        ? ["CNPJ detectado nao corresponde a nenhum cliente da Grow."]
+        : ["Nao foi possivel detectar CNPJ valido no documento."],
+      autoLinkBlockReason: "CNPJ obrigatorio para auto-vinculo.",
+    };
+  }
+
+  const instances = await loadInstancesForClient(supabaseAdmin, effectiveClientId);
+  const clientProfiles = Array.from(profilesMap.values()).filter((profile) => profile.client_id === effectiveClientId && profile.is_active);
+  const candidates = buildReferenceDocumentCandidates(effectiveClientId, templatesMap, clientProfiles, referenceFiles.byTemplateDocument)
+    .filter((candidate) => (!templateId || candidate.template.id === templateId) && (!documentTypeKey || candidate.document.document_type_key === documentTypeKey));
+
+  if (candidates.length === 0) {
+    return {
+      ...emptyResult,
+      detectedClientId: effectiveClientId,
+      reasons: ["Cliente identificado, mas nenhuma obrigacao ativa com documento modelo correspondente foi encontrada."],
+      autoLinkBlockReason: "Nao existe documento modelo ativo para as obrigacoes vinculadas.",
+    };
+  }
+
+  const inputTokens = analysis.keywords;
+  const inputCues = analysis.primary_cues;
+  const fileNameToken = normalizeToken(fileName || "");
+
+  const ranked = candidates.map((candidate) => {
+    const referenceTokens = asStringArray(candidate.reference.keywords);
+    const referenceCues = asStringArray(candidate.reference.primary_cues);
+    const referenceFingerprint = asJsonRecord(candidate.reference.fingerprint_payload);
+    const referenceFingerprintTokens = asStringArray(referenceFingerprint.top_tokens);
+    const aliasScore = [candidate.document.label, ...candidate.document.aliases]
+      .map((item) => normalizeToken(item))
+      .filter(Boolean)
+      .some((token) => fileNameToken.includes(token))
+      ? 0.1
+      : 0;
+    const docHintScore = documentTypeKey && documentTypeKey === candidate.document.document_type_key ? 0.15 : 0;
+    const keywordScore = overlapRatio(inputTokens, referenceTokens) * 0.35;
+    const cueScore = overlapRatio(inputCues, referenceCues) * 0.2;
+    const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens) * 0.2;
+    const textScore = candidate.reference.extracted_text && analysis.extracted_text
+      ? overlapRatio(
+          inputTokens,
+          analysis.extracted_text.includes(candidate.reference.extracted_text.slice(0, 80)) ? referenceTokens : referenceTokens,
+        ) * 0.1
+      : 0;
+    const cnpjScore = detectedClientByCnpj ? 0.2 : 0;
+    const totalScore = Math.min(1, keywordScore + cueScore + fingerprintScore + textScore + aliasScore + docHintScore + cnpjScore);
+
+    const eligibleInstances = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
+      clientId: effectiveClientId,
+      exactCompetence: effectiveCompetence,
+      templateIds: new Set([candidate.template.id]),
+    });
+
+    return {
+      ...candidate,
+      eligibleInstances,
+      totalScore: Number(totalScore.toFixed(2)),
+    };
+  }).sort((left, right) => right.totalScore - left.totalScore);
+
+  const best = ranked[0];
+  const second = ranked[1];
+
+  if (!best) {
+    return {
+      ...emptyResult,
+      detectedClientId: effectiveClientId,
+      autoLinkBlockReason: "Nenhum documento modelo elegivel encontrado.",
+    };
+  }
+
+  const ambiguous = second && Math.abs(best.totalScore - second.totalScore) <= 0.05;
+  const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
+  const autoAllowed = Boolean(
+    analysis.detected_cnpj &&
+    detectedClientByCnpj &&
+    best.totalScore >= 0.9 &&
+    !ambiguous &&
+    uniqueOpenInstance,
+  );
+
+  const reasons = [
+    detectedClientByCnpj
+      ? `Cliente identificado por CNPJ: ${detectedClientByCnpj.name}.`
+      : "Cliente sugerido manualmente, sem CNPJ confiavel para auto-vinculo.",
+    `Documento modelo mais aderente: ${best.reference.file_name}.`,
+    `Score do modelo: ${best.totalScore.toFixed(2)}.`,
+  ];
+
+  if (effectiveCompetence) {
+    reasons.push(`Competencia considerada: ${effectiveCompetence}.`);
+  }
+
+  const autoLinkBlockReason = autoAllowed
+    ? null
+    : !analysis.detected_cnpj
+      ? "Nao foi detectado CNPJ valido no documento."
+      : ambiguous
+        ? "Mais de um documento modelo apresentou score parecido."
+        : !uniqueOpenInstance
+          ? "Nao existe uma instancia unica e elegivel para a obrigacao candidata."
+          : "Score abaixo do limiar de auto-vinculo.";
+
+  return {
+    ...emptyResult,
+    resolvedInstanceId: autoAllowed ? uniqueOpenInstance : uniqueOpenInstance,
+    suggestedTemplateId: best.template.id,
+    documentTypeKey: best.document.document_type_key,
+    strategy: autoAllowed ? "direct_expected_doc" : "manual_review",
+    score: autoAllowed ? best.totalScore : Math.max(0.55, best.totalScore),
+    reasons,
+    reviewRequired: !autoAllowed,
+    documentDefinition: best.document,
+    candidateInstanceIds: best.eligibleInstances.map((item) => item.instance.id),
+    detectedClientId: effectiveClientId,
+    detectedCnpj: analysis.detected_cnpj,
+    competenceDetected: effectiveCompetence,
+    referenceFileId: best.reference.id,
+    referenceMatchScore: best.totalScore,
+    referenceMatchReasons: reasons,
+    textExtractionStatus: analysis.text_extraction_status,
+    ocrStatus: analysis.ocr_status,
+    extractedTextPreview: analysis.extracted_text_preview,
+    fingerprintPayload: analysis.fingerprint_payload,
+    autoLinkBlockReason,
   };
 }
 
@@ -985,6 +1353,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
   const profilesMap = await loadProfilesMap(supabaseAdmin);
   const clientsMap = await loadClientsMap(supabaseAdmin);
+  const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
 
   const windowStart = new Date();
   windowStart.setUTCMonth(windowStart.getUTCMonth() - 1);
@@ -1021,7 +1390,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
 
   const templates = Array.from(templatesMap.values()).map((template) => ({
     ...template,
-    expected_documents: asExpectedDocuments(template.expected_documents),
+    expected_documents: enrichExpectedDocuments(template, referenceFiles.byTemplateDocument),
   }));
 
   const profiles = Array.from(profilesMap.values()).map((profile) => ({
@@ -1045,6 +1414,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
     return {
       ...row,
       client: clientsMap.get(String(row.client_id || row.suggested_client_id || "")) || null,
+      detected_client: clientsMap.get(String(row.detected_client_id || "")) || null,
       template: templatesMap.get(String(row.suggested_template_id || "")) || null,
       linked_instance: instances.find((instance) => instance.id === String(row.linked_instance_id || row.suggested_instance_id || "")) || null,
       document_definition: resolveExpectedDocument(
@@ -1054,7 +1424,17 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
       match_reasons: asStringArray(row.match_reasons),
       matched_by: asTrimmedString(row.matched_by),
       match_score: Number(row.match_score || 0),
+      detected_cnpj: normalizeCnpj(asTrimmedString(row.detected_cnpj)),
+      competence_detected: asTrimmedString(row.competence_detected),
+      reference_file_id: asTrimmedString(row.reference_file_id),
+      reference_match_score: Number(row.reference_match_score || 0),
+      reference_match_reasons: asStringArray(row.reference_match_reasons),
       review_required: asBoolean(row.review_required, true),
+      text_extraction_status: asTrimmedString(row.text_extraction_status) || "pending",
+      ocr_status: asTrimmedString(row.ocr_status) || "pending",
+      extracted_text_preview: asTrimmedString(row.extracted_text_preview),
+      auto_link_block_reason: asTrimmedString(row.auto_link_block_reason),
+      reference_file: referenceFiles.byId.get(String(row.reference_file_id || "")) || null,
     };
   });
 
@@ -1455,19 +1835,22 @@ async function handleRegisterDocumentUploadNative(
   }
 
   const clientId = asTrimmedString(payload.client_id);
-  const match = await resolveDocumentMatch(supabaseAdmin, {
+  const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  const match = await resolveDocumentReferenceMatch(supabaseAdmin, {
     clientId,
     instanceId: asTrimmedString(payload.instance_id),
     templateId: asTrimmedString(payload.template_id),
     documentTypeKey: asTrimmedString(payload.document_type_key),
     suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
     fileName,
+    analysis,
   });
   const autoLinked = Boolean(match.resolvedInstanceId && !match.reviewRequired && match.score >= 0.9);
 
   const inboxRow = {
-    client_id: clientId,
+    client_id: match.detectedClientId || clientId,
     suggested_client_id: clientId,
+    detected_client_id: match.detectedClientId || null,
     suggested_template_id: match.suggestedTemplateId,
     suggested_instance_id: match.resolvedInstanceId,
     linked_instance_id: autoLinked ? match.resolvedInstanceId : null,
@@ -1478,13 +1861,23 @@ async function handleRegisterDocumentUploadNative(
     content_type: asTrimmedString(payload.content_type),
     file_size: asInteger(payload.file_size, null),
     suggested_competence_label: asTrimmedString(payload.suggested_competence_label),
+    detected_cnpj: match.detectedCnpj || null,
+    competence_detected: match.competenceDetected || null,
     identification_confidence: match.score,
     matched_by: match.strategy,
     match_score: match.score,
     match_reasons: match.reasons,
+    reference_file_id: match.referenceFileId || null,
+    reference_match_score: match.referenceMatchScore || 0,
+    reference_match_reasons: match.referenceMatchReasons || [],
     review_required: match.reviewRequired,
     status: autoLinked ? "linked" : "pending_review",
     blocking_reason: autoLinked ? null : "Aguardando validaÃ§Ã£o humana para vincular o arquivo.",
+    text_extraction_status: match.textExtractionStatus || analysis.text_extraction_status,
+    ocr_status: match.ocrStatus || analysis.ocr_status,
+    extracted_text_preview: match.extractedTextPreview || analysis.extracted_text_preview,
+    fingerprint_payload: match.fingerprintPayload || analysis.fingerprint_payload,
+    auto_link_block_reason: match.autoLinkBlockReason || null,
     notes: asTrimmedString(payload.notes),
     created_by: actorId,
     reviewed_by: autoLinked ? actorId : null,
@@ -1610,21 +2003,121 @@ async function handlePreviewDocumentMatch(
   payload: JsonRecord,
 ) {
   const fileName = asTrimmedString(payload.file_name);
-  const clientId = asTrimmedString(payload.client_id);
-  if (!fileName || !clientId) {
-    return jsonResponse({ error: "Cliente e nome do arquivo sÃ£o obrigatÃ³rios para o preview." }, 400);
+  if (!fileName) {
+    return jsonResponse({ error: "Nome do arquivo Ã© obrigatÃ³rio para o preview." }, 400);
   }
 
-  const match = await resolveDocumentMatch(supabaseAdmin, {
-    clientId,
+  const match = await resolveDocumentReferenceMatch(supabaseAdmin, {
+    clientId: asTrimmedString(payload.client_id),
     instanceId: asTrimmedString(payload.instance_id),
     templateId: asTrimmedString(payload.template_id),
     documentTypeKey: asTrimmedString(payload.document_type_key),
     suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
     fileName,
+    analysis: parseDocumentAnalysisPayload(payload.analysis),
   });
 
   return jsonResponse({ ok: true, match });
+}
+
+async function handleUploadReferenceDocument(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  payload: JsonRecord,
+) {
+  const templateId = asTrimmedString(payload.template_id);
+  const documentTypeKey = asTrimmedString(payload.document_type_key);
+  const fileName = asTrimmedString(payload.file_name);
+  const storagePath = asTrimmedString(payload.storage_path);
+  if (!templateId || !documentTypeKey || !fileName || !storagePath) {
+    return jsonResponse({ error: "Template, documento, arquivo e storage_path sao obrigatorios." }, 400);
+  }
+
+  const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  const row = {
+    template_id: templateId,
+    profile_id: asTrimmedString(payload.profile_id),
+    document_type_key: documentTypeKey,
+    file_name: fileName,
+    storage_bucket: asTrimmedString(payload.storage_bucket) || "obligation-files",
+    storage_path: storagePath,
+    content_type: asTrimmedString(payload.content_type),
+    file_size: asInteger(payload.file_size, null),
+    is_active: asBoolean(payload.is_active, true),
+    source_kind: asTrimmedString(payload.source_kind) || "template_reference",
+    extracted_text: analysis.extracted_text,
+    extracted_text_preview: analysis.extracted_text_preview,
+    text_extraction_status: analysis.text_extraction_status,
+    ocr_status: analysis.ocr_status,
+    fingerprint_version: asInteger(payload.fingerprint_version, 1) || 1,
+    fingerprint_payload: analysis.fingerprint_payload,
+    keywords: analysis.keywords,
+    primary_cues: analysis.primary_cues,
+    created_by: actorId,
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .insert(row)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return jsonResponse({ error: error?.message || "Falha ao registrar documento modelo." }, 400);
+  }
+
+  return jsonResponse({ ok: true, reference_file: data });
+}
+
+async function handleListReferenceDocuments(
+  supabaseAdmin: SupabaseAdmin,
+  payload: JsonRecord,
+) {
+  const templateId = asTrimmedString(payload.template_id);
+  const documentTypeKey = asTrimmedString(payload.document_type_key);
+  let query = supabaseAdmin.from("expected_document_reference_files").select("*").order("created_at", { ascending: false });
+  if (templateId) query = query.eq("template_id", templateId);
+  if (documentTypeKey) query = query.eq("document_type_key", documentTypeKey);
+  const { data, error } = await query;
+  if (error) return jsonResponse({ error: error.message }, 400);
+  return jsonResponse({ ok: true, reference_files: data || [] });
+}
+
+async function handleDeleteReferenceDocument(
+  supabaseAdmin: SupabaseAdmin,
+  payload: JsonRecord,
+) {
+  const referenceId = asTrimmedString(payload.reference_file_id);
+  if (!referenceId) return jsonResponse({ error: "reference_file_id e obrigatorio." }, 400);
+  const { error } = await supabaseAdmin.from("expected_document_reference_files").delete().eq("id", referenceId);
+  if (error) return jsonResponse({ error: error.message }, 400);
+  return jsonResponse({ ok: true });
+}
+
+async function handleReprocessReferenceDocument(
+  supabaseAdmin: SupabaseAdmin,
+  payload: JsonRecord,
+) {
+  const referenceId = asTrimmedString(payload.reference_file_id);
+  if (!referenceId) return jsonResponse({ error: "reference_file_id e obrigatorio." }, 400);
+  const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  const updates = {
+    extracted_text: analysis.extracted_text,
+    extracted_text_preview: analysis.extracted_text_preview,
+    text_extraction_status: analysis.text_extraction_status,
+    ocr_status: analysis.ocr_status,
+    fingerprint_payload: analysis.fingerprint_payload,
+    keywords: analysis.keywords,
+    primary_cues: analysis.primary_cues,
+  };
+  const { data, error } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .update(updates)
+    .eq("id", referenceId)
+    .select("*")
+    .single();
+  if (error || !data) return jsonResponse({ error: error?.message || "Falha ao reprocessar documento modelo." }, 400);
+  return jsonResponse({ ok: true, reference_file: data });
 }
 
 async function handleClientSnapshot(supabaseAdmin: SupabaseAdmin, actorId: string, clientId: string) {
@@ -1689,6 +2182,26 @@ Deno.serve(async (req) => {
 
     if (action === "preview_document_match") {
       return await handlePreviewDocumentMatch(supabaseAdmin, payload);
+    }
+
+    if (action === "preview_reference_match") {
+      return await handlePreviewDocumentMatch(supabaseAdmin, payload);
+    }
+
+    if (action === "upload_reference_document") {
+      return await handleUploadReferenceDocument(supabaseAdmin, user.id, payload);
+    }
+
+    if (action === "list_reference_documents") {
+      return await handleListReferenceDocuments(supabaseAdmin, payload);
+    }
+
+    if (action === "delete_reference_document") {
+      return await handleDeleteReferenceDocument(supabaseAdmin, payload);
+    }
+
+    if (action === "reprocess_reference_document") {
+      return await handleReprocessReferenceDocument(supabaseAdmin, payload);
     }
 
     if (action === "list_client_snapshot") {
