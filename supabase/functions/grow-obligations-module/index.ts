@@ -265,7 +265,9 @@ function asBoolean(value: unknown, fallback = false) {
 
 function asInteger(value: unknown, fallback: number | null = null) {
   if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-  const parsed = Number(asTrimmedString(value));
+  const normalized = asTrimmedString(value);
+  if (normalized === null) return fallback;
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
 
