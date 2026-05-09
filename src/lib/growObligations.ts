@@ -149,6 +149,14 @@ export type GrowDocumentInboxItem = {
   ocr_status: "pending" | "not_needed" | "completed" | "failed";
   extracted_text_preview: string | null;
   auto_link_block_reason: string | null;
+  processing_status: "queued" | "processing" | "processed" | "failed";
+  processing_attempts: number;
+  processing_started_at: string | null;
+  processing_completed_at: string | null;
+  last_processing_error: string | null;
+  execution_status: "pending" | "applied" | "skipped" | "failed";
+  execution_notes: string | null;
+  archive_path: string | null;
   notes: string | null;
   created_at: string;
   client: GrowClientSummary | null;
@@ -170,6 +178,9 @@ export type GrowObligationsOverviewPayload = {
     waiting_documents: number;
     done_instances: number;
     inbox_pending: number;
+    inbox_processing: number;
+    inbox_failed: number;
+    inbox_applied: number;
   };
   clients: GrowClientSummary[];
   templates: GrowObligationTemplate[];

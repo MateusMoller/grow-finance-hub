@@ -279,6 +279,34 @@ function inboxStatusLabel(status: GrowDocumentInboxItem["status"]) {
   return "Em revisao";
 }
 
+function processingStatusLabel(status: GrowDocumentInboxItem["processing_status"]) {
+  switch (status) {
+    case "processing":
+      return "Processando";
+    case "processed":
+      return "Processado";
+    case "failed":
+      return "Falhou";
+    case "queued":
+    default:
+      return "Na fila";
+  }
+}
+
+function executionStatusLabel(status: GrowDocumentInboxItem["execution_status"]) {
+  switch (status) {
+    case "applied":
+      return "Aplicado";
+    case "skipped":
+      return "Ignorado";
+    case "failed":
+      return "Falhou";
+    case "pending":
+    default:
+      return "Pendente";
+  }
+}
+
 const overviewQueryKey = ["grow-obligations-overview"];
 
 export function GrowObligationsWorkspace({
@@ -522,6 +550,23 @@ export function GrowObligationsWorkspace({
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao enviar lote de documentos."),
   });
 
+  const processQueueMutation = useMutation({
+    mutationFn: () =>
+      invokeGrowObligations<{
+        ok: true;
+        processed: number;
+        total: number;
+      }>({
+        action: "process_document_queue",
+        limit: 50,
+      }),
+    onSuccess: async (result) => {
+      toast.success(`${result.processed} documento(s) processados automaticamente.`);
+      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao processar documentos vinculados."),
+  });
+
   const templateValidationError = useMemo(() => validateTemplateForm(templateForm), [templateForm]);
   const uploadQueueValidationError = useMemo(
     () => uploadQueue.map((item) => validateUploadQueueItem(item)).find(Boolean) || null,
@@ -548,6 +593,14 @@ export function GrowObligationsWorkspace({
 
   const pendingDocuments = useMemo(
     () => (overview?.documents || []).filter((item) => item.status === "pending_review"),
+    [overview?.documents],
+  );
+
+  const linkedDocumentsForProcessing = useMemo(
+    () =>
+      (overview?.documents || []).filter(
+        (item) => item.status === "linked" && (item.processing_status === "queued" || item.processing_status === "failed"),
+      ),
     [overview?.documents],
   );
 
@@ -682,8 +735,8 @@ export function GrowObligationsWorkspace({
           {[
             { label: "Pendentes", value: overview.summary.pending_instances, icon: ClipboardList, accent: "text-amber-600" },
             { label: "Atrasadas", value: overview.summary.overdue_instances, icon: AlertTriangle, accent: "text-red-600" },
-            { label: "Aguardando documento", value: overview.summary.waiting_documents + overview.summary.inbox_pending, icon: FileArchive, accent: "text-orange-600" },
-            { label: "Templates ativos", value: overview.summary.templates_active, icon: ShieldCheck, accent: "text-primary" },
+            { label: "Fila documental", value: overview.summary.inbox_processing + overview.summary.inbox_pending, icon: FileArchive, accent: "text-orange-600" },
+            { label: "Falhas no robô", value: overview.summary.inbox_failed, icon: ShieldCheck, accent: "text-primary" },
           ].map((item) => (
             <motion.div key={item.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="rounded-3xl border border-border/60 bg-background/75 p-4">
               <div className="flex items-start justify-between">
@@ -807,6 +860,24 @@ export function GrowObligationsWorkspace({
                   </div>
                 </div>
 
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                  <div>
+                    <p className="text-sm font-medium">Pós-processamento operacional</p>
+                    <p className="text-xs text-muted-foreground">
+                      {linkedDocumentsForProcessing.length} documento(s) vinculados aguardando aplicação automática na obrigação.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="rounded-2xl"
+                    onClick={() => processQueueMutation.mutate()}
+                    disabled={processQueueMutation.isPending || linkedDocumentsForProcessing.length === 0}
+                  >
+                    {processQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Processar documentos vinculados
+                  </Button>
+                </div>
+
                 <div className="space-y-3">
                   {uploadQueue.map((item) => {
                     const queueInstances = overview.instances.filter((instance) => {
@@ -928,7 +999,10 @@ export function GrowObligationsWorkspace({
                           <p className="text-xs text-muted-foreground">Cliente: {item.detected_client?.name || item.client?.name || "nao identificado"} · CNPJ: {item.detected_cnpj || "nao detectado"} · Documento: {item.document_definition?.label || item.document_type_key || "nao identificado"}</p>
                           {item.auto_link_block_reason && <p className="text-[11px] text-orange-600">{item.auto_link_block_reason}</p>}
                           <p className="text-[11px] text-muted-foreground">{item.reference_match_reasons.join(" · ")}</p>
+                          {item.execution_notes && <p className="text-[11px] text-muted-foreground">{item.execution_notes}</p>}
                           <div className="flex flex-wrap gap-2">
+                            <Badge variant="outline">{processingStatusLabel(item.processing_status)}</Badge>
+                            <Badge variant="outline">{executionStatusLabel(item.execution_status)}</Badge>
                             <Button variant="outline" size="sm" className="rounded-xl" onClick={() => { setDocumentResolutionId(item.id); setDocumentResolutionInstanceId(item.linked_instance?.id || ""); setDocumentResolutionNotes(item.notes || ""); }}>Revisar vinculo</Button>
                             <Button variant="ghost" size="sm" className="rounded-xl text-destructive" onClick={() => documentResolveMutation.mutate({ inboxItemId: item.id, decision: "reject", notes: "Documento rejeitado manualmente." })}>Rejeitar</Button>
                           </div>
@@ -951,8 +1025,15 @@ export function GrowObligationsWorkspace({
                             <p className="text-sm font-medium">{item.file_name}</p>
                             <p className="text-xs text-muted-foreground">{item.detected_client?.name || item.client?.name || "Sem cliente"} · {item.document_definition?.label || item.document_type_key || "Sem documento"}</p>
                             <p className="text-[11px] text-muted-foreground">{matchStrategyLabel(item.matched_by)} · {formatDateTime(item.created_at)}</p>
+                            {item.execution_notes && <p className="text-[11px] text-muted-foreground">{item.execution_notes}</p>}
+                            {item.archive_path && <p className="text-[11px] text-muted-foreground">Arquivo lógico: {item.archive_path}</p>}
+                            {item.last_processing_error && <p className="text-[11px] text-destructive">{item.last_processing_error}</p>}
                           </div>
-                          <Badge variant={item.status === "linked" ? "default" : item.status === "rejected" ? "destructive" : "secondary"}>{inboxStatusLabel(item.status)}</Badge>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge variant={item.status === "linked" ? "default" : item.status === "rejected" ? "destructive" : "secondary"}>{inboxStatusLabel(item.status)}</Badge>
+                            <Badge variant="outline">{processingStatusLabel(item.processing_status)}</Badge>
+                            <Badge variant="outline">{executionStatusLabel(item.execution_status)}</Badge>
+                          </div>
                         </div>
                       </div>
                     ))}

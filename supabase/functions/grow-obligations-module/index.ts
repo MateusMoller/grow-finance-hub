@@ -188,6 +188,14 @@ type InboxRow = {
   extracted_text_preview: string | null;
   fingerprint_payload: unknown;
   auto_link_block_reason: string | null;
+  processing_status: string;
+  processing_attempts: number;
+  processing_started_at: string | null;
+  processing_completed_at: string | null;
+  last_processing_error: string | null;
+  execution_status: string;
+  execution_notes: string | null;
+  archive_path: string | null;
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -288,6 +296,11 @@ function normalizeToken(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return normalizeToken(value).replace(/_+/g, "-");
+}
+
+function toArchiveSegment(value: string | null | undefined, fallback: string) {
+  const token = normalizeToken(value || "").replace(/_+/g, "-");
+  return token || fallback;
 }
 
 function asJsonRecord(value: unknown) {
@@ -1067,6 +1080,257 @@ async function createInstanceEvent(
   if (error) throw error;
 }
 
+function buildOperationalArchivePath(
+  client: { cnpj: string | null; name: string },
+  template: TemplateRow,
+  instance: InstanceRow,
+  fileName: string,
+) {
+  const extension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")) : ".pdf";
+  const safeName = toArchiveSegment(fileName.replace(/\.[^.]+$/, ""), "arquivo");
+  return [
+    "obrigacoes-grow",
+    toArchiveSegment(client.cnpj, "sem-cnpj"),
+    toArchiveSegment(client.name, "cliente"),
+    toArchiveSegment(template.name, "obrigacao"),
+    toArchiveSegment(instance.competence_label, "competencia"),
+    `${safeName}${extension.toLowerCase()}`,
+  ].join("/");
+}
+
+async function determineInstanceDocumentStatus(
+  supabaseAdmin: SupabaseAdmin,
+  instance: InstanceRow,
+  template: TemplateRow,
+) {
+  if (instance.status === "concluida" || instance.status === "cancelada") {
+    return instance.status;
+  }
+
+  if (!template.requires_document) {
+    return instance.status === "atrasada" ? "atrasada" : "em_revisao";
+  }
+
+  const requiredDocuments = asExpectedDocuments(template.expected_documents)
+    .filter((document) => document.active && document.required)
+    .map((document) => document.document_type_key);
+
+  if (requiredDocuments.length === 0) {
+    return instance.status === "atrasada" ? "atrasada" : "em_revisao";
+  }
+
+  const { data: linkedRows, error } = await supabaseAdmin
+    .from("document_inbox_items")
+    .select("document_type_key, status")
+    .eq("linked_instance_id", instance.id)
+    .eq("status", "linked");
+
+  if (error) throw error;
+
+  const linkedDocumentTypes = new Set(
+    (linkedRows || [])
+      .map((row) => asTrimmedString((row as JsonRecord).document_type_key))
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  const allRequiredReceived = requiredDocuments.every((documentTypeKey) => linkedDocumentTypes.has(documentTypeKey));
+  if (allRequiredReceived) {
+    return instance.status === "atrasada" ? "atrasada" : "em_revisao";
+  }
+
+  return instance.status === "atrasada" ? "atrasada" : "aguardando_documento";
+}
+
+async function markInboxProcessingState(
+  supabaseAdmin: SupabaseAdmin,
+  inboxItemId: string,
+  updates: JsonRecord,
+) {
+  const { error } = await supabaseAdmin
+    .from("document_inbox_items")
+    .update(updates)
+    .eq("id", inboxItemId);
+
+  if (error) throw error;
+}
+
+async function applyDocumentOperationalFlow(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  inboxItem: InboxRow,
+) {
+  const now = new Date().toISOString();
+  await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+    processing_status: "processing",
+    processing_attempts: (inboxItem.processing_attempts || 0) + 1,
+    processing_started_at: now,
+    last_processing_error: null,
+  });
+
+  if (inboxItem.status === "rejected") {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "processed",
+      processing_completed_at: now,
+      execution_status: "skipped",
+      execution_notes: "Documento rejeitado na triagem manual.",
+      archive_path: null,
+    });
+
+    return { processed: false, reason: "rejected" };
+  }
+
+  if (!inboxItem.linked_instance_id) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "queued",
+      processing_started_at: null,
+      execution_status: "pending",
+      execution_notes: "Aguardando vinculação manual da instância.",
+    });
+
+    return { processed: false, reason: "awaiting_link" };
+  }
+
+  const { data: instanceData, error: instanceError } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("id", inboxItem.linked_instance_id)
+    .single();
+
+  if (instanceError || !instanceData) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "failed",
+      processing_completed_at: now,
+      execution_status: "failed",
+      last_processing_error: instanceError?.message || "Instância vinculada não encontrada.",
+      execution_notes: "Falha ao localizar a instância vinculada para executar a obrigação.",
+    });
+
+    return { processed: false, reason: "missing_instance" };
+  }
+
+  const instance = instanceData as InstanceRow;
+  const templatesMap = await loadTemplatesMap(supabaseAdmin);
+  const clientsMap = await loadClientsMap(supabaseAdmin);
+  const template = templatesMap.get(instance.template_id);
+  const client = clientsMap.get(instance.client_id);
+
+  if (!template || !client) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "failed",
+      processing_completed_at: now,
+      execution_status: "failed",
+      last_processing_error: "Template ou cliente da instância não encontrado.",
+      execution_notes: "Falha ao carregar o contexto operacional da obrigação.",
+    });
+
+    return { processed: false, reason: "missing_context" };
+  }
+
+  const archivePath = buildOperationalArchivePath(client, template, instance, inboxItem.file_name);
+  const source = inboxItem.matched_by || "manual_review";
+  const triageStatus = source === "manual_review" ? "reviewed" : "accepted";
+
+  const { error: fileError } = await supabaseAdmin
+    .from("obligation_instance_files")
+    .upsert({
+      instance_id: instance.id,
+      inbox_item_id: inboxItem.id,
+      file_name: inboxItem.file_name,
+      storage_bucket: inboxItem.storage_bucket,
+      storage_path: inboxItem.storage_path,
+      content_type: inboxItem.content_type,
+      file_size: inboxItem.file_size,
+      triage_status: triageStatus,
+      source,
+      uploaded_by: actorId,
+      identification_confidence: Number(inboxItem.match_score || inboxItem.identification_confidence || 1),
+    }, { onConflict: "storage_bucket,storage_path" });
+
+  if (fileError) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "failed",
+      processing_completed_at: now,
+      execution_status: "failed",
+      last_processing_error: fileError.message,
+      execution_notes: "Falha ao anexar o arquivo na instância da obrigação.",
+    });
+
+    return { processed: false, reason: "file_upsert_failed" };
+  }
+
+  await createInstanceEvent(
+    supabaseAdmin,
+    instance.id,
+    actorId,
+    "document_received",
+    null,
+    null,
+    `Documento ${inboxItem.file_name} recebido pela Central de Documentos.`,
+    {
+      inbox_item_id: inboxItem.id,
+      document_type_key: inboxItem.document_type_key,
+      matched_by: inboxItem.matched_by,
+      archive_path: archivePath,
+    },
+  );
+
+  const nextStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
+  let updatedInstance = instance;
+
+  if (nextStatus !== instance.status) {
+    const { data: updatedInstanceData, error: updateError } = await supabaseAdmin
+      .from("obligation_instances")
+      .update({
+        status: nextStatus,
+        last_status_at: now,
+      })
+      .eq("id", instance.id)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedInstanceData) {
+      await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+        processing_status: "failed",
+        processing_completed_at: now,
+        execution_status: "failed",
+        last_processing_error: updateError?.message || "Falha ao atualizar o status da obrigação.",
+        execution_notes: "Documento anexado, mas a execução automática da obrigação falhou.",
+      });
+
+      return { processed: false, reason: "instance_update_failed" };
+    }
+
+    updatedInstance = updatedInstanceData as InstanceRow;
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "status_change",
+      instance.status,
+      nextStatus,
+      "Status ajustado automaticamente após recebimento do documento.",
+      { inbox_item_id: inboxItem.id },
+    );
+  }
+
+  await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
+
+  const executionNotes = nextStatus === "aguardando_documento"
+    ? "Documento anexado. A obrigação ainda aguarda outros documentos obrigatórios."
+    : "Documento anexado e obrigação atualizada automaticamente para revisão operacional.";
+
+  await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+    processing_status: "processed",
+    processing_completed_at: now,
+    execution_status: "applied",
+    execution_notes: executionNotes,
+    archive_path: archivePath,
+    last_processing_error: null,
+  });
+
+  return { processed: true, nextStatus, archivePath };
+}
+
 async function syncInstanceArtifacts(
   supabaseAdmin: SupabaseAdmin,
   instance: InstanceRow,
@@ -1436,6 +1700,14 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
       ocr_status: asTrimmedString(row.ocr_status) || "pending",
       extracted_text_preview: asTrimmedString(row.extracted_text_preview),
       auto_link_block_reason: asTrimmedString(row.auto_link_block_reason),
+      processing_status: asTrimmedString(row.processing_status) || "queued",
+      processing_attempts: asInteger(row.processing_attempts, 0) || 0,
+      processing_started_at: asTrimmedString(row.processing_started_at),
+      processing_completed_at: asTrimmedString(row.processing_completed_at),
+      last_processing_error: asTrimmedString(row.last_processing_error),
+      execution_status: asTrimmedString(row.execution_status) || "pending",
+      execution_notes: asTrimmedString(row.execution_notes),
+      archive_path: asTrimmedString(row.archive_path),
       reference_file: referenceFiles.byId.get(String(row.reference_file_id || "")) || null,
     };
   });
@@ -1449,6 +1721,9 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
     waiting_documents: instances.filter((instance) => instance.status === "aguardando_documento").length,
     done_instances: instances.filter((instance) => instance.status === "concluida").length,
     inbox_pending: documents.filter((item) => item.status === "pending_review").length,
+    inbox_processing: documents.filter((item) => item.processing_status === "processing" || item.processing_status === "queued").length,
+    inbox_failed: documents.filter((item) => item.processing_status === "failed").length,
+    inbox_applied: documents.filter((item) => item.execution_status === "applied").length,
   };
 
   return {
@@ -1880,6 +2155,16 @@ async function handleRegisterDocumentUploadNative(
     extracted_text_preview: match.extractedTextPreview || analysis.extracted_text_preview,
     fingerprint_payload: match.fingerprintPayload || analysis.fingerprint_payload,
     auto_link_block_reason: match.autoLinkBlockReason || null,
+    processing_status: autoLinked ? "queued" : "queued",
+    processing_attempts: 0,
+    processing_started_at: null,
+    processing_completed_at: null,
+    last_processing_error: null,
+    execution_status: autoLinked ? "pending" : "pending",
+    execution_notes: autoLinked
+      ? "Documento aguardando aplicação automática na obrigação."
+      : "Documento aguardando revisão humana para vinculação.",
+    archive_path: null,
     notes: asTrimmedString(payload.notes),
     created_by: actorId,
     reviewed_by: autoLinked ? actorId : null,
@@ -1896,27 +2181,12 @@ async function handleRegisterDocumentUploadNative(
     return jsonResponse({ error: inboxError?.message || "Falha ao registrar documento." }, 400);
   }
 
-  if (autoLinked && match.resolvedInstanceId) {
-    const { error: fileError } = await supabaseAdmin
-      .from("obligation_instance_files")
-      .insert({
-        instance_id: match.resolvedInstanceId,
-        inbox_item_id: String((inboxItem as JsonRecord).id),
-        file_name: fileName,
-        storage_bucket: storageBucket,
-        storage_path: storagePath,
-        content_type: asTrimmedString(payload.content_type),
-        file_size: asInteger(payload.file_size, null),
-        triage_status: "accepted",
-        source: match.strategy,
-        uploaded_by: actorId,
-        identification_confidence: match.score,
-      });
-
-    if (fileError) throw fileError;
+  let processingResult: JsonRecord | null = null;
+  if (autoLinked) {
+    processingResult = await applyDocumentOperationalFlow(supabaseAdmin, actorId, inboxItem as InboxRow) as unknown as JsonRecord;
   }
 
-  return jsonResponse({ ok: true, inbox_item: inboxItem, match });
+  return jsonResponse({ ok: true, inbox_item: inboxItem, match, processing_result: processingResult });
 }
 
 async function handleResolveDocumentNative(
@@ -1948,6 +2218,11 @@ async function handleResolveDocumentNative(
         matched_by: "manual_review",
         review_required: true,
         blocking_reason: asTrimmedString(payload.blocking_reason) || "Documento rejeitado manualmente.",
+        processing_status: "processed",
+        processing_completed_at: new Date().toISOString(),
+        execution_status: "skipped",
+        execution_notes: "Documento rejeitado na triagem manual.",
+        last_processing_error: null,
         notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
         reviewed_by: actorId,
         reviewed_at: new Date().toISOString(),
@@ -1971,6 +2246,12 @@ async function handleResolveDocumentNative(
       matched_by: "manual_review",
       review_required: false,
       blocking_reason: null,
+      processing_status: "queued",
+      processing_started_at: null,
+      processing_completed_at: null,
+      execution_status: "pending",
+      execution_notes: "Documento aguardando aplicação operacional após revisão manual.",
+      last_processing_error: null,
       notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
       reviewed_by: actorId,
       reviewed_at: new Date().toISOString(),
@@ -1979,25 +2260,23 @@ async function handleResolveDocumentNative(
 
   if (inboxUpdateError) throw inboxUpdateError;
 
-  const { error: fileError } = await supabaseAdmin
-    .from("obligation_instance_files")
-    .upsert({
-      instance_id: instanceId,
-      inbox_item_id: inboxItemId,
-      file_name: asTrimmedString((inboxItem as JsonRecord).file_name),
-      storage_bucket: asTrimmedString((inboxItem as JsonRecord).storage_bucket) || "obligation-files",
-      storage_path: asTrimmedString((inboxItem as JsonRecord).storage_path),
-      content_type: asTrimmedString((inboxItem as JsonRecord).content_type),
-      file_size: asInteger((inboxItem as JsonRecord).file_size, null),
-      triage_status: "reviewed",
-      source: "manual_review",
-      uploaded_by: actorId,
-      identification_confidence: Number((inboxItem as JsonRecord).match_score || (inboxItem as JsonRecord).identification_confidence || 1),
-    }, { onConflict: "storage_bucket,storage_path" });
+  const refreshedInbox = {
+    ...(inboxItem as InboxRow),
+    status: "linked",
+    linked_instance_id: instanceId,
+    matched_by: "manual_review",
+    review_required: false,
+    notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
+    reviewed_by: actorId,
+    reviewed_at: new Date().toISOString(),
+    processing_status: "queued",
+    execution_status: "pending",
+    last_processing_error: null,
+  } satisfies InboxRow;
 
-  if (fileError) throw fileError;
+  const processingResult = await applyDocumentOperationalFlow(supabaseAdmin, actorId, refreshedInbox);
 
-  return jsonResponse({ ok: true });
+  return jsonResponse({ ok: true, processing_result: processingResult });
 }
 
 async function handlePreviewDocumentMatch(
@@ -2122,6 +2401,47 @@ async function handleReprocessReferenceDocument(
   return jsonResponse({ ok: true, reference_file: data });
 }
 
+async function handleProcessDocumentQueue(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  payload: JsonRecord,
+) {
+  const force = asBoolean(payload.force, false);
+  const inboxItemId = asTrimmedString(payload.inbox_item_id);
+  let query = supabaseAdmin
+    .from("document_inbox_items")
+    .select("*")
+    .eq("status", "linked")
+    .order("created_at", { ascending: true })
+    .limit(Math.min(50, Math.max(1, asInteger(payload.limit, 20) || 20)));
+
+  if (inboxItemId) {
+    query = query.eq("id", inboxItemId);
+  } else if (!force) {
+    query = query.in("processing_status", ["queued", "failed"]);
+  }
+
+  const { data, error } = await query;
+  if (error) return jsonResponse({ error: error.message }, 400);
+
+  const results = [];
+  for (const row of (data || []) as InboxRow[]) {
+    const result = await applyDocumentOperationalFlow(supabaseAdmin, actorId, row);
+    results.push({
+      inbox_item_id: row.id,
+      file_name: row.file_name,
+      result,
+    });
+  }
+
+  return jsonResponse({
+    ok: true,
+    processed: results.filter((item) => (item.result as JsonRecord).processed === true).length,
+    total: results.length,
+    results,
+  });
+}
+
 async function handleClientSnapshot(supabaseAdmin: SupabaseAdmin, actorId: string, clientId: string) {
   const overview = await buildOverview(supabaseAdmin, actorId);
   return jsonResponse({
@@ -2204,6 +2524,10 @@ Deno.serve(async (req) => {
 
     if (action === "reprocess_reference_document") {
       return await handleReprocessReferenceDocument(supabaseAdmin, payload);
+    }
+
+    if (action === "process_document_queue") {
+      return await handleProcessDocumentQueue(supabaseAdmin, user.id, payload);
     }
 
     if (action === "list_client_snapshot") {
