@@ -42,6 +42,7 @@ import {
 } from "@/lib/fileUploadSecurity";
 import {
   growCompetenceReferenceLabel,
+  growDueMonthReferenceLabel,
   growObligationStatusClass,
   growObligationStatusLabel,
   growPeriodicityLabel,
@@ -74,6 +75,7 @@ interface TemplateFormState {
   sector: string;
   periodicity: GrowObligationTemplate["periodicity"];
   competence_reference: GrowObligationTemplate["competence_reference"];
+  technical_due_month_reference: GrowObligationTemplate["technical_due_month_reference"];
   due_day: string;
   legal_due_day: string;
   priority: GrowObligationInstance["priority"];
@@ -138,7 +140,6 @@ const statusOptions: GrowObligationInstance["status"][] = [
   "em_andamento",
   "aguardando_documento",
   "em_revisao",
-  "concluida",
   "atrasada",
   "cancelada",
 ];
@@ -173,6 +174,7 @@ function makeTemplateForm(template?: GrowObligationTemplate | null): TemplateFor
     sector: template?.sector || "Geral",
     periodicity: template?.periodicity || "monthly",
     competence_reference: template?.competence_reference || "vigente",
+    technical_due_month_reference: template?.technical_due_month_reference || "vigente",
     due_day: String(template?.due_day ?? 10),
     legal_due_day: template?.legal_due_day ? String(template.legal_due_day) : "",
     priority: template?.priority || "media",
@@ -387,6 +389,7 @@ export function GrowObligationsWorkspace({
         sector: payload.sector,
         periodicity: payload.periodicity,
         competence_reference: payload.competence_reference,
+        technical_due_month_reference: payload.technical_due_month_reference,
         due_day: Number(payload.due_day || 10),
         legal_due_day: payload.legal_due_day ? Number(payload.legal_due_day) : null,
         priority: payload.priority,
@@ -909,7 +912,14 @@ export function GrowObligationsWorkspace({
                         <span>Documento: {instance.document_required ? "obrigatorio" : "opcional"}</span>
                       </div>
                     </div>
-                    <Button variant="outline" className="rounded-2xl" onClick={() => { setInstanceForm(makeInstanceForm(instance)); setInstanceDialogOpen(true); }}>Atualizar execucao</Button>
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl"
+                      disabled={instance.status === "concluida"}
+                      onClick={() => { setInstanceForm(makeInstanceForm(instance)); setInstanceDialogOpen(true); }}
+                    >
+                      {instance.status === "concluida" ? "Concluida por documento" : "Atualizar execucao"}
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -1178,7 +1188,34 @@ export function GrowObligationsWorkspace({
             <div className="space-y-2"><Label>Setor</Label><Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Periodicidade</Label><Select value={templateForm.periodicity} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, periodicity: value as GrowObligationTemplate["periodicity"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Mes base</Label><Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vigente">{growCompetenceReferenceLabel.vigente}</SelectItem><SelectItem value="anterior">{growCompetenceReferenceLabel.anterior}</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label>Dia do vencimento tecnico</Label><Input value={templateForm.due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_day: event.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Dia do vencimento tecnico</Label>
+              <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+                <Input
+                  value={templateForm.due_day}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_day: event.target.value }))}
+                  placeholder="Dia"
+                  inputMode="numeric"
+                />
+                <Select
+                  value={templateForm.technical_due_month_reference}
+                  onValueChange={(value) =>
+                    setTemplateForm((prev) => ({
+                      ...prev,
+                      technical_due_month_reference: value as GrowObligationTemplate["technical_due_month_reference"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vigente">{growDueMonthReferenceLabel.vigente}</SelectItem>
+                    <SelectItem value="anterior">{growDueMonthReferenceLabel.anterior}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-2"><Label>Prioridade</Label><Select value={templateForm.priority} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, priority: value as GrowObligationInstance["priority"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Dia do vencimento legal</Label><Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} /></div>
             <div className="space-y-2 md:col-span-2"><Label>Observacoes operacionais</Label><Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} /></div>
@@ -1336,7 +1373,7 @@ export function GrowObligationsWorkspace({
 
       <Dialog open={instanceDialogOpen} onOpenChange={setInstanceDialogOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Atualizar execucao</DialogTitle><DialogDescription>Altere o status operacional e as observacoes da competencia.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Atualizar execucao</DialogTitle><DialogDescription>Altere o status operacional e as observacoes da competencia. A conclusao acontece apenas por documento valido anexado.</DialogDescription></DialogHeader>
           {instanceForm && (
             <div className="space-y-4 py-2">
               <div className="grid gap-4 md:grid-cols-2">

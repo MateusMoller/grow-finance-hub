@@ -108,6 +108,7 @@ type TemplateRow = {
   sector: string;
   periodicity: string;
   competence_reference: string;
+  technical_due_month_reference: string;
   due_day: number;
   yearly_due_month: number | null;
   legal_due_day: number | null;
@@ -271,6 +272,13 @@ function asBoolean(value: unknown, fallback = false) {
   return fallback;
 }
 
+function normalizeMonthReference(value: unknown, fallback: "vigente" | "anterior" = "vigente") {
+  const token = asTrimmedString(value);
+  if (token === "anterior") return "anterior";
+  if (token === "vigente") return "vigente";
+  return fallback;
+}
+
 function asInteger(value: unknown, fallback: number | null = null) {
   if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
   const normalized = asTrimmedString(value);
@@ -417,9 +425,17 @@ function computeCompetenceDate(
   return baseDate;
 }
 
-function computeDueDate(competenceDate: Date, dueDay: number) {
-  const year = competenceDate.getUTCFullYear();
-  const monthIndex = competenceDate.getUTCMonth();
+function computeDueDate(
+  competenceDate: Date,
+  dueDay: number,
+  dueMonthReference: "vigente" | "anterior" = "vigente",
+) {
+  const dueBaseDate = new Date(Date.UTC(competenceDate.getUTCFullYear(), competenceDate.getUTCMonth(), 1));
+  if (dueMonthReference === "anterior") {
+    dueBaseDate.setUTCMonth(dueBaseDate.getUTCMonth() - 1);
+  }
+  const year = dueBaseDate.getUTCFullYear();
+  const monthIndex = dueBaseDate.getUTCMonth();
   const day = clampDay(dueDay, year, monthIndex);
   return new Date(Date.UTC(year, monthIndex, day));
 }
@@ -1112,7 +1128,7 @@ async function determineInstanceDocumentStatus(
     .map((document) => document.document_type_key);
 
   if (requiredDocuments.length === 0) {
-    return instance.status === "atrasada" ? "atrasada" : "em_revisao";
+    return "concluida";
   }
 
   const { data: linkedRows, error } = await supabaseAdmin
@@ -1131,7 +1147,7 @@ async function determineInstanceDocumentStatus(
 
   const allRequiredReceived = requiredDocuments.every((documentTypeKey) => linkedDocumentTypes.has(documentTypeKey));
   if (allRequiredReceived) {
-    return instance.status === "atrasada" ? "atrasada" : "em_revisao";
+    return "concluida";
   }
 
   return instance.status === "atrasada" ? "atrasada" : "aguardando_documento";
@@ -1278,6 +1294,7 @@ async function applyDocumentOperationalFlow(
       .from("obligation_instances")
       .update({
         status: nextStatus,
+        completed_at: nextStatus === "concluida" ? now : null,
         last_status_at: now,
       })
       .eq("id", instance.id)
@@ -1313,7 +1330,7 @@ async function applyDocumentOperationalFlow(
 
   const executionNotes = nextStatus === "aguardando_documento"
     ? "Documento anexado. A obrigação ainda aguarda outros documentos obrigatórios."
-    : "Documento anexado e obrigação atualizada automaticamente para revisão operacional.";
+    : "Documento anexado e obrigação concluída automaticamente.";
 
   await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
     processing_status: "processed",
@@ -1493,6 +1510,7 @@ async function ensureInstancesForProfiles(
         const technicalDueDate = computeDueDate(
           currentCompetenceDate,
           profile.due_day_override ?? template.due_day,
+          normalizeMonthReference(template.technical_due_month_reference, "vigente"),
         );
         const legalDueDate = template.legal_due_day
           ? computeDueDate(currentCompetenceDate, profile.legal_due_day_override ?? template.legal_due_day)
@@ -1743,6 +1761,7 @@ async function handleUpsertTemplate(
     sector: asTrimmedString(payload.sector) || "Geral",
     periodicity: asTrimmedString(payload.periodicity) || "monthly",
     competence_reference: asTrimmedString(payload.competence_reference) || "vigente",
+    technical_due_month_reference: normalizeMonthReference(payload.technical_due_month_reference, "vigente"),
     due_day: asInteger(payload.due_day, 10),
     yearly_due_month: asInteger(payload.yearly_due_month, null),
     legal_due_day: asInteger(payload.legal_due_day, null),
@@ -1945,6 +1964,9 @@ async function handleUpdateInstance(
 
   const current = currentData as InstanceRow;
   const nextStatus = asTrimmedString(payload.status) || current.status;
+  if (nextStatus === "concluida" && current.status !== "concluida") {
+    return jsonResponse({ error: "A obrigação só pode ser concluída automaticamente por documento válido anexado." }, 400);
+  }
   const updates = {
     status: nextStatus,
     priority: asTrimmedString(payload.priority) || current.priority,

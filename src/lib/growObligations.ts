@@ -40,6 +40,7 @@ export type GrowObligationTemplate = {
   sector: string;
   periodicity: "monthly" | "quarterly" | "yearly" | "custom";
   competence_reference: "vigente" | "anterior";
+  technical_due_month_reference: "vigente" | "anterior";
   due_day: number;
   yearly_due_month: number | null;
   legal_due_day: number | null;
@@ -62,6 +63,11 @@ export const growPeriodicityLabel: Record<GrowObligationTemplate["periodicity"],
 export const growCompetenceReferenceLabel: Record<GrowObligationTemplate["competence_reference"], string> = {
   vigente: "Vigente",
   anterior: "Anterior",
+};
+
+export const growDueMonthReferenceLabel: Record<GrowObligationTemplate["technical_due_month_reference"], string> = {
+  vigente: "Mes vigente",
+  anterior: "Mes anterior",
 };
 
 export type GrowClientSummary = {
