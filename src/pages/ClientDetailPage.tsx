@@ -486,6 +486,13 @@ const formatCepValue = (value: string) => {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 };
 
+const normalizeCnpjForSave = (value: string | null | undefined) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length !== 14) return null;
+  return digits;
+};
+
 type ViaCepResponse = {
   erro?: boolean;
   cep?: string;
@@ -1349,6 +1356,12 @@ export default function ClientDetailPage() {
   const saveClientInfo = async () => {
     if (!id) return;
     const normalizedEmail = normalizeEmail(clientForm.email);
+    const normalizedCnpj = normalizeCnpjForSave(clientForm.cnpj);
+
+    if ((clientForm.cnpj || "").trim() && !normalizedCnpj) {
+      toast.error("Informe um CNPJ valido com 14 digitos.");
+      return;
+    }
 
     const nextGeneralFieldErrors: Record<string, string> = {};
     const normalizedGeneralFieldValues = generalInfoCadastralFields.map((fieldName) => {
@@ -1430,7 +1443,7 @@ export default function ClientDetailPage() {
     try {
       const { error } = await supabase.from("clients").update({
         name: clientForm.name,
-        cnpj: clientForm.cnpj,
+        cnpj: normalizedCnpj,
         regime: clientForm.regime,
         sector: clientForm.sector,
         status: clientForm.status,
@@ -1445,19 +1458,6 @@ export default function ClientDetailPage() {
 
       if (error) {
         toast.error("Erro ao salvar dados do cliente");
-        return;
-      }
-
-      const { error: deleteGeneralDataError } = await supabase
-        .from("client_data")
-        .delete()
-        .eq("client_id", id)
-        .eq("category", "cadastro_clientes")
-        .in("field_name", [...generalInfoCadastralFields, ...cadastroClientesMirrorFieldNames])
-        .is("period", null);
-
-      if (deleteGeneralDataError) {
-        toast.error("Dados gerais salvos, mas houve erro ao atualizar os campos cadastrais.");
         return;
       }
 
@@ -1476,9 +1476,30 @@ export default function ClientDetailPage() {
         }));
 
       if (cadastroClientRows.length > 0) {
-        const { error: insertGeneralDataError } = await supabase.from("client_data").insert(cadastroClientRows);
-        if (insertGeneralDataError) {
+        const { error: upsertGeneralDataError } = await supabase
+          .from("client_data")
+          .upsert(cadastroClientRows, { onConflict: "client_id,category,field_name,period" });
+        if (upsertGeneralDataError) {
           toast.error("Dados gerais salvos, mas houve erro ao persistir os campos de endereço.");
+          return;
+        }
+      }
+
+      const cadastroClientFieldNames = [...generalInfoCadastralFields, ...cadastroClientesMirrorFieldNames];
+      const filledFieldNames = new Set(cadastroClientRows.map((entry) => entry.field_name));
+      const fieldsToClear = cadastroClientFieldNames.filter((fieldName) => !filledFieldNames.has(fieldName));
+
+      if (fieldsToClear.length > 0) {
+        const { error: clearGeneralDataError } = await supabase
+          .from("client_data")
+          .delete()
+          .eq("client_id", id)
+          .eq("category", "cadastro_clientes")
+          .in("field_name", fieldsToClear)
+          .is("period", null);
+
+        if (clearGeneralDataError) {
+          toast.error("Dados gerais salvos, mas houve erro ao limpar campos vazios.");
           return;
         }
       }
@@ -1492,6 +1513,7 @@ export default function ClientDetailPage() {
       setClient({
         ...client!,
         ...clientForm,
+        cnpj: normalizedCnpj,
         email: normalizedEmail || null,
         address: normalizedAddress || clientForm.address || null,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
@@ -1499,6 +1521,7 @@ export default function ClientDetailPage() {
       } as ClientRecord);
       setClientForm((prev) => ({
         ...prev,
+        cnpj: normalizedCnpj,
         email: normalizedEmail || null,
         address: normalizedAddress || prev.address || null,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
@@ -1718,13 +1741,24 @@ export default function ClientDetailPage() {
     const entryPeriod = config.mode === "monthly" ? period : null;
     const nextCategoryErrors: Record<string, string> = {};
     let nextPartnerErrors: Record<string, string> = {};
+    const hasEmployees = category === "cadastro_departamento_pessoal"
+      ? normalizeYesNoValue(
+          dataEntries[getCategoryFieldEntryKey("cadastro_departamento_pessoal", "possui_funcionarios")] || "",
+        ) === "sim"
+      : true;
 
     const entries = config.fields.map((f) => {
       const key = `${category}__${f.name}`;
       const rule = getFieldRule(category, f.name);
       const currentValue = dataEntries[key] || "";
-      const normalizedValue = normalizeFieldValueForSave(rule, currentValue);
-      const validationError = validateFieldValue(rule, normalizedValue);
+      const shouldClearEmployeeDependentField =
+        category === "cadastro_departamento_pessoal" &&
+        cadastroDpEmployeeDependentFieldNames.has(f.name) &&
+        !hasEmployees;
+      const normalizedValue = shouldClearEmployeeDependentField
+        ? ""
+        : normalizeFieldValueForSave(rule, currentValue);
+      const validationError = shouldClearEmployeeDependentField ? null : validateFieldValue(rule, normalizedValue);
 
       if (validationError) {
         nextCategoryErrors[key] = validationError;
@@ -1773,25 +1807,9 @@ export default function ClientDetailPage() {
       setPartnerFieldErrors({});
     }
 
-    let deleteQuery = supabase.from("client_data")
-      .delete()
-      .eq("client_id", id)
-      .eq("category", category);
-
-    if (config.mode === "monthly") {
-      deleteQuery = deleteQuery.eq("period", period);
-    } else {
-      deleteQuery = deleteQuery.is("period", null);
-    }
-
-    const { error: deleteError } = await deleteQuery;
-    if (deleteError) {
-      setSavingData(null);
-      toast.error("Erro ao preparar os dados para salvamento");
-      return;
-    }
-
-    const { error } = await supabase.from("client_data").insert(entries);
+    const { error } = await supabase
+      .from("client_data")
+      .upsert(entries, { onConflict: "client_id,category,field_name,period" });
     setSavingData(null);
     if (error) return toast.error("Erro ao salvar dados");
 
