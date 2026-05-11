@@ -34,6 +34,7 @@ import {
   type PortalActionItem,
   type PortalCashflowEntry,
   type PortalClientDocument,
+  type PortalObligationDocument,
   type PortalClientProfile,
   type PortalClientRequest,
   type PortalClientTask,
@@ -468,6 +469,42 @@ const isEcontinuoDocument = (document: PortalClientDocument) => {
   return pathToken.includes("envios_econtinuo") || pathToken.includes("econtinuo");
 };
 
+const obligationStatusLabels: Record<PortalObligationDocument["instance_status"], string> = {
+  pendente: "Pendente",
+  em_andamento: "Em andamento",
+  aguardando_documento: "Aguardando documento",
+  em_revisao: "Em revisão",
+  concluida: "Concluída",
+  atrasada: "Atrasada",
+  cancelada: "Cancelada",
+};
+
+const obligationStatusVariants: Record<PortalObligationDocument["instance_status"], string> = {
+  pendente: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  em_andamento: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  aguardando_documento: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  em_revisao: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
+  concluida: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  atrasada: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  cancelada: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+};
+
+const formatFileSize = (size: number | null) => {
+  if (!size || size <= 0) return null;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatCompetenceHeading = (competenceDate: string, competenceLabel: string) => {
+  const parsedDate = new Date(`${competenceDate}T00:00:00`);
+  if (Number.isNaN(parsedDate.getTime())) return competenceLabel;
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(parsedDate);
+};
+
 const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
   id: task.id,
   title: task.title,
@@ -508,6 +545,7 @@ export default function PortalClientePage() {
   const [clientProfile, setClientProfile] = useState<PortalClientProfile | null>(null);
   const [requests, setRequests] = useState<PortalClientRequest[]>([]);
   const [documents, setDocuments] = useState<PortalClientDocument[]>([]);
+  const [portalObligationDocuments, setPortalObligationDocuments] = useState<PortalObligationDocument[]>([]);
   const [portalTasks, setPortalTasks] = useState<PortalClientTask[]>([]);
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
   const [cashflowEntries, setCashflowEntries] = useState<PortalCashflowEntry[]>([]);
@@ -566,6 +604,7 @@ export default function PortalClientePage() {
     setClientProfile(null);
     setRequests([]);
     setDocuments([]);
+    setPortalObligationDocuments([]);
     setPortalTasks([]);
     setCashflowEntries([]);
     setCashflowAccounts([]);
@@ -792,17 +831,83 @@ export default function PortalClientePage() {
     const fetchedDocuments = asArray<PortalClientDocument>(docRes.data);
 
     let fetchedTasks: PortalClientTask[] = [];
+    let fetchedObligationDocuments: PortalObligationDocument[] = [];
     if (client?.id) {
-      const { data: tasksData, error: tasksError } = await supabase
-        .from("client_portal_tasks")
-        .select("id, client_id, title, description, type, status, due_date, sector, request_id, created_by, created_at, updated_at")
-        .eq("client_id", client.id)
-        .order("created_at", { ascending: false });
+      const [tasksRes, obligationInstancesRes] = await Promise.all([
+        supabase
+          .from("client_portal_tasks")
+          .select("id, client_id, title, description, type, status, due_date, sector, request_id, created_by, created_at, updated_at")
+          .eq("client_id", client.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("obligation_instances")
+          .select(
+            "id, template_id, competence_key, competence_label, competence_date, technical_due_date, legal_due_date, status, template:obligation_templates(name, sector), files:obligation_instance_files(id, file_name, storage_bucket, storage_path, file_size, content_type, triage_status, source, created_at)",
+          )
+          .eq("client_id", client.id)
+          .order("competence_date", { ascending: false }),
+      ]);
+
+      const { data: tasksData, error: tasksError } = tasksRes;
 
       if (tasksError) {
         toast.error("Erro ao carregar pendências.");
       } else {
         fetchedTasks = asArray<PortalClientTask>(tasksData);
+      }
+
+      if (obligationInstancesRes.error) {
+        toast.error("Erro ao carregar documentos das obrigações.");
+      } else {
+        type ObligationInstanceRow = {
+          id: string;
+          template_id: string;
+          competence_key: string;
+          competence_label: string;
+          competence_date: string;
+          technical_due_date: string;
+          legal_due_date: string | null;
+          status: PortalObligationDocument["instance_status"];
+          template: { name: string; sector: string | null } | null;
+          files: Array<{
+            id: string;
+            file_name: string;
+            storage_bucket: string;
+            storage_path: string;
+            file_size: number | null;
+            content_type: string | null;
+            triage_status: PortalObligationDocument["triage_status"];
+            source: string;
+            created_at: string;
+          }> | null;
+        };
+
+        const obligationInstances = asArray<ObligationInstanceRow>(obligationInstancesRes.data);
+        fetchedObligationDocuments = obligationInstances.flatMap((instance) =>
+          asArray<NonNullable<ObligationInstanceRow["files"]>[number]>(instance.files)
+            .filter((file) => file.triage_status !== "rejected")
+            .map((file) => ({
+              id: file.id,
+              instance_id: instance.id,
+              template_id: instance.template_id,
+              template_name: instance.template?.name || "Obrigação sem nome",
+              template_sector: instance.template?.sector || null,
+              competence_key: instance.competence_key,
+              competence_label: instance.competence_label,
+              competence_date: instance.competence_date,
+              technical_due_date: instance.technical_due_date,
+              legal_due_date: instance.legal_due_date,
+              instance_status: instance.status,
+              file_name: file.file_name,
+              storage_bucket: file.storage_bucket,
+              storage_path: file.storage_path,
+              file_size: file.file_size,
+              content_type: file.content_type,
+              triage_status: file.triage_status,
+              source: file.source,
+              created_at: file.created_at,
+            })),
+        );
       }
     }
 
@@ -887,6 +992,7 @@ export default function PortalClientePage() {
     setClientProfile(client);
     setRequests(fetchedRequests);
     setDocuments(fetchedDocuments);
+    setPortalObligationDocuments(fetchedObligationDocuments);
     setPortalTasks(fetchedTasks);
     setCashflowEntries(fetchedCashflowEntries);
     setCashflowAccounts(fetchedCashflowAccounts);
@@ -973,6 +1079,46 @@ export default function PortalClientePage() {
     () => documents.filter((document) => isEcontinuoDocument(document)),
     [documents],
   );
+
+  const obligationDocumentsByCompetence = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        competenceKey: string;
+        competenceLabel: string;
+        competenceDate: string;
+        heading: string;
+        items: PortalObligationDocument[];
+      }
+    >();
+
+    portalObligationDocuments.forEach((document) => {
+      const existingGroup = grouped.get(document.competence_key);
+      if (existingGroup) {
+        existingGroup.items.push(document);
+        return;
+      }
+
+      grouped.set(document.competence_key, {
+        competenceKey: document.competence_key,
+        competenceLabel: document.competence_label,
+        competenceDate: document.competence_date,
+        heading: formatCompetenceHeading(document.competence_date, document.competence_label),
+        items: [document],
+      });
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort((left, right) => {
+          const fileDateCompare = right.created_at.localeCompare(left.created_at);
+          if (fileDateCompare !== 0) return fileDateCompare;
+          return left.template_name.localeCompare(right.template_name, "pt-BR");
+        }),
+      }))
+      .sort((left, right) => right.competenceDate.localeCompare(left.competenceDate));
+  }, [portalObligationDocuments]);
 
   const requestsAwaitingClient = useMemo(
     () =>
@@ -1357,10 +1503,8 @@ export default function PortalClientePage() {
     await fetchPortalData();
   };
 
-  const handleDownloadDocument = async (document: PortalClientDocument) => {
-    const { data, error } = await supabase.storage
-      .from("client-documents")
-      .createSignedUrl(document.file_path, 120);
+  const handleDownloadStoredFile = async (bucket: string, filePath: string) => {
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, 120);
 
     if (error || !data?.signedUrl) {
       toast.error("Não foi possível gerar o link de download.");
@@ -1369,6 +1513,12 @@ export default function PortalClientePage() {
 
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
+
+  const handleDownloadDocument = async (document: PortalClientDocument) =>
+    handleDownloadStoredFile("client-documents", document.file_path);
+
+  const handleDownloadObligationDocument = async (document: PortalObligationDocument) =>
+    handleDownloadStoredFile(document.storage_bucket, document.storage_path);
 
   const handleRequestFieldValueChange = (fieldName: string, value: string) => {
     setRequestFieldValues((prev) => ({ ...prev, [fieldName]: value }));
@@ -2137,9 +2287,9 @@ export default function PortalClientePage() {
           <TabsContent value="uploads" className="space-y-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Envios do e-continuo</CardTitle>
+                <CardTitle className="text-base">Envios por competência</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Historico automatico dos arquivos enviados pela equipe para este cliente.
+                  Consulte aqui os documentos anexados pela equipe nas suas obrigações, organizados mês a mês.
                 </p>
               </CardHeader>
             </Card>
@@ -2148,48 +2298,119 @@ export default function PortalClientePage() {
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
-            ) : econtinuoDocuments.length === 0 ? (
+            ) : obligationDocumentsByCompetence.length === 0 && econtinuoDocuments.length === 0 ? (
               <Card>
                 <CardContent className="p-10 text-center">
                   <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                  <p className="font-medium">Nenhum envio do e-continuo encontrado.</p>
+                  <p className="font-medium">Nenhum envio encontrado.</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Assim que houver envios, eles serao listados automaticamente aqui.
+                    Assim que a equipe anexar documentos às suas obrigações, eles aparecerão aqui por competência.
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-2">
-                {econtinuoDocuments.map((document) => (
-                  <div
-                    key={document.id}
-                    className="rounded-xl border bg-card px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{document.file_name}</p>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
-                        <span>Enviado em {new Date(document.created_at).toLocaleString("pt-BR")}</span>
-                        <span>•</span>
-                        <span>{document.category}</span>
-                        {document.file_size ? (
-                          <>
-                            <span>•</span>
-                            <span>{(document.file_size / 1024).toFixed(1)} KB</span>
-                          </>
-                        ) : null}
+                {obligationDocumentsByCompetence.map((group) => (
+                  <Card key={group.competenceKey}>
+                    <CardHeader className="pb-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <CardTitle className="text-base capitalize">{group.heading}</CardTitle>
+                          <p className="text-sm text-muted-foreground">Competência {group.competenceLabel}</p>
+                        </div>
+                        <Badge variant="secondary">{group.items.length} arquivo(s)</Badge>
                       </div>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 shrink-0"
-                      onClick={() => void handleDownloadDocument(document)}
-                    >
-                      <Download className="h-4 w-4" /> Baixar
-                    </Button>
-                  </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {group.items.map((document) => (
+                        <div
+                          key={document.id}
+                          className="rounded-xl border bg-card px-4 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+                        >
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium truncate">{document.file_name}</p>
+                              <Badge className={obligationStatusVariants[document.instance_status]}>
+                                {obligationStatusLabels[document.instance_status]}
+                              </Badge>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>{document.template_name}</span>
+                              {document.template_sector ? (
+                                <>
+                                  <span>•</span>
+                                  <span>{document.template_sector}</span>
+                                </>
+                              ) : null}
+                              <span>•</span>
+                              <span>Anexado em {new Date(document.created_at).toLocaleString("pt-BR")}</span>
+                              <span>•</span>
+                              <span>Prazo técnico {new Date(`${document.technical_due_date}T00:00:00`).toLocaleDateString("pt-BR")}</span>
+                              {formatFileSize(document.file_size) ? (
+                                <>
+                                  <span>•</span>
+                                  <span>{formatFileSize(document.file_size)}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 shrink-0"
+                            onClick={() => void handleDownloadObligationDocument(document)}
+                          >
+                            <Download className="h-4 w-4" /> Baixar
+                          </Button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
                 ))}
+
+                {econtinuoDocuments.length > 0 ? (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Histórico legado do e-contínuo</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Esses arquivos pertencem ao histórico anterior do portal e continuam disponíveis para consulta.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {econtinuoDocuments.map((document) => (
+                        <div
+                          key={document.id}
+                          className="rounded-xl border bg-card px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{document.file_name}</p>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
+                              <span>Enviado em {new Date(document.created_at).toLocaleString("pt-BR")}</span>
+                              <span>•</span>
+                              <span>{document.category}</span>
+                              {formatFileSize(document.file_size) ? (
+                                <>
+                                  <span>•</span>
+                                  <span>{formatFileSize(document.file_size)}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 shrink-0"
+                            onClick={() => void handleDownloadDocument(document)}
+                          >
+                            <Download className="h-4 w-4" /> Baixar
+                          </Button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : null}
               </div>
             )}
           </TabsContent>

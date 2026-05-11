@@ -189,8 +189,15 @@ const cadastroDpFields = [
   { name: "beneficios", label: "Beneficios" },
   { name: "hora_extra_banco_horas", label: "Hora extra / Banco de horas" },
   { name: "envia_relatorio_ferias", label: "Envia relatório de férias?" },
-  { name: "clinica_parceira", label: "Clinica parceira" },
   { name: "possui_decimo_terceiro", label: "Possui 13o?" },
+];
+const cadastroDpClinicaParceiraFields = [
+  { name: "clinica_parceira", label: "Nome da Clinica Parceira" },
+  { name: "clinica_parceira_cnpj", label: "CNPJ da Clinica Parceira" },
+  { name: "clinica_parceira_contato", label: "Contato da Clinica Parceira" },
+  { name: "clinica_parceira_telefone_whatsapp", label: "Telefone/WhatsApp da Clinica Parceira" },
+  { name: "clinica_parceira_email", label: "E-mail da Clinica Parceira" },
+  { name: "clinica_parceira_observacoes", label: "Observacoes da Clinica Parceira" },
 ];
 const cadastroDpSindicatoFields = [
   { name: "sindicato_nome", label: "Nome do Sindicato" },
@@ -200,7 +207,16 @@ const cadastroDpSindicatoFields = [
   { name: "sindicato_telefone_whatsapp", label: "Telefone/WhatsApp do Sindicato" },
   { name: "sindicato_observacoes", label: "Observacoes do Sindicato" },
 ];
+const cadastroDpClinicaParceiraFieldNames = new Set(cadastroDpClinicaParceiraFields.map((field) => field.name));
 const cadastroDpSindicatoFieldNames = new Set(cadastroDpSindicatoFields.map((field) => field.name));
+const cadastroDpEmployeeDependentFieldNames = new Set([
+  "possui_fgts",
+  "possui_adiantamento_salarial",
+  "envia_folha_ponto",
+  "beneficios",
+  "hora_extra_banco_horas",
+  "possui_decimo_terceiro",
+]);
 const cadastroContabilFields = [
   { name: "obrigacao_contabil", label: "Obrigação Contábil" },
   { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
@@ -283,7 +299,7 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     description: "Informações cadastrais do setor Fiscal conforme planilha.",
   },
   cadastro_departamento_pessoal: {
-    fields: [...cadastroDpFields, ...cadastroDpSindicatoFields],
+    fields: [...cadastroDpFields, ...cadastroDpClinicaParceiraFields, ...cadastroDpSindicatoFields],
     icon: Users,
     label: "Setor DP",
     color: "text-emerald-600",
@@ -402,6 +418,7 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
     hora_extra_banco_horas: yesNoRule,
     envia_relatorio_ferias: yesNoRule,
     possui_decimo_terceiro: yesNoRule,
+    clinica_parceira_telefone_whatsapp: { type: "phone" },
     sindicato_telefone_whatsapp: { type: "phone" },
   },
   cadastro_contabil: {
@@ -645,6 +662,28 @@ const generalInfoCadastralFields = [
 type GeneralInfoCadastralFieldName = (typeof generalInfoCadastralFields)[number];
 
 const getCategoryFieldEntryKey = (category: ClientCategoryKey, fieldName: string) => `${category}__${fieldName}`;
+
+const cadastroClientesMirrorFieldNames = ["regime_tributÃ¡rio", "ddd", "telefone"] as const;
+type CadastroClientesMirrorFieldName = (typeof cadastroClientesMirrorFieldNames)[number];
+
+const splitPhoneForCadastro = (rawPhone: string) => {
+  const digits = rawPhone.replace(/\D/g, "");
+  if (!digits) return { ddd: "", phone: "" };
+  if (digits.length <= 2) return { ddd: digits, phone: "" };
+  return {
+    ddd: digits.slice(0, 2),
+    phone: digits.slice(2),
+  };
+};
+
+const buildClientPhoneFromCadastro = (dddRaw: string, phoneRaw: string) => {
+  const ddd = dddRaw.replace(/\D/g, "");
+  const phone = phoneRaw.replace(/\D/g, "");
+  if (!ddd && !phone) return "";
+  if (!ddd) return phone;
+  if (!phone) return ddd;
+  return `(${ddd})${phone}`;
+};
 
 const clientBusinessProfileOptions = [
   { key: "comércio", label: "Comércio" },
@@ -1137,6 +1176,23 @@ export default function ClientDetailPage() {
 
     setDataEntries((prev) => ({ ...prev, [key]: normalizedValue }));
 
+    if (category === "cadastro_clientes") {
+      if (fieldName === "regime_tributÃ¡rio") {
+        setClientForm((prev) => ({ ...prev, regime: normalizedValue }));
+      }
+
+      if (fieldName === "ddd" || fieldName === "telefone") {
+        const nextDdd = fieldName === "ddd"
+          ? normalizedValue
+          : (dataEntries[getCategoryFieldEntryKey("cadastro_clientes", "ddd")] || "");
+        const nextPhone = fieldName === "telefone"
+          ? normalizedValue
+          : (dataEntries[getCategoryFieldEntryKey("cadastro_clientes", "telefone")] || "");
+        const mergedPhone = buildClientPhoneFromCadastro(nextDdd, nextPhone);
+        setClientForm((prev) => ({ ...prev, phone: mergedPhone }));
+      }
+    }
+
     const error = validateFieldValue(rule, normalizedValue);
     setDataFieldErrors((prev) => {
       const next = { ...prev };
@@ -1150,7 +1206,20 @@ export default function ClientDetailPage() {
     dataEntries[getCategoryFieldEntryKey("cadastro_clientes", fieldName)] || "";
 
   const setGeneralInfoFieldValue = (fieldName: GeneralInfoCadastralFieldName, value: string) => {
-    handleDataFieldChange("cadastro_clientes", fieldName, value);
+    const key = getCategoryFieldEntryKey("cadastro_clientes", fieldName);
+    const rule = getFieldRule("cadastro_clientes", fieldName);
+
+    // Preserve the raw typed value for address-related inputs.
+    // Canonical normalization still runs on save.
+    setDataEntries((prev) => ({ ...prev, [key]: value }));
+
+    const error = validateFieldValue(rule, value);
+    setDataFieldErrors((prev) => {
+      const next = { ...prev };
+      if (error) next[key] = error;
+      else delete next[key];
+      return next;
+    });
   };
 
   const getSelectedBusinessProfiles = () =>
@@ -1329,6 +1398,30 @@ export default function ClientDetailPage() {
     );
 
     const normalizedAddress = buildAddressFromCadastralValues(generalValues);
+    const phonePartsFromGeneral = splitPhoneForCadastro(clientForm.phone || "");
+    const mirroredCadastroFieldValues: Array<{ fieldName: CadastroClientesMirrorFieldName; value: string }> = [
+      {
+        fieldName: "regime_tributÃ¡rio",
+        value: normalizeFieldValueForSave(
+          getFieldRule("cadastro_clientes", "regime_tributÃ¡rio"),
+          clientForm.regime || "",
+        ),
+      },
+      {
+        fieldName: "ddd",
+        value: normalizeFieldValueForSave(
+          getFieldRule("cadastro_clientes", "ddd"),
+          phonePartsFromGeneral.ddd,
+        ),
+      },
+      {
+        fieldName: "telefone",
+        value: normalizeFieldValueForSave(
+          getFieldRule("cadastro_clientes", "telefone"),
+          phonePartsFromGeneral.phone,
+        ),
+      },
+    ];
     const clientWillBeInactive = isInactiveClientStatus(clientForm.status);
     const nextPortalCashflowEnabled = clientWillBeInactive ? false : Boolean(clientForm.portal_cashflow_enabled);
 
@@ -1360,7 +1453,7 @@ export default function ClientDetailPage() {
         .delete()
         .eq("client_id", id)
         .eq("category", "cadastro_clientes")
-        .in("field_name", [...generalInfoCadastralFields])
+        .in("field_name", [...generalInfoCadastralFields, ...cadastroClientesMirrorFieldNames])
         .is("period", null);
 
       if (deleteGeneralDataError) {
@@ -1368,19 +1461,22 @@ export default function ClientDetailPage() {
         return;
       }
 
-      const generalDataRows = normalizedGeneralFieldValues
-        .filter((entry) => Boolean(entry.value))
+      const cadastroClientRows = [
+        ...normalizedGeneralFieldValues.map((entry) => ({ field_name: entry.fieldName, field_value: entry.value })),
+        ...mirroredCadastroFieldValues.map((entry) => ({ field_name: entry.fieldName, field_value: entry.value })),
+      ]
+        .filter((entry) => Boolean(entry.field_value))
         .map((entry) => ({
           client_id: id,
           category: "cadastro_clientes",
-          field_name: entry.fieldName,
-          field_value: entry.value,
+          field_name: entry.field_name,
+          field_value: entry.field_value,
           period: null,
           created_by: user?.id || null,
         }));
 
-      if (generalDataRows.length > 0) {
-        const { error: insertGeneralDataError } = await supabase.from("client_data").insert(generalDataRows);
+      if (cadastroClientRows.length > 0) {
+        const { error: insertGeneralDataError } = await supabase.from("client_data").insert(cadastroClientRows);
         if (insertGeneralDataError) {
           toast.error("Dados gerais salvos, mas houve erro ao persistir os campos de endereço.");
           return;
@@ -1410,6 +1506,9 @@ export default function ClientDetailPage() {
       setDataEntries((prev) => {
         const next = { ...prev };
         normalizedGeneralFieldValues.forEach((entry) => {
+          next[getCategoryFieldEntryKey("cadastro_clientes", entry.fieldName)] = entry.value;
+        });
+        mirroredCadastroFieldValues.forEach((entry) => {
           next[getCategoryFieldEntryKey("cadastro_clientes", entry.fieldName)] = entry.value;
         });
         return next;
@@ -1695,6 +1794,38 @@ export default function ClientDetailPage() {
     const { error } = await supabase.from("client_data").insert(entries);
     setSavingData(null);
     if (error) return toast.error("Erro ao salvar dados");
+
+    if (category === "cadastro_clientes") {
+      const regimeEntryValue = entries.find((entry) => entry.field_name === "regime_tributÃ¡rio")?.field_value;
+      const dddEntryValue = entries.find((entry) => entry.field_name === "ddd")?.field_value;
+      const phoneEntryValue = entries.find((entry) => entry.field_name === "telefone")?.field_value;
+
+      const mirroredRegime = typeof regimeEntryValue === "string" ? regimeEntryValue : "";
+      const mirroredDdd = typeof dddEntryValue === "string" ? dddEntryValue : "";
+      const mirroredPhoneField = typeof phoneEntryValue === "string" ? phoneEntryValue : "";
+      const mergedPhone = buildClientPhoneFromCadastro(mirroredDdd, mirroredPhoneField);
+
+      const { error: updateClientMirrorError } = await supabase
+        .from("clients")
+        .update({
+          regime: mirroredRegime || null,
+          phone: mergedPhone || null,
+        })
+        .eq("id", id);
+
+      if (updateClientMirrorError) {
+        toast.error("Dados cadastrais salvos, mas houve erro ao sincronizar os dados gerais.");
+        return;
+      }
+
+      setClientForm((prev) => ({
+        ...prev,
+        regime: mirroredRegime || prev.regime || "",
+        phone: mergedPhone || "",
+      }));
+      setClient((prev) => (prev ? { ...prev, regime: mirroredRegime || null, phone: mergedPhone || null } : prev));
+    }
+
     toast.success(`Dados de ${config.label} salvos`);
     void loadClientData();
   };
@@ -1831,8 +1962,18 @@ export default function ClientDetailPage() {
     const categoryFiles = files.filter((file) => file.category === category);
     const isCadastroClientes = category === "cadastro_clientes";
     const isCadastroDp = category === "cadastro_departamento_pessoal";
+    const possuiFuncionariosValue = isCadastroDp
+      ? normalizeYesNoValue(
+          dataEntries[getCategoryFieldEntryKey("cadastro_departamento_pessoal", "possui_funcionarios")] || "",
+        )
+      : "";
     const primaryFields = isCadastroDp
-      ? config.fields.filter((field) => !cadastroDpSindicatoFieldNames.has(field.name))
+      ? config.fields.filter(
+          (field) =>
+            (!cadastroDpEmployeeDependentFieldNames.has(field.name) || possuiFuncionariosValue === "sim") &&
+            !cadastroDpClinicaParceiraFieldNames.has(field.name) &&
+            !cadastroDpSindicatoFieldNames.has(field.name),
+        )
       : config.fields;
 
     const renderField = (field: ClientDataField) => {
@@ -1890,6 +2031,19 @@ export default function ClientDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {primaryFields.map(renderField)}
         </div>
+        {isCadastroDp && (
+          <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium">Informacoes da Clinica Parceira</h4>
+              <p className="text-xs text-muted-foreground">
+                Dados da clinica parceira para contato e alinhamentos do setor DP.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {cadastroDpClinicaParceiraFields.map(renderField)}
+            </div>
+          </div>
+        )}
         {isCadastroDp && (
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
             <div className="space-y-1">
@@ -2137,7 +2291,15 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Regime Tributário</Label>
-                  <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.regime || ""} onChange={(e) => setClientForm((p) => ({ ...p, regime: e.target.value }))}>
+                  <select
+                    className="w-full text-sm bg-background border rounded-lg px-3 py-2"
+                    value={clientForm.regime || ""}
+                    onChange={(e) => {
+                      const nextRegime = e.target.value;
+                      setClientForm((p) => ({ ...p, regime: nextRegime }));
+                      handleDataFieldChange("cadastro_clientes", "regime_tributÃ¡rio", nextRegime);
+                    }}
+                  >
                     {["Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI"].map((r) => <option key={r}>{r}</option>)}
                   </select>
                 </div>
@@ -2180,7 +2342,16 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Telefone</Label>
-                  <Input value={clientForm.phone || ""} onChange={(e) => setClientForm((p) => ({ ...p, phone: e.target.value }))} />
+                  <Input
+                    value={clientForm.phone || ""}
+                    onChange={(e) => {
+                      const nextPhone = e.target.value;
+                      setClientForm((p) => ({ ...p, phone: nextPhone }));
+                      const parsed = splitPhoneForCadastro(nextPhone);
+                      handleDataFieldChange("cadastro_clientes", "ddd", parsed.ddd);
+                      handleDataFieldChange("cadastro_clientes", "telefone", parsed.phone);
+                    }}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">CEP</Label>
@@ -2357,7 +2528,6 @@ export default function ClientDetailPage() {
           </TabsContent>
 
           <TabsContent value="dados_mensais" className="space-y-4">
-            <ClientObligationsPanel clientId={client.id} />
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="space-y-1">
@@ -2428,6 +2598,7 @@ export default function ClientDetailPage() {
           </TabsContent>
 
           <TabsContent value="obrigações" className="space-y-4">
+            <ClientObligationsPanel clientId={client.id} />
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="space-y-1">

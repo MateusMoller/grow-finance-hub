@@ -46,6 +46,37 @@ export interface PortalClientDocument {
   processed_by: string | null;
 }
 
+export type PortalObligationInstanceStatus =
+  | "pendente"
+  | "em_andamento"
+  | "aguardando_documento"
+  | "em_revisao"
+  | "concluida"
+  | "atrasada"
+  | "cancelada";
+
+export interface PortalObligationDocument {
+  id: string;
+  instance_id: string;
+  template_id: string;
+  template_name: string;
+  template_sector: string | null;
+  competence_key: string;
+  competence_label: string;
+  competence_date: string;
+  technical_due_date: string;
+  legal_due_date: string | null;
+  instance_status: PortalObligationInstanceStatus;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  file_size: number | null;
+  content_type: string | null;
+  triage_status: "accepted" | "reviewed" | "rejected";
+  source: string;
+  created_at: string;
+}
+
 export type PortalTaskStatus = "pending_client" | "in_analysis" | "completed" | "cancelled";
 export type PortalTaskType = "document" | "request_return" | "operational" | "deadline" | "other";
 
