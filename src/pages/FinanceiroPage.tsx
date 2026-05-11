@@ -207,6 +207,7 @@ export default function FinanceiroPage() {
       supabase
         .from("clients")
         .select("id, name, sector, status, portal_cashflow_enabled")
+        .eq("portal_cashflow_enabled", true)
         .order("name", { ascending: true }),
       supabase
         .from("client_cashflow_rules")
@@ -248,6 +249,10 @@ export default function FinanceiroPage() {
   }, [fetchFinanceData]);
 
   const accountMap = useMemo(() => getCashflowAccountMap(accounts), [accounts]);
+  const enabledClients = useMemo(
+    () => clients.filter((client) => client.portal_cashflow_enabled),
+    [clients],
+  );
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client])), [clients]);
   const healthSnapshotMap = useMemo(
     () => new Map(healthSnapshots.map((snapshot) => [snapshot.client_id, snapshot])),
@@ -528,6 +533,12 @@ export default function FinanceiroPage() {
     selectedClientSnapshot?.health_status,
   ]);
 
+  useEffect(() => {
+    if (clientFilter === "unselected") return;
+    if (enabledClients.some((client) => client.id === clientFilter)) return;
+    setClientFilter("unselected");
+  }, [clientFilter, enabledClients]);
+
   const resetRuleForm = () => {
     setNewRuleClientId("global");
     setNewRuleMatchText("");
@@ -713,9 +724,9 @@ export default function FinanceiroPage() {
               <SelectTrigger>
                 <SelectValue placeholder="Cliente" />
               </SelectTrigger>
-              <SelectContent>
+            <SelectContent>
                 <SelectItem value="unselected">Escolha um cliente</SelectItem>
-                {clients.map((client) => (
+                {enabledClients.map((client) => (
                   <SelectItem key={client.id} value={client.id}>
                     {client.name}
                   </SelectItem>

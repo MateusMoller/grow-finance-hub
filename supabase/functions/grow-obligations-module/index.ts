@@ -1107,10 +1107,6 @@ async function determineInstanceDocumentStatus(
     return instance.status;
   }
 
-  if (!template.requires_document) {
-    return instance.status === "atrasada" ? "atrasada" : "em_revisao";
-  }
-
   const requiredDocuments = asExpectedDocuments(template.expected_documents)
     .filter((document) => document.active && document.required)
     .map((document) => document.document_type_key);
@@ -1343,40 +1339,38 @@ async function syncInstanceArtifacts(
   const instanceDone = instance.status === "concluida" || instance.status === "cancelada";
   const dueDate = `${instance.technical_due_date}T09:00:00.000Z`;
 
-  if (template.generates_calendar) {
-    const payload = {
-      title: `${template.name} · ${instance.competence_label}`,
-      description: `${clientName}\nCompetência: ${instance.competence_label}`,
-      entry_type: "obrigação",
-      priority: instance.priority,
-      sector: template.sector,
-      due_at: dueDate,
-      all_day: true,
-      status: instanceDone ? "completed" : "pending",
-      client_name: clientName,
-      integration_source: "grow_obligation",
-      integration_key: integrationKey,
-    };
+  const payload = {
+    title: `${template.name} · ${instance.competence_label}`,
+    description: `${clientName}\nCompetência: ${instance.competence_label}`,
+    entry_type: "obrigação",
+    priority: instance.priority,
+    sector: template.sector,
+    due_at: dueDate,
+    all_day: true,
+    status: instanceDone ? "completed" : "pending",
+    client_name: clientName,
+    integration_source: "grow_obligation",
+    integration_key: integrationKey,
+  };
 
-    const { data: existingEvent, error: eventLookupError } = await supabaseAdmin
+  const { data: existingEvent, error: eventLookupError } = await supabaseAdmin
+    .from("calendar_events")
+    .select("id")
+    .eq("integration_source", "grow_obligation")
+    .eq("integration_key", integrationKey)
+    .maybeSingle();
+
+  if (eventLookupError) throw eventLookupError;
+
+  if (existingEvent?.id) {
+    const { error } = await supabaseAdmin
       .from("calendar_events")
-      .select("id")
-      .eq("integration_source", "grow_obligation")
-      .eq("integration_key", integrationKey)
-      .maybeSingle();
-
-    if (eventLookupError) throw eventLookupError;
-
-    if (existingEvent?.id) {
-      const { error } = await supabaseAdmin
-        .from("calendar_events")
-        .update(payload)
-        .eq("id", existingEvent.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabaseAdmin.from("calendar_events").insert(payload);
-      if (error) throw error;
-    }
+      .update(payload)
+      .eq("id", existingEvent.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabaseAdmin.from("calendar_events").insert(payload);
+    if (error) throw error;
   }
 
   const { data: existingTask, error: taskLookupError } = await supabaseAdmin
@@ -1387,17 +1381,6 @@ async function syncInstanceArtifacts(
     .maybeSingle();
 
   if (taskLookupError) throw taskLookupError;
-
-  if (!template.generates_kanban) {
-    if (existingTask?.id) {
-      const { error } = await supabaseAdmin
-        .from("kanban_tasks")
-        .delete()
-        .eq("id", existingTask.id);
-      if (error) throw error;
-    }
-    return;
-  }
 
   const taskStatus =
     instance.status === "concluida"
@@ -1528,7 +1511,7 @@ async function ensureInstancesForProfiles(
           priority: template.priority,
           current_assignee: profile.assigned_to,
           origin: "grow_native",
-          document_required: template.requires_document,
+          document_required: true,
           created_by: actorId,
         });
         existingKeys.add(uniqueKey);
@@ -1766,9 +1749,9 @@ async function handleUpsertTemplate(
     priority: asTrimmedString(payload.priority) || "media",
     expected_documents: asExpectedDocuments(payload.expected_documents),
     is_active: asBoolean(payload.is_active, true),
-    generates_calendar: asBoolean(payload.generates_calendar, true),
-    generates_kanban: asBoolean(payload.generates_kanban, false),
-    requires_document: asBoolean(payload.requires_document, true),
+    generates_calendar: true,
+    generates_kanban: true,
+    requires_document: true,
     operational_notes: asTrimmedString(payload.operational_notes),
     created_by: actorId,
   };
@@ -1779,6 +1762,79 @@ async function handleUpsertTemplate(
 
   const { data, error } = await query;
   if (error) return jsonResponse({ error: error.message }, 400);
+
+  const template = data as TemplateRow;
+  const linkedClientIds = Array.from(new Set(asStringArray(payload.linked_client_ids)));
+
+  if ("linked_client_ids" in payload) {
+    const { data: existingProfilesData, error: existingProfilesError } = await supabaseAdmin
+      .from("client_obligation_profiles")
+      .select("*")
+      .eq("template_id", template.id);
+
+    if (existingProfilesError) return jsonResponse({ error: existingProfilesError.message }, 400);
+
+    const existingProfiles = (existingProfilesData || []) as ProfileRow[];
+    const existingProfilesByClientId = new Map(existingProfiles.map((profile) => [profile.client_id, profile]));
+    const today = toIsoDate(new Date());
+    const templatesMap = await loadTemplatesMap(supabaseAdmin);
+    const activatedProfiles: ProfileRow[] = [];
+
+    for (const clientId of linkedClientIds) {
+      const existingProfile = existingProfilesByClientId.get(clientId);
+      const profileRow = {
+        client_id: clientId,
+        template_id: template.id,
+        assigned_to: existingProfile?.assigned_to || null,
+        start_date: existingProfile?.start_date || today,
+        end_date: null,
+        is_active: true,
+        due_day_override: existingProfile?.due_day_override ?? null,
+        yearly_due_month_override: existingProfile?.yearly_due_month_override ?? null,
+        legal_due_day_override: existingProfile?.legal_due_day_override ?? null,
+        expected_documents_override: existingProfile?.expected_documents_override ?? null,
+        notes: existingProfile?.notes || null,
+        parameters: asRecord(existingProfile?.parameters) || {},
+        created_by: actorId,
+      };
+
+      const { data: syncedProfile, error: syncedProfileError } = await supabaseAdmin
+        .from("client_obligation_profiles")
+        .upsert(profileRow, { onConflict: "client_id,template_id" })
+        .select("*")
+        .single();
+
+      if (syncedProfileError) return jsonResponse({ error: syncedProfileError.message }, 400);
+      activatedProfiles.push(syncedProfile as ProfileRow);
+    }
+
+    const profilesToDeactivate = existingProfiles.filter(
+      (profile) => profile.is_active && !linkedClientIds.includes(profile.client_id),
+    );
+
+    for (const profile of profilesToDeactivate) {
+      const { error: deactivateError } = await supabaseAdmin
+        .from("client_obligation_profiles")
+        .update({
+          is_active: false,
+          end_date: profile.end_date || today,
+        })
+        .eq("id", profile.id);
+
+      if (deactivateError) return jsonResponse({ error: deactivateError.message }, 400);
+    }
+
+    if (activatedProfiles.length > 0) {
+      await ensureInstancesForProfiles(
+        supabaseAdmin,
+        activatedProfiles,
+        templatesMap,
+        actorId,
+        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)),
+        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 2, 1)),
+      );
+    }
+  }
 
   return jsonResponse({ ok: true, template: data });
 }

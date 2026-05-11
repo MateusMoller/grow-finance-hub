@@ -15,7 +15,6 @@ import {
   MessageSquare,
   MessagesSquare,
   Newspaper,
-  Send,
   Settings,
   Target,
   TrendingUp,
@@ -81,7 +80,6 @@ const contextMap: ContextScreen[] = [
       "Relatorios",
       "Financeiro",
       "Obrigacoes",
-      "E-continuo",
       "Notificacoes",
       "Usuarios",
       "Sugestoes",
@@ -333,41 +331,22 @@ const moduleGuides: ModuleGuide[] = [
     title: "Obrigacoes",
     access: "Perfis internos habilitados",
     icon: FileSpreadsheet,
-    objective: "Controlar obrigacoes e seus desdobramentos operacionais.",
+    objective: "Controlar obrigacoes e centralizar os envios/documentos operacionais no mesmo modulo.",
     features: [
       "Leitura de obrigacoes por cliente, status e prazo.",
       "Acompanhamento de execucao em conjunto com tarefas e calendario.",
+      "Central de Documentos integrada para envio, triagem e historico.",
       "Base para rotinas recorrentes e previsao de carga.",
     ],
     flow: [
       "Filtrar por cliente e competencia.",
       "Validar status e prazo tecnico.",
+      "Usar a aba de documentos para enviar, revisar e consultar anexos.",
       "Encaminhar tratativas para tarefa quando necessario.",
     ],
     carePoints: [
       "Nao deixar obrigacao sem status atualizado.",
       "Evitar processar fora de prioridade de prazo tecnico.",
-    ],
-  },
-  {
-    id: "mod-econtinuo",
-    title: "E-continuo",
-    access: "Perfis internos habilitados",
-    icon: Send,
-    objective: "Gerenciar envios operacionais e historico por cliente.",
-    features: [
-      "Envio de arquivos para rotinas e-continuo.",
-      "Historico de envios para auditoria operacional.",
-      "Rastreio de data e tipo de arquivo enviado.",
-    ],
-    flow: [
-      "Selecionar cliente e preparar envio.",
-      "Publicar arquivo no fluxo adequado.",
-      "Confirmar no historico o registro da acao.",
-    ],
-    carePoints: [
-      "Validar categoria e arquivo antes do envio final.",
-      "Nao enviar arquivo sem relacao clara com a demanda.",
     ],
   },
   {
@@ -717,11 +696,10 @@ export default function ManualPage() {
             <div className="rounded-lg border p-3">Relatorios: <span className="text-muted-foreground">/app/relatorios</span></div>
             <div className="rounded-lg border p-3">Financeiro: <span className="text-muted-foreground">/app/financeiro</span></div>
             <div className="rounded-lg border p-3">Obrigacoes: <span className="text-muted-foreground">/app/obrigacoes</span></div>
-            <div className="rounded-lg border p-3">E-continuo: <span className="text-muted-foreground">/app/econtinuo</span></div>
             <div className="rounded-lg border p-3">Portal do cliente: <span className="text-muted-foreground">/app/portal</span></div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Observacao: atalhos antigos como /app/solicitacoes, /app/kanban, /app/comercial e /app/acessorias redirecionam para os modulos atuais.
+            Observacao: atalhos antigos como /app/solicitacoes, /app/kanban, /app/comercial, /app/acessorias e /app/econtinuo redirecionam para os modulos atuais.
           </p>
         </section>
 

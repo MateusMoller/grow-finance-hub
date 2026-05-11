@@ -1,6 +1,5 @@
 
 import { AppLayout } from "@/components/app/AppLayout";
-import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -32,7 +31,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -93,12 +91,6 @@ interface ReportDatasetDefinition {
   defaultColumns: string[];
 }
 
-interface AutomaticReportCard {
-  datasetId: ReportDatasetId;
-  count: number;
-  stats: Array<{ label: string; value: string }>;
-}
-
 interface SavedReportConfig {
   id: string;
   name: string;
@@ -122,7 +114,6 @@ const roleOrder = [
 ] as const;
 
 const rolePriority = new Map(roleOrder.map((role, index) => [role, index]));
-const doneTaskStatuses = new Set(["done", "archived", "concluído", "concluída", "completed", "fechado"]);
 
 const normalizeText = (value: string) =>
   value
@@ -199,11 +190,6 @@ const pickPrimaryRole = (roles: string[]) => {
     return aPriority - bPriority;
   });
   return sorted[0];
-};
-
-const isTaskDone = (status: string) => {
-  const normalized = normalizeText(status || "");
-  return doneTaskStatuses.has(normalized);
 };
 
 const taskStatusLabel = (status: string) => {
@@ -1046,61 +1032,6 @@ export default function RelatoriosPage() {
     [clientDataByClientId, clientDataReportPeriod, filteredClients, filteredLeads, filteredTasks, filteredTeam],
   );
 
-  const automaticCards = useMemo<AutomaticReportCard[]>(() => {
-    const activeClients = filteredClients.filter((client) => normalizeText(client.status || "") === "ativo").length;
-    const clientsWithContact = filteredClients.filter((client) => Boolean(client.contact || client.email)).length;
-
-    const leadsFromSite = filteredLeads.filter((lead) => normalizeText(lead.source_tag || "").includes("site")).length;
-    const leadsIn30Days = filteredLeads.filter((lead) => {
-      const createdAt = new Date(lead.created_at).getTime();
-      if (Number.isNaN(createdAt)) return false;
-      const now = Date.now();
-      const last30DaysMs = 30 * 24 * 60 * 60 * 1000;
-      return now - createdAt <= last30DaysMs;
-    }).length;
-
-    const doneTasks = filteredTasks.filter((task) => isTaskDone(task.status)).length;
-    const openTasks = filteredTasks.length - doneTasks;
-
-    const teamWithRole = filteredTeam.filter((member) => normalizeText(member.role) !== "sem papel").length;
-    const teamWithoutRole = filteredTeam.length - teamWithRole;
-
-    return [
-      {
-        datasetId: "clientes",
-        count: rowsByDataset.clientes.length,
-        stats: [
-          { label: "Ativos", value: String(activeClients) },
-          { label: "Com contato", value: String(clientsWithContact) },
-        ],
-      },
-      {
-        datasetId: "leads_crm",
-        count: rowsByDataset.leads_crm.length,
-        stats: [
-          { label: "Ultimos 30 dias", value: String(leadsIn30Days) },
-          { label: "Origem site", value: String(leadsFromSite) },
-        ],
-      },
-      {
-        datasetId: "tarefas",
-        count: rowsByDataset.tarefas.length,
-        stats: [
-          { label: "Concluídas", value: String(doneTasks) },
-          { label: "Em aberto", value: String(openTasks) },
-        ],
-      },
-      {
-        datasetId: "equipe",
-        count: rowsByDataset.equipe.length,
-        stats: [
-          { label: "Com papel", value: String(teamWithRole) },
-          { label: "Sem papel", value: String(teamWithoutRole) },
-        ],
-      },
-    ];
-  }, [filteredClients, filteredLeads, filteredTasks, filteredTeam, rowsByDataset]);
-
   const activeFilterBadges = useMemo(() => {
     const items: string[] = [];
     if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
@@ -1468,7 +1399,7 @@ export default function RelatoriosPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Relatórios</h1>
             <p className="text-sm text-muted-foreground">
-              Relatórios automaticos com dados do banco e construtor personalizado.
+              Construtor de relatórios personalizados com dados do banco.
             </p>
             {lastUpdatedAt && (
               <p className="text-xs text-muted-foreground mt-1">Atualizado em {formatDateTime(lastUpdatedAt)}</p>
@@ -1490,108 +1421,8 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        <Tabs defaultValue="automaticos" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="automaticos">Relatórios automaticos</TabsTrigger>
-            <TabsTrigger value="personalizado">Gerar relatório personalizado</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="automaticos" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {automaticCards.map((card, index) => {
-                const definition = reportDefinitions[card.datasetId];
-                const Icon = definition.icon;
-
-                return (
-                  <motion.div
-                    key={card.datasetId}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="rounded-xl border bg-card p-5 space-y-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={`h-10 w-10 rounded-lg ${definition.colorClass} flex items-center justify-center`}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <Badge variant="outline">{card.count} registros</Badge>
-                    </div>
-
-                    <div>
-                      <h3 className="font-medium">{definition.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">{definition.description}</p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {card.stats.map((stat) => (
-                        <div key={`${card.datasetId}-${stat.label}`} className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">{stat.label}</span>
-                          <span className="font-medium">{stat.value}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() =>
-                          void handleExport(
-                            card.datasetId,
-                            reportDefinitions[card.datasetId].defaultColumns,
-                            "csv",
-                            "automático",
-                          )
-                        }
-                      >
-                        <Download className="h-4 w-4" />
-                        CSV
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="gap-2"
-                        onClick={() =>
-                          void handleExport(
-                            card.datasetId,
-                            reportDefinitions[card.datasetId].defaultColumns,
-                            "xlsx",
-                            "automático",
-                          )
-                        }
-                      >
-                        <FileSpreadsheet className="h-4 w-4" />
-                        XLSX
-                      </Button>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            <div className="rounded-xl border bg-card">
-              <div className="p-4 border-b flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-heading font-semibold">Resumo rapido</h2>
-                <span className="text-xs text-muted-foreground">
-                  Totais carregados:{" "}
-                  {Object.values(rowsByDataset)
-                    .reduce((sum, rows) => sum + rows.length, 0)
-                    .toLocaleString("pt-BR")}{" "}
-                  registros
-                </span>
-              </div>
-              <div className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
-                {Object.values(reportDefinitions).map((definition) => (
-                  <div key={definition.id} className="rounded-lg border p-3">
-                    <p className="font-medium">{definition.name}</p>
-                    <p className="text-2xl font-bold mt-1">{rowsByDataset[definition.id].length}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="personalizado" className="space-y-4">
+        <div className="space-y-4">
+          <div className="space-y-4">
             <div className="rounded-xl border bg-card p-4 space-y-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -1934,8 +1765,8 @@ export default function RelatoriosPage() {
                 </div>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </div>
     </AppLayout>
   );

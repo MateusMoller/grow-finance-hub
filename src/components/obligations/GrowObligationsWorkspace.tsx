@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -83,6 +83,7 @@ interface TemplateFormState {
   generates_kanban: boolean;
   requires_document: boolean;
   operational_notes: string;
+  linked_client_ids: string[];
 }
 
 interface InstanceFormState {
@@ -179,11 +180,26 @@ function makeTemplateForm(template?: GrowObligationTemplate | null): TemplateFor
       ? template.expected_documents.map((item) => makeDocumentDraft(item))
       : [makeDocumentDraft()],
     is_active: template?.is_active ?? true,
-    generates_calendar: template?.generates_calendar ?? true,
-    generates_kanban: template?.generates_kanban ?? false,
-    requires_document: template?.requires_document ?? true,
+    generates_calendar: true,
+    generates_kanban: true,
+    requires_document: true,
     operational_notes: template?.operational_notes || "",
+    linked_client_ids: [],
   };
+}
+
+function buildTemplateLinkedClientIds(
+  profiles: GrowObligationsOverviewPayload["profiles"] | undefined,
+  templateId: string | null | undefined,
+) {
+  if (!profiles || !templateId) return [];
+  return Array.from(
+    new Set(
+      profiles
+        .filter((profile) => profile.template_id === templateId && profile.is_active)
+        .map((profile) => profile.client_id),
+    ),
+  );
 }
 
 function makeInstanceForm(instance: GrowObligationInstance): InstanceFormState {
@@ -307,6 +323,27 @@ function executionStatusLabel(status: GrowDocumentInboxItem["execution_status"])
   }
 }
 
+function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPreview): UploadQueueItem {
+  const { match } = preview;
+  const nextClientId = match.detectedClientId || item.client_id;
+  const nextTemplateId = match.suggestedTemplateId || item.template_id;
+  const nextDocumentTypeKey = match.documentTypeKey || item.document_type_key;
+  const nextInstanceId = match.resolvedInstanceId || item.instance_id;
+  const nextCompetenceLabel = match.competenceDetected || item.analysis.competence_detected || item.suggested_competence_label;
+
+  return {
+    ...item,
+    client_id: nextClientId || "",
+    template_id: nextTemplateId || "",
+    document_type_key: nextDocumentTypeKey || "",
+    instance_id: nextInstanceId || "",
+    suggested_competence_label: nextCompetenceLabel || "",
+    preview,
+    previewError: null,
+    isPreviewing: false,
+  };
+}
+
 const overviewQueryKey = ["grow-obligations-overview"];
 
 export function GrowObligationsWorkspace({
@@ -314,6 +351,7 @@ export function GrowObligationsWorkspace({
   initialClientId = null,
 }: GrowObligationsWorkspaceProps) {
   const queryClient = useQueryClient();
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(defaultTab);
   const [templateSearch, setTemplateSearch] = useState("");
   const [instanceSearch, setInstanceSearch] = useState("");
@@ -328,6 +366,8 @@ export function GrowObligationsWorkspace({
   const [documentResolutionNotes, setDocumentResolutionNotes] = useState("");
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [referenceUploadKey, setReferenceUploadKey] = useState<string | null>(null);
+  const [isDraggingUpload, setIsDraggingUpload] = useState(false);
+  const [templateClientSearch, setTemplateClientSearch] = useState("");
 
   const overviewQuery = useQuery({
     queryKey: overviewQueryKey,
@@ -356,12 +396,14 @@ export function GrowObligationsWorkspace({
         generates_kanban: payload.generates_kanban,
         requires_document: payload.requires_document,
         operational_notes: payload.operational_notes,
+        linked_client_ids: payload.linked_client_ids,
       });
     },
     onSuccess: async () => {
       toast.success("Obrigacao mestre salva.");
       setTemplateDialogOpen(false);
       setTemplateForm(makeTemplateForm());
+      setTemplateClientSearch("");
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigacao."),
@@ -634,6 +676,13 @@ export function GrowObligationsWorkspace({
     [overview?.templates],
   );
 
+  const filteredTemplateClients = useMemo(() => {
+    const items = overview?.clients || [];
+    const token = templateClientSearch.trim().toLowerCase();
+    if (!token) return items;
+    return items.filter((client) => `${client.name} ${client.cnpj || ""}`.toLowerCase().includes(token));
+  }, [overview?.clients, templateClientSearch]);
+
   async function runPreview(item: UploadQueueItem) {
     if (!item.file?.name) {
       setUploadQueue((prev) => prev.map((current) => (current.id === item.id ? { ...current, preview: null, previewError: "Arquivo invalido.", isPreviewing: false } : current)));
@@ -650,7 +699,9 @@ export function GrowObligationsWorkspace({
         file_name: item.file.name,
         analysis: item.analysis,
       });
-      setUploadQueue((prev) => prev.map((current) => (current.id === item.id ? { ...current, preview, previewError: null, isPreviewing: false } : current)));
+      setUploadQueue((prev) =>
+        prev.map((current) => (current.id === item.id ? applyPreviewAutofill(current, preview) : current)),
+      );
     } catch (error) {
       setUploadQueue((prev) => prev.map((current) => (current.id === item.id ? { ...current, preview: null, previewError: error instanceof Error ? error.message : "Falha no preview.", isPreviewing: false } : current)));
     }
@@ -658,6 +709,7 @@ export function GrowObligationsWorkspace({
 
   async function handleUploadFiles(files: FileList | File[]) {
     const list = Array.from(files);
+    if (list.length === 0) return;
     const nextItems: UploadQueueItem[] = [];
     for (const file of list) {
       try {
@@ -686,6 +738,19 @@ export function GrowObligationsWorkspace({
     setUploadQueue((prev) => [...prev, ...nextItems]);
     for (const item of nextItems) {
       void runPreview(item);
+    }
+  }
+
+  function handleUploadDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleUploadDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDraggingUpload(false);
+    if (event.dataTransfer.files?.length) {
+      void handleUploadFiles(event.dataTransfer.files);
     }
   }
 
@@ -761,7 +826,14 @@ export function GrowObligationsWorkspace({
               <div><CardTitle>Catalogo mestre</CardTitle><CardDescription>Cadastre os documentos esperados e anexe PDFs modelo para habilitar o envio inteligente.</CardDescription></div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Buscar por nome ou setor" className="w-full sm:w-72" />
-                <Button className="rounded-2xl" onClick={() => { setTemplateForm(makeTemplateForm()); setTemplateDialogOpen(true); }}><Plus className="mr-2 h-4 w-4" />Nova obrigacao</Button>
+                <Button
+                  className="rounded-2xl"
+                  onClick={() => {
+                    setTemplateForm(makeTemplateForm());
+                    setTemplateClientSearch("");
+                    setTemplateDialogOpen(true);
+                  }}
+                ><Plus className="mr-2 h-4 w-4" />Nova obrigacao</Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -783,7 +855,18 @@ export function GrowObligationsWorkspace({
                         ))}
                       </div>
                     </div>
-                    <Button variant="outline" className="rounded-2xl" onClick={() => { setTemplateForm(makeTemplateForm(template)); setTemplateDialogOpen(true); }}>Editar</Button>
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl"
+                      onClick={() => {
+                        setTemplateForm({
+                          ...makeTemplateForm(template),
+                          linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
+                        });
+                        setTemplateClientSearch("");
+                        setTemplateDialogOpen(true);
+                      }}
+                    >Editar</Button>
                   </div>
                 </div>
               ))}
@@ -843,20 +926,58 @@ export function GrowObligationsWorkspace({
             <CardContent className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <div className="space-y-4">
                 <div
-                  className="rounded-3xl border border-dashed border-primary/30 bg-primary/5 p-6"
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
+                  className={`rounded-3xl border border-dashed p-6 transition-colors ${
+                    isDraggingUpload
+                      ? "border-primary bg-primary/10 shadow-sm"
+                      : "border-primary/30 bg-primary/5"
+                  }`}
+                  onDragEnter={(event) => {
                     event.preventDefault();
-                    void handleUploadFiles(event.dataTransfer.files);
+                    setIsDraggingUpload(true);
+                  }}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      setIsDraggingUpload(false);
+                    }
+                  }}
+                  onDragOver={handleUploadDragOver}
+                  onDrop={handleUploadDrop}
+                  onClick={() => uploadInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      uploadInputRef.current?.click();
+                    }
                   }}
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
                     <UploadCloud className="h-10 w-10 text-primary" />
                     <div>
-                      <p className="font-medium">Arraste PDFs aqui</p>
+                      <p className="font-medium">{isDraggingUpload ? "Solte os PDFs para adicionar" : "Arraste PDFs aqui"}</p>
                       <p className="text-sm text-muted-foreground">O sistema analisa cada arquivo e monta o preview antes do envio final.</p>
                     </div>
-                    <Input type="file" accept="application/pdf" multiple onChange={(event) => event.target.files && void handleUploadFiles(event.target.files)} />
+                    <input
+                      ref={uploadInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => {
+                        if (event.target.files) {
+                          void handleUploadFiles(event.target.files);
+                        }
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                    <Button type="button" variant="outline" className="rounded-2xl" onClick={(event) => {
+                      event.stopPropagation();
+                      uploadInputRef.current?.click();
+                    }}>
+                      <UploadCloud className="mr-2 h-4 w-4" />
+                      Escolher arquivos
+                    </Button>
                   </div>
                 </div>
 
@@ -1064,6 +1185,62 @@ export function GrowObligationsWorkspace({
           </div>
 
           <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <Label>Clientes vinculados</Label>
+                <p className="text-xs text-muted-foreground">
+                  Selecione aqui os clientes que ja devem receber esta obrigacao assim que o template for salvo.
+                </p>
+              </div>
+              <div className="w-full lg:w-80">
+                <Input
+                  value={templateClientSearch}
+                  onChange={(event) => setTemplateClientSearch(event.target.value)}
+                  placeholder="Buscar cliente por nome ou CNPJ"
+                />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">
+                {templateForm.linked_client_ids.length} cliente(s) selecionado(s) para vinculo automatico.
+              </p>
+            </div>
+            <div className="grid max-h-72 gap-2 overflow-y-auto md:grid-cols-2">
+              {filteredTemplateClients.map((client) => {
+                const checked = templateForm.linked_client_ids.includes(client.id);
+                return (
+                  <label
+                    key={client.id}
+                    className="flex items-start justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 p-3 text-sm"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-medium">{client.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {client.cnpj || "Sem CNPJ"} · {client.sector || "Sem setor"}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) =>
+                        setTemplateForm((prev) => ({
+                          ...prev,
+                          linked_client_ids: event.target.checked
+                            ? [...prev.linked_client_ids, client.id]
+                            : prev.linked_client_ids.filter((clientId) => clientId !== client.id),
+                        }))
+                      }
+                    />
+                  </label>
+                );
+              })}
+            </div>
+            {filteredTemplateClients.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum cliente encontrado para este filtro.</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
             <div className="flex items-center justify-between">
               <Label>Documentos esperados</Label>
               <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setTemplateForm((prev) => ({ ...prev, expected_documents: [...prev.expected_documents, makeDocumentDraft()] }))}><Plus className="mr-2 h-4 w-4" />Adicionar documento esperado</Button>
@@ -1121,22 +1298,36 @@ export function GrowObligationsWorkspace({
             ))}
           </div>
 
-          <div className="grid gap-3 rounded-2xl border border-border/70 p-4 md:grid-cols-2">
-            {[
-              ["is_active", "Template ativo"],
-              ["generates_calendar", "Gerar no calendario"],
-              ["generates_kanban", "Gerar no kanban"],
-              ["requires_document", "Exigir documento"],
-            ].map(([field, label]) => (
-              <label key={field} className="flex items-center justify-between gap-4 text-sm">
-                <span>{label}</span>
-                <input type="checkbox" checked={Boolean(templateForm[field as keyof TemplateFormState])} onChange={(event) => setTemplateForm((prev) => ({ ...prev, [field]: event.target.checked }))} />
+          <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Regras fixas da obrigacao</p>
+              <p className="text-xs text-muted-foreground">
+                Toda obrigação gera tarefa automática para o setor, entra no calendário e exige documento anexado.
+              </p>
+            </div>
+            <div className="grid gap-2 text-sm text-muted-foreground">
+              <label className="flex items-center justify-between gap-4 text-sm">
+                <span>Template ativo</span>
+                <input
+                  type="checkbox"
+                  checked={templateForm.is_active}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, is_active: event.target.checked }))}
+                />
               </label>
-            ))}
+              <div className="flex items-center justify-between"><span>Tarefa no setor</span><span>Sempre</span></div>
+              <div className="flex items-center justify-between"><span>Calendário</span><span>Sempre</span></div>
+              <div className="flex items-center justify-between"><span>Documento anexado</span><span>Obrigatório</span></div>
+            </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>Cancelar</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTemplateDialogOpen(false);
+                setTemplateClientSearch("");
+              }}
+            >Cancelar</Button>
             {templateValidationError && <p className="mr-auto text-sm text-orange-600">{templateValidationError}</p>}
             <Button onClick={() => templateMutation.mutate(templateForm)} disabled={templateMutation.isPending || Boolean(templateValidationError)}>{templateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar template</Button>
           </DialogFooter>
