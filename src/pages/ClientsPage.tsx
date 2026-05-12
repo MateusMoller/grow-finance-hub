@@ -33,6 +33,7 @@ interface Client {
   contact: string | null;
   email: string | null;
   phone: string | null;
+  obligation_completion_whatsapp_enabled: boolean;
   portal_user_id: string | null;
 }
 
@@ -78,6 +79,7 @@ export default function ClientsPage() {
     contact: "",
     email: "",
     phone: "",
+    obligationCompletionWhatsAppEnabled: false,
     portalPassword: "123456",
   });
 
@@ -92,7 +94,7 @@ export default function ClientsPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
-      .select("id, name, cnpj, regime, sector, status, contact, email, phone, portal_user_id")
+      .select("id, name, cnpj, regime, sector, status, contact, email, phone, obligation_completion_whatsapp_enabled, portal_user_id")
       .order("name");
     setLoading(false);
 
@@ -175,6 +177,7 @@ export default function ClientsPage() {
         contact: newClient.contact || null,
         email: normalizedEmail,
         phone: newClient.phone || null,
+        obligationCompletionWhatsAppEnabled: newClient.obligationCompletionWhatsAppEnabled,
         portalPassword: newClient.portalPassword.trim() || "123456",
       },
       headers: {
@@ -205,6 +208,7 @@ export default function ClientsPage() {
       contact: "",
       email: "",
       phone: "",
+      obligationCompletionWhatsAppEnabled: false,
       portalPassword: "123456",
     });
     void loadClients();
@@ -456,6 +460,26 @@ export default function ClientsPage() {
                   placeholder="(11) 99999-9999"
                   value={newClient.phone}
                   onChange={(event) => setNewClient((prev) => ({ ...prev, phone: event.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Enviar WhatsApp automático ao concluir obrigações</p>
+                  <p className="text-xs text-muted-foreground">
+                    Ative apenas para clientes que devem receber confirmação automática no WhatsApp. O número será buscado no cadastro do cliente.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newClient.obligationCompletionWhatsAppEnabled}
+                  onChange={(event) =>
+                    setNewClient((prev) => ({
+                      ...prev,
+                      obligationCompletionWhatsAppEnabled: event.target.checked,
+                    }))
+                  }
                 />
               </div>
             </div>

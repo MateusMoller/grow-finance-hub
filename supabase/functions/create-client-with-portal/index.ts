@@ -28,6 +28,7 @@ type CreateClientPayload = {
   contact?: string;
   email: string;
   phone?: string;
+  obligationCompletionWhatsAppEnabled?: boolean;
   portalPassword?: string;
 };
 
@@ -179,6 +180,9 @@ Deno.serve(async (req) => {
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
       phone: asTrimmedString(payload.phone) || undefined,
+      obligationCompletionWhatsAppEnabled: typeof payload.obligationCompletionWhatsAppEnabled === "boolean"
+        ? payload.obligationCompletionWhatsAppEnabled
+        : false,
       portalPassword: asTrimmedString(payload.portalPassword) || undefined,
     };
 
@@ -384,6 +388,7 @@ Deno.serve(async (req) => {
       contact: parsedPayload.contact || null,
       email: parsedPayload.email,
       phone: parsedPayload.phone || null,
+      obligation_completion_whatsapp_enabled: Boolean(parsedPayload.obligationCompletionWhatsAppEnabled),
       portal_user_id: portalUserId,
       created_by: callerUser.id,
     };

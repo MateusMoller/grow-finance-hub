@@ -89,6 +89,8 @@ interface TemplateFormState {
   completion_email_enabled: boolean;
   completion_email_subject: string;
   completion_email_body: string;
+  completion_whatsapp_enabled: boolean;
+  completion_whatsapp_body: string;
 }
 
 interface InstanceFormState {
@@ -193,6 +195,8 @@ function makeTemplateForm(template?: GrowObligationTemplate | null): TemplateFor
     completion_email_enabled: template?.completion_email_enabled ?? false,
     completion_email_subject: template?.completion_email_subject || "",
     completion_email_body: template?.completion_email_body || "",
+    completion_whatsapp_enabled: template?.completion_whatsapp_enabled ?? false,
+    completion_whatsapp_body: template?.completion_whatsapp_body || "",
   };
 }
 
@@ -268,6 +272,9 @@ function validateTemplateForm(form: TemplateFormState) {
   }
   if (form.completion_email_enabled && !form.completion_email_body.trim()) {
     return "Informe o corpo padrao do e-mail automatico.";
+  }
+  if (form.completion_whatsapp_enabled && !form.completion_whatsapp_body.trim()) {
+    return "Informe o corpo padrao do WhatsApp automatico.";
   }
   return null;
 }
@@ -415,6 +422,8 @@ export function GrowObligationsWorkspace({
         completion_email_enabled: payload.completion_email_enabled,
         completion_email_subject: payload.completion_email_subject || null,
         completion_email_body: payload.completion_email_body || null,
+        completion_whatsapp_enabled: payload.completion_whatsapp_enabled,
+        completion_whatsapp_body: payload.completion_whatsapp_body || null,
       });
     },
     onSuccess: async () => {
@@ -1234,6 +1243,40 @@ export function GrowObligationsWorkspace({
             <div className="space-y-2"><Label>Prioridade</Label><Select value={templateForm.priority} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, priority: value as GrowObligationInstance["priority"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Dia do vencimento legal</Label><Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} /></div>
             <div className="space-y-2 md:col-span-2"><Label>Observacoes operacionais</Label><Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} /></div>
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>WhatsApp automatico ao concluir</Label>
+                <p className="text-xs text-muted-foreground">
+                  Dispara automaticamente para clientes com opt-in no cadastro quando a obrigacao for concluida por documento valido.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={templateForm.completion_whatsapp_enabled}
+                onChange={(event) =>
+                  setTemplateForm((prev) => ({
+                    ...prev,
+                    completion_whatsapp_enabled: event.target.checked,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Mensagem padrao</Label>
+              <Textarea
+                value={templateForm.completion_whatsapp_body}
+                onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_whatsapp_body: event.target.value }))}
+                rows={6}
+                placeholder={"OlÃ¡, {{cliente_nome}}.\n\nA obrigaÃ§Ã£o {{obrigacao_nome}} referente Ã  competÃªncia {{competencia}} foi concluÃ­da.\n\nSetor responsÃ¡vel: {{setor}}.\nPrazo tÃ©cnico: {{prazo_tecnico}}."}
+                disabled={!templateForm.completion_whatsapp_enabled}
+              />
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+              O numero nao e configurado aqui. A Grow usa primeiro `Cadastro Clientes &gt; WhatsApp` e, se estiver vazio, usa o telefone principal do cliente.
+            </div>
           </div>
 
           <div className="space-y-3 rounded-2xl border border-border/70 p-4">

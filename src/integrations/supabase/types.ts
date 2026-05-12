@@ -360,6 +360,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          obligation_completion_whatsapp_enabled: boolean
           phone: string | null
           portal_cashflow_enabled: boolean
           portal_user_id: string | null
@@ -378,6 +379,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          obligation_completion_whatsapp_enabled?: boolean
           phone?: string | null
           portal_cashflow_enabled?: boolean
           portal_user_id?: string | null
@@ -396,6 +398,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          obligation_completion_whatsapp_enabled?: boolean
           phone?: string | null
           portal_cashflow_enabled?: boolean
           portal_user_id?: string | null

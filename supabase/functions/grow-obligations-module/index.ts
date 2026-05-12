@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendWhatsAppTextMessage } from "../_shared/ai/whatsapp.ts";
+import { normalizePhoneDigits } from "../_shared/ai/utils.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,6 +124,20 @@ type TemplateRow = {
   completion_email_enabled: boolean;
   completion_email_subject: string | null;
   completion_email_body: string | null;
+  completion_whatsapp_enabled: boolean;
+  completion_whatsapp_body: string | null;
+};
+
+type ClientDeliveryContext = {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  sector: string;
+  status: string;
+  email: string | null;
+  phone: string | null;
+  contact: string | null;
+  obligation_completion_whatsapp_enabled: boolean;
 };
 
 type ProfileRow = {
@@ -330,6 +346,13 @@ function toArchiveSegment(value: string | null | undefined, fallback: string) {
   return token || fallback;
 }
 
+function combineDddAndPhone(ddd: string | null | undefined, phone: string | null | undefined) {
+  const dddDigits = normalizePhoneDigits(ddd);
+  const phoneDigits = normalizePhoneDigits(phone);
+  if (!phoneDigits) return null;
+  return dddDigits ? `${dddDigits}${phoneDigits}` : phoneDigits;
+}
+
 function asJsonRecord(value: unknown) {
   return asRecord(value) || {};
 }
@@ -509,7 +532,7 @@ async function buildAuthContext(req: Request) {
 async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, cnpj, sector, status, email, contact")
+    .select("id, name, cnpj, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
     .order("name");
 
   if (error) throw error;
@@ -524,7 +547,12 @@ async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
         sector: asTrimmedString((row as JsonRecord).sector) || "Geral",
         status: asTrimmedString((row as JsonRecord).status) || "Ativo",
         email: normalizeEmail((row as JsonRecord).email),
+        phone: asTrimmedString((row as JsonRecord).phone),
         contact: asTrimmedString((row as JsonRecord).contact),
+        obligation_completion_whatsapp_enabled: asBoolean(
+          (row as JsonRecord).obligation_completion_whatsapp_enabled,
+          false,
+        ),
       },
     ]),
   );
@@ -1198,12 +1226,63 @@ async function sendEmailViaResend(params: {
   };
 }
 
+async function resolveClientWhatsAppTarget(
+  supabaseAdmin: SupabaseAdmin,
+  client: ClientDeliveryContext,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("client_data")
+    .select("field_name, field_value")
+    .eq("client_id", client.id)
+    .eq("category", "cadastro_clientes")
+    .in("field_name", ["whatsapp", "telefone", "ddd"]);
+
+  if (error) throw error;
+
+  const entries = new Map<string, string>();
+  for (const row of data || []) {
+    const fieldName = asTrimmedString((row as JsonRecord).field_name)?.toLowerCase();
+    const fieldValue = asTrimmedString((row as JsonRecord).field_value);
+    if (!fieldName || !fieldValue) continue;
+    entries.set(fieldName, fieldValue);
+  }
+
+  const cadastroWhatsApp = normalizePhoneDigits(entries.get("whatsapp"));
+  if (cadastroWhatsApp) {
+    return {
+      phoneDigits: cadastroWhatsApp,
+      source: "client_data.whatsapp",
+    };
+  }
+
+  const cadastroPhone = combineDddAndPhone(entries.get("ddd"), entries.get("telefone"));
+  if (cadastroPhone) {
+    return {
+      phoneDigits: cadastroPhone,
+      source: "client_data.telefone",
+    };
+  }
+
+  const clientPhone = normalizePhoneDigits(client.phone);
+  if (clientPhone) {
+    return {
+      phoneDigits: clientPhone,
+      source: "clients.phone",
+    };
+  }
+
+  return {
+    phoneDigits: null,
+    source: null,
+  };
+}
+
 async function maybeSendCompletionEmail(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
   template: TemplateRow,
   instance: InstanceRow,
-  client: { id: string; name: string; email?: string | null },
+  client: ClientDeliveryContext,
   inboxItem: InboxRow,
 ) {
   if (!template.completion_email_enabled) {
@@ -1310,6 +1389,107 @@ async function maybeSendCompletionEmail(
   return { attempted: true as const, sent: true as const, recipientEmail };
 }
 
+async function maybeSendCompletionWhatsApp(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  template: TemplateRow,
+  instance: InstanceRow,
+  client: ClientDeliveryContext,
+  inboxItem: InboxRow,
+) {
+  if (!template.completion_whatsapp_enabled) {
+    return { attempted: false as const, sent: false as const, reason: "disabled_template" };
+  }
+
+  if (!client.obligation_completion_whatsapp_enabled) {
+    return { attempted: false as const, sent: false as const, reason: "disabled_client" };
+  }
+
+  const target = await resolveClientWhatsAppTarget(supabaseAdmin, client);
+  if (!target.phoneDigits) {
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "completion_whatsapp_failed",
+      null,
+      null,
+      "ObrigaÃ§Ã£o concluÃ­da, mas o cliente nÃ£o possui WhatsApp vÃ¡lido cadastrado.",
+      { inbox_item_id: inboxItem.id },
+    );
+    return { attempted: true as const, sent: false as const, reason: "missing_recipient" };
+  }
+
+  const renderPayload = {
+    clientName: client.name,
+    obligationName: template.name,
+    competence: instance.competence_label,
+    sector: template.sector,
+    technicalDueDate: instance.technical_due_date,
+  };
+
+  const messageBody = renderCompletionEmailTemplate(
+    template.completion_whatsapp_body ||
+      "OlÃ¡, {{cliente_nome}}.\n\nA obrigaÃ§Ã£o {{obrigacao_nome}} referente Ã  competÃªncia {{competencia}} foi concluÃ­da.\n\nSetor responsÃ¡vel: {{setor}}.\nPrazo tÃ©cnico: {{prazo_tecnico}}.",
+    renderPayload,
+  );
+
+  try {
+    const sendResult = await sendWhatsAppTextMessage(target.phoneDigits, messageBody);
+    if (!sendResult.sent) {
+      await createInstanceEvent(
+        supabaseAdmin,
+        instance.id,
+        actorId,
+        "completion_whatsapp_failed",
+        null,
+        null,
+        "ObrigaÃ§Ã£o concluÃ­da, mas o WhatsApp automÃ¡tico nÃ£o foi enviado porque a integraÃ§Ã£o nÃ£o estÃ¡ configurada.",
+        {
+          inbox_item_id: inboxItem.id,
+          recipient_phone: target.phoneDigits,
+          recipient_source: target.source,
+        },
+      );
+      return { attempted: true as const, sent: false as const, reason: "missing_provider_config" };
+    }
+
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "completion_whatsapp_sent",
+      null,
+      null,
+      `WhatsApp automÃ¡tico enviado para ${target.phoneDigits}.`,
+      {
+        inbox_item_id: inboxItem.id,
+        recipient_phone: target.phoneDigits,
+        recipient_source: target.source,
+      },
+    );
+
+    return { attempted: true as const, sent: true as const, recipientPhone: target.phoneDigits };
+  } catch (error) {
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "completion_whatsapp_failed",
+      null,
+      null,
+      "ObrigaÃ§Ã£o concluÃ­da, mas houve falha no disparo do WhatsApp automÃ¡tico.",
+      {
+        inbox_item_id: inboxItem.id,
+        recipient_phone: target.phoneDigits,
+        recipient_source: target.source,
+        provider_message: error instanceof Error ? error.message : "Unknown provider error",
+      },
+    );
+    return { attempted: true as const, sent: false as const, reason: "provider_error" };
+  }
+}
+
 async function determineInstanceDocumentStatus(
   supabaseAdmin: SupabaseAdmin,
   instance: InstanceRow,
@@ -1368,6 +1548,10 @@ async function applyDocumentOperationalFlow(
   inboxItem: InboxRow,
 ) {
   const now = new Date().toISOString();
+  if (nextStatus !== "aguardando_documento" && failedAutomaticDeliveries.length > 0) {
+    executionNotes = `Documento anexado e obrigaÃ§Ã£o concluÃ­da automaticamente. ${failedAutomaticDeliveries.join(" e ")} nÃ£o pÃ´de ser enviado.`;
+  }
+
   await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
     processing_status: "processing",
     processing_attempts: (inboxItem.processing_attempts || 0) + 1,
@@ -1525,11 +1709,22 @@ async function applyDocumentOperationalFlow(
 
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
-  const emailResult = justCompleted
-    ? await maybeSendCompletionEmail(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem)
-    : { attempted: false as const, sent: false as const, reason: "not_completed" };
+  const [emailResult, whatsappResult] = justCompleted
+    ? await Promise.all([
+      maybeSendCompletionEmail(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+      maybeSendCompletionWhatsApp(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+    ])
+    : [
+      { attempted: false as const, sent: false as const, reason: "not_completed" },
+      { attempted: false as const, sent: false as const, reason: "not_completed" },
+    ];
 
-  const executionNotes = nextStatus === "aguardando_documento"
+  const failedAutomaticDeliveries = [
+    emailResult.attempted && !emailResult.sent ? "o e-mail automÃ¡tico" : null,
+    whatsappResult.attempted && !whatsappResult.sent ? "o WhatsApp automÃ¡tico" : null,
+  ].filter((value): value is string => Boolean(value));
+
+  let executionNotes = nextStatus === "aguardando_documento"
     ? "Documento anexado. A obrigação ainda aguarda outros documentos obrigatórios."
     : emailResult.attempted && !emailResult.sent
       ? "Documento anexado e obrigação concluída automaticamente. O e-mail automático não pôde ser enviado."
@@ -1978,6 +2173,8 @@ async function handleUpsertTemplate(
     completion_email_enabled: asBoolean(payload.completion_email_enabled, false),
     completion_email_subject: asTrimmedString(payload.completion_email_subject),
     completion_email_body: asTrimmedString(payload.completion_email_body),
+    completion_whatsapp_enabled: asBoolean(payload.completion_whatsapp_enabled, false),
+    completion_whatsapp_body: asTrimmedString(payload.completion_whatsapp_body),
     created_by: actorId,
   };
 

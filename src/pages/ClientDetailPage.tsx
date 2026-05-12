@@ -43,6 +43,7 @@ interface ClientRecord {
   notes: string | null;
   portal_user_id: string | null;
   portal_cashflow_enabled: boolean;
+  obligation_completion_whatsapp_enabled: boolean;
 }
 
 type ClientDataRow = Database["public"]["Tables"]["client_data"]["Row"];
@@ -1437,6 +1438,9 @@ export default function ClientDetailPage() {
     ];
     const clientWillBeInactive = isInactiveClientStatus(clientForm.status);
     const nextPortalCashflowEnabled = clientWillBeInactive ? false : Boolean(clientForm.portal_cashflow_enabled);
+    const nextObligationCompletionWhatsAppEnabled = clientWillBeInactive
+      ? false
+      : Boolean(clientForm.obligation_completion_whatsapp_enabled);
 
     setSaving(true);
 
@@ -1453,6 +1457,7 @@ export default function ClientDetailPage() {
         address: normalizedAddress || clientForm.address || null,
         notes: clientForm.notes,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
+        obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
         ...(clientWillBeInactive ? { portal_user_id: null } : {}),
       }).eq("id", id);
 
@@ -1517,6 +1522,7 @@ export default function ClientDetailPage() {
         email: normalizedEmail || null,
         address: normalizedAddress || clientForm.address || null,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
+        obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
         ...(clientWillBeInactive ? { portal_user_id: null } : {}),
       } as ClientRecord);
       setClientForm((prev) => ({
@@ -1525,6 +1531,7 @@ export default function ClientDetailPage() {
         email: normalizedEmail || null,
         address: normalizedAddress || prev.address || null,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
+        obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
       }));
       setDataEntries((prev) => {
         const next = { ...prev };
@@ -2532,6 +2539,35 @@ export default function ClientDetailPage() {
                   {!canManageCashflowAccess && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       Apenas usuário admin pode alterar esta liberacao.
+                    </p>
+                  )}
+                </div>
+                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Enviar WhatsApp automático ao concluir obrigações</p>
+                      <p className="text-xs text-muted-foreground">
+                        Quando ativado, a Grow pode disparar confirmação automática no WhatsApp deste cliente após a obrigação ser concluída por documento válido.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={clientIsInactive ? false : Boolean(clientForm.obligation_completion_whatsapp_enabled)}
+                      disabled={clientIsInactive}
+                      onCheckedChange={(checked) =>
+                        setClientForm((prev) => ({
+                          ...prev,
+                          obligation_completion_whatsapp_enabled: checked,
+                        }))
+                      }
+                      aria-label="Enviar WhatsApp automático ao concluir obrigações"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    O número será buscado primeiro em {"Cadastro Clientes > WhatsApp"}. Se não houver, a Grow usa o telefone principal cadastrado.
+                  </p>
+                  {clientIsInactive && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Cliente inativo: disparos automáticos de WhatsApp ficam bloqueados.
                     </p>
                   )}
                 </div>

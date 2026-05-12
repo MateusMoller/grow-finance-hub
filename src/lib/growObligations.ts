@@ -54,6 +54,8 @@ export type GrowObligationTemplate = {
   completion_email_enabled: boolean;
   completion_email_subject: string | null;
   completion_email_body: string | null;
+  completion_whatsapp_enabled: boolean;
+  completion_whatsapp_body: string | null;
 };
 
 export const growPeriodicityLabel: Record<GrowObligationTemplate["periodicity"], string> = {
@@ -81,6 +83,8 @@ export type GrowClientSummary = {
   status: string;
   email?: string | null;
   contact?: string | null;
+  phone?: string | null;
+  obligation_completion_whatsapp_enabled?: boolean;
 };
 
 export type GrowObligationProfile = {
