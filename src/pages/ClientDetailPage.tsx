@@ -1524,7 +1524,7 @@ export default function ClientDetailPage() {
       }
 
       if (appliedCount > 0) {
-        queueAutoSaveGeneralInfo();
+        queueAutoSaveGeneralInfo({ force: true });
         queueAutoSaveCategory("cadastro_clientes");
       }
 
@@ -1852,8 +1852,8 @@ export default function ClientDetailPage() {
     }
   };
 
-  const queueAutoSaveGeneralInfo = () => {
-    if (!autoSaveGeneralInfo) return;
+  const queueAutoSaveGeneralInfo = (options?: { force?: boolean }) => {
+    if (!autoSaveGeneralInfo && !options?.force) return;
     if (generalAutoSaveTimerRef.current) {
       window.clearTimeout(generalAutoSaveTimerRef.current);
     }
@@ -2188,8 +2188,8 @@ export default function ClientDetailPage() {
 
     if (!options?.silent) {
       toast.success(`Dados de ${config.label} salvos`);
+      void loadClientData();
     }
-    void loadClientData();
   };
 
   const queueAutoSaveCategory = (category: ClientCategoryKey) => {
