@@ -1320,7 +1320,7 @@ export function GrowObligationsWorkspace({
               </div>
             </div>
             <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-              Placeholders disponíveis: `{{cliente_nome}}`, `{{obrigacao_nome}}`, `{{competencia}}`, `{{setor}}`, `{{prazo_tecnico}}`.
+              {"Placeholders disponíveis: {{cliente_nome}}, {{obrigacao_nome}}, {{competencia}}, {{setor}}, {{prazo_tecnico}}."}
             </div>
           </div>
 

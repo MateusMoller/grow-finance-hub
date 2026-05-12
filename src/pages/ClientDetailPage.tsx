@@ -487,6 +487,39 @@ const formatCepValue = (value: string) => {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 };
 
+const formatCnpjValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
+const formatPhoneValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (!digits) return "";
+  if (digits.length <= 2) return `(${digits}`;
+
+  const ddd = digits.slice(0, 2);
+  const phone = digits.slice(2);
+  if (phone.length <= 4) return `(${ddd}) ${phone}`;
+
+  if (phone.length <= 8) {
+    return `(${ddd}) ${phone.slice(0, 4)}-${phone.slice(4)}`;
+  }
+
+  return `(${ddd}) ${phone.slice(0, 5)}-${phone.slice(5)}`;
+};
+
+const normalizePhoneDigits = (value: string | null | undefined) => (value || "").replace(/\D/g, "");
+
+const isValidEmailValue = (value: string | null | undefined) => {
+  const normalized = normalizeEmail(value);
+  if (!normalized) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+};
+
 const normalizeCnpjForSave = (value: string | null | undefined) => {
   const digits = (value || "").replace(/\D/g, "");
   if (!digits) return null;
@@ -517,6 +550,26 @@ type CepLookupAddress = {
   neighborhood: string;
   city: string;
   state: string;
+};
+
+type CnpjLookupResponse = {
+  ok?: boolean;
+  cnpj?: string;
+  source?: string;
+  data?: {
+    legal_name?: string | null;
+    trade_name?: string | null;
+    main_cnae?: string | null;
+    cep?: string | null;
+    street?: string | null;
+    number?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  } | null;
+  error?: string;
 };
 
 const CEP_LOOKUP_TIMEOUT_MS = 8000;
@@ -605,6 +658,45 @@ const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value
   return trimmed;
 };
 
+const normalizeFieldValueForInput = (rule: FieldValidationRule | undefined, fieldName: string, value: string) => {
+  if (rule?.type === "state") {
+    return value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 2);
+  }
+  if (rule?.type === "cep") {
+    return formatCepValue(value);
+  }
+  if (rule?.type === "phone") {
+    return formatPhoneValue(value);
+  }
+  if (fieldName.includes("cnpj")) {
+    return formatCnpjValue(value);
+  }
+  return value;
+};
+
+const getFieldPlaceholder = (rule: FieldValidationRule | undefined, fieldName: string) => {
+  if (rule?.type === "yesNo") return "-";
+  if (rule?.type === "date") return "AAAA-MM-DD";
+  if (rule?.type === "cep") return "00000-000";
+  if (rule?.type === "state") return "UF";
+  if (rule?.type === "phone") return "(00) 00000-0000";
+  if (rule?.type === "percent") return "0,00";
+  if (rule?.type === "integer" || rule?.type === "number") return "0";
+  if (fieldName.includes("email")) return "email@empresa.com";
+  if (fieldName.includes("cnpj")) return "00.000.000/0000-00";
+  return "-";
+};
+
+const getFieldMaxLength = (rule: FieldValidationRule | undefined, fieldName: string) => {
+  if (rule?.type === "state") return 2;
+  if (rule?.type === "cep") return 9;
+  if (rule?.type === "phone") return 15;
+  if (rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent") return 16;
+  if (fieldName.includes("cnpj")) return 18;
+  if (fieldName.includes("email")) return 120;
+  return 140;
+};
+
 const validateFieldValue = (rule: FieldValidationRule | undefined, value: string) => {
   const normalizedValue = value.trim();
   if (!rule || !normalizedValue) return null;
@@ -687,10 +779,9 @@ const splitPhoneForCadastro = (rawPhone: string) => {
 const buildClientPhoneFromCadastro = (dddRaw: string, phoneRaw: string) => {
   const ddd = dddRaw.replace(/\D/g, "");
   const phone = phoneRaw.replace(/\D/g, "");
-  if (!ddd && !phone) return "";
-  if (!ddd) return phone;
-  if (!phone) return ddd;
-  return `(${ddd})${phone}`;
+  const digits = `${ddd}${phone}`;
+  if (!digits) return "";
+  return formatPhoneValue(digits);
 };
 
 const clientBusinessProfileOptions = [
@@ -986,6 +1077,8 @@ export default function ClientDetailPage() {
   const navigate = useNavigate();
   const { user, role } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const generalAutoSaveTimerRef = useRef<number | null>(null);
+  const categoryAutoSaveTimerRef = useRef<Partial<Record<ClientCategoryKey, number>>>({});
 
   const [client, setClient] = useState<ClientRecord | null>(null);
   const [clientForm, setClientForm] = useState<Partial<ClientRecord>>({});
@@ -1003,6 +1096,9 @@ export default function ClientDetailPage() {
   const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
   const [savingPortalAccess, setSavingPortalAccess] = useState(false);
   const [searchingCep, setSearchingCep] = useState(false);
+  const [searchingCnpj, setSearchingCnpj] = useState(false);
+  const [autoSaveGeneralInfo, setAutoSaveGeneralInfo] = useState(true);
+  const [showAdvancedClientInfo, setShowAdvancedClientInfo] = useState(false);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1123,7 +1219,9 @@ export default function ClientDetailPage() {
     const c = clientRes.data;
     const normalizedClient: ClientRecord = {
       ...(c as ClientRecord),
+      cnpj: c.cnpj ? formatCnpjValue(c.cnpj) : c.cnpj,
       email: c.email ? normalizeEmail(c.email) : c.email,
+      phone: c.phone ? formatPhoneValue(c.phone) : c.phone,
     };
     setClient(normalizedClient);
     setClientForm(normalizedClient);
@@ -1180,9 +1278,10 @@ export default function ClientDetailPage() {
   const handleDataFieldChange = (category: ClientCategoryKey, fieldName: string, value: string) => {
     const key = getCategoryFieldEntryKey(category, fieldName);
     const rule = getFieldRule(category, fieldName);
-    const normalizedValue = normalizeFieldValueForSave(rule, value);
+    const draftValue = normalizeFieldValueForInput(rule, fieldName, value);
+    const normalizedValue = normalizeFieldValueForSave(rule, draftValue);
 
-    setDataEntries((prev) => ({ ...prev, [key]: normalizedValue }));
+    setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
 
     if (category === "cadastro_clientes") {
       if (fieldName === "regime_tributÃ¡rio") {
@@ -1191,10 +1290,10 @@ export default function ClientDetailPage() {
 
       if (fieldName === "ddd" || fieldName === "telefone") {
         const nextDdd = fieldName === "ddd"
-          ? normalizedValue
+          ? draftValue
           : (dataEntries[getCategoryFieldEntryKey("cadastro_clientes", "ddd")] || "");
         const nextPhone = fieldName === "telefone"
-          ? normalizedValue
+          ? draftValue
           : (dataEntries[getCategoryFieldEntryKey("cadastro_clientes", "telefone")] || "");
         const mergedPhone = buildClientPhoneFromCadastro(nextDdd, nextPhone);
         setClientForm((prev) => ({ ...prev, phone: mergedPhone }));
@@ -1216,12 +1315,13 @@ export default function ClientDetailPage() {
   const setGeneralInfoFieldValue = (fieldName: GeneralInfoCadastralFieldName, value: string) => {
     const key = getCategoryFieldEntryKey("cadastro_clientes", fieldName);
     const rule = getFieldRule("cadastro_clientes", fieldName);
+    const draftValue = normalizeFieldValueForInput(rule, fieldName, value);
 
     // Preserve the raw typed value for address-related inputs.
     // Canonical normalization still runs on save.
-    setDataEntries((prev) => ({ ...prev, [key]: value }));
+    setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
 
-    const error = validateFieldValue(rule, value);
+    const error = validateFieldValue(rule, normalizeFieldValueForSave(rule, draftValue));
     setDataFieldErrors((prev) => {
       const next = { ...prev };
       if (error) next[key] = error;
@@ -1229,6 +1329,9 @@ export default function ClientDetailPage() {
       return next;
     });
   };
+
+  const getCategoryFieldValue = (category: ClientCategoryKey, fieldName: string) =>
+    dataEntries[getCategoryFieldEntryKey(category, fieldName)] || "";
 
   const getSelectedBusinessProfiles = () =>
     parseBusinessProfilesValue(getGeneralInfoFieldValue("perfil_atuacao"));
@@ -1264,6 +1367,104 @@ export default function ClientDetailPage() {
       toast.error(message);
     } finally {
       setSearchingCep(false);
+    }
+  };
+
+  const handleCnpjLookup = async (options?: { auto?: boolean }) => {
+    const normalizedCnpj = normalizeCnpjForSave(clientForm.cnpj);
+    if (!normalizedCnpj) {
+      if (!options?.auto) {
+        toast.error("Informe um CNPJ valido com 14 digitos.");
+      }
+      return;
+    }
+
+    if (searchingCnpj) return;
+    setSearchingCnpj(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke<CnpjLookupResponse>("lookup-cnpj", {
+        body: { cnpj: normalizedCnpj },
+      });
+
+      if (error || !data?.data) {
+        const message = data?.error || "Nao foi possivel consultar o CNPJ no momento.";
+        if (!options?.auto) {
+          toast.error(message);
+        }
+        return;
+      }
+
+      const cnpjData = data.data;
+      let appliedCount = 0;
+
+      const applyGeneralFieldIfEmpty = (fieldName: GeneralInfoCadastralFieldName, value: string | null | undefined) => {
+        const nextValue = (value || "").trim();
+        if (!nextValue) return;
+        if (getGeneralInfoFieldValue(fieldName).trim()) return;
+        setGeneralInfoFieldValue(fieldName, nextValue);
+        appliedCount += 1;
+      };
+
+      const applyCategoryFieldIfEmpty = (fieldName: string, value: string | null | undefined) => {
+        const nextValue = (value || "").trim();
+        if (!nextValue) return;
+        if (getCategoryFieldValue("cadastro_clientes", fieldName).trim()) return;
+        handleDataFieldChange("cadastro_clientes", fieldName, nextValue);
+        appliedCount += 1;
+      };
+
+      if (!String(clientForm.name || "").trim() && cnpjData.legal_name) {
+        setClientForm((prev) => ({ ...prev, name: cnpjData.legal_name || prev.name }));
+        appliedCount += 1;
+      }
+
+      if (!String(clientForm.email || "").trim() && cnpjData.email) {
+        setClientForm((prev) => ({ ...prev, email: normalizeEmail(cnpjData.email) }));
+        appliedCount += 1;
+      }
+
+      if (!String(clientForm.phone || "").trim() && cnpjData.phone) {
+        const formatted = formatPhoneValue(cnpjData.phone);
+        setClientForm((prev) => ({ ...prev, phone: formatted }));
+        appliedCount += 1;
+      }
+
+      applyCategoryFieldIfEmpty("nome_fantasia", cnpjData.trade_name);
+      applyCategoryFieldIfEmpty("cnae_principal", cnpjData.main_cnae);
+
+      applyGeneralFieldIfEmpty("cep", cnpjData.cep);
+      applyGeneralFieldIfEmpty("endereço", cnpjData.street);
+      applyGeneralFieldIfEmpty("numero_estabelecimento", cnpjData.number);
+      applyGeneralFieldIfEmpty("bairro", cnpjData.neighborhood);
+      applyGeneralFieldIfEmpty("cidade", cnpjData.city);
+      applyGeneralFieldIfEmpty("estado", cnpjData.state);
+
+      if (cnpjData.phone) {
+        const splitPhone = splitPhoneForCadastro(formatPhoneValue(cnpjData.phone));
+        applyCategoryFieldIfEmpty("ddd", splitPhone.ddd);
+        applyCategoryFieldIfEmpty("telefone", splitPhone.phone);
+      }
+
+      if (appliedCount > 0) {
+        queueAutoSaveGeneralInfo();
+        queueAutoSaveCategory("cadastro_clientes");
+      }
+
+      if (!options?.auto) {
+        if (appliedCount > 0) {
+          toast.success(`${appliedCount} campos preenchidos pelo CNPJ (${data.source || "consulta"}).`);
+        } else {
+          toast.message("Nenhum campo vazio encontrado para preenchimento automatico.");
+        }
+      }
+    } catch (lookupError) {
+      if (!options?.auto) {
+        const message = lookupError instanceof Error ? lookupError.message : "Erro ao consultar CNPJ.";
+        toast.error(message);
+      }
+    } finally {
+      setSearchingCnpj(false);
     }
   };
 
@@ -1354,13 +1555,25 @@ export default function ClientDetailPage() {
     });
   };
 
-  const saveClientInfo = async () => {
-    if (!id) return;
+  const saveClientInfo = async (options?: { silent?: boolean }) => {
+    if (!id || saving) return;
     const normalizedEmail = normalizeEmail(clientForm.email);
     const normalizedCnpj = normalizeCnpjForSave(clientForm.cnpj);
+    const normalizedPhone = formatPhoneValue(clientForm.phone || "");
+    const phoneDigits = normalizePhoneDigits(normalizedPhone);
 
     if ((clientForm.cnpj || "").trim() && !normalizedCnpj) {
       toast.error("Informe um CNPJ valido com 14 digitos.");
+      return;
+    }
+
+    if ((clientForm.email || "").trim() && !isValidEmailValue(clientForm.email)) {
+      toast.error("Informe um e-mail valido.");
+      return;
+    }
+
+    if (phoneDigits && (phoneDigits.length < 10 || phoneDigits.length > 11)) {
+      toast.error("Informe um telefone valido com DDD.");
       return;
     }
 
@@ -1412,7 +1625,7 @@ export default function ClientDetailPage() {
     );
 
     const normalizedAddress = buildAddressFromCadastralValues(generalValues);
-    const phonePartsFromGeneral = splitPhoneForCadastro(clientForm.phone || "");
+    const phonePartsFromGeneral = splitPhoneForCadastro(normalizedPhone);
     const mirroredCadastroFieldValues: Array<{ fieldName: CadastroClientesMirrorFieldName; value: string }> = [
       {
         fieldName: "regime_tributÃ¡rio",
@@ -1446,14 +1659,14 @@ export default function ClientDetailPage() {
 
     try {
       const { error } = await supabase.from("clients").update({
-        name: clientForm.name,
+        name: (clientForm.name || "").trim(),
         cnpj: normalizedCnpj,
-        regime: clientForm.regime,
-        sector: clientForm.sector,
-        status: clientForm.status,
-        contact: clientForm.contact,
+        regime: (clientForm.regime || "").trim() || null,
+        sector: (clientForm.sector || "").trim() || null,
+        status: (clientForm.status || "").trim() || null,
+        contact: (clientForm.contact || "").trim() || null,
         email: normalizedEmail || null,
-        phone: clientForm.phone,
+        phone: normalizedPhone || null,
         address: normalizedAddress || clientForm.address || null,
         notes: clientForm.notes,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
@@ -1509,7 +1722,9 @@ export default function ClientDetailPage() {
         }
       }
 
-      toast.success("Dados do cliente salvos");
+      if (!options?.silent) {
+        toast.success("Dados do cliente salvos");
+      }
 
       if (clientWillBeInactive) {
         setPortalAccessEnabled(false);
@@ -1518,8 +1733,14 @@ export default function ClientDetailPage() {
       setClient({
         ...client!,
         ...clientForm,
+        name: (clientForm.name || "").trim(),
+        regime: (clientForm.regime || "").trim() || null,
+        sector: (clientForm.sector || "").trim() || null,
+        status: (clientForm.status || "").trim() || null,
+        contact: (clientForm.contact || "").trim() || null,
         cnpj: normalizedCnpj,
         email: normalizedEmail || null,
+        phone: normalizedPhone || null,
         address: normalizedAddress || clientForm.address || null,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
         obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
@@ -1527,8 +1748,14 @@ export default function ClientDetailPage() {
       } as ClientRecord);
       setClientForm((prev) => ({
         ...prev,
+        name: (prev.name || "").trim(),
+        regime: (prev.regime || "").trim(),
+        sector: (prev.sector || "").trim(),
+        status: (prev.status || "").trim(),
+        contact: (prev.contact || "").trim(),
         cnpj: normalizedCnpj,
         email: normalizedEmail || null,
+        phone: normalizedPhone || "",
         address: normalizedAddress || prev.address || null,
         portal_cashflow_enabled: nextPortalCashflowEnabled,
         obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
@@ -1547,6 +1774,26 @@ export default function ClientDetailPage() {
       setSaving(false);
     }
   };
+
+  const queueAutoSaveGeneralInfo = () => {
+    if (!autoSaveGeneralInfo) return;
+    if (generalAutoSaveTimerRef.current) {
+      window.clearTimeout(generalAutoSaveTimerRef.current);
+    }
+
+    generalAutoSaveTimerRef.current = window.setTimeout(() => {
+      void saveClientInfo({ silent: true });
+    }, 700);
+  };
+
+  useEffect(() => () => {
+    if (generalAutoSaveTimerRef.current) {
+      window.clearTimeout(generalAutoSaveTimerRef.current);
+    }
+    Object.values(categoryAutoSaveTimerRef.current).forEach((timerId) => {
+      if (timerId) window.clearTimeout(timerId);
+    });
+  }, []);
 
   const handlePortalAccessChange = async (checked: boolean) => {
     if (!canManageCashflowAccess) {
@@ -1740,8 +1987,8 @@ export default function ClientDetailPage() {
     toast.success("Pendencia removida.");
   };
 
-  const saveCategoryData = async (category: ClientCategoryKey) => {
-    if (!id || !user) return;
+  const saveCategoryData = async (category: ClientCategoryKey, options?: { silent?: boolean }) => {
+    if (!id || !user || savingData === category) return;
     setSavingData(category);
 
     const config = categoryConfig[category];
@@ -1799,7 +2046,9 @@ export default function ClientDetailPage() {
       if (category === "cadastro_clientes") {
         setPartnerFieldErrors(nextPartnerErrors);
       }
-      toast.error("Existem campos com dados invalidos. Revise antes de salvar.");
+      if (!options?.silent) {
+        toast.error("Existem campos com dados invalidos. Revise antes de salvar.");
+      }
       return;
     }
 
@@ -1818,7 +2067,12 @@ export default function ClientDetailPage() {
       .from("client_data")
       .upsert(entries, { onConflict: "client_id,category,field_name,period" });
     setSavingData(null);
-    if (error) return toast.error("Erro ao salvar dados");
+    if (error) {
+      if (!options?.silent) {
+        toast.error("Erro ao salvar dados");
+      }
+      return;
+    }
 
     if (category === "cadastro_clientes") {
       const regimeEntryValue = entries.find((entry) => entry.field_name === "regime_tributÃ¡rio")?.field_value;
@@ -1839,7 +2093,9 @@ export default function ClientDetailPage() {
         .eq("id", id);
 
       if (updateClientMirrorError) {
-        toast.error("Dados cadastrais salvos, mas houve erro ao sincronizar os dados gerais.");
+        if (!options?.silent) {
+          toast.error("Dados cadastrais salvos, mas houve erro ao sincronizar os dados gerais.");
+        }
         return;
       }
 
@@ -1851,8 +2107,21 @@ export default function ClientDetailPage() {
       setClient((prev) => (prev ? { ...prev, regime: mirroredRegime || null, phone: mergedPhone || null } : prev));
     }
 
-    toast.success(`Dados de ${config.label} salvos`);
+    if (!options?.silent) {
+      toast.success(`Dados de ${config.label} salvos`);
+    }
     void loadClientData();
+  };
+
+  const queueAutoSaveCategory = (category: ClientCategoryKey) => {
+    const currentTimer = categoryAutoSaveTimerRef.current[category];
+    if (currentTimer) {
+      window.clearTimeout(currentTimer);
+    }
+
+    categoryAutoSaveTimerRef.current[category] = window.setTimeout(() => {
+      void saveCategoryData(category, { silent: true });
+    }, 700);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2030,10 +2299,11 @@ export default function ClientDetailPage() {
           ) : (
             <Input
               value={dataEntries[key] || ""}
-              onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
+              onChange={(event) => handleDataFieldChange(category, field.name, normalizeFieldValueForInput(rule, field.name, event.target.value))}
               inputMode={inputMode}
               type={rule?.type === "date" ? "date" : "text"}
-              placeholder="-"
+              placeholder={getFieldPlaceholder(rule, field.name)}
+              maxLength={getFieldMaxLength(rule, field.name)}
               className={`h-9 ${fieldError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
             />
           )}
@@ -2045,7 +2315,7 @@ export default function ClientDetailPage() {
     };
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" onBlurCapture={() => queueAutoSaveCategory(category)}>
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <config.icon className={`h-5 w-5 ${config.color}`} />
@@ -2180,7 +2450,7 @@ export default function ClientDetailPage() {
         <div className="flex justify-end">
           <Button onClick={() => saveCategoryData(category)} disabled={savingData === category} size="sm">
             {savingData === category ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-            Salvar {config.label}
+            Salvar {config.label} (opcional)
           </Button>
         </div>
         {config.allowFiles && (
@@ -2299,15 +2569,64 @@ export default function ClientDetailPage() {
               <h3 className="font-semibold flex items-center gap-2">
                 <Building2 className="h-4 w-4" /> Informações do Cliente
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  Modo simplificado: campos essenciais primeiro. O restante fica em avancado.
+                </p>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Switch checked={autoSaveGeneralInfo} onCheckedChange={setAutoSaveGeneralInfo} />
+                    Salvar automatico
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    onClick={() => setShowAdvancedClientInfo((prev) => !prev)}
+                  >
+                    {showAdvancedClientInfo ? "Ocultar avancado" : "Mostrar avancado"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" onBlurCapture={queueAutoSaveGeneralInfo}>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Razão Social</Label>
-                  <Input value={clientForm.name || ""} onChange={(e) => setClientForm((p) => ({ ...p, name: e.target.value }))} />
+                  <Input
+                    value={clientForm.name || ""}
+                    onChange={(e) => setClientForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Nome completo da empresa"
+                    maxLength={140}
+                    autoComplete="organization"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">CNPJ</Label>
                   <div className="flex gap-2">
-                    <Input value={clientForm.cnpj || ""} onChange={(e) => setClientForm((p) => ({ ...p, cnpj: e.target.value }))} />
+                    <Input
+                      value={clientForm.cnpj || ""}
+                      onChange={(e) => setClientForm((p) => ({ ...p, cnpj: formatCnpjValue(e.target.value) }))}
+                      onBlur={() => {
+                        const normalizedCnpj = normalizeCnpjForSave(clientForm.cnpj);
+                        if (normalizedCnpj && !String(clientForm.name || "").trim()) {
+                          void handleCnpjLookup({ auto: true });
+                        }
+                      }}
+                      placeholder="00.000.000/0000-00"
+                      inputMode="numeric"
+                      maxLength={18}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => void handleCnpjLookup()}
+                      disabled={searchingCnpj}
+                    >
+                      {searchingCnpj ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Buscar CNPJ"}
+                    </Button>
                     <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => void handleCopyRawCnpj()}>
                       <Copy className="h-3.5 w-3.5 mr-1" />
                       Copiar
@@ -2334,6 +2653,7 @@ export default function ClientDetailPage() {
                     {getClientSegmentOptions(clientForm.sector).map((segment) => <option key={segment}>{segment}</option>)}
                   </select>
                 </div>
+                {showAdvancedClientInfo && (
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-xs">Classificacao de Atividade</Label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
@@ -2351,6 +2671,7 @@ export default function ClientDetailPage() {
                     Marque uma ou mais opções: comércio, industria e/ou prestador de serviços.
                   </p>
                 </div>
+                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Status</Label>
                   <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.status || ""} onChange={(e) => setClientForm((p) => ({ ...p, status: e.target.value }))}>
@@ -2359,23 +2680,40 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Contato Principal</Label>
-                  <Input value={clientForm.contact || ""} onChange={(e) => setClientForm((p) => ({ ...p, contact: e.target.value }))} />
+                  <Input
+                    value={clientForm.contact || ""}
+                    onChange={(e) => setClientForm((p) => ({ ...p, contact: e.target.value }))}
+                    placeholder="Nome do responsavel"
+                    maxLength={100}
+                    autoComplete="name"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">E-mail</Label>
-                  <Input type="email" value={clientForm.email || ""} onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))} />
+                  <Input
+                    type="email"
+                    value={clientForm.email || ""}
+                    onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))}
+                    placeholder="email@empresa.com"
+                    maxLength={120}
+                    autoComplete="email"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Telefone</Label>
                   <Input
                     value={clientForm.phone || ""}
                     onChange={(e) => {
-                      const nextPhone = e.target.value;
+                      const nextPhone = formatPhoneValue(e.target.value);
                       setClientForm((p) => ({ ...p, phone: nextPhone }));
                       const parsed = splitPhoneForCadastro(nextPhone);
                       handleDataFieldChange("cadastro_clientes", "ddd", parsed.ddd);
                       handleDataFieldChange("cadastro_clientes", "telefone", parsed.phone);
                     }}
+                    placeholder="(00) 00000-0000"
+                    inputMode="tel"
+                    maxLength={15}
+                    autoComplete="tel"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -2383,7 +2721,7 @@ export default function ClientDetailPage() {
                   <div className="flex gap-2">
                     <Input
                       value={getGeneralInfoFieldValue("cep")}
-                      onChange={(event) => setGeneralInfoFieldValue("cep", formatCepValue(event.target.value))}
+                      onChange={(event) => setGeneralInfoFieldValue("cep", event.target.value)}
                       onBlur={() => {
                         const digits = getGeneralInfoFieldValue("cep").replace(/\D/g, "");
                         if (digits.length === 8) {
@@ -2409,25 +2747,33 @@ export default function ClientDetailPage() {
                     <p className="text-[11px] text-destructive">{dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")]}</p>
                   )}
                 </div>
+                {showAdvancedClientInfo && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Inscricao Estadual</Label>
                   <Input
                     value={getGeneralInfoFieldValue("inscricao_estadual")}
                     onChange={(event) => setGeneralInfoFieldValue("inscricao_estadual", event.target.value)}
+                    maxLength={40}
                   />
                 </div>
+                )}
+                {showAdvancedClientInfo && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Inscricao Municipal</Label>
                   <Input
                     value={getGeneralInfoFieldValue("inscricao_municipal")}
                     onChange={(event) => setGeneralInfoFieldValue("inscricao_municipal", event.target.value)}
+                    maxLength={40}
                   />
                 </div>
+                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Rua / Logradouro</Label>
                   <Input
                     value={getGeneralInfoFieldValue("endereço")}
                     onChange={(event) => setGeneralInfoFieldValue("endereço", event.target.value)}
+                    placeholder="Rua, avenida, travessa..."
+                    maxLength={140}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -2435,6 +2781,8 @@ export default function ClientDetailPage() {
                   <Input
                     value={getGeneralInfoFieldValue("numero_estabelecimento")}
                     onChange={(event) => setGeneralInfoFieldValue("numero_estabelecimento", event.target.value)}
+                    inputMode="numeric"
+                    maxLength={10}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -2442,6 +2790,7 @@ export default function ClientDetailPage() {
                   <Input
                     value={getGeneralInfoFieldValue("bairro")}
                     onChange={(event) => setGeneralInfoFieldValue("bairro", event.target.value)}
+                    maxLength={80}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -2449,6 +2798,7 @@ export default function ClientDetailPage() {
                   <Input
                     value={getGeneralInfoFieldValue("cidade")}
                     onChange={(event) => setGeneralInfoFieldValue("cidade", event.target.value)}
+                    maxLength={80}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -2457,8 +2807,11 @@ export default function ClientDetailPage() {
                     value={getGeneralInfoFieldValue("estado")}
                     onChange={(event) => setGeneralInfoFieldValue("estado", event.target.value)}
                     placeholder="UF"
+                    maxLength={2}
                   />
                 </div>
+                {showAdvancedClientInfo && (
+                <>
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs">Endereco Completo (automático)</Label>
                   <Input
@@ -2571,11 +2924,13 @@ export default function ClientDetailPage() {
                     </p>
                   )}
                 </div>
+                </>
+                )}
               </div>
               <div className="flex justify-end">
                 <Button onClick={saveClientInfo} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-                  Salvar Informações
+                  Salvar Informações (opcional)
                 </Button>
               </div>
             </div>

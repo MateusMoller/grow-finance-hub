@@ -72,6 +72,20 @@ function normalizeCnpj(value: unknown): string | null {
   return digits.length === 14 ? digits : null;
 }
 
+function normalizePhone(value: unknown): string | null {
+  const text = asTrimmedString(value);
+  if (!text) return null;
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 11) return null;
+
+  const ddd = digits.slice(0, 2);
+  const phoneDigits = digits.slice(2);
+  if (phoneDigits.length <= 8) {
+    return `(${ddd}) ${phoneDigits.slice(0, 4)}-${phoneDigits.slice(4)}`;
+  }
+  return `(${ddd}) ${phoneDigits.slice(0, 5)}-${phoneDigits.slice(5)}`;
+}
+
 function isInactiveClientStatus(value: string | null | undefined) {
   return asTrimmedString(value)?.toLowerCase() === "inativo";
 }
@@ -197,6 +211,11 @@ Deno.serve(async (req) => {
     const normalizedCnpj = parsedPayload.cnpj ? normalizeCnpj(parsedPayload.cnpj) : null;
     if (parsedPayload.cnpj && !normalizedCnpj) {
       return jsonResponse({ error: "Informe um CNPJ valido ou deixe o campo em branco." }, 400);
+    }
+
+    const normalizedPhone = parsedPayload.phone ? normalizePhone(parsedPayload.phone) : null;
+    if (parsedPayload.phone && !normalizedPhone) {
+      return jsonResponse({ error: "Informe um telefone valido com DDD ou deixe o campo em branco." }, 400);
     }
 
     const normalizedPortalPassword = parsedPayload.portalPassword || "123456";
@@ -387,7 +406,7 @@ Deno.serve(async (req) => {
       sector: parsedPayload.sector || "Contabil",
       contact: parsedPayload.contact || null,
       email: parsedPayload.email,
-      phone: parsedPayload.phone || null,
+      phone: normalizedPhone || null,
       obligation_completion_whatsapp_enabled: Boolean(parsedPayload.obligationCompletionWhatsAppEnabled),
       portal_user_id: portalUserId,
       created_by: callerUser.id,

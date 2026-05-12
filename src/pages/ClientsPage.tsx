@@ -37,7 +37,61 @@ interface Client {
   portal_user_id: string | null;
 }
 
+type CnpjLookupResponse = {
+  ok?: boolean;
+  source?: string;
+  data?: {
+    legal_name?: string | null;
+    trade_name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  } | null;
+  error?: string;
+};
+
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
+const isValidEmail = (value: string | null | undefined) => {
+  const normalized = normalizeEmail(value);
+  if (!normalized) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+};
+
+const formatCnpjValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
+const normalizeCnpjForSave = (value: string | null | undefined) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length !== 14) return null;
+  return digits;
+};
+
+const formatPhoneValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (!digits) return "";
+  if (digits.length <= 2) return `(${digits}`;
+
+  const ddd = digits.slice(0, 2);
+  const phone = digits.slice(2);
+  if (phone.length <= 4) return `(${ddd}) ${phone}`;
+  if (phone.length <= 8) return `(${ddd}) ${phone.slice(0, 4)}-${phone.slice(4)}`;
+  return `(${ddd}) ${phone.slice(0, 5)}-${phone.slice(5)}`;
+};
+
+const normalizePhoneDigits = (value: string | null | undefined) => (value || "").replace(/\D/g, "");
+
+const normalizeRegime = (value: string | null | undefined) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase() === "simples") return "Simples Nacional";
+  return trimmed;
+};
 
 const parseFunctionErrorMessage = async (error: unknown) => {
   if (!(error instanceof FunctionsHttpError)) {
@@ -71,6 +125,7 @@ export default function ClientsPage() {
   const [inactiveFolderOpen, setInactiveFolderOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [searchingNewClientCnpj, setSearchingNewClientCnpj] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "",
     cnpj: "",
@@ -106,15 +161,29 @@ export default function ClientsPage() {
     setClients(
       ((data || []) as Client[]).map((client) => ({
         ...client,
+        cnpj: client.cnpj ? formatCnpjValue(client.cnpj) : client.cnpj,
+        regime: normalizeRegime(client.regime),
         email: client.email ? normalizeEmail(client.email) : client.email,
+        phone: client.phone ? formatPhoneValue(client.phone) : client.phone,
       })),
     );
   };
 
-  const filtered = clients.filter(
-    (client) =>
-      client.name.toLowerCase().includes(search.toLowerCase()) || (client.cnpj || "").includes(search),
-  );
+  const filtered = clients.filter((client) => {
+    const normalizedSearch = search.trim().toLowerCase();
+    if (!normalizedSearch) return true;
+
+    const searchDigits = normalizedSearch.replace(/\D/g, "");
+    const cnpjDigits = (client.cnpj || "").replace(/\D/g, "");
+
+    return (
+      client.name.toLowerCase().includes(normalizedSearch) ||
+      (client.contact || "").toLowerCase().includes(normalizedSearch) ||
+      (client.email || "").toLowerCase().includes(normalizedSearch) ||
+      (searchDigits.length > 0 && cnpjDigits.includes(searchDigits)) ||
+      (client.cnpj || "").toLowerCase().includes(normalizedSearch)
+    );
+  });
 
   const totalActiveClients = useMemo(
     () => clients.filter((client) => String(client.status || "").trim().toLowerCase() === "ativo").length,
@@ -136,6 +205,67 @@ export default function ClientsPage() {
     setCreateOpen(true);
   };
 
+  const handleLookupNewClientCnpj = async (options?: { auto?: boolean }) => {
+    const normalizedCnpj = normalizeCnpjForSave(newClient.cnpj);
+    if (!normalizedCnpj) {
+      if (!options?.auto) {
+        toast.error("Informe um CNPJ valido com 14 digitos.");
+      }
+      return;
+    }
+
+    if (searchingNewClientCnpj) return;
+    setSearchingNewClientCnpj(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke<CnpjLookupResponse>("lookup-cnpj", {
+        body: { cnpj: normalizedCnpj },
+      });
+
+      if (error || !data?.data) {
+        if (!options?.auto) {
+          toast.error(data?.error || "Nao foi possivel consultar o CNPJ no momento.");
+        }
+        return;
+      }
+
+      const cnpjData = data.data;
+      let appliedCount = 0;
+
+      setNewClient((prev) => {
+        const next = { ...prev };
+        if (!next.name.trim() && cnpjData.legal_name) {
+          next.name = cnpjData.legal_name;
+          appliedCount += 1;
+        }
+        if (!next.phone.trim() && cnpjData.phone) {
+          next.phone = formatPhoneValue(cnpjData.phone);
+          appliedCount += 1;
+        }
+        if (!next.email.trim() && cnpjData.email) {
+          next.email = normalizeEmail(cnpjData.email);
+          appliedCount += 1;
+        }
+        return next;
+      });
+
+      if (!options?.auto) {
+        if (appliedCount > 0) {
+          toast.success(`${appliedCount} campos preenchidos pelo CNPJ (${data.source || "consulta"}).`);
+        } else {
+          toast.message("Nenhum campo vazio encontrado para preenchimento automatico.");
+        }
+      }
+    } catch (lookupError) {
+      if (!options?.auto) {
+        const message = lookupError instanceof Error ? lookupError.message : "Erro ao consultar CNPJ.";
+        toast.error(message);
+      }
+    } finally {
+      setSearchingNewClientCnpj(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!canCreateClients) {
       toast.error("Seu perfil nÃ£o possui permissÃ£o para cadastrar clientes.");
@@ -148,8 +278,30 @@ export default function ClientsPage() {
     }
 
     const normalizedEmail = normalizeEmail(newClient.email);
-    if (!normalizedEmail) {
+    if (!isValidEmail(normalizedEmail)) {
       toast.error("Informe um e-mail vÃ¡lido para o portal.");
+      return;
+    }
+
+    const normalizedName = newClient.name.trim();
+    const normalizedContact = newClient.contact.trim();
+    const normalizedCnpj = normalizeCnpjForSave(newClient.cnpj);
+    const normalizedPhone = formatPhoneValue(newClient.phone);
+    const phoneDigits = normalizePhoneDigits(normalizedPhone);
+    const password = newClient.portalPassword.trim() || "123456";
+
+    if (newClient.cnpj.trim() && !normalizedCnpj) {
+      toast.error("Informe um CNPJ valido com 14 digitos ou deixe em branco.");
+      return;
+    }
+
+    if (phoneDigits && (phoneDigits.length < 10 || phoneDigits.length > 11)) {
+      toast.error("Informe um telefone valido com DDD.");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("A senha inicial do portal deve ter no minimo 6 caracteres.");
       return;
     }
 
@@ -170,15 +322,15 @@ export default function ClientsPage() {
       portal_password_applied?: boolean;
     }>("create-client-with-portal", {
       body: {
-        name: newClient.name,
-        cnpj: newClient.cnpj || null,
-        regime: newClient.regime,
-        sector: newClient.sector,
-        contact: newClient.contact || null,
+        name: normalizedName,
+        cnpj: normalizedCnpj,
+        regime: newClient.regime.trim(),
+        sector: newClient.sector.trim(),
+        contact: normalizedContact || null,
         email: normalizedEmail,
-        phone: newClient.phone || null,
+        phone: normalizedPhone || null,
         obligationCompletionWhatsAppEnabled: newClient.obligationCompletionWhatsAppEnabled,
-        portalPassword: newClient.portalPassword.trim() || "123456",
+        portalPassword: password,
       },
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -195,7 +347,7 @@ export default function ClientsPage() {
     const portalPasswordApplied = Boolean(data?.portal_password_applied);
 
     if (portalPasswordApplied) {
-      toast.success(`Cliente cadastrado. Senha inicial do portal: ${newClient.portalPassword.trim() || "123456"}.`);
+      toast.success(`Cliente cadastrado. Senha inicial do portal: ${password}.`);
     } else {
       toast.success("Cliente cadastrado com acesso de portal.");
     }
@@ -386,15 +538,36 @@ export default function ClientsPage() {
                   placeholder="Nome da empresa"
                   value={newClient.name}
                   onChange={(event) => setNewClient((prev) => ({ ...prev, name: event.target.value }))}
+                  maxLength={140}
+                  autoComplete="organization"
                 />
               </div>
               <div className="space-y-2">
                 <Label>CNPJ</Label>
-                <Input
-                  placeholder="00.000.000/0001-00"
-                  value={newClient.cnpj}
-                  onChange={(event) => setNewClient((prev) => ({ ...prev, cnpj: event.target.value }))}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="00.000.000/0001-00"
+                    value={newClient.cnpj}
+                    onChange={(event) => setNewClient((prev) => ({ ...prev, cnpj: formatCnpjValue(event.target.value) }))}
+                    onBlur={() => {
+                      const normalizedCnpj = normalizeCnpjForSave(newClient.cnpj);
+                      if (normalizedCnpj && !newClient.name.trim()) {
+                        void handleLookupNewClientCnpj({ auto: true });
+                      }
+                    }}
+                    inputMode="numeric"
+                    maxLength={18}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => void handleLookupNewClientCnpj()}
+                    disabled={searchingNewClientCnpj}
+                  >
+                    {searchingNewClientCnpj ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buscar CNPJ"}
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -429,6 +602,8 @@ export default function ClientsPage() {
                 placeholder="Nome do contato"
                 value={newClient.contact}
                 onChange={(event) => setNewClient((prev) => ({ ...prev, contact: event.target.value }))}
+                maxLength={100}
+                autoComplete="name"
               />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -441,6 +616,8 @@ export default function ClientsPage() {
                   onChange={(event) =>
                     setNewClient((prev) => ({ ...prev, email: event.target.value.toLowerCase() }))
                   }
+                  maxLength={120}
+                  autoComplete="email"
                 />
               </div>
               <div className="space-y-2">
@@ -450,6 +627,9 @@ export default function ClientsPage() {
                   placeholder="123456"
                   value={newClient.portalPassword}
                   onChange={(event) => setNewClient((prev) => ({ ...prev, portalPassword: event.target.value }))}
+                  minLength={6}
+                  maxLength={64}
+                  autoComplete="new-password"
                 />
               </div>
             </div>
@@ -459,7 +639,10 @@ export default function ClientsPage() {
                 <Input
                   placeholder="(11) 99999-9999"
                   value={newClient.phone}
-                  onChange={(event) => setNewClient((prev) => ({ ...prev, phone: event.target.value }))}
+                  onChange={(event) => setNewClient((prev) => ({ ...prev, phone: formatPhoneValue(event.target.value) }))}
+                  inputMode="tel"
+                  maxLength={15}
+                  autoComplete="tel"
                 />
               </div>
             </div>
