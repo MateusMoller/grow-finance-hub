@@ -466,7 +466,7 @@ const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
   const totalProLabore = partners.reduce((sum, partner) => sum + partner.pro_labore, 0);
   const withGovPassword = partners.filter((partner) => Boolean(partner.senha_gov)).length;
   const govPasswordStatus =
-    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Nao";
+    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Não";
   const ownershipByPartner = partners
     .map((partner) => {
       const partnerName = partner.nome || "Sócio sem nome";
@@ -589,7 +589,7 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
       { key: "email", label: "E-mail" },
       { key: "telefone", label: "Telefone" },
       { key: "origem", label: "Origem" },
-      { key: "pagina_origem", label: "Pagina de origem" },
+      { key: "pagina_origem", label: "Página de origem" },
       { key: "criado_em", label: "Criado em", formatter: formatDateTime },
     ],
     defaultColumns: ["nome", "empresa", "email", "telefone", "origem", "criado_em"],
@@ -1428,7 +1428,7 @@ export default function RelatoriosPage() {
                 <div>
                   <h2 className="font-heading font-semibold">Gerar relatório</h2>
                   <p className="text-xs text-muted-foreground">
-                    Escolha o modulo, selecione as colunas e exporte seu modelo customizado.
+                    Escolha o módulo, selecione as colunas e exporte seu modelo customizado.
                   </p>
                 </div>
                 <div className="w-full lg:w-[280px]">

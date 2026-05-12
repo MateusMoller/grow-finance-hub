@@ -7,7 +7,7 @@ import { SiteWordmark } from "./SiteWordmark";
 
 const navLinks = [
   { label: "Institucional", to: "/" },
-  { label: "Servicos", to: "/#servicos" },
+  { label: "Serviços", to: "/#servicos" },
   { label: "Clientes", to: "/#clientes" },
   { label: "Newsletter", to: "/newsletter" },
   { label: "Contato", to: "/contato" },

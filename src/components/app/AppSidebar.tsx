@@ -33,7 +33,7 @@ import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
-  { title: "Calendario", url: "/app/calendario", icon: CalendarDays },
+  { title: "Calendário", url: "/app/calendario", icon: CalendarDays },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
   { title: "Clientes", url: "/app/clientes", icon: Users },
 ];
@@ -42,17 +42,17 @@ const operationalItems = [
   { title: "CRM", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
-  { title: "Relatorios", url: "/app/relatorios", icon: BarChart3 },
+  { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
   { title: "Financeiro", url: "/app/financeiro", icon: Wallet },
-  { title: "Obrigacoes", url: "/app/obrigacoes", icon: FileSpreadsheet },
+  { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
 ];
 
 const systemItems = [
-  { title: "Notificacoes", url: "/app/notificacoes", icon: Bell },
-  { title: "Usuarios", url: "/app/usuarios", icon: UserCog },
-  { title: "Sugestoes", url: "/app/sugestoes", icon: Lightbulb },
+  { title: "Notificações", url: "/app/notificacoes", icon: Bell },
+  { title: "Usuários", url: "/app/usuarios", icon: UserCog },
+  { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
-  { title: "Configuracoes", url: "/app/configuracoes", icon: Settings },
+  { title: "Configurações", url: "/app/configuracoes", icon: Settings },
 ];
 
 function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {

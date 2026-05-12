@@ -50,7 +50,7 @@ const menuSections: PortalMenuSection[] = [
   {
     label: "Conta",
     items: [
-      { key: "manual", title: "Manual do usuario", icon: BookOpen },
+      { key: "manual", title: "Manual do usuário", icon: BookOpen },
       { key: "settings", title: "Configuracoes", icon: Settings2 },
     ],
   },

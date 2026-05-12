@@ -41,14 +41,14 @@ const toRelativeTime = (isoDate: string) => {
 
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.max(1, Math.floor(diffMs / 60000));
-  if (diffMin < 60) return `Ha ${diffMin} min`;
+  if (diffMin < 60) return `Há ${diffMin} min`;
 
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `Ha ${diffHours}h`;
+  if (diffHours < 24) return `Há ${diffHours}h`;
 
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return "Ontem";
-  if (diffDays < 7) return `Ha ${diffDays} dias`;
+  if (diffDays < 7) return `Há ${diffDays} dias`;
   return date.toLocaleDateString("pt-BR");
 };
 
@@ -64,7 +64,7 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
 
   const base = [
     { title: "Dashboard", url: "/app" },
-    { title: "Calendario", url: "/app/calendario" },
+    { title: "Calendário", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "CRM", url: "/app/crm" },
@@ -72,10 +72,10 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     { title: "Relatórios", url: "/app/relatorios" },
     { title: "Obrigações", url: "/app/obrigacoes" },
     { title: "E-continuo", url: "/app/econtinuo" },
-    { title: "Notificacoes", url: "/app/notificacoes" },
+    { title: "Notificações", url: "/app/notificacoes" },
     { title: "Usuários", url: "/app/usuarios" },
-    { title: "Sugestoes", url: "/app/sugestoes" },
-    { title: "Configuracoes", url: "/app/configuracoes" },
+    { title: "Sugestões", url: "/app/sugestoes" },
+    { title: "Configurações", url: "/app/configuracoes" },
     { title: "Manual de uso", url: "/app/manual" },
   ];
 
@@ -242,7 +242,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
                   className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-44 lg:w-56"
-                  placeholder="Buscar paginas..."
+                  placeholder="Buscar páginas..."
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   onFocus={() => setSearchOpen(true)}
@@ -277,7 +277,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
                   <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notificacoes</span>
+                    <span>Notificações</span>
                     <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
@@ -327,7 +327,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={markAllAsRead}>Marcar todas como lidas</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    Ver central de notificacoes
+                    Ver central de notificações
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -349,10 +349,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <UserRound className="h-4 w-4 mr-2" /> Meu perfil
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <Settings className="h-4 w-4 mr-2" /> Configuracoes
+                    <Settings className="h-4 w-4 mr-2" /> Configurações
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    <Bell className="h-4 w-4 mr-2" /> Notificacoes
+                    <Bell className="h-4 w-4 mr-2" /> Notificações
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -371,7 +371,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
 
           <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
-            Grow Finance Hub - Area interna
+            Grow Finance Hub - Área interna
           </footer>
 
           <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
@@ -416,14 +416,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="space-y-3">
             <input
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none"
-              placeholder="Buscar pagina..."
+              placeholder="Buscar página..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
             <div className="max-h-72 overflow-y-auto space-y-1">
               {filteredLinks.length === 0 ? (
                 <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                  Nenhuma pagina encontrada.
+                  Nenhuma página encontrada.
                 </div>
               ) : (
                 filteredLinks.map((item) => (

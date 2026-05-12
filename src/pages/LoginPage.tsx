@@ -62,7 +62,7 @@ export default function LoginPage() {
     if (userError || !userData.user) {
       await signOut();
       setLoading(false);
-      toast.error("Nao foi possivel validar o acesso apos o login.");
+      toast.error("Não foi possível validar o acesso após o login.");
       return;
     }
 
@@ -75,7 +75,7 @@ export default function LoginPage() {
 
     if (roleError) {
       await signOut();
-      toast.error("Nao foi possivel validar suas permissoes de acesso.");
+      toast.error("Não foi possível validar suas permissões de acesso.");
       return;
     }
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
 
     if (!target) {
       await signOut();
-      toast.error("Este usuario nao possui permissao para acessar o sistema.");
+      toast.error("Este usuário não possui permissão para acessar o sistema.");
       return;
     }
 

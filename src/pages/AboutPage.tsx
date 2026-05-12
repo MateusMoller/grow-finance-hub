@@ -617,7 +617,7 @@ export default function AboutPage() {
             >
               <h2 className="font-heading text-2xl font-semibold">Por que escolher a Grow?</h2>
               <p className="mt-3 text-sm text-muted-foreground">
-                Porque nossa proposta combina técnica, proximidade e inteligencia de gestão. Nao entregamos apenas obrigações,
+                Porque nossa proposta combina técnica, proximidade e inteligência de gestão. Não entregamos apenas obrigações,
                 entregamos direcao para o seu negócio.
               </p>
               <div className="mt-4 space-y-2 text-sm">

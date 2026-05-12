@@ -380,7 +380,7 @@ export default function SolicitacoesPage() {
 
           const { error: insertTaskError } = await supabase.from("client_portal_tasks").insert(payload);
           if (insertTaskError) {
-            toast.error("Nao foi possivel criar automaticamente as tarefas vinculadas das solicitacoes.");
+            toast.error("Não foi possível criar automaticamente as tarefas vinculadas das solicitações.");
           }
         }
       }
@@ -397,7 +397,7 @@ export default function SolicitacoesPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast.error("Erro ao carregar pendencias do portal.");
+      toast.error("Erro ao carregar pendências do portal.");
       setLoadingTasks(false);
       return;
     }
@@ -1441,7 +1441,7 @@ export default function SolicitacoesPage() {
             <DialogHeader>
               <DialogTitle>Nova pendencia do portal</DialogTitle>
               <DialogDescription>
-                Esta pendencia aparecera para o cliente na aba de pendencias e na visao geral.
+                Esta pendência aparecerá para o cliente na aba de pendências e na visão geral.
               </DialogDescription>
             </DialogHeader>
 
@@ -1483,7 +1483,7 @@ export default function SolicitacoesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Nao vincular</SelectItem>
+                      <SelectItem value="none">Não vincular</SelectItem>
                       {requestOptionsForTaskClient.map((request) => (
                         <SelectItem key={request.id} value={request.id}>
                           {request.title}

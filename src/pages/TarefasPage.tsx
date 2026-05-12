@@ -743,7 +743,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               <Label>Subtarefas</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Ex: Conferir pendencias do cliente"
+                  placeholder="Ex: Conferir pendências do cliente"
                   value={newSubtaskTitle}
                   onChange={(event) => setNewSubtaskTitle(event.target.value)}
                   onKeyDown={(event) => {

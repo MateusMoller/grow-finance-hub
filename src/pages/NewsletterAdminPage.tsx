@@ -247,7 +247,7 @@ export default function NewsletterAdminPage() {
     }
 
     if (snippets.length === 0) {
-      toast.error("Nao foi possivel enviar as midias selecionadas.");
+      toast.error("Não foi possível enviar as mídias selecionadas.");
       return;
     }
 

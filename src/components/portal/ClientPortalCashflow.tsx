@@ -187,7 +187,7 @@ const formatConsentStatus = (status: string) => {
   if (token === "pending") return "Aguardando consentimento";
   if (token === "revoked") return "Consentimento revogado";
   if (token === "expired") return "Consentimento expirado";
-  return "Consentimento nao informado";
+  return "Consentimento não informado";
 };
 
 const suggestionToDraftRow = (suggestion: ParsedCashflowSuggestion, index: number): ImportDraftRow => ({
@@ -473,7 +473,7 @@ export function ClientPortalCashflow({
 
   const handleCreateOpenFinanceSession = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
 
@@ -481,7 +481,7 @@ export function ClientPortalCashflow({
     if (!sessionToken) return;
 
     setPluggyConnectToken(sessionToken);
-    toast.success("Sessao de conexao iniciada. Finalize o consentimento no fluxo do banco.");
+    toast.success("Sessão de conexão iniciada. Finalize o consentimento no fluxo do banco.");
   };
 
   const handleManualSyncOpenFinance = async (connectionId: string) => {
@@ -501,7 +501,7 @@ export function ClientPortalCashflow({
 
   const handleCreateEntry = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
 
@@ -577,7 +577,7 @@ export function ClientPortalCashflow({
 
   const handleParseImportFiles = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
     if (importFiles.length === 0) {
@@ -597,12 +597,12 @@ export function ClientPortalCashflow({
     }
 
     setImportDrafts(result.entries.map((entry, index) => suggestionToDraftRow(entry, index)));
-    toast.success(`${result.entries.length} sugestoes geradas para revisao.`);
+    toast.success(`${result.entries.length} sugestões geradas para revisão.`);
   };
 
   const handleImportSelectedDrafts = async () => {
     if (!enabled) {
-      toast.error("Este modulo ainda nao foi liberado para este cliente.");
+      toast.error("Este módulo ainda não foi liberado para este cliente.");
       return;
     }
     if (selectedDrafts.length === 0) {
@@ -672,8 +672,8 @@ export function ClientPortalCashflow({
             Controle de caixa bloqueado
           </CardTitle>
           <CardDescription>
-            O acesso a este modulo depende de liberacao do admin. Quando estiver ativo, voce podera acompanhar saldo,
-            previsoes, conciliacao e pendencias operacionais.
+            O acesso a este módulo depende de liberação do admin. Quando estiver ativo, você poderá acompanhar saldo,
+            previsões, conciliação e pendências operacionais.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
@@ -708,9 +708,9 @@ export function ClientPortalCashflow({
                 </Badge>
               </div>
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Caixa organizado em operacao, conciliacao e gestao.</h2>
+                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Caixa organizado em operação, conciliação e gestão.</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  Acompanhe o caixa atual, visualize o saldo projetado e resolva pendencias sem sair do portal.
+                  Acompanhe o caixa atual, visualize o saldo projetado e resolva pendências sem sair do portal.
                 </p>
               </div>
             </div>
@@ -731,7 +731,7 @@ export function ClientPortalCashflow({
               <div className="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.35)] backdrop-blur">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Pendencias</p>
                 <p className="mt-2 text-2xl font-semibold text-amber-600">{conciliationEntries.length}</p>
-                <p className="mt-1 text-xs text-slate-600">Itens esperando revisao ou conciliacao</p>
+                <p className="mt-1 text-xs text-slate-600">Itens esperando revisão ou conciliação</p>
               </div>
             </div>
           </div>
@@ -845,7 +845,7 @@ export function ClientPortalCashflow({
             <div>
               <CardTitle className="text-base">Filtros e periodo</CardTitle>
               <CardDescription>
-                Ajuste a leitura operacional e gerencial do caixa sem perder a visao das pendencias.
+                Ajuste a leitura operacional e gerencial do caixa sem perder a visão das pendências.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -969,7 +969,7 @@ export function ClientPortalCashflow({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as situacoes</SelectItem>
-                <SelectItem value="not_applicable">Nao aplicavel</SelectItem>
+                <SelectItem value="not_applicable">Não aplicável</SelectItem>
                 <SelectItem value="pending">Pendente</SelectItem>
                 <SelectItem value="suggested">Sugerido</SelectItem>
                 <SelectItem value="reconciled">Conciliado</SelectItem>
@@ -1140,7 +1140,7 @@ export function ClientPortalCashflow({
                     Importacao assistida
                   </CardTitle>
                   <CardDescription>
-                    Gere sugestoes a partir de arquivos e envie para a mesma fila de revisao da conciliacao.
+                    Gere sugestões a partir de arquivos e envie para a mesma fila de revisão da conciliação.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1153,7 +1153,7 @@ export function ClientPortalCashflow({
                       disabled={parsingImport || importFiles.length === 0}
                     >
                       {parsingImport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                      {parsingImport ? "Lendo..." : "Gerar sugestoes"}
+                      {parsingImport ? "Lendo..." : "Gerar sugestões"}
                     </Button>
                   </div>
 
@@ -1194,7 +1194,7 @@ export function ClientPortalCashflow({
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs text-muted-foreground">
-                          {selectedDrafts.length} de {importDrafts.length} sugestoes selecionadas
+                          {selectedDrafts.length} de {importDrafts.length} sugestões selecionadas
                         </p>
                         <div className="flex gap-2">
                           <Button
@@ -1366,7 +1366,7 @@ export function ClientPortalCashflow({
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      O consentimento acontece no fluxo seguro do banco. Depois disso, os extratos entram na revisao do caixa.
+                      O consentimento acontece no fluxo seguro do banco. Depois disso, os extratos entram na revisão do caixa.
                     </p>
                     <Button
                       type="button"
@@ -1391,7 +1391,7 @@ export function ClientPortalCashflow({
                       }}
                       onError={(error) => {
                         setPluggyConnectToken(null);
-                        toast.error(error?.message || "Erro na conexao bancaria.");
+                        toast.error(error?.message || "Erro na conexão bancária.");
                       }}
                       onClose={async () => {
                         setPluggyConnectToken(null);
@@ -1429,7 +1429,7 @@ export function ClientPortalCashflow({
                                   <Badge variant="secondary">{formatConsentStatus(connection.consent_status)}</Badge>
                                 </div>
                                 <div className="text-sm text-muted-foreground">
-                                  <p>Ultima sincronizacao: {connection.last_synced_at ? new Date(connection.last_synced_at).toLocaleString("pt-BR") : "Ainda nao sincronizado"}</p>
+                                  <p>Última sincronização: {connection.last_synced_at ? new Date(connection.last_synced_at).toLocaleString("pt-BR") : "Ainda não sincronizado"}</p>
                                   <p>Contas vinculadas: {connectionAccounts.length}</p>
                                 </div>
                                 {connection.last_sync_error ? (
@@ -1477,7 +1477,7 @@ export function ClientPortalCashflow({
                                   <div key={account.id} className="rounded-xl border bg-muted/30 p-3">
                                     <p className="text-sm font-medium">{account.account_name || "Conta bancaria"}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {account.institution_name || "Instituicao nao informada"}
+                                      {account.institution_name || "Instituição não informada"}
                                       {account.account_mask ? ` • ${account.account_mask}` : ""}
                                     </p>
                                   </div>
@@ -1577,7 +1577,7 @@ export function ClientPortalCashflow({
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <ShieldCheck className="h-4 w-4 text-primary" />
-                Fila de conciliacao e revisao
+                Fila de conciliação e revisão
               </CardTitle>
               <CardDescription>
                 Veja o que chegou por importacao ou Open Finance e ainda precisa de tratamento.
@@ -1586,7 +1586,7 @@ export function ClientPortalCashflow({
             <CardContent>
               {conciliationEntries.length === 0 ? (
                 <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  Nao ha pendencias de conciliacao neste momento.
+                  Não há pendências de conciliação neste momento.
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border">
@@ -1817,7 +1817,7 @@ export function ClientPortalCashflow({
           <MetricCard
             title="Itens com atencao"
             value={String(monthlyEntries.filter((entry) => entry.review_status !== "approved").length)}
-            helper="Lancamentos que ainda pedem revisao ou conciliacao neste mes."
+            helper="Lançamentos que ainda pedem revisão ou conciliação neste mês."
             tone={monthlyEntries.some((entry) => entry.review_status !== "approved") ? "warning" : "success"}
           />
         </CardContent>

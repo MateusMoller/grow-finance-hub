@@ -232,7 +232,7 @@ export default function FinanceiroPage() {
     setLoading(false);
 
     if (entriesRes.error || accountsRes.error || clientsRes.error || rulesRes.error || healthRes.error || alertsRes.error) {
-      toast.error("Nao foi possivel carregar o modulo financeiro.");
+      toast.error("Não foi possível carregar o módulo financeiro.");
       return;
     }
 
@@ -493,7 +493,7 @@ export default function FinanceiroPage() {
         key: "pending_reconciliation" as QueueFilter,
         title: "Conciliacao",
         value: queueCounts.pendingReconciliation,
-        helper: "Tratar extratos e importacoes que ainda nao fecharam.",
+        helper: "Tratar extratos e importações que ainda não fecharam.",
       },
       {
         key: "overdue" as QueueFilter,
@@ -578,7 +578,7 @@ export default function FinanceiroPage() {
     setCreatingRule(false);
 
     if (error) {
-      toast.error("Nao foi possivel salvar a regra automatica.");
+      toast.error("Não foi possível salvar a regra automática.");
       return;
     }
 
@@ -593,7 +593,7 @@ export default function FinanceiroPage() {
     setDeletingRuleId(null);
 
     if (error) {
-      toast.error("Nao foi possivel excluir a regra.");
+      toast.error("Não foi possível excluir a regra.");
       return;
     }
 
@@ -612,7 +612,7 @@ export default function FinanceiroPage() {
                 <div>
                   <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Analise um cliente por vez, com leitura mais limpa e decisao mais criteriosa.</h1>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
-                    O modulo interno agora libera os dados somente depois da escolha do cliente, para manter foco operacional e reduzir poluicao visual.
+                    O módulo interno agora libera os dados somente depois da escolha do cliente, para manter foco operacional e reduzir poluição visual.
                   </p>
                 </div>
               </div>
@@ -656,7 +656,7 @@ export default function FinanceiroPage() {
                 <MetricCard
                   title="Pendencias operacionais"
                   value={String(queueCounts.pendingReview + queueCounts.pendingReconciliation)}
-                  helper="Tudo que precisa de revisao ou conciliacao agora."
+                  helper="Tudo que precisa de revisão ou conciliação agora."
                   tone={queueCounts.pendingReview + queueCounts.pendingReconciliation > 0 ? "warning" : "success"}
                 />
                 <MetricCard
@@ -818,7 +818,7 @@ export default function FinanceiroPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as situacoes</SelectItem>
-                <SelectItem value="not_applicable">Nao aplicavel</SelectItem>
+                <SelectItem value="not_applicable">Não aplicável</SelectItem>
                 <SelectItem value="pending">Pendente</SelectItem>
                 <SelectItem value="suggested">Sugerido</SelectItem>
                 <SelectItem value="reconciled">Conciliado</SelectItem>
@@ -844,7 +844,7 @@ export default function FinanceiroPage() {
                 <div className="rounded-2xl border border-dashed border-border/80 bg-muted/10 p-5">
                   <p className="text-sm font-medium">Escolha um cliente para iniciar a leitura.</p>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    A tela fica propositalmente vazia ate essa escolha para evitar comparacoes apressadas e ajudar a equipe a revisar cada operacao com mais criterio.
+                    A tela fica propositalmente vazia até essa escolha para evitar comparações apressadas e ajudar a equipe a revisar cada operação com mais critério.
                   </p>
                 </div>
               )}
@@ -892,7 +892,7 @@ export default function FinanceiroPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Fila operacional</CardTitle>
                 <CardDescription>
-                  Trate revisao, conciliacao, vencidos, sem conta e duplicidade sem sair da mesma fila.
+                  Trate revisão, conciliação, vencidos, sem conta e duplicidade sem sair da mesma fila.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -948,7 +948,7 @@ export default function FinanceiroPage() {
                             <TableRow key={entry.id}>
                               <TableCell>
                                 <div className="space-y-1">
-                                  <p className="text-sm font-medium">{client?.name || "Cliente nao encontrado"}</p>
+                                  <p className="text-sm font-medium">{client?.name || "Cliente não encontrado"}</p>
                                   <p className="text-[11px] text-muted-foreground">{client?.sector || "Sem setor"}</p>
                                 </div>
                               </TableCell>
@@ -1031,7 +1031,7 @@ export default function FinanceiroPage() {
               <MetricCard
                 title="Saude do caixa"
                 value={selectedClientHealthStatus ? healthStatusMeta[selectedClientHealthStatus].label : "-"}
-                helper="Leitura consolidada entre saldo projetado, alertas e pendencias."
+                helper="Leitura consolidada entre saldo projetado, alertas e pendências."
                 tone={selectedClientHealthStatus === "critico" ? "danger" : selectedClientHealthStatus === "atencao" ? "warning" : "success"}
               />
               <MetricCard
@@ -1096,7 +1096,7 @@ export default function FinanceiroPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <ShieldCheck className="h-4 w-4 text-primary" />
-                  Itens bancarios que ainda afetam a operacao
+                  Itens bancários que ainda afetam a operação
                 </CardTitle>
                 <CardDescription>
                   Importacoes e Open Finance que seguem exigindo tratamento antes de estabilizar o processo.
@@ -1125,7 +1125,7 @@ export default function FinanceiroPage() {
                       <TableBody>
                         {conciliationEntries.slice(0, 120).map((entry) => (
                           <TableRow key={entry.id}>
-                            <TableCell className="text-sm text-muted-foreground">{clientMap.get(entry.client_id)?.name || "Cliente nao encontrado"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{clientMap.get(entry.client_id)?.name || "Cliente não encontrado"}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{formatDate(getEntryDueDate(entry))}</TableCell>
                             <TableCell>
                               <div className="space-y-1">
@@ -1188,7 +1188,7 @@ export default function FinanceiroPage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {selectedClientGapAlert
                         ? `Saldo projetado de ${cashflowCurrencyFormatter.format(selectedClientGapAlert.projectedBalance)}.`
-                        : "Nao ha ruptura de caixa prevista na janela atual."}
+                        : "Não há ruptura de caixa prevista na janela atual."}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-border/70 p-4">
@@ -1197,7 +1197,7 @@ export default function FinanceiroPage() {
                       {formatDate(selectedClientSnapshot?.last_activity_at?.slice(0, 10))}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Cobertura de revisao: {Math.round((selectedClientSnapshot?.review_coverage || 0) * 100)}%
+                      Cobertura de revisão: {Math.round((selectedClientSnapshot?.review_coverage || 0) * 100)}%
                     </p>
                   </div>
                   <div className="rounded-2xl border border-border/70 p-4">
@@ -1217,7 +1217,7 @@ export default function FinanceiroPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Regras automaticas</CardTitle>
                 <CardDescription>
-                  Configure automacoes depois que a operacao estiver estavel e a classificacao estiver clara.
+                  Configure automações depois que a operação estiver estável e a classificação estiver clara.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -1257,7 +1257,7 @@ export default function FinanceiroPage() {
                   <div className="flex items-center justify-between rounded-lg border px-3 py-2">
                     <div>
                       <p className="text-sm font-medium">Marcar como transferencia</p>
-                      <p className="text-[11px] text-muted-foreground">Nao entra no resultado gerencial</p>
+                      <p className="text-[11px] text-muted-foreground">Não entra no resultado gerencial</p>
                     </div>
                     <Switch checked={newRuleTransfer} onCheckedChange={setNewRuleTransfer} />
                   </div>
@@ -1299,7 +1299,7 @@ export default function FinanceiroPage() {
                             <TableCell>{rule.entry_type === "income" ? "Entrada" : "Saida"}</TableCell>
                             <TableCell>{rule.category}</TableCell>
                             <TableCell>{rule.counterparty_name || "-"}</TableCell>
-                            <TableCell>{rule.mark_as_transfer ? "Sim" : "Nao"}</TableCell>
+                            <TableCell>{rule.mark_as_transfer ? "Sim" : "Não"}</TableCell>
                             <TableCell>{Math.round(rule.auto_approve_threshold * 100)}%</TableCell>
                             <TableCell>
                               <Badge variant={rule.is_active ? "secondary" : "outline"} className="text-[10px]">

@@ -61,7 +61,7 @@ export default function NotificacoesPage() {
         try {
           await syncPushSubscriptionOnServer(user.id);
         } catch {
-          // Nao derruba o status local do push se a sincronização remota falhar.
+          // Não derruba o status local do push se a sincronização remota falhar.
         }
       }
     } catch {
@@ -261,7 +261,7 @@ export default function NotificacoesPage() {
 
           {pushStatus.permission === "denied" && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              O navegador bloqueou notificacoes. Libere nas configuracoes do site/app no celular.
+              O navegador bloqueou notificações. Libere nas configurações do site/app no celular.
             </p>
           )}
           {!pushStatus.hasPublicKey && (

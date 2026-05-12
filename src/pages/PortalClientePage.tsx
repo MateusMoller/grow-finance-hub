@@ -152,13 +152,13 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       description: "Use quando precisar tratar fechamento, conferencia ou ajustes da folha.",
       defaultTitle: "Folha de pagamento",
       fields: [
-        { name: "competencia", label: "Competencia", type: "text", required: true, placeholder: "Ex.: 04/2026" },
+        { name: "competencia", label: "Competência", type: "text", required: true, placeholder: "Ex.: 04/2026" },
         {
           name: "solicitacao_folha",
           label: "O que precisa nesta folha",
           type: "select",
           required: true,
-          options: ["Conferencia", "Inclusao de variaveis", "Ajuste", "Envio de informacoes"],
+          options: ["Conferência", "Inclusão de variáveis", "Ajuste", "Envio de informações"],
         },
         {
           name: "observacao_folha",
@@ -236,10 +236,10 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       key: "guias_impostos",
       label: "Guias e impostos",
       sector: "Fiscal",
-      description: "Para duvidas, revisoes e regularizacoes ligadas a impostos e obrigacoes fiscais.",
+      description: "Para dúvidas, revisões e regularizações ligadas a impostos e obrigações fiscais.",
       defaultTitle: "Guias e impostos",
       fields: [
-        { name: "competencia_fiscal", label: "Competencia", type: "text", placeholder: "Ex.: 04/2026" },
+        { name: "competencia_fiscal", label: "Competência", type: "text", placeholder: "Ex.: 04/2026" },
         {
           name: "tipo_demanda_fiscal",
           label: "Tipo de demanda",
@@ -272,7 +272,7 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       key: "certidao_fiscal",
       label: "Certidoes e regularidade",
       sector: "Fiscal",
-      description: "Solicite certidoes, conferencias de regularidade ou apoio em pendencias fiscais.",
+      description: "Solicite certidões, conferências de regularidade ou apoio em pendências fiscais.",
       defaultTitle: "Certidoes e regularidade fiscal",
       fields: [
         {
@@ -294,7 +294,7 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       description: "Use para fechamento mensal, ajustes contabilisticos e alinhamentos de lancamentos.",
       defaultTitle: "Fechamento contabil",
       fields: [
-        { name: "competencia_contabil", label: "Competencia", type: "text", required: true },
+        { name: "competencia_contabil", label: "Competência", type: "text", required: true },
         {
           name: "tipo_rotina_contabil",
           label: "Etapa",
@@ -307,9 +307,9 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
     },
     {
       key: "balancete_relatorio",
-      label: "Balancete e relatorios",
+      label: "Balancete e relatórios",
       sector: "Contabil",
-      description: "Solicite demonstracoes, relatorios ou leituras contabeis especificas.",
+      description: "Solicite demonstrações, relatórios ou leituras contábeis específicas.",
       defaultTitle: "Balancete ou relatorio contabil",
       fields: [
         {
@@ -328,7 +328,7 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       key: "controle_caixa",
       label: "Controle de caixa",
       sector: "Financeiro",
-      description: "Solicite liberacao, apoio ou ajustes no modulo de caixa do portal.",
+      description: "Solicite liberação, apoio ou ajustes no módulo de caixa do portal.",
       defaultTitle: "Controle de caixa no portal",
       fields: [
         {
@@ -336,7 +336,7 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
           label: "O que voce precisa",
           type: "select",
           required: true,
-          options: ["Liberacao do modulo", "Ajuste de configuracao", "Suporte de uso", "Conferencia de lancamentos"],
+          options: ["Liberação do módulo", "Ajuste de configuração", "Suporte de uso", "Conferência de lançamentos"],
         },
         { name: "periodo_caixa", label: "Periodo ou referencia", type: "text", placeholder: "Opcional" },
       ],
@@ -395,7 +395,7 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       key: "proposta_ou_plano",
       label: "Proposta, plano ou escopo",
       sector: "Comercial",
-      description: "Use para falar de proposta comercial, ajuste de escopo ou revisao de plano.",
+      description: "Use para falar de proposta comercial, ajuste de escopo ou revisão de plano.",
       defaultTitle: "Proposta, plano ou escopo",
       fields: [
         {
@@ -441,7 +441,7 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       key: "outro_assunto",
       label: "Outro assunto",
       sector: "Geral",
-      description: "Se o pedido nao encaixar nas categorias acima, use este caminho e detalhe o contexto.",
+      description: "Se o pedido não encaixar nas categorias acima, use este caminho e detalhe o contexto.",
       defaultTitle: "Solicitacao geral",
       fields: [
         {
@@ -625,7 +625,7 @@ export default function PortalClientePage() {
       } = await supabase.auth.getSession();
 
       if (sessionError) {
-        throw new Error("Nao foi possivel validar a sessao atual.");
+        throw new Error("Não foi possível validar a sessão atual.");
       }
 
       const accessToken = activeSession?.access_token;
@@ -1179,7 +1179,7 @@ export default function PortalClientePage() {
   const openRequestDetailById = useCallback((requestId: string) => {
     const request = requests.find((item) => item.id === requestId);
     if (!request) {
-      toast.error("Nao foi possivel abrir esta solicitacao.");
+      toast.error("Não foi possível abrir esta solicitação.");
       return;
     }
     setSelectedRequest(request);
@@ -1632,7 +1632,7 @@ export default function PortalClientePage() {
 
   const handleCreateOpenFinanceSession = async (): Promise<string | null> => {
     if (!clientProfile?.id) {
-      toast.error("Cliente nao vinculado ao portal.");
+      toast.error("Cliente não vinculado ao portal.");
       return null;
     }
 
@@ -1648,11 +1648,11 @@ export default function PortalClientePage() {
       });
 
       if (!data.sessionToken || typeof data.sessionToken !== "string") {
-        throw new Error("Nao foi possivel iniciar a sessao de conexao.");
+        throw new Error("Não foi possível iniciar a sessão de conexão.");
       }
       return data.sessionToken;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao iniciar conexao bancaria.");
+      toast.error(error instanceof Error ? error.message : "Erro ao iniciar conexão bancária.");
       return null;
     } finally {
       setOpenFinanceConnecting(false);
@@ -1661,7 +1661,7 @@ export default function PortalClientePage() {
 
   const handleManualSyncOpenFinance = async (connectionId: string): Promise<OpenFinanceSyncStatus | null> => {
     if (!clientProfile?.id) {
-      toast.error("Cliente nao vinculado ao portal.");
+      toast.error("Cliente não vinculado ao portal.");
       return null;
     }
 
@@ -1684,7 +1684,7 @@ export default function PortalClientePage() {
 
   const handleDisconnectOpenFinance = async (connectionId: string) => {
     if (!clientProfile?.id) {
-      toast.error("Cliente nao vinculado ao portal.");
+      toast.error("Cliente não vinculado ao portal.");
       return false;
     }
 
@@ -2155,7 +2155,7 @@ export default function PortalClientePage() {
                     <div className="space-y-1">
                       <CardTitle className="text-base">Historico de solicitacoes</CardTitle>
                       <p className="text-sm text-muted-foreground">
-                        Consulte andamento, retornos da equipe e documentos vinculados em um modulo separado do envio.
+                        Consulte andamento, retornos da equipe e documentos vinculados em um módulo separado do envio.
                       </p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -2443,7 +2443,7 @@ export default function PortalClientePage() {
                   sector: "Financeiro",
                   reasonKey: "controle_caixa",
                   title: "Liberacao do controle de caixa no portal",
-                  description: "Solicito a liberacao do modulo de controle de caixa para uso no portal do cliente.",
+                  description: "Solicito a liberação do módulo de controle de caixa para uso no portal do cliente.",
                 })
               }
             />
@@ -2466,7 +2466,7 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">1. Abra uma solicitação</p>
                       <p className="text-sm text-muted-foreground">
-                        Use a aba de solicitacoes para escolher setor, motivo e preencher os campos certos na propria pagina.
+                        Use a aba de solicitações para escolher setor, motivo e preencher os campos certos na própria página.
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("freeform")}>
@@ -2508,7 +2508,7 @@ export default function PortalClientePage() {
                     <div>
                       <p className="font-medium">4. Acompanhe o controle de caixa (quando liberado)</p>
                       <p className="text-sm text-muted-foreground">
-                        Se o admin liberar este modulo, voce pode registrar entradas e saidas e acompanhar os indicadores de caixa.
+                        Se o admin liberar este módulo, você pode registrar entradas e saídas e acompanhar os indicadores de caixa.
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setActiveTab("cashflow")}>
@@ -2716,7 +2716,7 @@ export default function PortalClientePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Nao vincular agora</SelectItem>
+                  <SelectItem value="none">Não vincular agora</SelectItem>
                   {requests.map((request) => (
                     <SelectItem key={request.id} value={request.id}>
                       {request.title}

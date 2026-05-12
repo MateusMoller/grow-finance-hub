@@ -119,7 +119,7 @@ export function GrowAssistantWidget({
         {
           id: `assistant-error-${Date.now()}`,
           role: "assistant",
-          text: "Nao consegui concluir esta consulta agora. Tente novamente ou encaminhe para a equipe.",
+          text: "Não consegui concluir esta consulta agora. Tente novamente ou encaminhe para a equipe.",
         },
       ]);
     } finally {

@@ -62,7 +62,7 @@ export default function SolutionsPage() {
               <span className="text-primary">gestão do seu negócio</span>
             </h1>
             <p className="text-base text-muted-foreground md:text-lg">
-              Cada servico e desenhado para se integrar com os demais, formando um ecossistema digital completo.
+              Cada serviço é desenhado para se integrar com os demais, formando um ecossistema digital completo.
             </p>
           </motion.div>
 

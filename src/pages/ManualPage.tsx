@@ -63,12 +63,12 @@ interface FlowGuide {
 
 const contextMap: ContextScreen[] = [
   {
-    context: "Site publico (institucional)",
-    objective: "Atrair leads e apresentar servicos.",
+    context: "Site público (institucional)",
+    objective: "Atrair leads e apresentar serviços.",
     mainScreens: ["Inicio", "Sobre", "Solucoes", "Contato", "Newsletter publica"],
   },
   {
-    context: "App interno (operacao Grow)",
+    context: "App interno (operação Grow)",
     objective: "Executar rotina, controlar prazos e operar clientes.",
     mainScreens: [
       "Dashboard",
@@ -95,7 +95,7 @@ const contextMap: ContextScreen[] = [
       "Historico",
       "Obrigacoes (envios do e-continuo)",
       "Controle de caixa",
-      "Manual do usuario",
+      "Manual do usuário",
       "Configuracoes",
     ],
   },
@@ -125,11 +125,11 @@ const glossary: GlossaryItem[] = [
   {
     term: "Competencia",
     meaning: "Periodo de referencia para leitura de dados e filtros globais.",
-    whereUsed: "Dashboard, relatorios e filtros de operacao",
+    whereUsed: "Dashboard, relatórios e filtros de operação",
   },
   {
     term: "Open Finance",
-    meaning: "Conexao para leitura de dados bancarios no modulo de caixa, sem pagamento pelo portal.",
+    meaning: "Conexão para leitura de dados bancários no módulo de caixa, sem pagamento pelo portal.",
     whereUsed: "Portal (controle de caixa) e financeiro",
   },
 ];
@@ -142,17 +142,17 @@ const moduleGuides: ModuleGuide[] = [
     icon: LayoutDashboard,
     objective: "Ler rapidamente volume, alertas e prioridades do dia.",
     features: [
-      "Visao consolidada por filtros globais (empresa e competencia).",
+      "Visão consolidada por filtros globais (empresa e competência).",
       "Entrada para identificar gargalos operacionais.",
-      "Atalho para abrir modulos de origem e agir sem trocar fluxo.",
+      "Atalho para abrir módulos de origem e agir sem trocar fluxo.",
     ],
     flow: [
       "Ajustar filtros globais.",
       "Ler cards de risco e carga de trabalho.",
-      "Abrir o modulo de origem para tratar o item critico.",
+      "Abrir o módulo de origem para tratar o item crítico.",
     ],
     carePoints: [
-      "Nao analisar numero sem confirmar filtro ativo.",
+      "Não analisar número sem confirmar filtro ativo.",
       "Atualizar tarefas e status para manter indicadores confiaveis.",
     ],
   },
@@ -165,7 +165,7 @@ const moduleGuides: ModuleGuide[] = [
     features: [
       "Leitura por periodo para antecipar semanas criticas.",
       "Apoio para balancear volume entre equipe e prioridades.",
-      "Visao de compromissos recorrentes da operacao.",
+      "Visão de compromissos recorrentes da operação.",
     ],
     flow: [
       "Abrir semana atual.",
@@ -174,7 +174,7 @@ const moduleGuides: ModuleGuide[] = [
     ],
     carePoints: [
       "Evitar concentrar entregas no ultimo dia.",
-      "Revisar calendario no inicio e no fim do expediente.",
+      "Revisar calendário no início e no fim do expediente.",
     ],
   },
   {
@@ -182,20 +182,20 @@ const moduleGuides: ModuleGuide[] = [
     title: "Tarefas (Kanban + Lista)",
     access: "Todos os perfis internos",
     icon: ClipboardList,
-    objective: "Executar a operacao em uma unica entrada, com visao de quadro e lista.",
+    objective: "Executar a operação em uma única entrada, com visão de quadro e lista.",
     features: [
       "Modo Kanban como leitura principal da rotina.",
       "Modo Lista para detalhamento e filtros pontuais.",
-      "Criacao rapida de tarefa e atualizacao de status em fluxo continuo.",
+      "Criação rápida de tarefa e atualização de status em fluxo contínuo.",
     ],
     flow: [
       "Abrir em Kanban para leitura geral.",
       "Criar tarefa com responsavel, prazo e prioridade.",
-      "Mover status conforme execucao real.",
+      "Mover status conforme execução real.",
       "Usar Lista quando precisar de busca e recorte mais fino.",
     ],
     carePoints: [
-      "Nao deixar tarefa sem dono ou prazo.",
+      "Não deixar tarefa sem dono ou prazo.",
       "Evitar titulo generico sem contexto operacional.",
     ],
   },
@@ -206,9 +206,9 @@ const moduleGuides: ModuleGuide[] = [
     icon: Users,
     objective: "Centralizar cadastro, dados operacionais e comunicacao com o cliente.",
     features: [
-      "Dados gerais, mensais, cadastrais e obrigacoes por cliente.",
+      "Dados gerais, mensais, cadastrais e obrigações por cliente.",
       "Aba Pendencias para enviar demandas diretamente ao portal do cliente.",
-      "Criacao de pendencia com solicitacao vinculada e chat contextual.",
+      "Criação de pendência com solicitação vinculada e chat contextual.",
     ],
     flow: [
       "Abrir cliente e validar contexto da conta.",
@@ -238,7 +238,7 @@ const moduleGuides: ModuleGuide[] = [
       "Revisar metas e priorizar oportunidades de maior impacto.",
     ],
     carePoints: [
-      "Nao pular etapa sem justificativa registrada.",
+      "Não pular etapa sem justificativa registrada.",
       "Fechar itens parados para evitar funil inflado.",
     ],
   },
@@ -256,10 +256,10 @@ const moduleGuides: ModuleGuide[] = [
     flow: [
       "Enviar mensagem com contexto e acao esperada.",
       "Indicar urgencia quando houver impacto em prazo.",
-      "Confirmar conclusao para encerrar assunto.",
+      "Confirmar conclusão para encerrar assunto.",
     ],
     carePoints: [
-      "Nao substituir tarefa por mensagem de chat.",
+      "Não substituir tarefa por mensagem de chat.",
       "Evitar mensagens vagas sem dono e sem prazo.",
     ],
   },
@@ -270,7 +270,7 @@ const moduleGuides: ModuleGuide[] = [
     icon: Newspaper,
     objective: "Publicar conteudo e disparar comunicacao para a base.",
     features: [
-      "Criacao e edicao de newsletters com slug publico.",
+      "Criação e edição de newsletters com slug público.",
       "Publicacao e envio de e-mails para assinantes.",
       "Upload de imagens e midias (imagem, video e audio) no editor.",
     ],
@@ -281,7 +281,7 @@ const moduleGuides: ModuleGuide[] = [
     ],
     carePoints: [
       "Revisar links e conteudo antes de publicar.",
-      "Nao disparar e-mail com newsletter ainda em rascunho.",
+      "Não disparar e-mail com newsletter ainda em rascunho.",
     ],
   },
   {
@@ -289,7 +289,7 @@ const moduleGuides: ModuleGuide[] = [
     title: "Relatorios",
     access: "Admin e liderancas",
     icon: BarChart3,
-    objective: "Transformar operacao em leitura gerencial.",
+    objective: "Transformar operação em leitura gerencial.",
     features: [
       "Relatorios por area e periodo.",
       "Comparacao de desempenho e volume.",
@@ -310,16 +310,16 @@ const moduleGuides: ModuleGuide[] = [
     title: "Financeiro",
     access: "Perfis internos habilitados",
     icon: Wallet,
-    objective: "Controlar entradas, saidas, classificacoes e pendencias financeiras.",
+    objective: "Controlar entradas, saídas, classificações e pendências financeiras.",
     features: [
       "Gestao de movimentacoes e status de tratamento.",
-      "Classificacao por regras para acelerar operacao.",
+      "Classificação por regras para acelerar operação.",
       "Leitura integrada de origem, incluindo Open Finance.",
     ],
     flow: [
       "Revisar movimentos por status e categoria.",
       "Aplicar ajustes de classificacao e aprovacoes.",
-      "Tratar pendencias para manter caixa consistente.",
+      "Tratar pendências para manter caixa consistente.",
     ],
     carePoints: [
       "Separar claramente pendencia de conciliacao x pendencia operacional.",
@@ -331,22 +331,22 @@ const moduleGuides: ModuleGuide[] = [
     title: "Obrigacoes",
     access: "Perfis internos habilitados",
     icon: FileSpreadsheet,
-    objective: "Controlar obrigacoes e centralizar os envios/documentos operacionais no mesmo modulo.",
+    objective: "Controlar obrigações e centralizar os envios/documentos operacionais no mesmo módulo.",
     features: [
-      "Leitura de obrigacoes por cliente, status e prazo.",
-      "Acompanhamento de execucao em conjunto com tarefas e calendario.",
+      "Leitura de obrigações por cliente, status e prazo.",
+      "Acompanhamento de execução em conjunto com tarefas e calendário.",
       "Central de Documentos integrada para envio, triagem e historico.",
-      "Base para rotinas recorrentes e previsao de carga.",
+      "Base para rotinas recorrentes e previsão de carga.",
     ],
     flow: [
-      "Filtrar por cliente e competencia.",
-      "Validar status e prazo tecnico.",
+      "Filtrar por cliente e competência.",
+      "Validar status e prazo técnico.",
       "Usar a aba de documentos para enviar, revisar e consultar anexos.",
       "Encaminhar tratativas para tarefa quando necessario.",
     ],
     carePoints: [
-      "Nao deixar obrigacao sem status atualizado.",
-      "Evitar processar fora de prioridade de prazo tecnico.",
+      "Não deixar obrigação sem status atualizado.",
+      "Evitar processar fora de prioridade de prazo técnico.",
     ],
   },
   {
@@ -358,17 +358,17 @@ const moduleGuides: ModuleGuide[] = [
     features: [
       "Notificacoes para leitura de risco e prioridade.",
       "Usuarios para controle de acessos (admin).",
-      "Sugestoes para registrar melhorias e gerar pendencias internas.",
+      "Sugestões para registrar melhorias e gerar pendências internas.",
       "Configuracoes para dados de conta e preferencias.",
     ],
     flow: [
       "Tratar alertas prioritarios no inicio do dia.",
-      "Ajustar acessos de usuarios quando necessario.",
-      "Registrar sugestoes com contexto e anexo quando existir evidencias.",
-      "Revisar configuracoes de conta periodicamente.",
+      "Ajustar acessos de usuários quando necessário.",
+      "Registrar sugestões com contexto e anexo quando existir evidências.",
+      "Revisar configurações de conta periodicamente.",
     ],
     carePoints: [
-      "Nao marcar notificacao como lida sem acao.",
+      "Não marcar notificação como lida sem ação.",
       "Aplicar principio de menor privilegio em acessos.",
     ],
   },
@@ -377,9 +377,9 @@ const moduleGuides: ModuleGuide[] = [
 const portalGuide: PortalGuideItem[] = [
   {
     tab: "Painel geral",
-    purpose: "Resumo rapido do que esta aguardando acao do cliente.",
+    purpose: "Resumo rápido do que está aguardando ação do cliente.",
     actions: [
-      "Ver pendencias e atualizacoes recentes.",
+      "Ver pendências e atualizações recentes.",
       "Abrir historico ou iniciar nova solicitacao sem trocar contexto.",
     ],
   },
@@ -411,10 +411,10 @@ const portalGuide: PortalGuideItem[] = [
   },
   {
     tab: "Controle de caixa",
-    purpose: "Gerir caixa e conectores financeiros quando o modulo estiver liberado.",
+    purpose: "Gerir caixa e conectores financeiros quando o módulo estiver liberado.",
     actions: [
       "Registrar entradas e saidas.",
-      "Acompanhar saude financeira e pendencias de conciliacao.",
+      "Acompanhar saúde financeira e pendências de conciliação.",
       "Conectar Open Finance para leitura de extratos (sem pagamento no portal).",
     ],
   },
@@ -424,7 +424,7 @@ const portalGuide: PortalGuideItem[] = [
     actions: [
       "Atualizar senha do portal.",
       "Solicitar atualizacao cadastral e suporte de acesso.",
-      "Ver status de liberacao do modulo de caixa.",
+      "Ver status de liberação do módulo de caixa.",
     ],
   },
 ];
@@ -451,7 +451,7 @@ const practicalFlows: FlowGuide[] = [
   {
     title: "Fluxo de newsletter com midias",
     steps: [
-      "Admin abre Newsletter, cria ou edita edicao.",
+      "Admin abre Newsletter, cria ou edita edição.",
       "Envia imagem/video/audio no bloco de midias do editor.",
       "Publica newsletter e dispara envio de e-mails quando aprovado.",
     ],
@@ -459,9 +459,9 @@ const practicalFlows: FlowGuide[] = [
 ];
 
 const internalDailyChecklist = [
-  "Revisar notificacoes de alta prioridade.",
+  "Revisar notificações de alta prioridade.",
   "Atualizar status de tarefas (kanban/lista) com o que foi executado.",
-  "Conferir pendencias de clientes que aguardam retorno.",
+  "Conferir pendências de clientes que aguardam retorno.",
   "Registrar avancos comerciais no CRM.",
   "Encerrar dia com proximas acoes claras para amanha.",
 ];
@@ -485,7 +485,7 @@ export default function ManualPage() {
             <div className="space-y-1">
               <h1 className="font-heading text-2xl font-bold">Manual de uso - Grow Finance Hub</h1>
               <p className="text-sm text-muted-foreground">
-                Versao atualizada com as telas e fluxos ativos do sistema, incluindo portal do cliente, pendencias vinculadas e newsletter com midias.
+                Versão atualizada com as telas e fluxos ativos do sistema, incluindo portal do cliente, pendências vinculadas e newsletter com mídias.
               </p>
             </div>
           </div>
@@ -493,13 +493,13 @@ export default function ManualPage() {
           <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
             <a href="#mapa" className="rounded-lg border p-3 hover:bg-muted">1. Mapa do sistema</a>
             <a href="#nomenclaturas" className="rounded-lg border p-3 hover:bg-muted">2. Nomenclaturas</a>
-            <a href="#modulos" className="rounded-lg border p-3 hover:bg-muted">3. Modulos internos</a>
+            <a href="#modulos" className="rounded-lg border p-3 hover:bg-muted">3. Módulos internos</a>
             <a href="#portal" className="rounded-lg border p-3 hover:bg-muted">4. Portal do cliente</a>
             <a href="#fluxos" className="rounded-lg border p-3 hover:bg-muted">5. Fluxos ponta a ponta</a>
           </div>
 
           <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-            Regra de uso: sempre trabalhe no modulo dono do fluxo. Evite tirar a demanda do contexto original.
+            Regra de uso: sempre trabalhe no módulo dono do fluxo. Evite tirar a demanda do contexto original.
           </div>
         </div>
 
@@ -530,7 +530,7 @@ export default function ManualPage() {
             <Filter className="h-5 w-5 text-primary" /> 2) Nomenclaturas operacionais
           </h2>
           <p className="text-sm text-muted-foreground">
-            Use estes termos como padrao para alinhar atendimento, operacao e cliente no mesmo idioma.
+            Use estes termos como padrão para alinhar atendimento, operação e cliente no mesmo idioma.
           </p>
           <div className="grid gap-3 md:grid-cols-2">
             {glossary.map((item) => (
@@ -545,10 +545,10 @@ export default function ManualPage() {
 
         <section id="modulos" className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-primary" /> 3) Guia dos modulos internos
+            <CheckCircle2 className="h-5 w-5 text-primary" /> 3) Guia dos módulos internos
           </h2>
           <p className="text-sm text-muted-foreground">
-            Este bloco cobre as telas da barra lateral interna e o fluxo recomendado de uso por modulo.
+            Este bloco cobre as telas da barra lateral interna e o fluxo recomendado de uso por módulo.
           </p>
           <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {moduleGuides.map((module, index) => (
@@ -576,7 +576,7 @@ export default function ManualPage() {
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className={blockClass}>
-                  <p className="text-sm font-semibold">Objetivo do modulo</p>
+                  <p className="text-sm font-semibold">Objetivo do módulo</p>
                   <p className="text-sm text-muted-foreground">{module.objective}</p>
                 </div>
 
@@ -638,7 +638,7 @@ export default function ManualPage() {
             <History className="h-5 w-5 text-primary" /> 5) Fluxos ponta a ponta (atualizados)
           </h2>
           <p className="text-sm text-muted-foreground">
-            Estes fluxos refletem o comportamento atual das telas e sao o padrao recomendado de operacao.
+            Estes fluxos refletem o comportamento atual das telas e são o padrão recomendado de operação.
           </p>
           <div className="grid gap-3 lg:grid-cols-3">
             {practicalFlows.map((flow) => (
@@ -677,7 +677,7 @@ export default function ManualPage() {
             </div>
           </div>
           <div className="rounded-lg border bg-primary/5 p-3 text-sm">
-            Resultado esperado: menos retrabalho, historico completo por demanda e retorno mais rapido entre cliente e equipe.
+            Resultado esperado: menos retrabalho, histórico completo por demanda e retorno mais rápido entre cliente e equipe.
           </div>
         </section>
 
@@ -687,31 +687,31 @@ export default function ManualPage() {
           </h2>
           <div className="grid gap-2 text-sm md:grid-cols-2">
             <div className="rounded-lg border p-3">Dashboard e indicadores: <span className="text-muted-foreground">/app</span></div>
-            <div className="rounded-lg border p-3">Calendario: <span className="text-muted-foreground">/app/calendario</span></div>
+            <div className="rounded-lg border p-3">Calendário: <span className="text-muted-foreground">/app/calendario</span></div>
             <div className="rounded-lg border p-3">Tarefas (kanban/lista): <span className="text-muted-foreground">/app/tarefas</span></div>
-            <div className="rounded-lg border p-3">Clientes e pendencias: <span className="text-muted-foreground">/app/clientes</span></div>
+            <div className="rounded-lg border p-3">Clientes e pendências: <span className="text-muted-foreground">/app/clientes</span></div>
             <div className="rounded-lg border p-3">CRM: <span className="text-muted-foreground">/app/crm</span></div>
             <div className="rounded-lg border p-3">Chat interno: <span className="text-muted-foreground">/app/chat-interno</span></div>
             <div className="rounded-lg border p-3">Newsletter admin: <span className="text-muted-foreground">/app/newsletter</span></div>
-            <div className="rounded-lg border p-3">Relatorios: <span className="text-muted-foreground">/app/relatorios</span></div>
+            <div className="rounded-lg border p-3">Relatórios: <span className="text-muted-foreground">/app/relatorios</span></div>
             <div className="rounded-lg border p-3">Financeiro: <span className="text-muted-foreground">/app/financeiro</span></div>
-            <div className="rounded-lg border p-3">Obrigacoes: <span className="text-muted-foreground">/app/obrigacoes</span></div>
+            <div className="rounded-lg border p-3">Obrigações: <span className="text-muted-foreground">/app/obrigacoes</span></div>
             <div className="rounded-lg border p-3">Portal do cliente: <span className="text-muted-foreground">/app/portal</span></div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Observacao: atalhos antigos como /app/solicitacoes, /app/kanban, /app/comercial, /app/acessorias e /app/econtinuo redirecionam para os modulos atuais.
+            Observação: atalhos antigos como /app/solicitacoes, /app/kanban, /app/comercial, /app/acessorias e /app/econtinuo redirecionam para os módulos atuais.
           </p>
         </section>
 
         <section className={sectionClass}>
           <h2 className="font-heading text-xl font-semibold flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" /> Onboarding rapido (novo usuario)
+            <MessageSquare className="h-5 w-5 text-primary" /> Onboarding rápido (novo usuário)
           </h2>
           <ol className="list-decimal pl-5 text-sm space-y-2">
             <li>Comecar por Dashboard, Tarefas e Clientes para entender o fluxo central.</li>
             <li>Treinar criacao de pendencia no cliente com solicitacao vinculada.</li>
             <li>Treinar resposta no historico do portal para fechar o ciclo cliente x equipe.</li>
-            <li>Se for admin, validar tambem Newsletter com upload de midias e modulo de Usuarios.</li>
+            <li>Se for admin, validar também Newsletter com upload de mídias e módulo de Usuários.</li>
           </ol>
           <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
             Sempre que uma tela mudar, atualize este manual junto da entrega para manter processo, linguagem e treinamento alinhados.

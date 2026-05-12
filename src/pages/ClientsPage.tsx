@@ -216,7 +216,7 @@ export default function ClientsPage() {
 
   const openCreateDialog = () => {
     if (!canCreateClients) {
-      toast.error("Seu perfil nÃ£o possui permissÃ£o para cadastrar clientes.");
+      toast.error("Seu perfil não possui permissão para cadastrar clientes.");
       return;
     }
 
@@ -242,7 +242,7 @@ export default function ClientsPage() {
 
       if (error || !data?.data) {
         if (!options?.auto) {
-          toast.error(data?.error || "Nao foi possivel consultar o CNPJ no momento.");
+          toast.error(data?.error || "Não foi possível consultar o CNPJ no momento.");
         }
         return;
       }
@@ -286,18 +286,18 @@ export default function ClientsPage() {
 
   const handleCreate = async () => {
     if (!canCreateClients) {
-      toast.error("Seu perfil nÃ£o possui permissÃ£o para cadastrar clientes.");
+      toast.error("Seu perfil não possui permissão para cadastrar clientes.");
       return;
     }
 
     if (!newClient.name.trim()) {
-      toast.error("Informe a razÃ£o social do cliente.");
+      toast.error("Informe a razão social do cliente.");
       return;
     }
 
     const normalizedEmail = normalizeEmail(newClient.email);
     if (!isValidEmail(normalizedEmail)) {
-      toast.error("Informe um e-mail vÃ¡lido para o portal.");
+      toast.error("Informe um e-mail válido para o portal.");
       return;
     }
 
@@ -358,7 +358,7 @@ export default function ClientsPage() {
 
     if (error) {
       const errorMessage = await parseFunctionErrorMessage(error);
-      toast.error(errorMessage || "NÃ£o foi possÃ­vel cadastrar o cliente.");
+      toast.error(errorMessage || "Não foi possível cadastrar o cliente.");
       return;
     }
 
@@ -459,7 +459,7 @@ export default function ClientsPage() {
                       </td>
                       <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
                       <td className="hidden p-4 text-sm lg:table-cell">{client.regime}</td>
-                      <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "NÃ£o informado"}</td>
+                      <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
                       <td className="p-4">
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[client.status || ""] || "bg-muted"}`}
@@ -517,7 +517,7 @@ export default function ClientsPage() {
                             </td>
                             <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
                             <td className="hidden p-4 text-sm lg:table-cell">{client.regime}</td>
-                            <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "NÃ£o informado"}</td>
+                            <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
                             <td className="p-4">
                               <span
                                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[client.status || ""] || "bg-muted"}`}

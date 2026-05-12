@@ -147,7 +147,7 @@ export default function ConfiguracoesPage() {
   });
 
   const upsertUserSettings = async (payload: Partial<Omit<TablesInsert<"user_settings">, "user_id">>) => {
-    if (!user) return { error: new Error("Usuario nao autenticado.") };
+    if (!user) return { error: new Error("Usuário não autenticado.") };
     return supabase.from("user_settings").upsert({ user_id: user.id, ...payload }, { onConflict: "user_id" });
   };
 
@@ -165,7 +165,7 @@ export default function ConfiguracoesPage() {
     ]);
 
     if (profileRes.error) toast.error("Falha ao carregar perfil.");
-    if (settingsRes.error) toast.error("Falha ao carregar configuracoes.");
+    if (settingsRes.error) toast.error("Falha ao carregar configurações.");
     if (tokenStatusRes.error) toast.error("Falha ao carregar o status do token.");
 
     const profile = profileRes.data;
@@ -310,7 +310,7 @@ export default function ConfiguracoesPage() {
       notify_daily_email: notificationSettings.dailyEmail,
     });
     setSavingSection(null);
-    if (error) return toast.error("Erro ao salvar notificacoes.");
+    if (error) return toast.error("Erro ao salvar notificações.");
     toast.success("Notificacoes salvas.");
   };
 
@@ -325,7 +325,7 @@ export default function ConfiguracoesPage() {
     void upsertUserSettings({ theme_preference: normalized })
       .then(({ error }) => {
         if (error) {
-          toast.error("Nao foi possivel salvar o tema automaticamente.");
+          toast.error("Não foi possível salvar o tema automaticamente.");
         }
       })
       .finally(() => {
@@ -381,13 +381,13 @@ export default function ConfiguracoesPage() {
     setIntegrationTokenAction(null);
 
     if (error || !data) {
-      toast.error("Nao foi possivel gerar um novo token seguro.");
+      toast.error("Não foi possível gerar um novo token seguro.");
       return;
     }
 
     setIntegrationTokenStatus(data);
     setIntegrationSettings((prev) => ({ ...prev, apiAccess: data.enabled }));
-    toast.success("Novo token gerado. Copie-o agora; ele nao sera exibido novamente.");
+    toast.success("Novo token gerado. Copie-o agora; ele não será exibido novamente.");
   };
 
   const handleIntegrationAccessToggle = async (enabled: boolean) => {
@@ -401,7 +401,7 @@ export default function ConfiguracoesPage() {
     setIntegrationTokenAction(null);
 
     if (error || !data) {
-      toast.error("Nao foi possivel atualizar o acesso por token.");
+      toast.error("Não foi possível atualizar o acesso por token.");
       return;
     }
 
@@ -417,7 +417,7 @@ export default function ConfiguracoesPage() {
       await navigator.clipboard.writeText(integrationTokenStatus.revealed_token);
       toast.success("Token copiado.");
     } catch {
-      toast.error("Nao foi possivel copiar o token.");
+      toast.error("Não foi possível copiar o token.");
     } finally {
       setIntegrationTokenAction(null);
     }
@@ -443,7 +443,7 @@ export default function ConfiguracoesPage() {
 
     const { error: updateError } = await supabase.auth.updateUser({ password: securityForm.newPassword });
     setSavingSection(null);
-    if (updateError) return toast.error("Nao foi possivel alterar a senha.");
+    if (updateError) return toast.error("Não foi possível alterar a senha.");
     setSecurityForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
     toast.success("Senha alterada com sucesso.");
   };
@@ -631,7 +631,7 @@ export default function ConfiguracoesPage() {
                 </div>
                 <Button className="mt-4" onClick={saveNotifications} disabled={savingSection === "notifications"}>
                   {savingSection === "notifications" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Salvar notificacoes
+                  Salvar notificações
                 </Button>
               </div>
             )}
@@ -698,7 +698,7 @@ export default function ConfiguracoesPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium">Sincronizacao com calendario</div>
+                      <div className="text-sm font-medium">Sincronização com calendário</div>
                       <div className="text-xs text-muted-foreground">Atualiza compromissos automaticamente</div>
                     </div>
                     <Switch
@@ -783,7 +783,7 @@ export default function ConfiguracoesPage() {
                       O valor completo do token so aparece no momento da geracao. Ultimo uso:{" "}
                       {integrationTokenStatus.last_used_at
                         ? new Date(integrationTokenStatus.last_used_at).toLocaleString("pt-BR")
-                        : "ainda nao utilizado"}
+                        : "ainda não utilizado"}
                       .
                     </p>
                   </div>

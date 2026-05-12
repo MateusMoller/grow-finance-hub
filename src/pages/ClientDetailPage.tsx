@@ -1302,7 +1302,7 @@ export default function ClientDetailPage() {
     setPortalTasks((tasksRes.data || []) as ClientPortalTaskRow[]);
 
     if (tasksRes.error) {
-      toast.error("Não foi possível carregar as pendencias do cliente.");
+      toast.error("Não foi possível carregar as pendências do cliente.");
     }
 
     if (normalizedClient.portal_user_id) {
@@ -1465,7 +1465,7 @@ export default function ClientDetailPage() {
       });
 
       if (error || !data?.data) {
-        const message = data?.error || "Nao foi possivel consultar o CNPJ no momento.";
+        const message = data?.error || "Não foi possível consultar o CNPJ no momento.";
         if (!options?.auto) {
           toast.error(message);
         }
@@ -1942,7 +1942,7 @@ export default function ClientDetailPage() {
     if (!id || !user?.id) return;
 
     if (!client?.portal_user_id || !portalAccessEnabled) {
-      toast.error("Libere o acesso ao portal deste cliente antes de criar pendencias.");
+      toast.error("Libere o acesso ao portal deste cliente antes de criar pendências.");
       return;
     }
 
@@ -1980,7 +1980,7 @@ export default function ClientDetailPage() {
         .single();
 
       if (requestError || !requestData?.id) {
-        toast.error("Nao foi possivel criar a solicitacao vinculada.");
+        toast.error("Não foi possível criar a solicitação vinculada.");
         return;
       }
 
@@ -1996,7 +1996,7 @@ export default function ClientDetailPage() {
 
         if (messageError) {
           await supabase.from("client_requests").delete().eq("id", requestData.id);
-          toast.error("Nao foi possivel iniciar o chat da solicitacao.");
+          toast.error("Não foi possível iniciar o chat da solicitação.");
           return;
         }
       }
@@ -2021,7 +2021,7 @@ export default function ClientDetailPage() {
         if (linkedRequestId) {
           await supabase.from("client_requests").delete().eq("id", linkedRequestId);
         }
-        toast.error("Nao foi possivel criar a pendencia vinculada ao portal.");
+        toast.error("Não foi possível criar a pendência vinculada ao portal.");
         return;
       }
 
@@ -2375,7 +2375,7 @@ export default function ClientDetailPage() {
             >
               <option value="">-</option>
               <option value="sim">Sim</option>
-              <option value="nao">Nao</option>
+              <option value="nao">Não</option>
             </select>
           ) : (
             <Input
@@ -2641,7 +2641,7 @@ export default function ClientDetailPage() {
             <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
             <TabsTrigger value="obrigações">Obrigações</TabsTrigger>
-            <TabsTrigger value="pendencias">Pendencias</TabsTrigger>
+            <TabsTrigger value="pendencias">Pendências</TabsTrigger>
           </TabsList>
 
           {/* General Info */}
@@ -3180,7 +3180,7 @@ export default function ClientDetailPage() {
 
               {(!client?.portal_user_id || !portalAccessEnabled) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
-                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendencias sejam exibidas para ele.
+                  Este cliente ainda não tem acesso ativo ao portal. Libere o acesso para que as pendências sejam exibidas para ele.
                 </div>
               )}
 

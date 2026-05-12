@@ -451,7 +451,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="p-5">
                   {summary.dailyDone.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Sem dados de conclusao.</div>
+                    <div className="text-sm text-muted-foreground">Sem dados de conclusão.</div>
                   ) : (
                     <div className="grid grid-cols-7 gap-3 items-end h-40">
                       {summary.dailyDone.map((point) => (

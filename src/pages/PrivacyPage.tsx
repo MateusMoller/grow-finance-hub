@@ -4,43 +4,43 @@ const privacySections = [
   {
     title: "1. Dados que podemos coletar",
     paragraphs: [
-      "Podemos coletar dados fornecidos diretamente por voce em formularios, cadastro de newsletter, contatos comerciais e acessos a areas protegidas do sistema.",
-      "Esses dados podem incluir nome, e-mail, telefone, empresa, cargo, informacoes de uso da plataforma e dados tecnicos necessarios para seguranca, autenticacao e melhoria da experiencia.",
+      "Podemos coletar dados fornecidos diretamente por você em formulários, cadastro de newsletter, contatos comerciais e acessos a áreas protegidas do sistema.",
+      "Esses dados podem incluir nome, e-mail, telefone, empresa, cargo, informações de uso da plataforma e dados técnicos necessários para segurança, autenticação e melhoria da experiência.",
     ],
   },
   {
-    title: "2. Como os dados sao utilizados",
+    title: "2. Como os dados são utilizados",
     paragraphs: [
-      "Os dados sao utilizados para responder solicitacoes, operar funcionalidades do site e da area interna, enviar comunicacoes relacionadas ao servico, melhorar fluxos de atendimento e manter seguranca da plataforma.",
-      "Tambem podemos utilizar informacoes para analise interna, acompanhamento de performance dos servicos, prevencao de fraude e cumprimento de obrigacoes legais e regulatorias.",
+      "Os dados são utilizados para responder solicitações, operar funcionalidades do site e da área interna, enviar comunicações relacionadas ao serviço, melhorar fluxos de atendimento e manter segurança da plataforma.",
+      "Também podemos utilizar informações para análise interna, acompanhamento de performance dos serviços, prevenção de fraude e cumprimento de obrigações legais e regulatórias.",
     ],
   },
   {
-    title: "3. Compartilhamento de informacoes",
+    title: "3. Compartilhamento de informações",
     paragraphs: [
-      "Nao comercializamos dados pessoais. O compartilhamento pode ocorrer apenas quando necessario para operacao tecnica do servico, integracoes contratadas, atendimento de exigencia legal ou defesa de direitos da Grow.",
-      "Sempre que houver participacao de terceiros no tratamento de dados, buscamos trabalhar com fornecedores que adotem padroes adequados de confidencialidade e seguranca.",
+      "Não comercializamos dados pessoais. O compartilhamento pode ocorrer apenas quando necessário para operação técnica do serviço, integrações contratadas, atendimento de exigência legal ou defesa de direitos da Grow.",
+      "Sempre que houver participação de terceiros no tratamento de dados, buscamos trabalhar com fornecedores que adotem padrões adequados de confidencialidade e segurança.",
     ],
   },
   {
-    title: "4. Armazenamento, seguranca e retencao",
+    title: "4. Armazenamento, segurança e retenção",
     paragraphs: [
-      "Adotamos medidas tecnicas e organizacionais para proteger os dados contra acesso nao autorizado, perda, alteracao, divulgacao indevida ou qualquer tratamento inadequado.",
-      "Os dados sao mantidos pelo periodo necessario para cumprir as finalidades descritas nesta politica, atender obrigacoes legais, resguardar direitos e suportar a continuidade dos servicos.",
+      "Adotamos medidas técnicas e organizacionais para proteger os dados contra acesso não autorizado, perda, alteração, divulgação indevida ou qualquer tratamento inadequado.",
+      "Os dados são mantidos pelo período necessário para cumprir as finalidades descritas nesta política, atender obrigações legais, resguardar direitos e suportar a continuidade dos serviços.",
     ],
   },
   {
     title: "5. Direitos do titular",
     paragraphs: [
-      "Voce pode solicitar confirmacao de tratamento, acesso, correcao, atualizacao, anonimização quando aplicavel, exclusao ou informacoes sobre compartilhamento, nos termos da legislacao vigente.",
-      "Tambem pode revogar consentimentos quando o tratamento depender dessa base legal, observadas as hipoteses em que a manutencao dos dados seja necessaria por obrigacao legal ou execucao contratual.",
+      "Você pode solicitar confirmação de tratamento, acesso, correção, atualização, anonimização quando aplicável, exclusão ou informações sobre compartilhamento, nos termos da legislação vigente.",
+      "Também pode revogar consentimentos quando o tratamento depender dessa base legal, observadas as hipóteses em que a manutenção dos dados seja necessária por obrigação legal ou execução contratual.",
     ],
   },
   {
     title: "6. Contato sobre privacidade",
     paragraphs: [
-      "Solicitacoes relacionadas a privacidade, dados pessoais ou exercicio de direitos podem ser enviadas para os canais oficiais informados no site.",
-      "Ao continuar utilizando o site e os servicos da Grow, voce declara estar ciente desta Politica de Privacidade e das finalidades aqui descritas.",
+      "Solicitações relacionadas à privacidade, dados pessoais ou exercício de direitos podem ser enviadas para os canais oficiais informados no site.",
+      "Ao continuar utilizando o site e os serviços da Grow, você declara estar ciente desta Política de Privacidade e das finalidades aqui descritas.",
     ],
   },
 ];
@@ -49,12 +49,12 @@ export default function PrivacyPage() {
   return (
     <SiteLegalLayout
       eyebrow="Privacidade"
-      title="Politica de Privacidade"
-      description="Explicamos aqui como a Grow trata dados pessoais e informacoes coletadas em nossos canais institucionais e operacionais."
+      title="Política de Privacidade"
+      description="Explicamos aqui como a Grow trata dados pessoais e informações coletadas em nossos canais institucionais e operacionais."
       updatedAt="24 de abril de 2026"
       sections={privacySections}
       asideTitle="Compromisso"
-      asideText="Tratamos dados com foco em seguranca, uso legitimo e transparencia, sempre dentro do contexto necessario para operar nossos servicos e relacoes comerciais."
+      asideText="Tratamos dados com foco em segurança, uso legítimo e transparência, sempre dentro do contexto necessário para operar nossos serviços e relações comerciais."
     />
   );
 }
