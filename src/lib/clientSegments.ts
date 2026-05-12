@@ -1,6 +1,7 @@
 export const clientSegmentOptions = [
   "Vestuario",
   "Alimenticio",
+  "Farmacia",
   "Tecnologia",
   "Saude",
   "Educacao",
