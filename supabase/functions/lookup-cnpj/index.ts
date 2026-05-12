@@ -24,40 +24,6 @@ const FETCH_TIMEOUT_MS = 9000;
 
 type JsonRecord = Record<string, unknown>;
 
-type CnpjLookupResult = {
-  legal_name: string | null;
-  trade_name: string | null;
-  main_cnae: string | null;
-  cep: string | null;
-  street: string | null;
-  number: string | null;
-  neighborhood: string | null;
-  city: string | null;
-  state: string | null;
-  phone: string | null;
-  email: string | null;
-  source: string;
-  raw_payload: JsonRecord;
-};
-
-type CacheRow = {
-  cnpj: string;
-  legal_name: string | null;
-  trade_name: string | null;
-  main_cnae: string | null;
-  cep: string | null;
-  street: string | null;
-  number: string | null;
-  neighborhood: string | null;
-  city: string | null;
-  state: string | null;
-  phone: string | null;
-  email: string | null;
-  source: string | null;
-  raw_payload: JsonRecord | null;
-  updated_at: string;
-};
-
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -97,8 +63,7 @@ function normalizeState(value: unknown): string | null {
   const text = asTrimmedString(value);
   if (!text) return null;
   const letters = text.replace(/[^A-Za-z]/g, "").toUpperCase();
-  if (letters.length !== 2) return null;
-  return letters;
+  return letters.length === 2 ? letters : null;
 }
 
 function normalizePhone(value: unknown): string | null {
@@ -106,13 +71,11 @@ function normalizePhone(value: unknown): string | null {
   if (!text) return null;
   const digits = text.replace(/\D/g, "");
   if (digits.length < 10 || digits.length > 11) return null;
-
   const ddd = digits.slice(0, 2);
   const number = digits.slice(2);
-  if (number.length <= 8) {
-    return `(${ddd}) ${number.slice(0, 4)}-${number.slice(4)}`;
-  }
-  return `(${ddd}) ${number.slice(0, 5)}-${number.slice(5)}`;
+  return number.length <= 8
+    ? `(${ddd}) ${number.slice(0, 4)}-${number.slice(4)}`
+    : `(${ddd}) ${number.slice(0, 5)}-${number.slice(5)}`;
 }
 
 function normalizeEmail(value: unknown): string | null {
@@ -124,35 +87,15 @@ function normalizeEmail(value: unknown): string | null {
 
 function extractBearerToken(req: Request): string | null {
   const authorization = req.headers.get("authorization");
-  if (!authorization) return null;
-  if (!authorization.toLowerCase().startsWith("bearer ")) return null;
+  if (!authorization?.toLowerCase().startsWith("bearer ")) return null;
   const token = authorization.slice(7).trim();
   return token || null;
-}
-
-function mapCacheRowToResult(row: CacheRow): CnpjLookupResult {
-  return {
-    legal_name: row.legal_name,
-    trade_name: row.trade_name,
-    main_cnae: row.main_cnae,
-    cep: row.cep,
-    street: row.street,
-    number: row.number,
-    neighborhood: row.neighborhood,
-    city: row.city,
-    state: row.state,
-    phone: row.phone,
-    email: row.email,
-    source: row.source || "cache",
-    raw_payload: row.raw_payload || {},
-  };
 }
 
 function isFreshCache(updatedAt: string) {
   const updatedTime = new Date(updatedAt).getTime();
   if (!Number.isFinite(updatedTime)) return false;
-  const maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000;
-  return Date.now() - updatedTime <= maxAgeMs;
+  return Date.now() - updatedTime <= CACHE_TTL_HOURS * 60 * 60 * 1000;
 }
 
 async function fetchJsonWithTimeout(url: string) {
@@ -170,14 +113,17 @@ async function fetchJsonWithTimeout(url: string) {
       return { ok: false as const, status: response.status, data: null };
     }
 
-    const data = await response.json();
-    return { ok: true as const, status: response.status, data };
+    return {
+      ok: true as const,
+      status: response.status,
+      data: await response.json(),
+    };
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-function parseBrasilApiPayload(payload: JsonRecord): CnpjLookupResult | null {
+function parseBrasilApiPayload(payload: JsonRecord) {
   const legalName = asTrimmedString(payload.razao_social);
   if (!legalName) return null;
 
@@ -202,29 +148,26 @@ function parseBrasilApiPayload(payload: JsonRecord): CnpjLookupResult | null {
   };
 }
 
-async function lookupCnpj(cnpj: string): Promise<CnpjLookupResult> {
-  const attempts: string[] = [];
-
-  const brasilApiResponse = await fetchJsonWithTimeout(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-  if (brasilApiResponse.ok && brasilApiResponse.data) {
-    const payload = asRecord(brasilApiResponse.data);
+async function lookupCnpj(cnpj: string) {
+  const response = await fetchJsonWithTimeout(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+  if (response.ok) {
+    const payload = asRecord(response.data);
     if (payload) {
       const parsed = parseBrasilApiPayload(payload);
       if (parsed) return parsed;
-      attempts.push("BrasilAPI payload incompleto");
-    } else {
-      attempts.push("BrasilAPI payload invalido");
     }
-  } else {
-    attempts.push(`BrasilAPI HTTP ${brasilApiResponse.status}`);
   }
 
-  throw new Error(`Nao foi possivel consultar CNPJ agora. Falhas: ${attempts.join(" | ")}`);
+  throw new Error(
+    response.ok
+      ? "BrasilAPI retornou um payload incompleto para este CNPJ."
+      : `Nao foi possivel consultar CNPJ agora. BrasilAPI HTTP ${response.status}.`,
+  );
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
@@ -264,11 +207,9 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", callerUser.id);
 
-    if (rolesError) {
-      throw rolesError;
-    }
+    if (rolesError) throw rolesError;
 
-    const isInternal = (roleRows || []).some((row) => internalRoles.has(row.role));
+    const isInternal = (roleRows || []).some((row) => internalRoles.has(String(row.role || "")));
     if (!isInternal) {
       return jsonResponse({ error: "Only internal roles can query CNPJ lookup" }, 403);
     }
@@ -293,16 +234,28 @@ Deno.serve(async (req) => {
         .eq("cnpj", cnpj)
         .maybeSingle();
 
-      if (cacheReadError) {
-        throw cacheReadError;
-      }
+      if (cacheReadError) throw cacheReadError;
 
-      if (cachedRow && isFreshCache(cachedRow.updated_at)) {
+      if (cachedRow && isFreshCache(String(cachedRow.updated_at || ""))) {
         return jsonResponse({
           ok: true,
           cnpj,
           source: "cache",
-          data: mapCacheRowToResult(cachedRow as CacheRow),
+          data: {
+            legal_name: cachedRow.legal_name,
+            trade_name: cachedRow.trade_name,
+            main_cnae: cachedRow.main_cnae,
+            cep: cachedRow.cep,
+            street: cachedRow.street,
+            number: cachedRow.number,
+            neighborhood: cachedRow.neighborhood,
+            city: cachedRow.city,
+            state: cachedRow.state,
+            phone: cachedRow.phone,
+            email: cachedRow.email,
+            source: cachedRow.source || "cache",
+            raw_payload: (cachedRow.raw_payload as JsonRecord | null) || {},
+          },
           cached_at: cachedRow.updated_at,
         });
       }
@@ -310,31 +263,27 @@ Deno.serve(async (req) => {
 
     const lookupResult = await lookupCnpj(cnpj);
 
-    const cachePayload = {
-      cnpj,
-      legal_name: lookupResult.legal_name,
-      trade_name: lookupResult.trade_name,
-      main_cnae: lookupResult.main_cnae,
-      cep: lookupResult.cep,
-      street: lookupResult.street,
-      number: lookupResult.number,
-      neighborhood: lookupResult.neighborhood,
-      city: lookupResult.city,
-      state: lookupResult.state,
-      phone: lookupResult.phone,
-      email: lookupResult.email,
-      source: lookupResult.source,
-      raw_payload: lookupResult.raw_payload,
-      updated_at: new Date().toISOString(),
-    };
-
     const { error: cacheUpsertError } = await supabaseAdmin
       .from("cnpj_lookup_cache")
-      .upsert(cachePayload, { onConflict: "cnpj" });
+      .upsert({
+        cnpj,
+        legal_name: lookupResult.legal_name,
+        trade_name: lookupResult.trade_name,
+        main_cnae: lookupResult.main_cnae,
+        cep: lookupResult.cep,
+        street: lookupResult.street,
+        number: lookupResult.number,
+        neighborhood: lookupResult.neighborhood,
+        city: lookupResult.city,
+        state: lookupResult.state,
+        phone: lookupResult.phone,
+        email: lookupResult.email,
+        source: lookupResult.source,
+        raw_payload: lookupResult.raw_payload,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "cnpj" });
 
-    if (cacheUpsertError) {
-      throw cacheUpsertError;
-    }
+    if (cacheUpsertError) throw cacheUpsertError;
 
     return jsonResponse({
       ok: true,
@@ -342,15 +291,8 @@ Deno.serve(async (req) => {
       source: lookupResult.source,
       data: lookupResult,
     });
-  } catch (error: unknown) {
-    const message =
-      typeof error === "object" &&
-      error !== null &&
-      "message" in error &&
-      typeof (error as { message?: unknown }).message === "string"
-        ? (error as { message: string }).message
-        : "Unknown error";
-
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     return jsonResponse({ error: message }, 400);
   }
 });
