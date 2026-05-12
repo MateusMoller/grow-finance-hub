@@ -86,6 +86,9 @@ interface TemplateFormState {
   requires_document: boolean;
   operational_notes: string;
   linked_client_ids: string[];
+  completion_email_enabled: boolean;
+  completion_email_subject: string;
+  completion_email_body: string;
 }
 
 interface InstanceFormState {
@@ -187,6 +190,9 @@ function makeTemplateForm(template?: GrowObligationTemplate | null): TemplateFor
     requires_document: true,
     operational_notes: template?.operational_notes || "",
     linked_client_ids: [],
+    completion_email_enabled: template?.completion_email_enabled ?? false,
+    completion_email_subject: template?.completion_email_subject || "",
+    completion_email_body: template?.completion_email_body || "",
   };
 }
 
@@ -257,6 +263,12 @@ function validateTemplateForm(form: TemplateFormState) {
   if (!form.name.trim()) return "Informe o nome da obrigacao.";
   const documents = sanitizeExpectedDocuments(form.expected_documents);
   if (documents.length === 0) return "Cadastre pelo menos um documento esperado.";
+  if (form.completion_email_enabled && !form.completion_email_subject.trim()) {
+    return "Informe o assunto padrao do e-mail automatico.";
+  }
+  if (form.completion_email_enabled && !form.completion_email_body.trim()) {
+    return "Informe o corpo padrao do e-mail automatico.";
+  }
   return null;
 }
 
@@ -400,6 +412,9 @@ export function GrowObligationsWorkspace({
         requires_document: payload.requires_document,
         operational_notes: payload.operational_notes,
         linked_client_ids: payload.linked_client_ids,
+        completion_email_enabled: payload.completion_email_enabled,
+        completion_email_subject: payload.completion_email_subject || null,
+        completion_email_body: payload.completion_email_body || null,
       });
     },
     onSuccess: async () => {
@@ -1219,6 +1234,51 @@ export function GrowObligationsWorkspace({
             <div className="space-y-2"><Label>Prioridade</Label><Select value={templateForm.priority} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, priority: value as GrowObligationInstance["priority"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Dia do vencimento legal</Label><Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} /></div>
             <div className="space-y-2 md:col-span-2"><Label>Observacoes operacionais</Label><Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} /></div>
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>E-mail automatico ao concluir</Label>
+                <p className="text-xs text-muted-foreground">
+                  Dispara automaticamente para o e-mail do cliente quando a obrigacao for concluida por documento valido.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={templateForm.completion_email_enabled}
+                onChange={(event) =>
+                  setTemplateForm((prev) => ({
+                    ...prev,
+                    completion_email_enabled: event.target.checked,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2 md:col-span-2">
+                <Label>Assunto padrao</Label>
+                <Input
+                  value={templateForm.completion_email_subject}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_email_subject: event.target.value }))}
+                  placeholder="Ex.: {{obrigacao_nome}} concluida - {{competencia}}"
+                  disabled={!templateForm.completion_email_enabled}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Corpo padrao</Label>
+                <Textarea
+                  value={templateForm.completion_email_body}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_email_body: event.target.value }))}
+                  rows={6}
+                  placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                  disabled={!templateForm.completion_email_enabled}
+                />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+              Placeholders disponíveis: `{{cliente_nome}}`, `{{obrigacao_nome}}`, `{{competencia}}`, `{{setor}}`, `{{prazo_tecnico}}`.
+            </div>
           </div>
 
           <div className="space-y-3 rounded-2xl border border-border/70 p-4">

@@ -57,7 +57,6 @@ const ensureServiceWorkerRegistration = async () => {
     });
   }
 
-  await registration.update();
   await navigator.serviceWorker.ready;
   return registration;
 };

@@ -119,6 +119,9 @@ type TemplateRow = {
   generates_kanban: boolean;
   requires_document: boolean;
   operational_notes: string | null;
+  completion_email_enabled: boolean;
+  completion_email_subject: string | null;
+  completion_email_body: string | null;
 };
 
 type ProfileRow = {
@@ -220,6 +223,22 @@ function asTrimmedString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeEmail(value: unknown): string | null {
+  const email = asTrimmedString(value)?.toLowerCase();
+  if (!email) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function asStringArray(value: unknown): string[] {
@@ -490,7 +509,7 @@ async function buildAuthContext(req: Request) {
 async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, cnpj, sector, status")
+    .select("id, name, cnpj, sector, status, email, contact")
     .order("name");
 
   if (error) throw error;
@@ -504,6 +523,8 @@ async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
         cnpj: normalizeCnpj(asTrimmedString((row as JsonRecord).cnpj)),
         sector: asTrimmedString((row as JsonRecord).sector) || "Geral",
         status: asTrimmedString((row as JsonRecord).status) || "Ativo",
+        email: normalizeEmail((row as JsonRecord).email),
+        contact: asTrimmedString((row as JsonRecord).contact),
       },
     ]),
   );
@@ -1114,6 +1135,181 @@ function buildOperationalArchivePath(
   ].join("/");
 }
 
+function renderCompletionEmailTemplate(
+  templateText: string,
+  payload: {
+    clientName: string;
+    obligationName: string;
+    competence: string;
+    sector: string;
+    technicalDueDate: string;
+  },
+) {
+  return templateText
+    .replaceAll("{{cliente_nome}}", payload.clientName)
+    .replaceAll("{{obrigacao_nome}}", payload.obligationName)
+    .replaceAll("{{competencia}}", payload.competence)
+    .replaceAll("{{setor}}", payload.sector)
+    .replaceAll("{{prazo_tecnico}}", payload.technicalDueDate);
+}
+
+function buildCompletionEmailBodyHtml(body: string) {
+  return `
+    <div style="background:#f8fafc;padding:24px 12px;font-family:Arial,sans-serif;color:#0f172a;">
+      <div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e2e8f0;">
+        <div style="white-space:pre-line;font-size:14px;line-height:1.6;">${escapeHtml(body)}</div>
+      </div>
+    </div>
+  `;
+}
+
+async function sendEmailViaResend(params: {
+  apiKey: string;
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: params.from,
+      to: [params.to],
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+    }),
+  });
+
+  if (response.ok) {
+    return { ok: true as const };
+  }
+
+  const responseText = await response.text();
+  return {
+    ok: false as const,
+    status: response.status,
+    message: responseText || "Unknown provider error",
+  };
+}
+
+async function maybeSendCompletionEmail(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  template: TemplateRow,
+  instance: InstanceRow,
+  client: { id: string; name: string; email?: string | null },
+  inboxItem: InboxRow,
+) {
+  if (!template.completion_email_enabled) {
+    return { attempted: false as const, sent: false as const, reason: "disabled" };
+  }
+
+  const recipientEmail = normalizeEmail(client.email);
+  if (!recipientEmail) {
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "completion_email_failed",
+      null,
+      null,
+      "Obrigação concluída, mas o cliente não possui e-mail válido cadastrado.",
+      { inbox_item_id: inboxItem.id },
+    );
+    return { attempted: true as const, sent: false as const, reason: "missing_recipient" };
+  }
+
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  const senderEmail =
+    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
+    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
+    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+
+  if (!resendApiKey) {
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "completion_email_failed",
+      null,
+      null,
+      "Obrigação concluída, mas a chave de envio de e-mail não está configurada.",
+      { inbox_item_id: inboxItem.id },
+    );
+    return { attempted: true as const, sent: false as const, reason: "missing_api_key" };
+  }
+
+  const renderPayload = {
+    clientName: client.name,
+    obligationName: template.name,
+    competence: instance.competence_label,
+    sector: template.sector,
+    technicalDueDate: instance.technical_due_date,
+  };
+
+  const subject = renderCompletionEmailTemplate(
+    template.completion_email_subject || "{{obrigacao_nome}} concluída - {{competencia}}",
+    renderPayload,
+  );
+  const textBody = renderCompletionEmailTemplate(
+    template.completion_email_body ||
+      "Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}.",
+    renderPayload,
+  );
+  const htmlBody = buildCompletionEmailBodyHtml(textBody);
+
+  const sendResult = await sendEmailViaResend({
+    apiKey: resendApiKey,
+    from: senderEmail,
+    to: recipientEmail,
+    subject,
+    html: htmlBody,
+    text: textBody,
+  });
+
+  if (!sendResult.ok) {
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "completion_email_failed",
+      null,
+      null,
+      "Obrigação concluída, mas houve falha no disparo do e-mail automático.",
+      {
+        inbox_item_id: inboxItem.id,
+        provider_status: sendResult.status,
+        provider_message: sendResult.message,
+        recipient_email: recipientEmail,
+      },
+    );
+    return { attempted: true as const, sent: false as const, reason: "provider_error" };
+  }
+
+  await createInstanceEvent(
+    supabaseAdmin,
+    instance.id,
+    actorId,
+    "completion_email_sent",
+    null,
+    null,
+    `E-mail automático enviado para ${recipientEmail}.`,
+    {
+      inbox_item_id: inboxItem.id,
+      recipient_email: recipientEmail,
+      subject,
+    },
+  );
+
+  return { attempted: true as const, sent: true as const, recipientEmail };
+}
+
 async function determineInstanceDocumentStatus(
   supabaseAdmin: SupabaseAdmin,
   instance: InstanceRow,
@@ -1288,6 +1484,7 @@ async function applyDocumentOperationalFlow(
 
   const nextStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
   let updatedInstance = instance;
+  const justCompleted = nextStatus === "concluida" && instance.status !== "concluida";
 
   if (nextStatus !== instance.status) {
     const { data: updatedInstanceData, error: updateError } = await supabaseAdmin
@@ -1328,9 +1525,15 @@ async function applyDocumentOperationalFlow(
 
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
+  const emailResult = justCompleted
+    ? await maybeSendCompletionEmail(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem)
+    : { attempted: false as const, sent: false as const, reason: "not_completed" };
+
   const executionNotes = nextStatus === "aguardando_documento"
     ? "Documento anexado. A obrigação ainda aguarda outros documentos obrigatórios."
-    : "Documento anexado e obrigação concluída automaticamente.";
+    : emailResult.attempted && !emailResult.sent
+      ? "Documento anexado e obrigação concluída automaticamente. O e-mail automático não pôde ser enviado."
+      : "Documento anexado e obrigação concluída automaticamente.";
 
   await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
     processing_status: "processed",
@@ -1772,6 +1975,9 @@ async function handleUpsertTemplate(
     generates_kanban: true,
     requires_document: true,
     operational_notes: asTrimmedString(payload.operational_notes),
+    completion_email_enabled: asBoolean(payload.completion_email_enabled, false),
+    completion_email_subject: asTrimmedString(payload.completion_email_subject),
+    completion_email_body: asTrimmedString(payload.completion_email_body),
     created_by: actorId,
   };
 

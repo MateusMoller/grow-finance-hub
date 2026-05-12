@@ -51,6 +51,9 @@ export type GrowObligationTemplate = {
   generates_kanban: boolean;
   requires_document: boolean;
   operational_notes: string | null;
+  completion_email_enabled: boolean;
+  completion_email_subject: string | null;
+  completion_email_body: string | null;
 };
 
 export const growPeriodicityLabel: Record<GrowObligationTemplate["periodicity"], string> = {
@@ -76,6 +79,8 @@ export type GrowClientSummary = {
   cnpj: string | null;
   sector: string;
   status: string;
+  email?: string | null;
+  contact?: string | null;
 };
 
 export type GrowObligationProfile = {

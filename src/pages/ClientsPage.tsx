@@ -19,7 +19,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -112,6 +112,11 @@ export default function ClientsPage() {
   const filtered = clients.filter(
     (client) =>
       client.name.toLowerCase().includes(search.toLowerCase()) || (client.cnpj || "").includes(search),
+  );
+
+  const totalActiveClients = useMemo(
+    () => clients.filter((client) => String(client.status || "").trim().toLowerCase() === "ativo").length,
+    [clients],
   );
 
   const isInactiveClient = (client: Client) =>
@@ -211,7 +216,9 @@ export default function ClientsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Clientes</h1>
-            <p className="text-sm text-muted-foreground">{clients.length} clientes cadastrados</p>
+            <p className="text-sm text-muted-foreground">
+              {clients.length} clientes cadastrados <span className="mx-1">•</span> {totalActiveClients} ativos
+            </p>
           </div>
           {canCreateClients && (
             <div className="flex items-center gap-2">

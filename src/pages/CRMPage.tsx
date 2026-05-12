@@ -391,14 +391,6 @@ export default function CRMPage() {
     }
 
     void loadLeadsFromSources(true);
-
-    const intervalId = window.setInterval(() => {
-      void loadLeadsFromSources(false);
-    }, 15000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
   }, [loadLeadsFromSources, user?.id]);
 
   useEffect(() => {
@@ -809,6 +801,15 @@ export default function CRMPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadLeadsFromSources(true)}
+              disabled={loadingLeads}
+            >
+              {loadingLeads ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              Atualizar
+            </Button>
             <Button
               variant="outline"
               size="sm"
