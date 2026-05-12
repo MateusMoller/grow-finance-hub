@@ -393,7 +393,7 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
     data_abertura: { type: "date" },
     cep: { type: "cep" },
     estado: { type: "state" },
-    ddd: { type: "integer", min: 0, max: 999 },
+    ddd: { type: "integer", min: 0, max: 99 },
     telefone: { type: "phone" },
     whatsapp: { type: "phone" },
   },
@@ -496,8 +496,26 @@ const formatCnpjValue = (value: string) => {
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 };
 
+const normalizeBrazilPhoneDigits = (value: string | null | undefined) => {
+  const rawDigits = (value || "").replace(/\D/g, "");
+  if (!rawDigits) return "";
+
+  if (rawDigits.startsWith("55") && rawDigits.length >= 12) {
+    const withoutCountryCode = rawDigits.slice(2);
+    if (withoutCountryCode.length >= 10) {
+      return withoutCountryCode.slice(-11);
+    }
+  }
+
+  if (rawDigits.length > 11) {
+    return rawDigits.slice(-11);
+  }
+
+  return rawDigits;
+};
+
 const formatPhoneValue = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
+  const digits = normalizeBrazilPhoneDigits(value).slice(0, 11);
   if (!digits) return "";
   if (digits.length <= 2) return `(${digits}`;
 
@@ -512,7 +530,15 @@ const formatPhoneValue = (value: string) => {
   return `(${ddd}) ${phone.slice(0, 5)}-${phone.slice(5)}`;
 };
 
-const normalizePhoneDigits = (value: string | null | undefined) => (value || "").replace(/\D/g, "");
+const formatCadastroPhoneValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 9);
+  if (!digits) return "";
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+};
+
+const normalizePhoneDigits = (value: string | null | undefined) => normalizeBrazilPhoneDigits(value);
 
 const isValidEmailValue = (value: string | null | undefined) => {
   const normalized = normalizeEmail(value);
@@ -658,7 +684,21 @@ const normalizeFieldValueForSave = (rule: FieldValidationRule | undefined, value
   return trimmed;
 };
 
-const normalizeFieldValueForInput = (rule: FieldValidationRule | undefined, fieldName: string, value: string) => {
+const isCadastroClientesPhoneField = (category: ClientCategoryKey | undefined, fieldName: string) =>
+  category === "cadastro_clientes" && fieldName === "telefone";
+
+const isCadastroClientesDddField = (category: ClientCategoryKey | undefined, fieldName: string) =>
+  category === "cadastro_clientes" && fieldName === "ddd";
+
+const normalizeFieldValueForInput = (
+  rule: FieldValidationRule | undefined,
+  fieldName: string,
+  value: string,
+  category?: ClientCategoryKey,
+) => {
+  if (isCadastroClientesDddField(category, fieldName)) {
+    return value.replace(/\D/g, "").slice(0, 2);
+  }
   if (rule?.type === "state") {
     return value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 2);
   }
@@ -666,6 +706,9 @@ const normalizeFieldValueForInput = (rule: FieldValidationRule | undefined, fiel
     return formatCepValue(value);
   }
   if (rule?.type === "phone") {
+    if (isCadastroClientesPhoneField(category, fieldName)) {
+      return formatCadastroPhoneValue(value);
+    }
     return formatPhoneValue(value);
   }
   if (fieldName.includes("cnpj")) {
@@ -674,11 +717,17 @@ const normalizeFieldValueForInput = (rule: FieldValidationRule | undefined, fiel
   return value;
 };
 
-const getFieldPlaceholder = (rule: FieldValidationRule | undefined, fieldName: string) => {
+const getFieldPlaceholder = (
+  rule: FieldValidationRule | undefined,
+  fieldName: string,
+  category?: ClientCategoryKey,
+) => {
   if (rule?.type === "yesNo") return "-";
   if (rule?.type === "date") return "AAAA-MM-DD";
   if (rule?.type === "cep") return "00000-000";
   if (rule?.type === "state") return "UF";
+  if (isCadastroClientesDddField(category, fieldName)) return "00";
+  if (isCadastroClientesPhoneField(category, fieldName)) return "00000-0000";
   if (rule?.type === "phone") return "(00) 00000-0000";
   if (rule?.type === "percent") return "0,00";
   if (rule?.type === "integer" || rule?.type === "number") return "0";
@@ -687,7 +736,13 @@ const getFieldPlaceholder = (rule: FieldValidationRule | undefined, fieldName: s
   return "-";
 };
 
-const getFieldMaxLength = (rule: FieldValidationRule | undefined, fieldName: string) => {
+const getFieldMaxLength = (
+  rule: FieldValidationRule | undefined,
+  fieldName: string,
+  category?: ClientCategoryKey,
+) => {
+  if (isCadastroClientesDddField(category, fieldName)) return 2;
+  if (isCadastroClientesPhoneField(category, fieldName)) return 10;
   if (rule?.type === "state") return 2;
   if (rule?.type === "cep") return 9;
   if (rule?.type === "phone") return 15;
@@ -697,7 +752,12 @@ const getFieldMaxLength = (rule: FieldValidationRule | undefined, fieldName: str
   return 140;
 };
 
-const validateFieldValue = (rule: FieldValidationRule | undefined, value: string) => {
+const validateFieldValue = (
+  rule: FieldValidationRule | undefined,
+  value: string,
+  category?: ClientCategoryKey,
+  fieldName?: string,
+) => {
   const normalizedValue = value.trim();
   if (!rule || !normalizedValue) return null;
 
@@ -725,6 +785,10 @@ const validateFieldValue = (rule: FieldValidationRule | undefined, value: string
 
   if (rule.type === "phone") {
     const digits = normalizedValue.replace(/\D/g, "");
+    if (isCadastroClientesPhoneField(category, fieldName || "")) {
+      if (digits.length < 8 || digits.length > 9) return "Telefone invalido. Use 8 ou 9 digitos.";
+      return null;
+    }
     if (digits.length < 8 || digits.length > 13) return "Telefone invalido.";
     return null;
   }
@@ -767,18 +831,27 @@ const cadastroClientesMirrorFieldNames = ["regime_tributÃ¡rio", "ddd", "telefo
 type CadastroClientesMirrorFieldName = (typeof cadastroClientesMirrorFieldNames)[number];
 
 const splitPhoneForCadastro = (rawPhone: string) => {
-  const digits = rawPhone.replace(/\D/g, "");
+  const digits = normalizeBrazilPhoneDigits(rawPhone);
   if (!digits) return { ddd: "", phone: "" };
   if (digits.length <= 2) return { ddd: digits, phone: "" };
   return {
     ddd: digits.slice(0, 2),
-    phone: digits.slice(2),
+    phone: formatCadastroPhoneValue(digits.slice(2)),
   };
 };
 
 const buildClientPhoneFromCadastro = (dddRaw: string, phoneRaw: string) => {
   const ddd = dddRaw.replace(/\D/g, "");
-  const phone = phoneRaw.replace(/\D/g, "");
+  let phone = phoneRaw.replace(/\D/g, "");
+  if (phone.startsWith("55") && phone.length >= 12) {
+    phone = phone.slice(2);
+  }
+  if (ddd && phone.startsWith(ddd) && phone.length >= 10) {
+    phone = phone.slice(2);
+  }
+  if (phone.length > 9) {
+    phone = phone.slice(-9);
+  }
   const digits = `${ddd}${phone}`;
   if (!digits) return "";
   return formatPhoneValue(digits);
@@ -1098,7 +1171,6 @@ export default function ClientDetailPage() {
   const [searchingCep, setSearchingCep] = useState(false);
   const [searchingCnpj, setSearchingCnpj] = useState(false);
   const [autoSaveGeneralInfo, setAutoSaveGeneralInfo] = useState(true);
-  const [showAdvancedClientInfo, setShowAdvancedClientInfo] = useState(false);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1278,7 +1350,7 @@ export default function ClientDetailPage() {
   const handleDataFieldChange = (category: ClientCategoryKey, fieldName: string, value: string) => {
     const key = getCategoryFieldEntryKey(category, fieldName);
     const rule = getFieldRule(category, fieldName);
-    const draftValue = normalizeFieldValueForInput(rule, fieldName, value);
+    const draftValue = normalizeFieldValueForInput(rule, fieldName, value, category);
     const normalizedValue = normalizeFieldValueForSave(rule, draftValue);
 
     setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
@@ -1300,7 +1372,7 @@ export default function ClientDetailPage() {
       }
     }
 
-    const error = validateFieldValue(rule, normalizedValue);
+    const error = validateFieldValue(rule, normalizedValue, category, fieldName);
     setDataFieldErrors((prev) => {
       const next = { ...prev };
       if (error) next[key] = error;
@@ -1315,13 +1387,18 @@ export default function ClientDetailPage() {
   const setGeneralInfoFieldValue = (fieldName: GeneralInfoCadastralFieldName, value: string) => {
     const key = getCategoryFieldEntryKey("cadastro_clientes", fieldName);
     const rule = getFieldRule("cadastro_clientes", fieldName);
-    const draftValue = normalizeFieldValueForInput(rule, fieldName, value);
+    const draftValue = normalizeFieldValueForInput(rule, fieldName, value, "cadastro_clientes");
 
     // Preserve the raw typed value for address-related inputs.
     // Canonical normalization still runs on save.
     setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
 
-    const error = validateFieldValue(rule, normalizeFieldValueForSave(rule, draftValue));
+    const error = validateFieldValue(
+      rule,
+      normalizeFieldValueForSave(rule, draftValue),
+      "cadastro_clientes",
+      fieldName,
+    );
     setDataFieldErrors((prev) => {
       const next = { ...prev };
       if (error) next[key] = error;
@@ -1583,10 +1660,10 @@ export default function ClientDetailPage() {
       const currentValue = dataEntries[key] || "";
       const rule = getFieldRule("cadastro_clientes", fieldName);
       const normalizedValue = normalizeFieldValueForSave(rule, currentValue);
-      const validationError = validateFieldValue(rule, normalizedValue);
+      const fieldValidationError = validateFieldValue(rule, normalizedValue, "cadastro_clientes", fieldName);
 
-      if (validationError) {
-        nextGeneralFieldErrors[key] = validationError;
+      if (fieldValidationError) {
+        nextGeneralFieldErrors[key] = fieldValidationError;
       }
 
       return { fieldName, value: normalizedValue };
@@ -2012,7 +2089,9 @@ export default function ClientDetailPage() {
       const normalizedValue = shouldClearEmployeeDependentField
         ? ""
         : normalizeFieldValueForSave(rule, currentValue);
-      const validationError = shouldClearEmployeeDependentField ? null : validateFieldValue(rule, normalizedValue);
+      const validationError = shouldClearEmployeeDependentField
+        ? null
+        : validateFieldValue(rule, normalizedValue, category, f.name);
 
       if (validationError) {
         nextCategoryErrors[key] = validationError;
@@ -2275,7 +2354,9 @@ export default function ClientDetailPage() {
       const rule = getFieldRule(category, field.name);
       const fieldError = dataFieldErrors[key];
       const isYesNoField = rule?.type === "yesNo";
-      const inputMode = rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
+      const inputMode = isCadastroClientesDddField(category, field.name)
+        ? "numeric"
+        : rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
         ? "decimal"
         : rule?.type === "cep"
           ? "numeric"
@@ -2299,11 +2380,11 @@ export default function ClientDetailPage() {
           ) : (
             <Input
               value={dataEntries[key] || ""}
-              onChange={(event) => handleDataFieldChange(category, field.name, normalizeFieldValueForInput(rule, field.name, event.target.value))}
+              onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
               inputMode={inputMode}
               type={rule?.type === "date" ? "date" : "text"}
-              placeholder={getFieldPlaceholder(rule, field.name)}
-              maxLength={getFieldMaxLength(rule, field.name)}
+              placeholder={getFieldPlaceholder(rule, field.name, category)}
+              maxLength={getFieldMaxLength(rule, field.name, category)}
               className={`h-9 ${fieldError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
             />
           )}
@@ -2569,25 +2650,11 @@ export default function ClientDetailPage() {
               <h3 className="font-semibold flex items-center gap-2">
                 <Building2 className="h-4 w-4" /> Informações do Cliente
               </h3>
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2">
-                <p className="text-xs text-muted-foreground">
-                  Modo simplificado: campos essenciais primeiro. O restante fica em avancado.
-                </p>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Switch checked={autoSaveGeneralInfo} onCheckedChange={setAutoSaveGeneralInfo} />
-                    Salvar automatico
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => setShowAdvancedClientInfo((prev) => !prev)}
-                  >
-                    {showAdvancedClientInfo ? "Ocultar avancado" : "Mostrar avancado"}
-                  </Button>
-                </div>
+              <div className="flex justify-end">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Switch checked={autoSaveGeneralInfo} onCheckedChange={setAutoSaveGeneralInfo} />
+                  Salvar automático
+                </label>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4" onBlurCapture={queueAutoSaveGeneralInfo}>
@@ -2653,7 +2720,6 @@ export default function ClientDetailPage() {
                     {getClientSegmentOptions(clientForm.sector).map((segment) => <option key={segment}>{segment}</option>)}
                   </select>
                 </div>
-                {showAdvancedClientInfo && (
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-xs">Classificacao de Atividade</Label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
@@ -2671,7 +2737,6 @@ export default function ClientDetailPage() {
                     Marque uma ou mais opções: comércio, industria e/ou prestador de serviços.
                   </p>
                 </div>
-                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Status</Label>
                   <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.status || ""} onChange={(e) => setClientForm((p) => ({ ...p, status: e.target.value }))}>
@@ -2747,7 +2812,6 @@ export default function ClientDetailPage() {
                     <p className="text-[11px] text-destructive">{dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")]}</p>
                   )}
                 </div>
-                {showAdvancedClientInfo && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Inscricao Estadual</Label>
                   <Input
@@ -2756,8 +2820,6 @@ export default function ClientDetailPage() {
                     maxLength={40}
                   />
                 </div>
-                )}
-                {showAdvancedClientInfo && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Inscricao Municipal</Label>
                   <Input
@@ -2766,7 +2828,6 @@ export default function ClientDetailPage() {
                     maxLength={40}
                   />
                 </div>
-                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Rua / Logradouro</Label>
                   <Input
@@ -2810,8 +2871,6 @@ export default function ClientDetailPage() {
                     maxLength={2}
                   />
                 </div>
-                {showAdvancedClientInfo && (
-                <>
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs">Endereco Completo (automático)</Label>
                   <Input
@@ -2924,8 +2983,6 @@ export default function ClientDetailPage() {
                     </p>
                   )}
                 </div>
-                </>
-                )}
               </div>
               <div className="flex justify-end">
                 <Button onClick={saveClientInfo} disabled={saving}>

@@ -75,7 +75,18 @@ function normalizeCnpj(value: unknown): string | null {
 function normalizePhone(value: unknown): string | null {
   const text = asTrimmedString(value);
   if (!text) return null;
-  const digits = text.replace(/\D/g, "");
+  const rawDigits = text.replace(/\D/g, "");
+  let digits = rawDigits;
+
+  if (rawDigits.startsWith("55") && rawDigits.length >= 12) {
+    const withoutCountryCode = rawDigits.slice(2);
+    if (withoutCountryCode.length >= 10) {
+      digits = withoutCountryCode.slice(-11);
+    }
+  } else if (rawDigits.length > 11) {
+    digits = rawDigits.slice(-11);
+  }
+
   if (digits.length < 10 || digits.length > 11) return null;
 
   const ddd = digits.slice(0, 2);

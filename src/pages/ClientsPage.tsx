@@ -72,8 +72,26 @@ const normalizeCnpjForSave = (value: string | null | undefined) => {
   return digits;
 };
 
+const normalizeBrazilPhoneDigits = (value: string | null | undefined) => {
+  const rawDigits = (value || "").replace(/\D/g, "");
+  if (!rawDigits) return "";
+
+  if (rawDigits.startsWith("55") && rawDigits.length >= 12) {
+    const withoutCountryCode = rawDigits.slice(2);
+    if (withoutCountryCode.length >= 10) {
+      return withoutCountryCode.slice(-11);
+    }
+  }
+
+  if (rawDigits.length > 11) {
+    return rawDigits.slice(-11);
+  }
+
+  return rawDigits;
+};
+
 const formatPhoneValue = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
+  const digits = normalizeBrazilPhoneDigits(value).slice(0, 11);
   if (!digits) return "";
   if (digits.length <= 2) return `(${digits}`;
 
@@ -84,7 +102,7 @@ const formatPhoneValue = (value: string) => {
   return `(${ddd}) ${phone.slice(0, 5)}-${phone.slice(5)}`;
 };
 
-const normalizePhoneDigits = (value: string | null | undefined) => (value || "").replace(/\D/g, "");
+const normalizePhoneDigits = (value: string | null | undefined) => normalizeBrazilPhoneDigits(value);
 
 const normalizeRegime = (value: string | null | undefined) => {
   const trimmed = (value || "").trim();
