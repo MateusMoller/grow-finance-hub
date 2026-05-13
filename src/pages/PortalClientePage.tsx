@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { RequestChat } from "@/components/app/RequestChat";
+import { ManualEngine } from "@/components/manual/ManualEngine";
 import { ClientPortalCashflow } from "@/components/portal/ClientPortalCashflow";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { GrowAssistantWidget } from "@/components/portal/GrowAssistantWidget";
@@ -2450,99 +2451,36 @@ export default function PortalClientePage() {
           </TabsContent>
 
           <TabsContent value="manual" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Manual do usuário</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Passo a passo rápido para usar o portal no dia a dia.
-                </p>
-              </CardHeader>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">1. Abra uma solicitação</p>
-                      <p className="text-sm text-muted-foreground">
-                        Use a aba de solicitações para escolher setor, motivo e preencher os campos certos na própria página.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("freeform")}>
-                      Ir para solicitações
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">2. Envie documentos</p>
-                      <p className="text-sm text-muted-foreground">
-                        Use o botao de envio para anexar os arquivos do mes de forma rápida e organizada.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setUploadDialogOpen(true)}>
-                      Enviar documentos
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">3. Escolha o motivo certo</p>
-                      <p className="text-sm text-muted-foreground">
-                        O setor e o motivo definem automaticamente os campos necessarios para cada tipo de pedido.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("support")}>
-                      Ir para solicitações
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">4. Acompanhe o controle de caixa (quando liberado)</p>
-                      <p className="text-sm text-muted-foreground">
-                        Se o admin liberar este módulo, você pode registrar entradas e saídas e acompanhar os indicadores de caixa.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setActiveTab("cashflow")}>
-                      Ir para controle de caixa
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border bg-card p-4 space-y-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-medium">5. Fale com a equipe pelo mesmo fluxo</p>
-                      <p className="text-sm text-muted-foreground">
-                        Demandas por setor e acompanhamentos também nascem dentro da central de solicitações.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openRequestsHub("support")}>
-                      Ir para solicitações
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Dicas rápidas</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-2 text-sm text-muted-foreground">
-                <p>• Mantenha títulos objetivos nas solicitações para facilitar o retorno da equipe.</p>
-                <p>• Sempre que possível, vincule documentos a uma solicitação específica.</p>
-                <p>• O painel geral resume o que está aguardando sua ação imediata.</p>
-              </CardContent>
-            </Card>
+            <ManualEngine
+              mode="portal"
+              title="Manual do usuário do portal"
+              subtitle="Guia interativo para abrir solicitações, acompanhar histórico, enviar documentos e usar o caixa."
+              allowedContexts={["portal"]}
+              role="client"
+              onRunAction={(actionKey) => {
+                if (actionKey === "portal:overview") {
+                  setActiveTab("overview");
+                  return true;
+                }
+                if (actionKey === "portal:requests") {
+                  openRequestsHub("freeform");
+                  return true;
+                }
+                if (actionKey === "portal:request-history") {
+                  setActiveTab("request-history");
+                  return true;
+                }
+                if (actionKey === "portal:uploads") {
+                  setActiveTab("uploads");
+                  return true;
+                }
+                if (actionKey === "portal:cashflow") {
+                  setActiveTab("cashflow");
+                  return true;
+                }
+                return false;
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">

@@ -156,6 +156,7 @@ const cadastroClientesFields = [
   { name: "cep", label: "CEP" },
   { name: "endereço", label: "Rua / Logradouro" },
   { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
+  { name: "complemento", label: "Complemento" },
   { name: "bairro", label: "Bairro" },
   { name: "cidade", label: "Cidade" },
   { name: "estado", label: "Estado" },
@@ -589,6 +590,7 @@ type CnpjLookupResponse = {
     cep?: string | null;
     street?: string | null;
     number?: string | null;
+    complement?: string | null;
     neighborhood?: string | null;
     city?: string | null;
     state?: string | null;
@@ -815,6 +817,7 @@ const generalInfoCadastralFields = [
   "cep",
   "endereço",
   "numero_estabelecimento",
+  "complemento",
   "bairro",
   "cidade",
   "estado",
@@ -921,12 +924,13 @@ const serializeBusinessProfilesValue = (profiles: ClientBusinessProfileKey[]) =>
 const buildAddressFromCadastralValues = (values: Record<GeneralInfoCadastralFieldName, string>) => {
   const street = values.endereço.trim();
   const number = values.numero_estabelecimento.trim();
+  const complement = values.complemento.trim();
   const neighborhood = values.bairro.trim();
   const city = values.cidade.trim();
   const state = values.estado.trim().toUpperCase();
   const cep = values.cep.trim();
 
-  const streetLine = [street, number ? `N ${number}` : ""].filter(Boolean).join(", ");
+  const streetLine = [street, number ? `n° ${number}` : "", complement ? `Compl. ${complement}` : ""].filter(Boolean).join(", ");
   const cityState = [city, state].filter(Boolean).join("/");
   const localityLine = [neighborhood, cityState, cep].filter(Boolean).join(" - ");
 
@@ -1513,6 +1517,7 @@ export default function ClientDetailPage() {
       applyGeneralFieldIfEmpty("cep", cnpjData.cep);
       applyGeneralFieldIfEmpty("endereço", cnpjData.street);
       applyGeneralFieldIfEmpty("numero_estabelecimento", cnpjData.number);
+      applyGeneralFieldIfEmpty("complemento", cnpjData.complement);
       applyGeneralFieldIfEmpty("bairro", cnpjData.neighborhood);
       applyGeneralFieldIfEmpty("cidade", cnpjData.city);
       applyGeneralFieldIfEmpty("estado", cnpjData.state);
@@ -1692,6 +1697,7 @@ export default function ClientDetailPage() {
         cep: "",
         endereço: "",
         numero_estabelecimento: "",
+        complemento: "",
         bairro: "",
         cidade: "",
         estado: "",
@@ -2847,6 +2853,15 @@ export default function ClientDetailPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-xs">Complemento</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("complemento")}
+                    onChange={(event) => setGeneralInfoFieldValue("complemento", event.target.value)}
+                    placeholder="Apto, sala, bloco..."
+                    maxLength={80}
+                  />
+                </div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Bairro</Label>
                   <Input
                     value={getGeneralInfoFieldValue("bairro")}
@@ -2878,6 +2893,7 @@ export default function ClientDetailPage() {
                       cep: getGeneralInfoFieldValue("cep"),
                       endereço: getGeneralInfoFieldValue("endereço"),
                       numero_estabelecimento: getGeneralInfoFieldValue("numero_estabelecimento"),
+                      complemento: getGeneralInfoFieldValue("complemento"),
                       bairro: getGeneralInfoFieldValue("bairro"),
                       cidade: getGeneralInfoFieldValue("cidade"),
                       estado: getGeneralInfoFieldValue("estado"),
