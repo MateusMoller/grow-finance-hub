@@ -1,0 +1,7 @@
+{
+  "name": "grow-document-robot",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Robô local Windows da Grow para monitorar pastas e enviar PDFs automaticamente para o módulo de Obrigações."
+}

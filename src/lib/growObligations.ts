@@ -117,6 +117,9 @@ export type GrowObligationInstance = {
   status: "pendente" | "em_andamento" | "aguardando_documento" | "em_revisao" | "concluida" | "atrasada" | "cancelada";
   priority: "baixa" | "media" | "alta" | "urgente";
   current_assignee: string | null;
+  protocol: string | null;
+  protocol_issued_at: string | null;
+  processed_automatically: boolean;
   completion_notes: string | null;
   document_required: boolean;
   completed_at: string | null;
@@ -129,6 +132,7 @@ export type GrowObligationInstance = {
 
 export type GrowDocumentInboxItem = {
   id: string;
+  ingestion_job_id: string | null;
   client_id: string | null;
   suggested_client_id: string | null;
   detected_client_id: string | null;
@@ -139,6 +143,8 @@ export type GrowDocumentInboxItem = {
   file_name: string;
   storage_bucket: string;
   storage_path: string;
+  source_kind: "web_manual" | "local_robot" | "api";
+  file_hash: string | null;
   content_type: string | null;
   file_size: number | null;
   suggested_competence_label: string | null;
@@ -169,9 +175,18 @@ export type GrowDocumentInboxItem = {
   processing_started_at: string | null;
   processing_completed_at: string | null;
   last_processing_error: string | null;
+  classification_status: "queued" | "classified" | "review_required" | "failed";
+  application_status: "pending" | "applied" | "skipped" | "failed";
+  communication_status: "pending" | "sent" | "partial" | "failed" | "not_applicable";
+  publication_status: "pending" | "published" | "failed" | "not_applicable";
   execution_status: "pending" | "applied" | "skipped" | "failed";
   execution_notes: string | null;
   archive_path: string | null;
+  robot_origin_path: string | null;
+  robot_machine_id: string | null;
+  protocol_number: string | null;
+  protocol_issued_at: string | null;
+  processed_automatically: boolean;
   notes: string | null;
   created_at: string;
   client: GrowClientSummary | null;
@@ -180,6 +195,39 @@ export type GrowDocumentInboxItem = {
   linked_instance: GrowObligationInstance | null;
   document_definition: GrowExpectedDocument | null;
   reference_file: GrowExpectedDocumentReferenceFile | null;
+};
+
+export type GrowDocumentIngestionJob = {
+  id: string;
+  source_kind: "web_manual" | "local_robot" | "api";
+  status: "queued" | "ingested" | "review_required" | "processing" | "completed" | "failed";
+  classification_status: "queued" | "classified" | "review_required" | "failed";
+  application_status: "pending" | "applied" | "skipped" | "failed";
+  communication_status: "pending" | "sent" | "partial" | "failed" | "not_applicable";
+  publication_status: "pending" | "published" | "failed" | "not_applicable";
+  client_id: string | null;
+  detected_client_id: string | null;
+  template_id: string | null;
+  instance_id: string | null;
+  inbox_item_id: string | null;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  file_hash: string | null;
+  file_size: number | null;
+  protocol_number: string | null;
+  protocol_issued_at: string | null;
+  robot_origin_path: string | null;
+  robot_machine_id: string | null;
+  review_required: boolean;
+  attempts: number;
+  started_at: string | null;
+  completed_at: string | null;
+  last_error: string | null;
+  metadata: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type GrowObligationsOverviewPayload = {
@@ -196,12 +244,17 @@ export type GrowObligationsOverviewPayload = {
     inbox_processing: number;
     inbox_failed: number;
     inbox_applied: number;
+    robot_received_today: number;
+    robot_completed_today: number;
+    robot_review_required: number;
+    robot_failed_total: number;
   };
   clients: GrowClientSummary[];
   templates: GrowObligationTemplate[];
   profiles: GrowObligationProfile[];
   instances: GrowObligationInstance[];
   documents: GrowDocumentInboxItem[];
+  ingestion_jobs: GrowDocumentIngestionJob[];
 };
 
 export type GrowClientSnapshotPayload = {

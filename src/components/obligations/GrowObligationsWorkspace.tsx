@@ -49,6 +49,7 @@ import {
   growPriorityLabel,
   invokeGrowObligations,
   type GrowDocumentInboxItem,
+  type GrowDocumentIngestionJob,
   type GrowExpectedDocument,
   type GrowExpectedDocumentReferenceFile,
   type GrowObligationInstance,
@@ -338,6 +339,50 @@ function executionStatusLabel(status: GrowDocumentInboxItem["execution_status"])
       return "Ignorado";
     case "failed":
       return "Falhou";
+    case "pending":
+    default:
+      return "Pendente";
+  }
+}
+
+function classificationStatusLabel(status: GrowDocumentInboxItem["classification_status"] | GrowDocumentIngestionJob["classification_status"]) {
+  switch (status) {
+    case "classified":
+      return "Classificado";
+    case "review_required":
+      return "Revisao";
+    case "failed":
+      return "Falhou";
+    case "queued":
+    default:
+      return "Na fila";
+  }
+}
+
+function communicationStatusLabel(status: GrowDocumentInboxItem["communication_status"] | GrowDocumentIngestionJob["communication_status"]) {
+  switch (status) {
+    case "sent":
+      return "Enviado";
+    case "partial":
+      return "Parcial";
+    case "failed":
+      return "Falhou";
+    case "not_applicable":
+      return "Nao se aplica";
+    case "pending":
+    default:
+      return "Pendente";
+  }
+}
+
+function publicationStatusLabel(status: GrowDocumentInboxItem["publication_status"] | GrowDocumentIngestionJob["publication_status"]) {
+  switch (status) {
+    case "published":
+      return "Publicado";
+    case "failed":
+      return "Falhou";
+    case "not_applicable":
+      return "Nao se aplica";
     case "pending":
     default:
       return "Pendente";
@@ -665,6 +710,16 @@ export function GrowObligationsWorkspace({
     [overview?.documents],
   );
 
+  const robotJobs = useMemo(
+    () => (overview?.ingestion_jobs || []).filter((job) => job.source_kind === "local_robot"),
+    [overview?.ingestion_jobs],
+  );
+
+  const robotRecentFailures = useMemo(
+    () => robotJobs.filter((job) => job.status === "failed").slice(0, 6),
+    [robotJobs],
+  );
+
   const linkedDocumentsForProcessing = useMemo(
     () =>
       (overview?.documents || []).filter(
@@ -828,7 +883,7 @@ export function GrowObligationsWorkspace({
             { label: "Pendentes", value: overview.summary.pending_instances, icon: ClipboardList, accent: "text-amber-600" },
             { label: "Atrasadas", value: overview.summary.overdue_instances, icon: AlertTriangle, accent: "text-red-600" },
             { label: "Fila documental", value: overview.summary.inbox_processing + overview.summary.inbox_pending, icon: FileArchive, accent: "text-orange-600" },
-            { label: "Falhas no robô", value: overview.summary.inbox_failed, icon: ShieldCheck, accent: "text-primary" },
+            { label: "Falhas no robô", value: overview.summary.robot_failed_total, icon: ShieldCheck, accent: "text-primary" },
           ].map((item) => (
             <motion.div key={item.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="rounded-3xl border border-border/60 bg-background/75 p-4">
               <div className="flex items-start justify-between">
@@ -959,6 +1014,26 @@ export function GrowObligationsWorkspace({
             </CardHeader>
             <CardContent className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Modo web</Badge>
+                      <p className="text-sm font-medium">Funciona sem instalar nada</p>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Arraste os PDFs aqui, revise o preview e envie. O backend continua cuidando de vinculo, protocolo, conclusao e publicacao no portal.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">Modo robo local</Badge>
+                      <p className="text-sm font-medium">Automacao continua no Windows</p>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Use esse modo quando quiser que uma pasta monitorada envie PDFs sozinha, sem depender da tela aberta.
+                    </p>
+                  </div>
+                </div>
                 <div
                   className={`rounded-3xl border border-dashed p-6 transition-colors ${
                     isDraggingUpload
@@ -990,7 +1065,7 @@ export function GrowObligationsWorkspace({
                     <UploadCloud className="h-10 w-10 text-primary" />
                     <div>
                       <p className="font-medium">{isDraggingUpload ? "Solte os PDFs para adicionar" : "Arraste PDFs aqui"}</p>
-                      <p className="text-sm text-muted-foreground">O sistema analisa cada arquivo e monta o preview antes do envio final.</p>
+                      <p className="text-sm text-muted-foreground">O sistema analisa cada arquivo, monta o preview e, quando houver match confiavel, ja tenta concluir a obrigacao no proprio envio.</p>
                     </div>
                     <input
                       ref={uploadInputRef}
@@ -1019,7 +1094,7 @@ export function GrowObligationsWorkspace({
                   <div>
                     <p className="text-sm font-medium">Pós-processamento operacional</p>
                     <p className="text-xs text-muted-foreground">
-                      {linkedDocumentsForProcessing.length} documento(s) vinculados aguardando aplicação automática na obrigação.
+                      {linkedDocumentsForProcessing.length} documento(s) vinculados aguardando aplicação automática. No modo web, isso só aparece quando algum item precisa de reprocessamento ou revisão complementar.
                     </p>
                   </div>
                   <Button
@@ -1031,6 +1106,84 @@ export function GrowObligationsWorkspace({
                     {processQueueMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                     Processar documentos vinculados
                   </Button>
+                </div>
+
+                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">RobÃ´ local Grow</p>
+                      <p className="text-xs text-muted-foreground">Fila de ingestÃ£o contÃ­nua para pastas monitoradas no Windows.</p>
+                    </div>
+                    <Badge variant="secondary">{robotJobs.length} job(s)</Badge>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border bg-background/80 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Recebidos hoje</p>
+                      <p className="mt-2 text-2xl font-semibold">{overview.summary.robot_received_today}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background/80 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Concluidos hoje</p>
+                      <p className="mt-2 text-2xl font-semibold">{overview.summary.robot_completed_today}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background/80 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Em revisao</p>
+                      <p className="mt-2 text-2xl font-semibold">{overview.summary.robot_review_required}</p>
+                    </div>
+                    <div className="rounded-xl border bg-background/80 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Falhas</p>
+                      <p className="mt-2 text-2xl font-semibold">{overview.summary.robot_failed_total}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border bg-background/80 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">Como ativar o robÃ´ na operaÃ§Ã£o</p>
+                        <p className="text-xs text-muted-foreground">Guia curto para deixar a ingestÃ£o contÃ­nua funcionando sem depender da tela aberta.</p>
+                      </div>
+                      <Badge variant="outline">Automacao controlada</Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                      <div className="rounded-xl border border-dashed p-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Entrada</p>
+                        <p className="mt-2 text-sm font-medium">C:/Grow/Entrada-eContinuo</p>
+                        <p className="mt-1 text-xs text-muted-foreground">O colaborador so precisa salvar o PDF nessa pasta. O robÃ´ detecta sozinho.</p>
+                      </div>
+                      <div className="rounded-xl border border-dashed p-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Config local</p>
+                        <p className="mt-2 text-sm font-medium">tools/grow-document-robot/runtime/config.local.json</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Esse arquivo guarda maquina, pasta monitorada, credenciais e estado local do robÃ´.</p>
+                      </div>
+                      <div className="rounded-xl border border-dashed p-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Execucao</p>
+                        <p className="mt-2 text-sm font-medium">npm.cmd run robot:start</p>
+                        <p className="mt-1 text-xs text-muted-foreground">O backend classifica, conclui a obrigaÃ§Ã£o, gera protocolo e publica no portal quando houver match confiavel.</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">
+                      Se o documento nao for confiavel o bastante, ele nao conclui sozinho: cai em triagem manual para evitar erro operacional e fraude.
+                    </div>
+                  </div>
+                  {robotRecentFailures.length > 0 ? (
+                    <div className="space-y-2">
+                      {robotRecentFailures.map((job) => (
+                        <div key={job.id} className="rounded-xl border bg-background/80 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-medium">{job.file_name}</p>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline">{classificationStatusLabel(job.classification_status)}</Badge>
+                              <Badge variant="outline">{job.status}</Badge>
+                            </div>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {job.robot_machine_id || "maquina nao informada"} Â· {job.robot_origin_path || "origem local nao informada"} Â· {formatDateTime(job.created_at)}
+                          </p>
+                          {job.last_error ? <p className="mt-2 text-xs text-destructive">{job.last_error}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nenhuma falha recente do robÃ´ local.</p>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -1156,6 +1309,7 @@ export function GrowObligationsWorkspace({
                           <p className="text-[11px] text-muted-foreground">{item.reference_match_reasons.join(" · ")}</p>
                           {item.execution_notes && <p className="text-[11px] text-muted-foreground">{item.execution_notes}</p>}
                           <div className="flex flex-wrap gap-2">
+                            <Badge variant="outline">{classificationStatusLabel(item.classification_status)}</Badge>
                             <Badge variant="outline">{processingStatusLabel(item.processing_status)}</Badge>
                             <Badge variant="outline">{executionStatusLabel(item.execution_status)}</Badge>
                             <Button variant="outline" size="sm" className="rounded-xl" onClick={() => { setDocumentResolutionId(item.id); setDocumentResolutionInstanceId(item.linked_instance?.id || ""); setDocumentResolutionNotes(item.notes || ""); }}>Revisar vinculo</Button>
@@ -1182,10 +1336,15 @@ export function GrowObligationsWorkspace({
                             <p className="text-[11px] text-muted-foreground">{matchStrategyLabel(item.matched_by)} · {formatDateTime(item.created_at)}</p>
                             {item.execution_notes && <p className="text-[11px] text-muted-foreground">{item.execution_notes}</p>}
                             {item.archive_path && <p className="text-[11px] text-muted-foreground">Arquivo lógico: {item.archive_path}</p>}
+                            {item.protocol_number && <p className="text-[11px] text-muted-foreground">Protocolo: {item.protocol_number}</p>}
+                            <p className="text-[11px] text-muted-foreground">
+                              Origem: {item.source_kind === "local_robot" ? "Robô local" : item.source_kind === "api" ? "API" : "Central web"} · Comunicação: {communicationStatusLabel(item.communication_status)} · Publicação: {publicationStatusLabel(item.publication_status)}
+                            </p>
                             {item.last_processing_error && <p className="text-[11px] text-destructive">{item.last_processing_error}</p>}
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <Badge variant={item.status === "linked" ? "default" : item.status === "rejected" ? "destructive" : "secondary"}>{inboxStatusLabel(item.status)}</Badge>
+                            <Badge variant="outline">{classificationStatusLabel(item.classification_status)}</Badge>
                             <Badge variant="outline">{processingStatusLabel(item.processing_status)}</Badge>
                             <Badge variant="outline">{executionStatusLabel(item.execution_status)}</Badge>
                           </div>

@@ -1,0 +1,14 @@
+{
+  "supabaseUrl": "https://SEU-PROJETO.supabase.co",
+  "supabaseAnonKey": "SUA_ANON_KEY",
+  "robotUserEmail": "robo@seudominio.com",
+  "robotUserPassword": "SENHA_DO_ROBO",
+  "machineId": "grow-robot-pc-01",
+  "stateFile": "./runtime/state.json",
+  "scanIntervalMs": 30000,
+  "retryDelayMs": 120000,
+  "maxRetries": 5,
+  "folders": [
+    "C:/Grow/Entrada-eContinuo"
+  ]
+}

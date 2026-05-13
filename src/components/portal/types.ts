@@ -67,6 +67,9 @@ export interface PortalObligationDocument {
   technical_due_date: string;
   legal_due_date: string | null;
   instance_status: PortalObligationInstanceStatus;
+  protocol: string | null;
+  protocol_issued_at: string | null;
+  processed_automatically: boolean;
   file_name: string;
   storage_bucket: string;
   storage_path: string;
@@ -74,6 +77,8 @@ export interface PortalObligationDocument {
   content_type: string | null;
   triage_status: "accepted" | "reviewed" | "rejected";
   source: string;
+  source_kind: "web_manual" | "local_robot" | "api";
+  protocol_number: string | null;
   created_at: string;
 }
 

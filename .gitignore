@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+tools/grow-document-robot/runtime/*.json
+tools/grow-document-robot/runtime/*.log
+tools/grow-document-robot/runtime/state.json
 .env
 .env.*
 !.env.example

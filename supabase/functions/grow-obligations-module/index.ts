@@ -171,13 +171,51 @@ type InstanceRow = {
   current_assignee: string | null;
   completion_notes: string | null;
   document_required: boolean;
+  protocol: string | null;
+  protocol_issued_at: string | null;
+  completed_by_inbox_item_id: string | null;
+  processed_automatically: boolean;
   completed_at: string | null;
   updated_at: string;
   created_at: string;
 };
 
+type IngestionJobRow = {
+  id: string;
+  source_kind: string;
+  status: string;
+  classification_status: string;
+  application_status: string;
+  communication_status: string;
+  publication_status: string;
+  client_id: string | null;
+  detected_client_id: string | null;
+  template_id: string | null;
+  instance_id: string | null;
+  inbox_item_id: string | null;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  file_hash: string | null;
+  file_size: number | null;
+  protocol_number: string | null;
+  protocol_issued_at: string | null;
+  robot_origin_path: string | null;
+  robot_machine_id: string | null;
+  review_required: boolean;
+  attempts: number;
+  started_at: string | null;
+  completed_at: string | null;
+  last_error: string | null;
+  metadata: unknown;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type InboxRow = {
   id: string;
+  ingestion_job_id: string | null;
   client_id: string | null;
   suggested_client_id: string | null;
   detected_client_id: string | null;
@@ -188,6 +226,8 @@ type InboxRow = {
   file_name: string;
   storage_bucket: string;
   storage_path: string;
+  source_kind: string;
+  file_hash: string | null;
   content_type: string | null;
   file_size: number | null;
   suggested_competence_label: string | null;
@@ -219,6 +259,15 @@ type InboxRow = {
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  classification_status: string;
+  application_status: string;
+  communication_status: string;
+  publication_status: string;
+  robot_origin_path: string | null;
+  robot_machine_id: string | null;
+  protocol_number: string | null;
+  protocol_issued_at: string | null;
+  processed_automatically: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -246,6 +295,14 @@ function normalizeEmail(value: unknown): string | null {
   if (!email) return null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
   return email;
+}
+
+function normalizeSourceKind(value: unknown, fallback = "web_manual") {
+  const normalized = asTrimmedString(value);
+  if (normalized === "local_robot" || normalized === "web_manual" || normalized === "api") {
+    return normalized;
+  }
+  return fallback;
 }
 
 function escapeHtml(value: string) {
@@ -600,6 +657,17 @@ async function loadReferenceFilesMap(supabaseAdmin: SupabaseAdmin) {
   }
 
   return { byTemplateDocument, byId, rows };
+}
+
+async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin) {
+  const { data, error } = await supabaseAdmin
+    .from("document_ingestion_jobs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(120);
+
+  if (error) throw error;
+  return (data || []) as IngestionJobRow[];
 }
 
 function enrichExpectedDocuments(
@@ -1163,6 +1231,99 @@ function buildOperationalArchivePath(
   ].join("/");
 }
 
+function buildProtocolNumber(instance: InstanceRow, inboxItemId: string) {
+  const competence = normalizeToken(instance.competence_key).replace(/_/g, "").toUpperCase() || "SEMCOMP";
+  const suffix = normalizeToken(inboxItemId).replace(/_/g, "").slice(0, 8).toUpperCase() || "DOC";
+  return `GROW-${new Date().getUTCFullYear()}-${competence}-${suffix}`;
+}
+
+async function findDuplicateIngestionJob(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    sourceKind: string;
+    fileHash: string | null;
+    fileName: string;
+    fileSize: number | null;
+    robotMachineId: string | null;
+  },
+) {
+  if (!params.fileHash) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("document_ingestion_jobs")
+    .select("*")
+    .eq("source_kind", params.sourceKind)
+    .eq("file_hash", params.fileHash)
+    .eq("file_name", params.fileName)
+    .eq("file_size", params.fileSize)
+    .eq("robot_machine_id", params.robotMachineId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data || null) as IngestionJobRow | null;
+}
+
+async function upsertIngestionJob(
+  supabaseAdmin: SupabaseAdmin,
+  payload: {
+    sourceKind: string;
+    fileName: string;
+    storageBucket: string;
+    storagePath: string;
+    fileHash: string | null;
+    fileSize: number | null;
+    clientId: string | null;
+    detectedClientId: string | null;
+    templateId: string | null;
+    instanceId: string | null;
+    robotOriginPath: string | null;
+    robotMachineId: string | null;
+    createdBy: string;
+    metadata?: JsonRecord;
+  },
+) {
+  const row = {
+    source_kind: payload.sourceKind,
+    file_name: payload.fileName,
+    storage_bucket: payload.storageBucket,
+    storage_path: payload.storagePath,
+    file_hash: payload.fileHash,
+    file_size: payload.fileSize,
+    client_id: payload.clientId,
+    detected_client_id: payload.detectedClientId,
+    template_id: payload.templateId,
+    instance_id: payload.instanceId,
+    robot_origin_path: payload.robotOriginPath,
+    robot_machine_id: payload.robotMachineId,
+    created_by: payload.createdBy,
+    metadata: payload.metadata || {},
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from("document_ingestion_jobs")
+    .upsert(row, { onConflict: "storage_bucket,storage_path" })
+    .select("*")
+    .single();
+
+  if (error || !data) throw error || new Error("Falha ao registrar job de ingestao.");
+  return data as IngestionJobRow;
+}
+
+async function updateIngestionJob(
+  supabaseAdmin: SupabaseAdmin,
+  jobId: string | null | undefined,
+  updates: JsonRecord,
+) {
+  if (!jobId) return;
+  const { error } = await supabaseAdmin
+    .from("document_ingestion_jobs")
+    .update(updates)
+    .eq("id", jobId);
+  if (error) throw error;
+}
+
 function renderCompletionEmailTemplate(
   templateText: string,
   payload: {
@@ -1547,6 +1708,7 @@ async function applyDocumentOperationalFlow(
   actorId: string,
   inboxItem: InboxRow,
 ) {
+  return await applyDocumentOperationalFlowV2(supabaseAdmin, actorId, inboxItem);
   const now = new Date().toISOString();
   if (nextStatus !== "aguardando_documento" && failedAutomaticDeliveries.length > 0) {
     executionNotes = `Documento anexado e obrigaÃ§Ã£o concluÃ­da automaticamente. ${failedAutomaticDeliveries.join(" e ")} nÃ£o pÃ´de ser enviado.`;
@@ -1576,6 +1738,10 @@ async function applyDocumentOperationalFlow(
       processing_status: "queued",
       processing_started_at: null,
       execution_status: "pending",
+      classification_status: "classified",
+      application_status: "pending",
+      communication_status: "pending",
+      publication_status: "pending",
       execution_notes: "Aguardando vinculação manual da instância.",
     });
 
@@ -1740,6 +1906,325 @@ async function applyDocumentOperationalFlow(
   });
 
   return { processed: true, nextStatus, archivePath };
+}
+
+async function applyDocumentOperationalFlowV2(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  inboxItem: InboxRow,
+) {
+  const now = new Date().toISOString();
+
+  await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+    processing_status: "processing",
+    processing_attempts: (inboxItem.processing_attempts || 0) + 1,
+    processing_started_at: now,
+    last_processing_error: null,
+  });
+  await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+    status: "processing",
+    started_at: now,
+    attempts: (inboxItem.processing_attempts || 0) + 1,
+    last_error: null,
+  });
+
+  if (inboxItem.status === "rejected") {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "processed",
+      processing_completed_at: now,
+      execution_status: "skipped",
+      application_status: "skipped",
+      communication_status: "not_applicable",
+      publication_status: "not_applicable",
+      execution_notes: "Documento rejeitado na triagem manual.",
+      archive_path: null,
+    });
+    await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+      status: "completed",
+      classification_status: "review_required",
+      application_status: "skipped",
+      communication_status: "not_applicable",
+      publication_status: "not_applicable",
+      review_required: true,
+      completed_at: now,
+    });
+    return { processed: false, reason: "rejected" };
+  }
+
+  if (!inboxItem.linked_instance_id) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "queued",
+      processing_started_at: null,
+      execution_status: "pending",
+      classification_status: "review_required",
+      application_status: "pending",
+      execution_notes: "Aguardando vinculacao manual da instancia.",
+    });
+    await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+      status: "review_required",
+      classification_status: "review_required",
+      review_required: true,
+      started_at: null,
+    });
+    return { processed: false, reason: "awaiting_link" };
+  }
+
+  const { data: instanceData, error: instanceError } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("id", inboxItem.linked_instance_id)
+    .single();
+
+  if (instanceError || !instanceData) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "failed",
+      processing_completed_at: now,
+      execution_status: "failed",
+      application_status: "failed",
+      last_processing_error: instanceError?.message || "Instancia vinculada nao encontrada.",
+      execution_notes: "Falha ao localizar a instancia vinculada para executar a obrigacao.",
+    });
+    await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+      status: "failed",
+      application_status: "failed",
+      last_error: instanceError?.message || "Instancia vinculada nao encontrada.",
+      completed_at: now,
+    });
+    return { processed: false, reason: "missing_instance" };
+  }
+
+  const instance = instanceData as InstanceRow;
+  const templatesMap = await loadTemplatesMap(supabaseAdmin);
+  const clientsMap = await loadClientsMap(supabaseAdmin);
+  const template = templatesMap.get(instance.template_id);
+  const client = clientsMap.get(instance.client_id);
+
+  if (!template || !client) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "failed",
+      processing_completed_at: now,
+      execution_status: "failed",
+      application_status: "failed",
+      last_processing_error: "Template ou cliente da instancia nao encontrado.",
+      execution_notes: "Falha ao carregar o contexto operacional da obrigacao.",
+    });
+    await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+      status: "failed",
+      application_status: "failed",
+      last_error: "Template ou cliente da instancia nao encontrado.",
+      completed_at: now,
+    });
+    return { processed: false, reason: "missing_context" };
+  }
+
+  const archivePath = buildOperationalArchivePath(client, template, instance, inboxItem.file_name);
+  const source = inboxItem.matched_by || "manual_review";
+  const triageStatus = source === "manual_review" ? "reviewed" : "accepted";
+
+  const { error: fileError } = await supabaseAdmin
+    .from("obligation_instance_files")
+    .upsert({
+      instance_id: instance.id,
+      inbox_item_id: inboxItem.id,
+      file_name: inboxItem.file_name,
+      storage_bucket: inboxItem.storage_bucket,
+      storage_path: inboxItem.storage_path,
+      content_type: inboxItem.content_type,
+      file_size: inboxItem.file_size,
+      triage_status: triageStatus,
+      source,
+      source_kind: inboxItem.source_kind || "web_manual",
+      uploaded_by: actorId,
+      identification_confidence: Number(inboxItem.match_score || inboxItem.identification_confidence || 1),
+      publication_status: "pending",
+    }, { onConflict: "storage_bucket,storage_path" });
+
+  if (fileError) {
+    await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+      processing_status: "failed",
+      processing_completed_at: now,
+      execution_status: "failed",
+      application_status: "failed",
+      last_processing_error: fileError.message,
+      execution_notes: "Falha ao anexar o arquivo na instancia da obrigacao.",
+    });
+    await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+      status: "failed",
+      application_status: "failed",
+      last_error: fileError.message,
+      completed_at: now,
+    });
+    return { processed: false, reason: "file_upsert_failed" };
+  }
+
+  await createInstanceEvent(
+    supabaseAdmin,
+    instance.id,
+    actorId,
+    "document_received",
+    null,
+    null,
+    `Documento ${inboxItem.file_name} recebido pela Central de Documentos.`,
+    {
+      inbox_item_id: inboxItem.id,
+      document_type_key: inboxItem.document_type_key,
+      matched_by: inboxItem.matched_by,
+      archive_path: archivePath,
+      source_kind: inboxItem.source_kind,
+    },
+  );
+
+  const nextStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
+  let updatedInstance = instance;
+  const justCompleted = nextStatus === "concluida" && instance.status !== "concluida";
+  const protocolNumber = justCompleted
+    ? (instance.protocol || buildProtocolNumber(instance, inboxItem.id))
+    : (instance.protocol || inboxItem.protocol_number || null);
+  const protocolIssuedAt = justCompleted ? now : instance.protocol_issued_at;
+
+  if (nextStatus !== instance.status || (justCompleted && !instance.protocol)) {
+    const { data: updatedInstanceData, error: updateError } = await supabaseAdmin
+      .from("obligation_instances")
+      .update({
+        status: nextStatus,
+        completed_at: nextStatus === "concluida" ? now : null,
+        protocol: nextStatus === "concluida" ? protocolNumber : instance.protocol,
+        protocol_issued_at: nextStatus === "concluida" ? protocolIssuedAt : instance.protocol_issued_at,
+        completed_by_inbox_item_id: nextStatus === "concluida" ? inboxItem.id : instance.completed_by_inbox_item_id,
+        processed_automatically: nextStatus === "concluida" ? true : instance.processed_automatically,
+        last_status_at: now,
+      })
+      .eq("id", instance.id)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedInstanceData) {
+      await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+        processing_status: "failed",
+        processing_completed_at: now,
+        execution_status: "failed",
+        application_status: "failed",
+        last_processing_error: updateError?.message || "Falha ao atualizar o status da obrigacao.",
+        execution_notes: "Documento anexado, mas a execucao automatica da obrigacao falhou.",
+      });
+      await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+        status: "failed",
+        application_status: "failed",
+        last_error: updateError?.message || "Falha ao atualizar o status da obrigacao.",
+        completed_at: now,
+      });
+      return { processed: false, reason: "instance_update_failed" };
+    }
+
+    updatedInstance = updatedInstanceData as InstanceRow;
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "status_change",
+      instance.status,
+      nextStatus,
+      "Status ajustado automaticamente apos recebimento do documento.",
+      { inbox_item_id: inboxItem.id, protocol_number: protocolNumber },
+    );
+  }
+
+  if (justCompleted && protocolNumber) {
+    await createInstanceEvent(
+      supabaseAdmin,
+      instance.id,
+      actorId,
+      "protocol_issued",
+      null,
+      null,
+      `Protocolo digital ${protocolNumber} emitido automaticamente pela Grow.`,
+      {
+        inbox_item_id: inboxItem.id,
+        protocol_number: protocolNumber,
+        protocol_issued_at: protocolIssuedAt,
+      },
+    );
+  }
+
+  await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
+
+  const [emailResult, whatsappResult] = justCompleted
+    ? await Promise.all([
+      maybeSendCompletionEmail(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+      maybeSendCompletionWhatsApp(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+    ])
+    : [
+      { attempted: false as const, sent: false as const, reason: "not_completed" },
+      { attempted: false as const, sent: false as const, reason: "not_completed" },
+    ];
+
+  const failedAutomaticDeliveries = [
+    emailResult.attempted && !emailResult.sent ? "o e-mail automatico" : null,
+    whatsappResult.attempted && !whatsappResult.sent ? "o WhatsApp automatico" : null,
+  ].filter((value): value is string => Boolean(value));
+
+  const communicationStatus = !justCompleted
+    ? "not_applicable"
+    : failedAutomaticDeliveries.length === 0
+      ? (emailResult.attempted || whatsappResult.attempted ? "sent" : "not_applicable")
+      : (emailResult.sent || whatsappResult.sent ? "partial" : "failed");
+
+  let executionNotes = nextStatus === "aguardando_documento"
+    ? "Documento anexado. A obrigacao ainda aguarda outros documentos obrigatorios."
+    : emailResult.attempted && !emailResult.sent
+      ? "Documento anexado e obrigacao concluida automaticamente. O e-mail automatico nao pode ser enviado."
+      : "Documento anexado e obrigacao concluida automaticamente.";
+
+  if (nextStatus !== "aguardando_documento" && failedAutomaticDeliveries.length > 0) {
+    executionNotes = `Documento anexado e obrigacao concluida automaticamente. ${failedAutomaticDeliveries.join(" e ")} nao pode ser enviado.`;
+  }
+  if (protocolNumber && nextStatus === "concluida") {
+    executionNotes = `${executionNotes} Protocolo ${protocolNumber}.`;
+  }
+
+  await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
+    processing_status: "processed",
+    processing_completed_at: now,
+    execution_status: "applied",
+    classification_status: "classified",
+    application_status: "applied",
+    communication_status: communicationStatus,
+    publication_status: "published",
+    execution_notes: executionNotes,
+    archive_path: archivePath,
+    last_processing_error: null,
+    protocol_number: protocolNumber,
+    protocol_issued_at: protocolIssuedAt,
+    processed_automatically: true,
+  });
+
+  const { error: publishError } = await supabaseAdmin
+    .from("obligation_instance_files")
+    .update({
+      protocol_number: protocolNumber,
+      publication_status: "published",
+    })
+    .eq("storage_bucket", inboxItem.storage_bucket)
+    .eq("storage_path", inboxItem.storage_path);
+
+  if (publishError) throw publishError;
+
+  await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+    status: "completed",
+    classification_status: "classified",
+    application_status: "applied",
+    communication_status: communicationStatus,
+    publication_status: "published",
+    protocol_number: protocolNumber,
+    protocol_issued_at: protocolIssuedAt,
+    review_required: false,
+    instance_id: updatedInstance.id,
+    detected_client_id: client.id,
+    inbox_item_id: inboxItem.id,
+    completed_at: now,
+  });
+
+  return { processed: true, nextStatus, archivePath, protocolNumber, communicationStatus };
 }
 
 async function syncInstanceArtifacts(
@@ -2037,7 +2522,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
   );
   await markOverdueInstances(supabaseAdmin, actorId);
 
-  const [{ data: instancesData, error: instancesError }, { data: docsData, error: docsError }] = await Promise.all([
+  const [{ data: instancesData, error: instancesError }, { data: docsData, error: docsError }, ingestionJobs] = await Promise.all([
     supabaseAdmin
       .from("obligation_instances")
       .select("*")
@@ -2048,6 +2533,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(120),
+    loadIngestionJobs(supabaseAdmin),
   ]);
 
   if (instancesError) throw instancesError;
@@ -2105,11 +2591,33 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
       processing_completed_at: asTrimmedString(row.processing_completed_at),
       last_processing_error: asTrimmedString(row.last_processing_error),
       execution_status: asTrimmedString(row.execution_status) || "pending",
+      classification_status: asTrimmedString(row.classification_status) || "queued",
+      application_status: asTrimmedString(row.application_status) || "pending",
+      communication_status: asTrimmedString(row.communication_status) || "pending",
+      publication_status: asTrimmedString(row.publication_status) || "pending",
       execution_notes: asTrimmedString(row.execution_notes),
       archive_path: asTrimmedString(row.archive_path),
+      ingestion_job_id: asTrimmedString(row.ingestion_job_id),
+      source_kind: normalizeSourceKind(row.source_kind),
+      file_hash: asTrimmedString(row.file_hash),
+      robot_origin_path: asTrimmedString(row.robot_origin_path),
+      robot_machine_id: asTrimmedString(row.robot_machine_id),
+      protocol_number: asTrimmedString(row.protocol_number),
+      protocol_issued_at: asTrimmedString(row.protocol_issued_at),
+      processed_automatically: asBoolean(row.processed_automatically, false),
       reference_file: referenceFiles.byId.get(String(row.reference_file_id || "")) || null,
     };
   });
+
+  const jobs = ingestionJobs.map((job) => ({
+    ...job,
+    source_kind: normalizeSourceKind(job.source_kind),
+    metadata: asJsonRecord(job.metadata),
+    review_required: asBoolean(job.review_required, false),
+  }));
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
 
   const summary = {
     templates_total: templates.length,
@@ -2123,6 +2631,10 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
     inbox_processing: documents.filter((item) => item.processing_status === "processing" || item.processing_status === "queued").length,
     inbox_failed: documents.filter((item) => item.processing_status === "failed").length,
     inbox_applied: documents.filter((item) => item.execution_status === "applied").length,
+    robot_received_today: jobs.filter((job) => job.source_kind === "local_robot" && new Date(job.created_at) >= startOfToday).length,
+    robot_completed_today: jobs.filter((job) => job.source_kind === "local_robot" && job.status === "completed" && job.completed_at && new Date(job.completed_at) >= startOfToday).length,
+    robot_review_required: jobs.filter((job) => job.source_kind === "local_robot" && job.status === "review_required").length,
+    robot_failed_total: jobs.filter((job) => job.source_kind === "local_robot" && job.status === "failed").length,
   };
 
   return {
@@ -2133,6 +2645,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
     profiles,
     instances,
     documents,
+    ingestion_jobs: jobs,
   };
 }
 
@@ -2477,6 +2990,10 @@ async function handleRegisterDocumentUpload(
     .single();
 
   if (inboxError || !inboxItem) {
+    await updateIngestionJob(supabaseAdmin, ingestionJob.id, {
+      status: "failed",
+      last_error: inboxError?.message || "Falha ao registrar documento na inbox.",
+    });
     return jsonResponse({ error: inboxError?.message || "Falha ao registrar documento." }, 400);
   }
 
@@ -2593,7 +3110,27 @@ async function handleRegisterDocumentUploadNative(
   }
 
   const clientId = asTrimmedString(payload.client_id);
+  const sourceKind = normalizeSourceKind(payload.source_kind, "web_manual");
+  const fileHash = asTrimmedString(payload.file_hash);
+  const robotOriginPath = asTrimmedString(payload.robot_origin_path);
+  const robotMachineId = asTrimmedString(payload.robot_machine_id);
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  const duplicateJob = await findDuplicateIngestionJob(supabaseAdmin, {
+    sourceKind,
+    fileHash,
+    fileName,
+    fileSize: asInteger(payload.file_size, null),
+    robotMachineId,
+  });
+  if (duplicateJob && duplicateJob.status !== "failed") {
+    return jsonResponse({
+      ok: true,
+      duplicate: true,
+      ingestion_job: duplicateJob,
+      match: null,
+      processing_result: null,
+    });
+  }
   const match = await resolveDocumentReferenceMatch(supabaseAdmin, {
     clientId,
     instanceId: asTrimmedString(payload.instance_id),
@@ -2604,8 +3141,30 @@ async function handleRegisterDocumentUploadNative(
     analysis,
   });
   const autoLinked = Boolean(match.resolvedInstanceId && !match.reviewRequired && match.score >= 0.9);
+  const ingestionJob = await upsertIngestionJob(supabaseAdmin, {
+    sourceKind,
+    fileName,
+    storageBucket,
+    storagePath,
+    fileHash,
+    fileSize: asInteger(payload.file_size, null),
+    clientId: match.detectedClientId || clientId,
+    detectedClientId: match.detectedClientId || null,
+    templateId: match.suggestedTemplateId || null,
+    instanceId: autoLinked ? match.resolvedInstanceId : null,
+    robotOriginPath,
+    robotMachineId,
+    createdBy: actorId,
+    metadata: {
+      detected_cnpj: match.detectedCnpj || null,
+      competence_detected: match.competenceDetected || null,
+      match_strategy: match.strategy,
+      match_score: match.score,
+    },
+  });
 
   const inboxRow = {
+    ingestion_job_id: ingestionJob.id,
     client_id: match.detectedClientId || clientId,
     suggested_client_id: clientId,
     detected_client_id: match.detectedClientId || null,
@@ -2616,6 +3175,8 @@ async function handleRegisterDocumentUploadNative(
     file_name: fileName,
     storage_bucket: storageBucket,
     storage_path: storagePath,
+    source_kind: sourceKind,
+    file_hash: fileHash,
     content_type: asTrimmedString(payload.content_type),
     file_size: asInteger(payload.file_size, null),
     suggested_competence_label: asTrimmedString(payload.suggested_competence_label),
@@ -2629,6 +3190,7 @@ async function handleRegisterDocumentUploadNative(
     reference_match_score: match.referenceMatchScore || 0,
     reference_match_reasons: match.referenceMatchReasons || [],
     review_required: match.reviewRequired,
+    classification_status: autoLinked ? "classified" : "review_required",
     status: autoLinked ? "linked" : "pending_review",
     blocking_reason: autoLinked ? null : "Aguardando validaÃ§Ã£o humana para vincular o arquivo.",
     text_extraction_status: match.textExtractionStatus || analysis.text_extraction_status,
@@ -2642,10 +3204,15 @@ async function handleRegisterDocumentUploadNative(
     processing_completed_at: null,
     last_processing_error: null,
     execution_status: autoLinked ? "pending" : "pending",
+    application_status: "pending",
+    communication_status: "pending",
+    publication_status: "pending",
     execution_notes: autoLinked
       ? "Documento aguardando aplicação automática na obrigação."
       : "Documento aguardando revisão humana para vinculação.",
     archive_path: null,
+    robot_origin_path: robotOriginPath,
+    robot_machine_id: robotMachineId,
     notes: asTrimmedString(payload.notes),
     created_by: actorId,
     reviewed_by: autoLinked ? actorId : null,
@@ -2659,15 +3226,35 @@ async function handleRegisterDocumentUploadNative(
     .single();
 
   if (inboxError || !inboxItem) {
+    await updateIngestionJob(supabaseAdmin, ingestionJob.id, {
+      status: "failed",
+      classification_status: "failed",
+      application_status: "failed",
+      communication_status: "not_applicable",
+      publication_status: "failed",
+      last_error: inboxError?.message || "Falha ao registrar documento.",
+      completed_at: new Date().toISOString(),
+    });
     return jsonResponse({ error: inboxError?.message || "Falha ao registrar documento." }, 400);
   }
 
+  await updateIngestionJob(supabaseAdmin, ingestionJob.id, {
+    inbox_item_id: String((inboxItem as JsonRecord).id),
+    status: autoLinked ? "ingested" : "review_required",
+    classification_status: autoLinked ? "classified" : "review_required",
+    application_status: "pending",
+    communication_status: "pending",
+    publication_status: "pending",
+    review_required: !autoLinked,
+    instance_id: autoLinked ? match.resolvedInstanceId : null,
+  });
+
   let processingResult: JsonRecord | null = null;
   if (autoLinked) {
-    processingResult = await applyDocumentOperationalFlow(supabaseAdmin, actorId, inboxItem as InboxRow) as unknown as JsonRecord;
+    processingResult = await applyDocumentOperationalFlowV2(supabaseAdmin, actorId, inboxItem as InboxRow) as unknown as JsonRecord;
   }
 
-  return jsonResponse({ ok: true, inbox_item: inboxItem, match, processing_result: processingResult });
+  return jsonResponse({ ok: true, inbox_item: inboxItem, ingestion_job: ingestionJob, match, processing_result: processingResult });
 }
 
 async function handleResolveDocumentNative(
@@ -2702,6 +3289,10 @@ async function handleResolveDocumentNative(
         processing_status: "processed",
         processing_completed_at: new Date().toISOString(),
         execution_status: "skipped",
+        classification_status: "review_required",
+        application_status: "skipped",
+        communication_status: "not_applicable",
+        publication_status: "not_applicable",
         execution_notes: "Documento rejeitado na triagem manual.",
         last_processing_error: null,
         notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
@@ -2711,6 +3302,15 @@ async function handleResolveDocumentNative(
       .eq("id", inboxItemId);
 
     if (error) throw error;
+    await updateIngestionJob(supabaseAdmin, asTrimmedString((inboxItem as JsonRecord).ingestion_job_id), {
+      status: "completed",
+      classification_status: "review_required",
+      application_status: "skipped",
+      communication_status: "not_applicable",
+      publication_status: "not_applicable",
+      review_required: true,
+      completed_at: new Date().toISOString(),
+    });
     return jsonResponse({ ok: true });
   }
 
@@ -2741,21 +3341,36 @@ async function handleResolveDocumentNative(
 
   if (inboxUpdateError) throw inboxUpdateError;
 
+  await updateIngestionJob(supabaseAdmin, asTrimmedString((inboxItem as JsonRecord).ingestion_job_id), {
+    status: "ingested",
+    classification_status: "classified",
+    application_status: "pending",
+    communication_status: "pending",
+    publication_status: "pending",
+    review_required: false,
+    instance_id: instanceId,
+    detected_client_id: asTrimmedString((inboxItem as JsonRecord).detected_client_id),
+  });
+
   const refreshedInbox = {
     ...(inboxItem as InboxRow),
     status: "linked",
     linked_instance_id: instanceId,
     matched_by: "manual_review",
     review_required: false,
+    classification_status: "classified",
     notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
     reviewed_by: actorId,
     reviewed_at: new Date().toISOString(),
     processing_status: "queued",
     execution_status: "pending",
+    application_status: "pending",
+    communication_status: "pending",
+    publication_status: "pending",
     last_processing_error: null,
   } satisfies InboxRow;
 
-  const processingResult = await applyDocumentOperationalFlow(supabaseAdmin, actorId, refreshedInbox);
+  const processingResult = await applyDocumentOperationalFlowV2(supabaseAdmin, actorId, refreshedInbox);
 
   return jsonResponse({ ok: true, processing_result: processingResult });
 }
@@ -2907,7 +3522,7 @@ async function handleProcessDocumentQueue(
 
   const results = [];
   for (const row of (data || []) as InboxRow[]) {
-    const result = await applyDocumentOperationalFlow(supabaseAdmin, actorId, row);
+    const result = await applyDocumentOperationalFlowV2(supabaseAdmin, actorId, row);
     results.push({
       inbox_item_id: row.id,
       file_name: row.file_name,
@@ -2975,7 +3590,7 @@ Deno.serve(async (req) => {
       return await handleUpdateInstance(supabaseAdmin, user.id, payload);
     }
 
-    if (action === "register_document_upload") {
+    if (action === "register_document_upload" || action === "register_robot_document_upload") {
       return await handleRegisterDocumentUploadNative(supabaseAdmin, user.id, payload);
     }
 

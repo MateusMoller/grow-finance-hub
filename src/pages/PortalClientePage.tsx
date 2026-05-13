@@ -843,7 +843,7 @@ export default function PortalClientePage() {
         supabase
           .from("obligation_instances")
           .select(
-            "id, template_id, competence_key, competence_label, competence_date, technical_due_date, legal_due_date, status, template:obligation_templates(name, sector), files:obligation_instance_files(id, file_name, storage_bucket, storage_path, file_size, content_type, triage_status, source, created_at)",
+            "id, template_id, competence_key, competence_label, competence_date, technical_due_date, legal_due_date, status, protocol, protocol_issued_at, processed_automatically, template:obligation_templates(name, sector), files:obligation_instance_files(id, file_name, storage_bucket, storage_path, file_size, content_type, triage_status, source, source_kind, protocol_number, created_at)",
           )
           .eq("client_id", client.id)
           .order("competence_date", { ascending: false }),
@@ -869,6 +869,9 @@ export default function PortalClientePage() {
           technical_due_date: string;
           legal_due_date: string | null;
           status: PortalObligationDocument["instance_status"];
+          protocol: string | null;
+          protocol_issued_at: string | null;
+          processed_automatically: boolean;
           template: { name: string; sector: string | null } | null;
           files: Array<{
             id: string;
@@ -879,6 +882,8 @@ export default function PortalClientePage() {
             content_type: string | null;
             triage_status: PortalObligationDocument["triage_status"];
             source: string;
+            source_kind: PortalObligationDocument["source_kind"];
+            protocol_number: string | null;
             created_at: string;
           }> | null;
         };
@@ -899,6 +904,9 @@ export default function PortalClientePage() {
               technical_due_date: instance.technical_due_date,
               legal_due_date: instance.legal_due_date,
               instance_status: instance.status,
+              protocol: instance.protocol,
+              protocol_issued_at: instance.protocol_issued_at,
+              processed_automatically: instance.processed_automatically,
               file_name: file.file_name,
               storage_bucket: file.storage_bucket,
               storage_path: file.storage_path,
@@ -906,6 +914,8 @@ export default function PortalClientePage() {
               content_type: file.content_type,
               triage_status: file.triage_status,
               source: file.source,
+              source_kind: file.source_kind,
+              protocol_number: file.protocol_number,
               created_at: file.created_at,
             })),
         );
@@ -2334,6 +2344,9 @@ export default function PortalClientePage() {
                               <Badge className={obligationStatusVariants[document.instance_status]}>
                                 {obligationStatusLabels[document.instance_status]}
                               </Badge>
+                              {document.processed_automatically ? (
+                                <Badge variant="secondary">Processado automaticamente</Badge>
+                              ) : null}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                               <span>{document.template_name}</span>
@@ -2351,6 +2364,12 @@ export default function PortalClientePage() {
                                 <>
                                   <span>•</span>
                                   <span>{formatFileSize(document.file_size)}</span>
+                                </>
+                              ) : null}
+                              {document.protocol || document.protocol_number ? (
+                                <>
+                                  <span>•</span>
+                                  <span>Protocolo {document.protocol_number || document.protocol}</span>
                                 </>
                               ) : null}
                             </div>
