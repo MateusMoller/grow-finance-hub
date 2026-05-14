@@ -1,9 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 import { isFunctionalPwaRoute, normalizePwaAppScopePath, normalizePwaBasePath, syncPwaModeForPath } from "@/lib/pwaScope";
 
-const FALLBACK_WEB_PUSH_PUBLIC_KEY =
-  "BC16oL1ad4y93LHHSe4c044NpuDUaPGGqnw39xZ7R9v6yLmh6eKPnuGVX-3amlZxGT45nZDZfQ3UsHFrgZ5DAVk";
-const WEB_PUSH_PUBLIC_KEY = (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || FALLBACK_WEB_PUSH_PUBLIC_KEY).trim();
+type GrowRuntimeConfig = {
+  VITE_WEB_PUSH_PUBLIC_KEY?: string;
+};
+
+type GrowWindow = Window & {
+  __GROW_RUNTIME_CONFIG__?: GrowRuntimeConfig;
+};
 
 export type PushPermissionState = NotificationPermission | "unsupported";
 
@@ -15,20 +19,72 @@ export interface PushSubscriptionStatus {
   endpoint: string | null;
 }
 
+const normalizeConfigValue = (value: unknown) => {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().replace(/^['"]|['"]$/g, "");
+  if (!normalized) return "";
+  if (normalized.includes("Exemplo")) return "";
+  if (normalized.includes("example")) return "";
+  if (normalized.includes("...")) return "";
+  return normalized;
+};
+
+const readRuntimePushPublicKey = () => {
+  if (typeof window === "undefined") return "";
+  return normalizeConfigValue((window as GrowWindow).__GROW_RUNTIME_CONFIG__?.VITE_WEB_PUSH_PUBLIC_KEY);
+};
+
+const readWebPushPublicKey = () =>
+  normalizeConfigValue(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY) || readRuntimePushPublicKey();
+
+let cachedWebPushPublicKey: string | null = null;
+
+const resolveWebPushPublicKey = async () => {
+  const configuredKey = readWebPushPublicKey();
+  if (configuredKey) {
+    cachedWebPushPublicKey = configuredKey;
+    return configuredKey;
+  }
+
+  if (cachedWebPushPublicKey) return cachedWebPushPublicKey;
+
+  const { data, error } = await supabase.functions.invoke<{ public_key?: string }>("send-push-notification", {
+    body: { action: "get_public_key" },
+  });
+
+  if (error) {
+    throw new Error(error.message || "Nao foi possivel carregar a chave publica de push.");
+  }
+
+  const publicKey = normalizeConfigValue(data?.public_key);
+  if (!publicKey) {
+    throw new Error("Chave publica VAPID nao configurada no backend.");
+  }
+
+  cachedWebPushPublicKey = publicKey;
+  return publicKey;
+};
+
 const getServiceWorkerUrl = () => `${normalizePwaBasePath()}sw.js`;
 const getServiceWorkerScopeUrl = () => new URL(normalizePwaAppScopePath(), window.location.origin).href;
 
+const readErrorDetails = (error: unknown) => ({
+  name: error instanceof Error ? error.name : "",
+  message: error instanceof Error ? error.message : String(error || ""),
+  stack: error instanceof Error ? error.stack : "",
+});
+
 const logPushActivationError = (step: string, error: unknown, context: Record<string, unknown> = {}) => {
-  console.error("[push-notifications] Activation failed", {
-    step,
-    error,
-    context,
-  });
+  const details = readErrorDetails(error);
+  console.error(
+    `[push-notifications] Activation failed at ${step}: ${details.name || "Error"} - ${details.message}`,
+  );
+  console.error("[push-notifications] Context", context);
+  if (details.stack) console.error("[push-notifications] Stack", details.stack);
 };
 
 const buildPushActivationError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error || "");
-  const name = error instanceof Error ? error.name : "";
+  const { name, message } = readErrorDetails(error);
   const normalized = `${name} ${message}`.toLowerCase();
 
   if (normalized.includes("push service error") || normalized.includes("registration failed")) {
@@ -38,7 +94,7 @@ const buildPushActivationError = (error: unknown) => {
   }
 
   if (normalized.includes("applicationserverkey") || normalized.includes("vapid")) {
-    return new Error("Chave publica VAPID invalida ou incompatível. Verifique VITE_WEB_PUSH_PUBLIC_KEY.");
+    return new Error("Chave publica VAPID invalida ou incompativel. Verifique VITE_WEB_PUSH_PUBLIC_KEY.");
   }
 
   return error instanceof Error ? error : new Error(message || "Falha ao ativar notificacoes push.");
@@ -66,11 +122,11 @@ export const isPushSupported = () =>
 
 const ensureServiceWorkerRegistration = async () => {
   if (!isPushSupported()) {
-    throw new Error("Push notifications não sao suportadas neste navegador.");
+    throw new Error("Push notifications nao sao suportadas neste navegador.");
   }
 
   if (!isFunctionalPwaRoute(window.location.pathname)) {
-    throw new Error("Notificações push so podem ser ativadas no login, portal e area interna.");
+    throw new Error("Notificacoes push so podem ser ativadas no login, portal e area interna.");
   }
 
   await syncPwaModeForPath(window.location.pathname);
@@ -117,7 +173,7 @@ const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubs
   const auth = payload.keys?.auth;
 
   if (!endpoint || !p256dh || !auth) {
-    throw new Error("Não foi possível ler as chaves da inscricao push.");
+    throw new Error("Nao foi possivel ler as chaves da inscricao push.");
   }
 
   const expiration =
@@ -143,12 +199,12 @@ const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubs
   );
 
   if (error) {
-    throw new Error(error.message || "Falha ao registrar dispositivo para notificações push.");
+    throw new Error(error.message || "Falha ao registrar dispositivo para notificacoes push.");
   }
 };
 
 export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatus> => {
-  const hasPublicKey = WEB_PUSH_PUBLIC_KEY.length > 0;
+  let hasPublicKey = readWebPushPublicKey().length > 0 || Boolean(cachedWebPushPublicKey);
 
   if (!isPushSupported()) {
     return {
@@ -158,6 +214,15 @@ export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatu
       subscribed: false,
       endpoint: null,
     };
+  }
+
+  if (!hasPublicKey) {
+    try {
+      await resolveWebPushPublicKey();
+      hasPublicKey = true;
+    } catch {
+      hasPublicKey = false;
+    }
   }
 
   const subscription = await getActiveSubscription();
@@ -172,15 +237,12 @@ export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatu
 };
 
 export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?: string | null) => {
-  if (!WEB_PUSH_PUBLIC_KEY) {
-    throw new Error("VITE_WEB_PUSH_PUBLIC_KEY não configurada no frontend.");
-  }
-
   try {
+    const webPushPublicKey = await resolveWebPushPublicKey();
     const permission = await ensurePermission();
     if (permission !== "granted") {
-    throw new Error("Permissão de notificação não concedida.");
-  }
+      throw new Error("Permissao de notificacao nao concedida.");
+    }
 
     const registration = await ensureServiceWorkerRegistration();
     let subscription = await registration.pushManager.getSubscription();
@@ -188,9 +250,9 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(WEB_PUSH_PUBLIC_KEY),
-    });
-  }
+        applicationServerKey: urlBase64ToUint8Array(webPushPublicKey),
+      });
+    }
 
     await upsertSubscriptionOnServer(userId, subscription, deviceLabel);
   } catch (error) {
@@ -200,7 +262,7 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
       permission: typeof Notification !== "undefined" ? Notification.permission : null,
       serviceWorkerUrl: typeof window !== "undefined" ? getServiceWorkerUrl() : null,
       serviceWorkerScope: typeof window !== "undefined" ? normalizePwaAppScopePath() : null,
-      vapidKeyLength: WEB_PUSH_PUBLIC_KEY.length,
+      vapidKeyLength: readWebPushPublicKey().length || cachedWebPushPublicKey?.length || 0,
     });
     throw buildPushActivationError(error);
   }
@@ -265,7 +327,7 @@ export const sendPushTestToCurrentUser = async (userId: string) => {
     body: {
       target_user_id: userId,
       title: "Push de teste",
-      body: "As notificações push do Grow Finance Hub estão ativas neste dispositivo.",
+      body: "As notificacoes push do Grow Finance Hub estao ativas neste dispositivo.",
       url: "/app/notificacoes",
       tag: `grow-push-test-${Date.now()}`,
     },

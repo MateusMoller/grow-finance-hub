@@ -136,6 +136,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Invalid payload" }, 400);
     }
 
+    if (asTrimmedString(payload.action) === "get_public_key") {
+      return jsonResponse({ public_key: vapidPublicKey });
+    }
+
     const singleTarget = asTrimmedString(payload.target_user_id);
     const arrayTargets = asStringArray(payload.target_user_ids);
     const targetUserIds = unique([
