@@ -1,19 +1,29 @@
 import { AppLayout } from "@/components/app/AppLayout";
-import { motion } from "framer-motion";
-import { AlertTriangle, Bell, BellOff, Check, Clock3, Loader2, RefreshCcw, Smartphone, UserX } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
 import {
   disablePushOnCurrentDevice,
   getPushSubscriptionStatus,
-  sendPushTestToCurrentUser,
   subscribePushOnCurrentDevice,
   syncPushSubscriptionOnServer,
   type PushSubscriptionStatus,
 } from "@/lib/pushNotifications";
+import { motion } from "framer-motion";
+import {
+  AlertTriangle,
+  Bell,
+  Check,
+  CheckCheck,
+  Clock3,
+  Inbox,
+  Loader2,
+  RefreshCcw,
+  Smartphone,
+  UserX,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type NotificationFilter = "all" | "unread" | "alta" | "media" | "baixa";
@@ -31,6 +41,20 @@ const toRelativeTime = (isoDate: string) => {
   if (diffDays === 1) return "Ontem";
   if (diffDays < 7) return `Ha ${diffDays} dias`;
   return date.toLocaleDateString("pt-BR");
+};
+
+const priorityLabel: Record<"alta" | "media" | "baixa", string> = {
+  alta: "Alta",
+  media: "Media",
+  baixa: "Baixa",
+};
+
+const filterLabels: Record<NotificationFilter, string> = {
+  all: "Todas",
+  unread: "Nao lidas",
+  alta: "Alta",
+  media: "Media",
+  baixa: "Baixa",
 };
 
 export default function NotificacoesPage() {
@@ -51,7 +75,7 @@ export default function NotificacoesPage() {
     subscribed: false,
     endpoint: null,
   });
-  const [pushActionLoading, setPushActionLoading] = useState<"enable" | "disable" | "test" | null>(null);
+  const [pushActionLoading, setPushActionLoading] = useState<"enable" | "disable" | null>(null);
 
   const loadPushStatus = useCallback(async () => {
     try {
@@ -61,7 +85,7 @@ export default function NotificacoesPage() {
         try {
           await syncPushSubscriptionOnServer(user.id);
         } catch {
-          // Não derruba o status local do push se a sincronização remota falhar.
+          // Mantem o estado local mesmo se a sincronizacao remota falhar.
         }
       }
     } catch {
@@ -73,6 +97,24 @@ export default function NotificacoesPage() {
     void loadPushStatus();
   }, [loadPushStatus]);
 
+  const notificationCounts = useMemo(() => {
+    const counts = {
+      all: notifications.length,
+      unread: unreadCount,
+      alta: 0,
+      media: 0,
+      baixa: 0,
+    };
+
+    notifications.forEach((notification) => {
+      if (notification.priority === "alta") counts.alta += 1;
+      if (notification.priority === "media") counts.media += 1;
+      if (notification.priority === "baixa") counts.baixa += 1;
+    });
+
+    return counts;
+  }, [notifications, unreadCount]);
+
   const filteredNotifications = useMemo(() => {
     if (filter === "all") return notifications;
     if (filter === "unread") return notifications.filter((notification) => !notification.read);
@@ -80,24 +122,24 @@ export default function NotificacoesPage() {
   }, [filter, notifications]);
 
   const pushStatusLabel = useMemo(() => {
-    if (!pushStatus.supported) return "Push não suportado neste navegador.";
-    if (!pushStatus.hasPublicKey) return "Chave publica VAPID não configurada no app.";
-    if (pushStatus.permission === "denied") return "Permissão bloqueada no navegador.";
-    if (pushStatus.permission !== "granted") return "Permissão ainda não concedida.";
-    if (!pushStatus.subscribed) return "Push habilitado no navegador, mas sem inscricao ativa.";
-    return "Push ativo neste dispositivo.";
+    if (!pushStatus.supported) return "Push nao suportado neste navegador.";
+    if (!pushStatus.hasPublicKey) return "Chave publica VAPID nao configurada.";
+    if (pushStatus.permission === "denied") return "Permissao bloqueada no navegador.";
+    if (pushStatus.permission !== "granted") return "Permissao ainda nao concedida.";
+    if (!pushStatus.subscribed) return "Pronto para ativar neste dispositivo.";
+    return "Ativo para este dispositivo.";
   }, [pushStatus]);
 
   const handleEnablePush = async () => {
     if (!user?.id) {
-      toast.error("Usuário não autenticado.");
+      toast.error("Usuario nao autenticado.");
       return;
     }
 
     setPushActionLoading("enable");
     try {
       await subscribePushOnCurrentDevice(user.id);
-      toast.success("Notificações push ativadas neste dispositivo.");
+      toast.success("Notificacoes push ativadas neste dispositivo.");
       await loadPushStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao ativar push.";
@@ -109,14 +151,14 @@ export default function NotificacoesPage() {
 
   const handleDisablePush = async () => {
     if (!user?.id) {
-      toast.error("Usuário não autenticado.");
+      toast.error("Usuario nao autenticado.");
       return;
     }
 
     setPushActionLoading("disable");
     try {
       await disablePushOnCurrentDevice(user.id);
-      toast.success("Notificações push desativadas neste dispositivo.");
+      toast.success("Notificacoes push desativadas neste dispositivo.");
       await loadPushStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao desativar push.";
@@ -126,219 +168,206 @@ export default function NotificacoesPage() {
     }
   };
 
-  const handleSendPushTest = async () => {
-    if (!user?.id) {
-      toast.error("Usuário não autenticado.");
-      return;
-    }
-
-    setPushActionLoading("test");
-    try {
-      await syncPushSubscriptionOnServer(user.id);
-      await sendPushTestToCurrentUser(user.id);
-      toast.success("Push de teste enviado.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao enviar push de teste.";
-      toast.error(message);
-    } finally {
-      setPushActionLoading(null);
-      await loadPushStatus();
-    }
-  };
-
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-4xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-              Notificacoes
-              {unreadCount > 0 && (
-                <Badge className="bg-destructive text-destructive-foreground">{unreadCount}</Badge>
-              )}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Alertas priorizados: atrasadas, vencendo hoje e tarefas sem responsavel
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void refresh()} className="gap-1">
-              <RefreshCcw className="h-3.5 w-3.5" /> Atualizar
-            </Button>
-            <Button variant="outline" size="sm" onClick={markAllAsRead} className="gap-1">
-              <Check className="h-3.5 w-3.5" /> Marcar todas como lidas
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>
-            Todas
-          </Button>
-          <Button
-            variant={filter === "unread" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("unread")}
-          >
-            Não lidas ({unreadCount})
-          </Button>
-          <Button variant={filter === "alta" ? "default" : "outline"} size="sm" onClick={() => setFilter("alta")}>
-            Prioridade alta
-          </Button>
-          <Button variant={filter === "media" ? "default" : "outline"} size="sm" onClick={() => setFilter("media")}>
-            Prioridade media
-          </Button>
-          <Button variant={filter === "baixa" ? "default" : "outline"} size="sm" onClick={() => setFilter("baixa")}>
-            Prioridade baixa
-          </Button>
-        </div>
-
-        <div className="rounded-xl border bg-card p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold flex items-center gap-2">
-                <Smartphone className="h-4 w-4" />
-                Notificacoes Push (PWA)
-              </h2>
-              <p className="text-xs text-muted-foreground mt-1">{pushStatusLabel}</p>
+      <div className="mx-auto w-full max-w-5xl space-y-5">
+        <section className="rounded-xl border bg-card px-4 py-4 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-heading text-2xl font-bold tracking-tight">Notificacoes</h1>
+                {unreadCount > 0 && (
+                  <Badge className="bg-destructive text-destructive-foreground">
+                    {unreadCount} nao lidas
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Alertas de tarefas atrasadas, vencimentos do dia e pendencias sem responsavel.
+              </p>
             </div>
-            <Badge variant={pushStatus.subscribed ? "default" : "outline"}>
-              {pushStatus.subscribed ? "Ativo" : "Inativo"}
-            </Badge>
+
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[21rem]">
+              <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase text-muted-foreground">Total</p>
+                <p className="text-lg font-semibold">{notificationCounts.all}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase text-muted-foreground">Nao lidas</p>
+                <p className="text-lg font-semibold">{notificationCounts.unread}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase text-muted-foreground">Alta</p>
+                <p className="text-lg font-semibold">{notificationCounts.alta}</p>
+              </div>
+            </div>
           </div>
+        </section>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              onClick={() => void handleEnablePush()}
-              disabled={
-                pushActionLoading !== null ||
-                !pushStatus.supported ||
-                !pushStatus.hasPublicKey
-              }
-            >
-              {pushActionLoading === "enable" && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-              Ativar no dispositivo
-            </Button>
+        <section className="rounded-xl border bg-card px-4 py-3 shadow-sm sm:px-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-medium">Push no dispositivo</h2>
+                <Badge variant={pushStatus.subscribed ? "default" : "outline"} className="h-5 px-2 text-[11px]">
+                  {pushStatus.subscribed ? "Ativo" : "Inativo"}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{pushStatusLabel}</p>
+            </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleDisablePush()}
-              disabled={pushActionLoading !== null || !pushStatus.subscribed}
-            >
-              {pushActionLoading === "disable" ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <BellOff className="h-3.5 w-3.5 mr-1" />
-              )}
-              Desativar
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleSendPushTest()}
-              disabled={pushActionLoading !== null || !pushStatus.subscribed}
-            >
-              {pushActionLoading === "test" ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Bell className="h-3.5 w-3.5 mr-1" />
-              )}
-              Enviar teste
-            </Button>
-
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => void loadPushStatus()}
-              disabled={pushActionLoading !== null}
-            >
-              Atualizar status
-            </Button>
+            {pushStatus.subscribed ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleDisablePush()}
+                disabled={pushActionLoading !== null}
+              >
+                {pushActionLoading === "disable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                Desativar
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => void handleEnablePush()}
+                disabled={
+                  pushActionLoading !== null ||
+                  !pushStatus.supported ||
+                  !pushStatus.hasPublicKey
+                }
+              >
+                {pushActionLoading === "enable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                Ativar
+              </Button>
+            )}
           </div>
 
           {pushStatus.permission === "denied" && (
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              O navegador bloqueou notificações. Libere nas configurações do site/app no celular.
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              O navegador bloqueou notificacoes. Libere nas configuracoes do site/app.
             </p>
           )}
           {!pushStatus.hasPublicKey && (
-            <p className="text-xs text-muted-foreground">
-              Configure a variavel <code>VITE_WEB_PUSH_PUBLIC_KEY</code> para habilitar inscricoes push.
+            <p className="mt-2 text-xs text-muted-foreground">
+              Configure <code>VITE_WEB_PUSH_PUBLIC_KEY</code> para habilitar push.
             </p>
           )}
-        </div>
+        </section>
 
-        {loading ? (
-          <div className="flex justify-center py-14">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        ) : filteredNotifications.length === 0 ? (
-          <div className="rounded-xl border bg-card p-12 text-center">
-            <Bell className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium">Nenhuma notificacao para este filtro</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Quando surgirem novos alertas de prioridade, eles aparecerao aqui.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filteredNotifications.map((notification, index) => {
-              const kindIcon =
-                notification.kind === "overdue"
-                  ? AlertTriangle
-                  : notification.kind === "due_today"
-                    ? Clock3
-                    : UserX;
-              const KindIcon = kindIcon;
+        <section className="space-y-3">
+          <div className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              Central de alertas
+            </div>
 
-              const priorityClass =
-                notification.priority === "alta"
-                  ? "text-destructive bg-destructive/10"
-                  : notification.priority === "media"
-                    ? "text-amber-700 bg-amber-100 dark:bg-amber-900/20"
-                    : "text-muted-foreground bg-muted";
-
-              return (
-                <motion.div
-                  key={notification.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.03 }}
-                  onClick={() => markAsRead(notification.id)}
-                  className={`rounded-xl border p-4 flex items-start gap-3 cursor-pointer transition-all hover:shadow-sm ${
-                    notification.read ? "bg-card" : "bg-primary/5 border-primary/20"
-                  }`}
+            <div className="flex flex-wrap gap-2">
+              {(["all", "unread", "alta", "media", "baixa"] as NotificationFilter[]).map((item) => (
+                <Button
+                  key={item}
+                  type="button"
+                  variant={filter === item ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 gap-2 rounded-full px-3"
+                  onClick={() => setFilter(item)}
                 >
-                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${priorityClass}`}>
-                    <KindIcon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className={`text-sm ${notification.read ? "font-medium" : "font-semibold"}`}>
-                          {notification.title}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">{notification.description}</p>
-                      </div>
-                      {!notification.read && (
-                        <div className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1.5" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-xs text-muted-foreground">{toRelativeTime(notification.createdAt)}</span>
-                      <Badge variant="outline" className="text-[10px] border-0 bg-muted">
-                        {notification.priority}
-                      </Badge>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                  {filterLabels[item]}
+                  <span className="text-[11px] opacity-75">{notificationCounts[item]}</span>
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => void refresh()} className="h-8 gap-1">
+                <RefreshCcw className="h-3.5 w-3.5" /> Atualizar
+              </Button>
+              <Button variant="outline" size="sm" onClick={markAllAsRead} className="h-8 gap-1">
+                <CheckCheck className="h-3.5 w-3.5" /> Lidas
+              </Button>
+            </div>
           </div>
-        )}
+
+          {loading ? (
+            <div className="flex justify-center rounded-xl border bg-card py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : filteredNotifications.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-card px-6 py-14 text-center">
+              <Inbox className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+              <p className="font-medium">Nenhuma notificacao neste filtro</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Quando houver novos alertas operacionais, eles aparecem aqui.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              {filteredNotifications.map((notification, index) => {
+                const kindIcon =
+                  notification.kind === "overdue"
+                    ? AlertTriangle
+                    : notification.kind === "due_today"
+                      ? Clock3
+                      : UserX;
+                const KindIcon = kindIcon;
+
+                const priorityClass =
+                  notification.priority === "alta"
+                    ? "bg-destructive/10 text-destructive"
+                    : notification.priority === "media"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                      : "bg-muted text-muted-foreground";
+
+                return (
+                  <motion.button
+                    key={notification.id}
+                    type="button"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.02 }}
+                    onClick={() => markAsRead(notification.id)}
+                    className={`flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/40 sm:px-5 ${
+                      notification.read ? "bg-card" : "bg-primary/5"
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${priorityClass}`}>
+                      <KindIcon className="h-4 w-4" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className={`text-sm ${notification.read ? "font-medium" : "font-semibold"}`}>
+                            {notification.title}
+                          </h3>
+                          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                            {notification.description}
+                          </p>
+                        </div>
+                        {!notification.read && (
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Nao lida" />
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{toRelativeTime(notification.createdAt)}</span>
+                        <Badge variant="outline" className="h-5 border-0 bg-muted px-2 text-[10px]">
+                          {priorityLabel[notification.priority]}
+                        </Badge>
+                        {notification.read && (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <Check className="h-3 w-3" />
+                            Lida
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </AppLayout>
   );
