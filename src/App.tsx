@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { GlobalFiltersProvider } from "@/hooks/useGlobalFilters";
 import { ProtectedRoute } from "@/components/app/ProtectedRoute";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider, useTheme } from "next-themes";
 import { isFunctionalPwaRoute, syncPwaModeForPath } from "@/lib/pwaScope";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -81,6 +81,47 @@ const PwaFunctionalRouteGuard = () => {
   return null;
 };
 
+const isAppRoute = (pathname: string) => pathname === "/app" || pathname.startsWith("/app/");
+
+const RouteThemeScope = () => {
+  const location = useLocation();
+  const { resolvedTheme, theme } = useTheme();
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const root = document.documentElement;
+
+    if (isAppRoute(location.pathname)) {
+      root.style.removeProperty("color-scheme");
+
+      const shouldUseDarkTheme = theme === "dark" || (theme === "system" && resolvedTheme === "dark");
+      root.classList.toggle("dark", shouldUseDarkTheme);
+      return;
+    }
+
+    const forcePublicLightTheme = () => {
+      if (root.classList.contains("dark")) {
+        root.classList.remove("dark");
+      }
+
+      root.style.colorScheme = "light";
+    };
+
+    forcePublicLightTheme();
+
+    const observer = new MutationObserver(forcePublicLightTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("color-scheme");
+    };
+  }, [location.pathname, resolvedTheme, theme]);
+
+  return null;
+};
+
 const AppRouteFallback = () => (
   <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
     Carregando...
@@ -102,6 +143,7 @@ const App = () => (
         <BrowserRouter basename={import.meta.env.BASE_URL}>
           <PwaModeSync />
           <PwaFunctionalRouteGuard />
+          <RouteThemeScope />
           <AuthProvider>
             <GlobalFiltersProvider>
               <Suspense fallback={<AppRouteFallback />}>

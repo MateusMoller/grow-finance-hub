@@ -830,7 +830,7 @@ type GeneralInfoCadastralFieldName = (typeof generalInfoCadastralFields)[number]
 
 const getCategoryFieldEntryKey = (category: ClientCategoryKey, fieldName: string) => `${category}__${fieldName}`;
 
-const cadastroClientesMirrorFieldNames = ["regime_tributÃ¡rio", "ddd", "telefone"] as const;
+const cadastroClientesMirrorFieldNames = ["regime_tributário", "ddd", "telefone"] as const;
 type CadastroClientesMirrorFieldName = (typeof cadastroClientesMirrorFieldNames)[number];
 
 const splitPhoneForCadastro = (rawPhone: string) => {
@@ -1360,7 +1360,7 @@ export default function ClientDetailPage() {
     setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
 
     if (category === "cadastro_clientes") {
-      if (fieldName === "regime_tributÃ¡rio") {
+      if (fieldName === "regime_tributário") {
         setClientForm((prev) => ({ ...prev, regime: normalizedValue }));
       }
 
@@ -1711,9 +1711,9 @@ export default function ClientDetailPage() {
     const phonePartsFromGeneral = splitPhoneForCadastro(normalizedPhone);
     const mirroredCadastroFieldValues: Array<{ fieldName: CadastroClientesMirrorFieldName; value: string }> = [
       {
-        fieldName: "regime_tributÃ¡rio",
+        fieldName: "regime_tributário",
         value: normalizeFieldValueForSave(
-          getFieldRule("cadastro_clientes", "regime_tributÃ¡rio"),
+          getFieldRule("cadastro_clientes", "regime_tributário"),
           clientForm.regime || "",
         ),
       },
@@ -2160,7 +2160,7 @@ export default function ClientDetailPage() {
     }
 
     if (category === "cadastro_clientes") {
-      const regimeEntryValue = entries.find((entry) => entry.field_name === "regime_tributÃ¡rio")?.field_value;
+      const regimeEntryValue = entries.find((entry) => entry.field_name === "regime_tributário")?.field_value;
       const dddEntryValue = entries.find((entry) => entry.field_name === "ddd")?.field_value;
       const phoneEntryValue = entries.find((entry) => entry.field_name === "telefone")?.field_value;
 
@@ -2714,7 +2714,7 @@ export default function ClientDetailPage() {
                     onChange={(e) => {
                       const nextRegime = e.target.value;
                       setClientForm((p) => ({ ...p, regime: nextRegime }));
-                      handleDataFieldChange("cadastro_clientes", "regime_tributÃ¡rio", nextRegime);
+                      handleDataFieldChange("cadastro_clientes", "regime_tributário", nextRegime);
                     }}
                   >
                     {["Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI"].map((r) => <option key={r}>{r}</option>)}

@@ -111,6 +111,9 @@ const normalizeRegime = (value: string | null | undefined) => {
   return trimmed;
 };
 
+const renderRegimeLabel = (regime: string | null) =>
+  regime ? regime : <span className="text-muted-foreground">Não informado</span>;
+
 const parseFunctionErrorMessage = async (error: unknown) => {
   if (!(error instanceof FunctionsHttpError)) {
     return error instanceof Error ? error.message : "Não foi possível cadastrar o cliente.";
@@ -431,7 +434,7 @@ export default function ClientsPage() {
                   <tr className="border-b bg-muted/30">
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Empresa</th>
                     <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground md:table-cell">CNPJ</th>
-                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Regime</th>
+                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Tributação</th>
                     <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Segmento</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Status</th>
                   </tr>
@@ -458,7 +461,7 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
-                      <td className="hidden p-4 text-sm lg:table-cell">{client.regime}</td>
+                      <td className="hidden p-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
                       <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
                       <td className="p-4">
                         <span
@@ -516,7 +519,7 @@ export default function ClientsPage() {
                               </div>
                             </td>
                             <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
-                            <td className="hidden p-4 text-sm lg:table-cell">{client.regime}</td>
+                            <td className="hidden p-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
                             <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
                             <td className="p-4">
                               <span
@@ -709,4 +712,3 @@ export default function ClientsPage() {
     </AppLayout>
   );
 }
-
