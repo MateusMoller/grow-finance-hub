@@ -205,7 +205,7 @@ export default function NotificacoesPage() {
         </section>
 
         <section className="rounded-xl border bg-card px-4 py-3 shadow-sm sm:px-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Smartphone className="h-4 w-4 text-muted-foreground" />
@@ -217,30 +217,34 @@ export default function NotificacoesPage() {
               <p className="mt-1 text-xs text-muted-foreground">{pushStatusLabel}</p>
             </div>
 
-            {pushStatus.subscribed ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleDisablePush()}
-                disabled={pushActionLoading !== null}
-              >
-                {pushActionLoading === "disable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                Desativar
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => void handleEnablePush()}
-                disabled={
-                  pushActionLoading !== null ||
-                  !pushStatus.supported ||
-                  !pushStatus.hasPublicKey
-                }
-              >
-                {pushActionLoading === "enable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                Ativar
-              </Button>
-            )}
+            <div className="w-full sm:w-auto">
+              {pushStatus.subscribed ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 w-full px-4 sm:min-w-32"
+                  onClick={() => void handleDisablePush()}
+                  disabled={pushActionLoading !== null}
+                >
+                  {pushActionLoading === "disable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                  Desativar push
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-9 w-full px-4 sm:min-w-32"
+                  onClick={() => void handleEnablePush()}
+                  disabled={
+                    pushActionLoading !== null ||
+                    !pushStatus.supported ||
+                    !pushStatus.hasPublicKey
+                  }
+                >
+                  {pushActionLoading === "enable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                  Ativar push
+                </Button>
+              )}
+            </div>
           </div>
 
           {pushStatus.permission === "denied" && (
