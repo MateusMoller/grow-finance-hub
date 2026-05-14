@@ -16,6 +16,33 @@ export interface PushSubscriptionStatus {
 }
 
 const getServiceWorkerUrl = () => `${normalizePwaBasePath()}sw.js`;
+const getServiceWorkerScopeUrl = () => new URL(normalizePwaAppScopePath(), window.location.origin).href;
+
+const logPushActivationError = (step: string, error: unknown, context: Record<string, unknown> = {}) => {
+  console.error("[push-notifications] Activation failed", {
+    step,
+    error,
+    context,
+  });
+};
+
+const buildPushActivationError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const name = error instanceof Error ? error.name : "";
+  const normalized = `${name} ${message}`.toLowerCase();
+
+  if (normalized.includes("push service error") || normalized.includes("registration failed")) {
+    return new Error(
+      "Falha ao registrar no servico de push do navegador. Verifique a conexao, as permissoes de notificacao do navegador/sistema e tente novamente.",
+    );
+  }
+
+  if (normalized.includes("applicationserverkey") || normalized.includes("vapid")) {
+    return new Error("Chave publica VAPID invalida ou incompatível. Verifique VITE_WEB_PUSH_PUBLIC_KEY.");
+  }
+
+  return error instanceof Error ? error : new Error(message || "Falha ao ativar notificacoes push.");
+};
 
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -32,6 +59,7 @@ const urlBase64ToUint8Array = (base64String: string) => {
 
 export const isPushSupported = () =>
   typeof window !== "undefined" &&
+  window.isSecureContext &&
   "serviceWorker" in navigator &&
   "PushManager" in window &&
   "Notification" in window;
@@ -48,7 +76,8 @@ const ensureServiceWorkerRegistration = async () => {
   await syncPwaModeForPath(window.location.pathname);
 
   const scope = normalizePwaAppScopePath();
-  let registration = await navigator.serviceWorker.getRegistration(scope);
+  const scopeUrl = getServiceWorkerScopeUrl();
+  let registration = await navigator.serviceWorker.getRegistration(scopeUrl);
 
   if (!registration) {
     registration = await navigator.serviceWorker.register(getServiceWorkerUrl(), {
@@ -57,8 +86,15 @@ const ensureServiceWorkerRegistration = async () => {
     });
   }
 
-  await navigator.serviceWorker.ready;
-  return registration;
+  const readyRegistration = await navigator.serviceWorker.ready;
+  const scopedRegistration = await navigator.serviceWorker.getRegistration(scopeUrl);
+  const resolvedRegistration = scopedRegistration || readyRegistration || registration;
+
+  if (!resolvedRegistration.active) {
+    throw new Error("Service worker ainda nao esta ativo para notificacoes push.");
+  }
+
+  return resolvedRegistration;
 };
 
 const ensurePermission = async () => {
@@ -140,22 +176,34 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
     throw new Error("VITE_WEB_PUSH_PUBLIC_KEY não configurada no frontend.");
   }
 
-  const permission = await ensurePermission();
-  if (permission !== "granted") {
+  try {
+    const permission = await ensurePermission();
+    if (permission !== "granted") {
     throw new Error("Permissão de notificação não concedida.");
   }
 
-  const registration = await ensureServiceWorkerRegistration();
-  let subscription = await registration.pushManager.getSubscription();
+    const registration = await ensureServiceWorkerRegistration();
+    let subscription = await registration.pushManager.getSubscription();
 
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(WEB_PUSH_PUBLIC_KEY),
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(WEB_PUSH_PUBLIC_KEY),
     });
   }
 
-  await upsertSubscriptionOnServer(userId, subscription, deviceLabel);
+    await upsertSubscriptionOnServer(userId, subscription, deviceLabel);
+  } catch (error) {
+    logPushActivationError("subscribePushOnCurrentDevice", error, {
+      path: typeof window !== "undefined" ? window.location.pathname : null,
+      secureContext: typeof window !== "undefined" ? window.isSecureContext : null,
+      permission: typeof Notification !== "undefined" ? Notification.permission : null,
+      serviceWorkerUrl: typeof window !== "undefined" ? getServiceWorkerUrl() : null,
+      serviceWorkerScope: typeof window !== "undefined" ? normalizePwaAppScopePath() : null,
+      vapidKeyLength: WEB_PUSH_PUBLIC_KEY.length,
+    });
+    throw buildPushActivationError(error);
+  }
 };
 
 export const syncPushSubscriptionOnServer = async (userId: string) => {
