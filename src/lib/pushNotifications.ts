@@ -123,6 +123,15 @@ const urlBase64ToUint8Array = (base64String: string) => {
   return outputArray;
 };
 
+const buildApplicationServerKey = (publicKey: string) => {
+  const key = urlBase64ToUint8Array(publicKey);
+  if (key.length !== 65 || key[0] !== 4) {
+    throw new Error("Chave publica VAPID invalida. Gere novamente o par de chaves Web Push.");
+  }
+
+  return key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength);
+};
+
 export const isPushSupported = () =>
   typeof window !== "undefined" &&
   window.isSecureContext &&
@@ -264,7 +273,7 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(webPushPublicKey),
+        applicationServerKey: buildApplicationServerKey(webPushPublicKey),
       });
     }
 
