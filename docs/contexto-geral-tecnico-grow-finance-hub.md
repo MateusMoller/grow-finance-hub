@@ -49,21 +49,22 @@ O **Grow Finance Hub** e a plataforma web central da Grow Contabilidade para uni
 - [src/lib/accessControl.ts](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/lib/accessControl.ts)
 - [src/pages/LoginPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/LoginPage.tsx)
 
-### Integracao Acessorias (obrigacoes e e-continuo)
-- A integracao com Acessorias e mediada por Edge Function dedicada, com acoes de overview, sincronizacao de empresas, sincronizacao de obrigacoes e envio e-continuo.
-- O modulo foi separado em dois dominios funcionais:
-- **Obrigacoes**: [src/pages/ObrigacoesPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/ObrigacoesPage.tsx)
-- **E-continuo**: [src/pages/EContinuoPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/EContinuoPage.tsx)
-- Componente base do modulo: [src/pages/AcessoriasPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/AcessoriasPage.tsx)
-- Backend da integracao: [supabase/functions/acessorias-module/index.ts](https://github.com/MateusMoller/grow-finance-hub/blob/main/supabase/functions/acessorias-module/index.ts)
+### Integracao Acessorias (legado operacional)
+- A integracao com Acessorias permanece no backend para historico, consulta e fluxos especificos de envio, mas deixou de ser o modulo principal de obrigacoes.
+- O fluxo oficial atual de obrigacoes e o modulo nativo Grow.
+- Rotas antigas como `/app/acessorias` e `/app/econtinuo` devem ser tratadas como compatibilidade e redirecionam para o modulo atual.
+- Referencias:
+- [src/pages/ObrigacoesPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/ObrigacoesPage.tsx)
+- [src/components/obligations/GrowObligationsWorkspace.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/components/obligations/GrowObligationsWorkspace.tsx)
+- [supabase/functions/acessorias-module/index.ts](https://github.com/MateusMoller/grow-finance-hub/blob/main/supabase/functions/acessorias-module/index.ts)
 
 ### Cruzamento por CNPJ e sincronizacao automatica
 - O fluxo operacional de clientes prioriza sincronizacao com Acessorias e cruzamento por CNPJ.
 - O cadastro manual de empresas foi desativado no fluxo de clientes internos para manter consistencia com a fonte integrada.
-- No modulo de obrigacoes, a sincronizacao foi configurada para execucao automatica no carregamento da tela (incluindo atualizacao da pagina/F5), reduzindo dependencia de gatilho manual.
+- No modulo de obrigacoes, as novas evolucoes devem priorizar o modulo nativo Grow e evitar reativar telas legadas de Acessorias/e-continuo.
 - Referencias:
 - [src/pages/ClientsPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/ClientsPage.tsx)
-- [src/pages/AcessoriasPage.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/pages/AcessoriasPage.tsx)
+- [src/components/obligations/GrowObligationsWorkspace.tsx](https://github.com/MateusMoller/grow-finance-hub/blob/main/src/components/obligations/GrowObligationsWorkspace.tsx)
 
 ### PWA restrito ao escopo funcional
 - O modo PWA foi limitado as rotas funcionais da aplicacao (`/app`), excluindo o escopo institucional.

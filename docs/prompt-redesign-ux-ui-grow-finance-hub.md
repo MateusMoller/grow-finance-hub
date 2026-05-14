@@ -34,7 +34,7 @@ O Grow Finance Hub possui 3 camadas principais:
 2) Camada App Interno (operacao da equipe):
 - Dashboard, Kanban, Calendario, Tarefas, Clientes, Relatorios,
   Atendimento Portal, Formularios, CRM, Chat Interno, Notificacoes,
-  Configuracoes, Usuarios, Sugestoes, Manual, Obrigacoes e E-continuo.
+  Configuracoes, Usuarios, Sugestoes, Manual e Obrigacoes.
 - Objetivo: produtividade operacional, controle e rastreabilidade.
 
 3) Camada Portal do Cliente:
@@ -46,7 +46,7 @@ Fluxos criticos que devem ser preservados:
 - Filtros globais e navegacao entre modulos.
 - Permissoes por papel e segregacao de acesso (interno vs cliente).
 - Login com selecao de ambiente (App Interno e Portal do Cliente).
-- Fluxo de Obrigacoes e E-continuo, incluindo leitura/pre-conferencia e historico.
+- Fluxo de Obrigacoes nativo Grow, incluindo leitura/pre-conferencia e historico.
 - Fluxos de clientes, dados cadastrais/mensais e relatorios.
 
 Principios de UX obrigatorios:
@@ -89,7 +89,6 @@ Entregaveis esperados (na sua resposta):
    - Kanban
    - Clientes
    - Obrigacoes
-   - E-continuo
    - Portal do cliente (painel e solicitacoes/envios)
 5) Microinteracoes relevantes (transicoes, feedback, confirmacoes, progresso).
 6) Rationale: justificar cada decisao visual com impacto em usabilidade, clareza e produtividade.
@@ -134,7 +133,7 @@ Reimagine a camada de App Interno do Grow Finance Hub com foco em produtividade,
 Modulos criticos a preservar:
 - Dashboard, Kanban, Calendario, Tarefas, Clientes, Relatorios,
   Atendimento Portal, Formularios, CRM, Chat Interno, Notificacoes,
-  Configuracoes, Usuarios, Sugestoes, Manual, Obrigacoes e E-continuo.
+  Configuracoes, Usuarios, Sugestoes, Manual e Obrigacoes.
 
 Objetivo:
 - Reduzir friccao operacional.
