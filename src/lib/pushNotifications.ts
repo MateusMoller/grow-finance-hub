@@ -38,12 +38,21 @@ const readWebPushPublicKey = () =>
   normalizeConfigValue(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY) || readRuntimePushPublicKey();
 
 let cachedWebPushPublicKey: string | null = null;
+let cachedWebPushPublicKeySource: "env" | "runtime" | "backend" | null = null;
 
 const resolveWebPushPublicKey = async () => {
-  const configuredKey = readWebPushPublicKey();
-  if (configuredKey) {
-    cachedWebPushPublicKey = configuredKey;
-    return configuredKey;
+  const envKey = normalizeConfigValue(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY);
+  if (envKey) {
+    cachedWebPushPublicKey = envKey;
+    cachedWebPushPublicKeySource = "env";
+    return envKey;
+  }
+
+  const runtimeKey = readRuntimePushPublicKey();
+  if (runtimeKey) {
+    cachedWebPushPublicKey = runtimeKey;
+    cachedWebPushPublicKeySource = "runtime";
+    return runtimeKey;
   }
 
   if (cachedWebPushPublicKey) return cachedWebPushPublicKey;
@@ -62,6 +71,7 @@ const resolveWebPushPublicKey = async () => {
   }
 
   cachedWebPushPublicKey = publicKey;
+  cachedWebPushPublicKeySource = "backend";
   return publicKey;
 };
 
@@ -206,6 +216,10 @@ const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubs
 export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatus> => {
   let hasPublicKey = readWebPushPublicKey().length > 0 || Boolean(cachedWebPushPublicKey);
 
+  if (hasPublicKey && !cachedWebPushPublicKey) {
+    void resolveWebPushPublicKey().catch(() => undefined);
+  }
+
   if (!isPushSupported()) {
     return {
       supported: false,
@@ -263,6 +277,7 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
       serviceWorkerUrl: typeof window !== "undefined" ? getServiceWorkerUrl() : null,
       serviceWorkerScope: typeof window !== "undefined" ? normalizePwaAppScopePath() : null,
       vapidKeyLength: readWebPushPublicKey().length || cachedWebPushPublicKey?.length || 0,
+      vapidKeySource: cachedWebPushPublicKeySource,
     });
     throw buildPushActivationError(error);
   }

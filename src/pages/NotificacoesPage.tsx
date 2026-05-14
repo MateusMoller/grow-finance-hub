@@ -123,7 +123,7 @@ export default function NotificacoesPage() {
 
   const pushStatusLabel = useMemo(() => {
     if (!pushStatus.supported) return "Push nao suportado neste navegador.";
-    if (!pushStatus.hasPublicKey) return "Chave publica VAPID nao configurada.";
+    if (!pushStatus.hasPublicKey) return "Chave publica VAPID sera carregada ao ativar.";
     if (pushStatus.permission === "denied") return "Permissao bloqueada no navegador.";
     if (pushStatus.permission !== "granted") return "Permissao ainda nao concedida.";
     if (!pushStatus.subscribed) return "Pronto para ativar neste dispositivo.";
@@ -236,8 +236,7 @@ export default function NotificacoesPage() {
                   onClick={() => void handleEnablePush()}
                   disabled={
                     pushActionLoading !== null ||
-                    !pushStatus.supported ||
-                    !pushStatus.hasPublicKey
+                    !pushStatus.supported
                   }
                 >
                   {pushActionLoading === "enable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
@@ -252,9 +251,10 @@ export default function NotificacoesPage() {
               O navegador bloqueou notificacoes. Libere nas configuracoes do site/app.
             </p>
           )}
-          {!pushStatus.hasPublicKey && (
+          {!pushStatus.hasPublicKey && pushStatus.supported && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Configure <code>VITE_WEB_PUSH_PUBLIC_KEY</code> para habilitar push.
+              Se a ativacao falhar, confirme se <code>runtime-config.js</code> atualizado foi publicado e se a
+              Edge Function <code>send-push-notification</code> foi redeployada.
             </p>
           )}
         </section>
