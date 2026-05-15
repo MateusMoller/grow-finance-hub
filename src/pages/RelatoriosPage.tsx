@@ -3,13 +3,10 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
   BarChart3,
   Briefcase,
   ClipboardList,
-  Download,
   Edit3,
   FileSpreadsheet,
   Loader2,
@@ -35,7 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 
 type ReportDatasetId = "clientes" | "leads_crm" | "tarefas" | "equipe";
-type ExportFormat = "csv" | "xlsx";
+type ExportFormat = "xlsx";
 type ReportRow = Record<string, unknown>;
 
 type ClientRow = Pick<
@@ -218,17 +215,6 @@ const formatCellValue = (value: unknown, formatter?: (value: unknown) => string)
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
   return JSON.stringify(value);
-};
-
-const triggerBlobDownload = (blob: Blob, fileName: string) => {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(url);
 };
 
 const getCurrentCompetence = () => {
@@ -725,7 +711,7 @@ const mapSavedReportRow = (row: SavedReportRow): SavedReportConfig | null => {
     name,
     datasetId,
     columnKeys,
-    format: row.format === "csv" ? "csv" : "xlsx",
+    format: "xlsx",
     autoGenerate: Boolean(row.auto_generate),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -749,11 +735,9 @@ export default function RelatoriosPage() {
 
   const [customDatasetId, setCustomDatasetId] = useState<ReportDatasetId>("clientes");
   const [selectedColumns, setSelectedColumns] = useState<string[]>(reportDefinitions.clientes.defaultColumns);
-  const [leftSelectedKeys, setLeftSelectedKeys] = useState<string[]>([]);
   const [rightSelectedKeys, setRightSelectedKeys] = useState<string[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReportConfig[]>([]);
   const [savedReportName, setSavedReportName] = useState("");
-  const [savedReportFormat, setSavedReportFormat] = useState<ExportFormat>("xlsx");
   const [savedReportAutoGenerate, setSavedReportAutoGenerate] = useState(false);
   const [editingSavedReportId, setEditingSavedReportId] = useState<string | null>(null);
   const skipDatasetResetRef = useRef(false);
@@ -901,7 +885,6 @@ export default function RelatoriosPage() {
       return;
     }
     setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns);
-    setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
   }, [customDatasetId]);
 
@@ -1095,20 +1078,9 @@ export default function RelatoriosPage() {
   }, [availableColumns, customDatasetId]);
 
   useEffect(() => {
-    const availableSet = new Set(availableColumns.map((column) => column.key));
-    setLeftSelectedKeys((current) => current.filter((key) => availableSet.has(key)));
-  }, [availableColumns]);
-
-  useEffect(() => {
     const selectedSet = new Set(selectedColumns);
     setRightSelectedKeys((current) => current.filter((key) => selectedSet.has(key)));
   }, [selectedColumns]);
-
-  const toggleLeftSelection = (columnKey: string) => {
-    setLeftSelectedKeys((current) =>
-      current.includes(columnKey) ? current.filter((key) => key !== columnKey) : [...current, columnKey],
-    );
-  };
 
   const toggleRightSelection = (columnKey: string) => {
     setRightSelectedKeys((current) =>
@@ -1116,22 +1088,14 @@ export default function RelatoriosPage() {
     );
   };
 
-  const handleAddColumns = () => {
-    if (leftSelectedKeys.length === 0) return;
-    const orderedKeys = customDefinition.columns.map((column) => column.key);
-
-    setSelectedColumns((current) => {
-      const merged = Array.from(new Set([...current, ...leftSelectedKeys]));
-      merged.sort((a, b) => orderedKeys.indexOf(a) - orderedKeys.indexOf(b));
-      return merged;
-    });
-    setLeftSelectedKeys([]);
+  const handleAddColumn = (columnKey: string) => {
+    if (selectedColumns.includes(columnKey)) return;
+    setSelectedColumns((current) => [...current, columnKey]);
   };
 
-  const handleRemoveColumns = () => {
-    if (rightSelectedKeys.length === 0) return;
-    setSelectedColumns((current) => current.filter((key) => !rightSelectedKeys.includes(key)));
-    setRightSelectedKeys([]);
+  const handleRemoveColumn = (columnKey: string) => {
+    setSelectedColumns((current) => current.filter((key) => key !== columnKey));
+    setRightSelectedKeys((current) => current.filter((key) => key !== columnKey));
   };
 
   const canMoveSelectedColumn = rightSelectedKeys.length === 1;
@@ -1168,7 +1132,7 @@ export default function RelatoriosPage() {
   );
 
   const handleExport = useCallback(
-    async (datasetId: ReportDatasetId, columnKeys: string[], format: ExportFormat, scopeLabel: string) => {
+    async (datasetId: ReportDatasetId, columnKeys: string[], scopeLabel: string) => {
       const definition = reportDefinitions[datasetId];
       const totalRows = rowsByDataset[datasetId].length;
 
@@ -1187,15 +1151,9 @@ export default function RelatoriosPage() {
       const now = new Date().toISOString().replace(/[:.]/g, "-");
       const baseName = sanitizeFileName(`${definition.name}-${scopeLabel}-${now}`);
 
-      if (format === "xlsx") {
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, definition.name.slice(0, 30));
-        XLSX.writeFile(workbook, `${baseName}.xlsx`);
-      } else {
-        const csv = XLSX.utils.sheet_to_csv(worksheet);
-        const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
-        triggerBlobDownload(blob, `${baseName}.csv`);
-      }
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, definition.name.slice(0, 30));
+      XLSX.writeFile(workbook, `${baseName}.xlsx`);
 
       toast.success(`Relatório ${definition.name} exportado com sucesso.`);
     },
@@ -1233,7 +1191,7 @@ export default function RelatoriosPage() {
       name,
       dataset_id: customDatasetId,
       column_keys: sanitizedColumns,
-      format: savedReportFormat,
+      format: "xlsx",
       auto_generate: savedReportAutoGenerate,
       updated_at: now,
     };
@@ -1283,7 +1241,6 @@ export default function RelatoriosPage() {
     editingSavedReportId,
     loadSavedReports,
     savedReportAutoGenerate,
-    savedReportFormat,
     savedReportName,
     savedReports,
     selectedColumns,
@@ -1296,9 +1253,7 @@ export default function RelatoriosPage() {
     setCustomDatasetId(report.datasetId);
     setSelectedColumns(report.columnKeys);
     setSavedReportName(report.name);
-    setSavedReportFormat(report.format);
     setSavedReportAutoGenerate(report.autoGenerate);
-    setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
     toast.success("Configuração do relatório carregada.");
   };
@@ -1308,9 +1263,7 @@ export default function RelatoriosPage() {
     setCustomDatasetId(report.datasetId);
     setSelectedColumns(report.columnKeys);
     setSavedReportName(report.name);
-    setSavedReportFormat(report.format);
     setSavedReportAutoGenerate(report.autoGenerate);
-    setLeftSelectedKeys([]);
     setRightSelectedKeys([]);
     setEditingSavedReportId(report.id);
     toast.success("Relatório carregado em modo de edicao.");
@@ -1319,7 +1272,6 @@ export default function RelatoriosPage() {
   const handleCancelEditingSavedReport = () => {
     setEditingSavedReportId(null);
     setSavedReportName("");
-    setSavedReportFormat("xlsx");
     setSavedReportAutoGenerate(false);
     toast.success("Edicao de relatório cancelada.");
   };
@@ -1349,7 +1301,6 @@ export default function RelatoriosPage() {
     if (editingSavedReportId === reportId) {
       setEditingSavedReportId(null);
       setSavedReportName("");
-      setSavedReportFormat("xlsx");
       setSavedReportAutoGenerate(false);
     }
     toast.success("Relatório salvo removido.");
@@ -1360,7 +1311,6 @@ export default function RelatoriosPage() {
       await handleExport(
         report.datasetId,
         report.columnKeys,
-        report.format,
         `salvo-${scope}-${sanitizeFileName(report.name)}`,
       );
     },
@@ -1428,7 +1378,7 @@ export default function RelatoriosPage() {
                 <div>
                   <h2 className="font-heading font-semibold">Gerar relatório</h2>
                   <p className="text-xs text-muted-foreground">
-                    Escolha o módulo, selecione as colunas e exporte seu modelo customizado.
+                    Escolha a base, ajuste as colunas e exporte em XLSX.
                   </p>
                 </div>
                 <div className="w-full lg:w-[280px]">
@@ -1447,8 +1397,17 @@ export default function RelatoriosPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border p-3 space-y-3">
-                <p className="text-sm font-medium">Salvar relatório para gerar depois</p>
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Modelo salvo</p>
+                    <p className="text-xs text-muted-foreground">Opcional. Use quando quiser repetir este relatório depois.</p>
+                  </div>
+                  <Badge variant="outline" className="w-fit gap-1.5">
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    XLSX
+                  </Badge>
+                </div>
                 {editingSavedReportId && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs">
                     <span className="text-primary font-medium">Modo edicao ativo para relatório salvo.</span>
@@ -1457,24 +1416,15 @@ export default function RelatoriosPage() {
                     </Button>
                   </div>
                 )}
-                <div className="grid gap-3 lg:grid-cols-[1fr_200px_auto]">
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
                   <Input
-                    placeholder="Nome do relatório salvo"
+                    placeholder="Nome do modelo"
                     value={savedReportName}
                     onChange={(event) => setSavedReportName(event.target.value)}
                   />
-                  <Select value={savedReportFormat} onValueChange={(value) => setSavedReportFormat(value as ExportFormat)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="xlsx">XLSX</SelectItem>
-                      <SelectItem value="csv">CSV</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button type="button" className="gap-2" onClick={() => void handleSaveCurrentReport()}>
+                  <Button type="button" variant="outline" className="gap-2" onClick={() => void handleSaveCurrentReport()}>
                     <Save className="h-4 w-4" />
-                    {editingSavedReportId ? "Atualizar relatório" : "Salvar relatório"}
+                    {editingSavedReportId ? "Atualizar modelo" : "Salvar modelo"}
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1485,7 +1435,7 @@ export default function RelatoriosPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr]">
+              <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border p-3">
                   <p className="text-sm font-medium">Colunas disponíveis</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -1509,50 +1459,23 @@ export default function RelatoriosPage() {
                           {moduleEntry.subfolders.map((subfolder) => (
                             <div key={`${moduleEntry.id}-${subfolder.id}`} className="rounded-md border bg-background p-2 space-y-1">
                               <p className="text-[11px] font-medium text-muted-foreground">{subfolder.label}</p>
-                              {subfolder.columns.map((column) => {
-                                const selected = leftSelectedKeys.includes(column.key);
-                                return (
-                                  <button
-                                    key={column.key}
-                                    type="button"
-                                    onClick={() => toggleLeftSelection(column.key)}
-                                    className={`w-full text-left text-sm rounded-md px-2.5 py-2 border transition-colors ${
-                                      selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
-                                    }`}
-                                  >
-                                    {column.label}
-                                  </button>
-                                );
-                              })}
+                              {subfolder.columns.map((column) => (
+                                <button
+                                  key={column.key}
+                                  type="button"
+                                  onClick={() => handleAddColumn(column.key)}
+                                  className="flex w-full items-center justify-between gap-3 rounded-md border px-2.5 py-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-primary/5"
+                                >
+                                  <span>{column.label}</span>
+                                  <span className="text-xs font-medium text-primary">Adicionar</span>
+                                </button>
+                              ))}
                             </div>
                           ))}
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div className="flex flex-row lg:flex-col items-center justify-center gap-2">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={handleAddColumns}
-                    disabled={leftSelectedKeys.length === 0}
-                    aria-label="Adicionar colunas"
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={handleRemoveColumns}
-                    disabled={rightSelectedKeys.length === 0}
-                    aria-label="Remover colunas"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
                 </div>
 
                 <div className="rounded-lg border p-3">
@@ -1595,46 +1518,46 @@ export default function RelatoriosPage() {
                     {selectedColumnDefinitions.map((column) => {
                       const selected = rightSelectedKeys.includes(column.key);
                       return (
-                        <button
+                        <div
                           key={column.key}
-                          type="button"
-                          onClick={() => toggleRightSelection(column.key)}
-                          className={`w-full text-left text-sm rounded-md px-2.5 py-2 border transition-colors ${
+                          className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm transition-colors ${
                             selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
                           }`}
                         >
-                          {column.label}
-                        </button>
+                          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleRightSelection(column.key)}>
+                            {column.label}
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
+                            onClick={() => handleRemoveColumn(column.key)}
+                          >
+                            Remover
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns)}
-                >
-                  Usar colunas padrão
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setSelectedColumns([])}>
-                  Limpar seleção
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => void handleExport(customDatasetId, selectedColumns, "csv", "personalizado")}
-                >
-                  <Download className="h-4 w-4" />
-                  Exportar CSV
-                </Button>
+              <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns)}
+                  >
+                    Usar colunas padrão
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setSelectedColumns([])}>
+                    Limpar seleção
+                  </Button>
+                </div>
                 <Button
                   type="button"
                   className="gap-2"
-                  onClick={() => void handleExport(customDatasetId, selectedColumns, "xlsx", "personalizado")}
+                  onClick={() => void handleExport(customDatasetId, selectedColumns, "personalizado")}
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   Exportar XLSX
@@ -1662,7 +1585,7 @@ export default function RelatoriosPage() {
                             <div>
                               <p className="text-sm font-medium">{report.name}</p>
                               <p className="text-xs text-muted-foreground">
-                                {definition.name} · {report.columnKeys.length} colunas · {report.format.toUpperCase()}
+                                {definition.name} · {report.columnKeys.length} colunas · XLSX
                               </p>
                             </div>
                             <div className="flex items-center gap-1">
