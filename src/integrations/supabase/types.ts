@@ -42,6 +42,7 @@ export type Database = {
       client_obligation_profiles: GenericTable
       client_portal_tasks: GenericTable
       client_requests: GenericTable
+      client_users: GenericTable
       clients: GenericTable
       cnpj_lookup_cache: GenericTable
       document_inbox_items: GenericTable
@@ -64,10 +65,13 @@ export type Database = {
       obligation_instance_files: GenericTable
       obligation_instances: GenericTable
       obligation_templates: GenericTable
+      operational_audit_logs: GenericTable
       open_finance_accounts: GenericTable
       open_finance_connections: GenericTable
       open_finance_transactions: GenericTable
       open_finance_webhook_events: GenericTable
+      organization_settings: GenericTable
+      organizations: GenericTable
       process_documents: GenericTable
       profiles: GenericTable
       push_subscriptions: GenericTable
@@ -88,12 +92,15 @@ export type Database = {
       apply_cashflow_rule_match: GenericFunction
       can_access_client_cashflow: GenericFunction
       can_access_client_open_finance: GenericFunction
+      can_access_client: GenericFunction
       cleanup_open_finance_transactions: GenericFunction
       create_kanban_from_request: GenericFunction
+      current_organization_id: GenericFunction
       enforce_admin_cashflow_release: GenericFunction
       enforce_clients_uniqueness_guard: GenericFunction
       find_matching_cashflow_rule: GenericFunction
       get_manual_adoption_snapshot: GenericFunction
+      has_org_role: GenericFunction
       has_role: GenericFunction
       infer_cashflow_category_from_obligation: GenericFunction
       is_grow_admin: GenericFunction

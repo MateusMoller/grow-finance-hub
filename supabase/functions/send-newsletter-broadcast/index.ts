@@ -6,6 +6,10 @@ const corsHeaders = {
 };
 
 type JsonRecord = Record<string, unknown>;
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -185,17 +189,20 @@ Deno.serve(async (req) => {
 
     const { data: callerRoles, error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (roleError) {
       throw roleError;
     }
 
-    const isCallerAdmin = (callerRoles || []).some((row) => row.role === "admin");
-    if (!isCallerAdmin) {
+    const callerAdminRole = ((callerRoles || []) as RoleRow[]).find(
+      (row) => row.role === "admin" && row.organization_id,
+    );
+    if (!callerAdminRole?.organization_id) {
       return jsonResponse({ error: "Only admins can send newsletters" }, 403);
     }
+    const organizationId = callerAdminRole.organization_id;
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -212,6 +219,7 @@ Deno.serve(async (req) => {
       .from("newsletters")
       .select("id, title, excerpt, content, is_published, email_sent_at")
       .eq("id", newsletterId)
+      .eq("organization_id", organizationId)
       .maybeSingle();
 
     if (newsletterError) {
@@ -237,6 +245,7 @@ Deno.serve(async (req) => {
     const { data: subscribers, error: subscribersError } = await supabaseAdmin
       .from("newsletter_subscribers")
       .select("email")
+      .eq("organization_id", organizationId)
       .eq("status", "active");
 
     if (subscribersError) {
@@ -256,7 +265,8 @@ Deno.serve(async (req) => {
       const { error: markError } = await supabaseAdmin
         .from("newsletters")
         .update({ email_sent_at: sentAt, email_send_error: null })
-        .eq("id", newsletter.id);
+        .eq("id", newsletter.id)
+        .eq("organization_id", organizationId);
 
       if (markError) {
         throw markError;
@@ -302,7 +312,8 @@ Deno.serve(async (req) => {
       const { error: markError } = await supabaseAdmin
         .from("newsletters")
         .update({ email_send_error: details })
-        .eq("id", newsletter.id);
+        .eq("id", newsletter.id)
+        .eq("organization_id", organizationId);
 
       if (markError) {
         throw markError;
@@ -323,7 +334,8 @@ Deno.serve(async (req) => {
     const { error: markError } = await supabaseAdmin
       .from("newsletters")
       .update({ email_sent_at: sentAt, email_send_error: null })
-      .eq("id", newsletter.id);
+      .eq("id", newsletter.id)
+      .eq("organization_id", organizationId);
 
     if (markError) {
       throw markError;

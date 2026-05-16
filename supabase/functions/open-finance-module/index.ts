@@ -94,10 +94,45 @@ async function resolveClient(
       .maybeSingle();
     if (byIdError) throw byIdError;
     if (!byId) throw new Error("Client not found.");
+
     if (!params.isInternal && byId.portal_user_id !== params.userId) {
-      throw new Error("Unauthorized client access.");
+      const { data: clientUser, error: clientUserError } = await supabaseAdmin
+        .from("client_users")
+        .select("id")
+        .eq("client_id", byId.id)
+        .eq("user_id", params.userId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (clientUserError) throw clientUserError;
+      if (!clientUser) {
+        throw new Error("Unauthorized client access.");
+      }
     }
+
     return byId;
+  }
+
+  const { data: linkedClientUser, error: linkedClientUserError } = await supabaseAdmin
+    .from("client_users")
+    .select("client_id")
+    .eq("user_id", params.userId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (linkedClientUserError) throw linkedClientUserError;
+
+  if (linkedClientUser?.client_id) {
+    const { data: linkedByMembership, error: linkedByMembershipError } = await supabaseAdmin
+      .from("clients")
+      .select("id, portal_user_id, portal_cashflow_enabled")
+      .eq("id", linkedClientUser.client_id)
+      .maybeSingle();
+
+    if (linkedByMembershipError) throw linkedByMembershipError;
+    if (linkedByMembership) return linkedByMembership;
   }
 
   const { data: linkedClient, error: linkedClientError } = await supabaseAdmin

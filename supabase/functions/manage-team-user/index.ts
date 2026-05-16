@@ -21,6 +21,10 @@ const manageableRoles = new Set([
 
 type JsonRecord = Record<string, unknown>;
 type ManageAction = "update" | "delete";
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -107,17 +111,20 @@ Deno.serve(async (req) => {
 
     const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (callerRolesError) {
       throw callerRolesError;
     }
 
-    const isCallerAdmin = (callerRoles || []).some((row) => row.role === "admin");
-    if (!isCallerAdmin) {
+    const callerAdminRole = ((callerRoles || []) as RoleRow[]).find(
+      (row) => row.role === "admin" && row.organization_id,
+    );
+    if (!callerAdminRole?.organization_id) {
       return jsonResponse({ error: "Only admins can manage users" }, 403);
     }
+    const organizationId = callerAdminRole.organization_id;
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -149,8 +156,43 @@ Deno.serve(async (req) => {
     }
 
     if (action === "delete") {
-      const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-      if (deleteUserError) throw deleteUserError;
+      const { error: roleDeleteError } = await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("organization_id", organizationId);
+
+      if (roleDeleteError) throw roleDeleteError;
+
+      const { error: clientLinksRevokeError } = await supabaseAdmin
+        .from("client_users")
+        .update({ status: "revoked" })
+        .eq("user_id", userId)
+        .eq("organization_id", organizationId);
+
+      if (clientLinksRevokeError) throw clientLinksRevokeError;
+
+      const { data: remainingRoles, error: remainingRolesError } = await supabaseAdmin
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(1);
+
+      if (remainingRolesError) throw remainingRolesError;
+
+      const { data: remainingClientLinks, error: remainingClientLinksError } = await supabaseAdmin
+        .from("client_users")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .limit(1);
+
+      if (remainingClientLinksError) throw remainingClientLinksError;
+
+      if ((remainingRoles || []).length === 0 && (remainingClientLinks || []).length === 0) {
+        const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (deleteUserError) throw deleteUserError;
+      }
 
       return jsonResponse({ ok: true, action: "delete", user_id: userId });
     }
@@ -192,8 +234,8 @@ Deno.serve(async (req) => {
     }
 
     const { error: roleUpsertError } = await supabaseAdmin.from("user_roles").upsert(
-      { user_id: userId, role },
-      { onConflict: "user_id,role" },
+      { user_id: userId, organization_id: organizationId, role },
+      { onConflict: "user_id,organization_id,role" },
     );
 
     if (roleUpsertError) {
@@ -204,6 +246,7 @@ Deno.serve(async (req) => {
       .from("user_roles")
       .delete()
       .eq("user_id", userId)
+      .eq("organization_id", organizationId)
       .neq("role", role);
 
     if (removeOtherRolesError) {
@@ -218,6 +261,7 @@ Deno.serve(async (req) => {
         display_name: displayName,
         email: targetUserData.user.email || null,
         role,
+        organization_id: organizationId,
       },
     });
   } catch (error: unknown) {

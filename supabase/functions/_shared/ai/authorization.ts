@@ -138,13 +138,58 @@ export async function getAuthorizedClientContext(params: {
     | null = null;
 
   if (isClientUser && !isInternalUser) {
-    const { data: linkedClients, error } = await params.supabaseAdmin
-      .from("clients")
-      .select("id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled")
-      .eq("portal_user_id", params.userId)
+    const { data: linkedClientUsers, error: linkedClientUsersError } = await params.supabaseAdmin
+      .from("client_users")
+      .select("client_id")
+      .eq("user_id", params.userId)
+      .eq("status", "active")
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (linkedClientUsersError) throw linkedClientUsersError;
+
+    const linkedClientIds = Array.from(
+      new Set(
+        (linkedClientUsers || [])
+          .map((row) => asTrimmedString(row.client_id))
+          .filter((clientId): clientId is string => Boolean(clientId)),
+      ),
+    );
+
+    let linkedClients:
+      | Array<{
+          id: string;
+          name: string;
+          cnpj: string | null;
+          sector: string | null;
+          status: string | null;
+          contact: string | null;
+          email: string | null;
+          phone: string | null;
+          portal_user_id: string | null;
+          portal_cashflow_enabled: boolean;
+        }>
+      | null = null;
+
+    if (linkedClientIds.length > 0) {
+      const { data, error } = await params.supabaseAdmin
+        .from("clients")
+        .select("id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled")
+        .in("id", linkedClientIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      linkedClients = data || [];
+    } else {
+      const { data, error } = await params.supabaseAdmin
+        .from("clients")
+        .select("id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled")
+        .eq("portal_user_id", params.userId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      linkedClients = data || [];
+    }
+
     if (!linkedClients || linkedClients.length === 0) {
       throw new Error("No client is linked to this portal user.");
     }
@@ -182,7 +227,19 @@ export async function getAuthorizedClientContext(params: {
     throw new Error("Unable to resolve an authorized client context.");
   }
 
-  const requestOwnerId = clientRow.portal_user_id;
+  let requestOwnerId = clientRow.portal_user_id;
+  if (!requestOwnerId) {
+    const { data: clientOwner } = await params.supabaseAdmin
+      .from("client_users")
+      .select("user_id")
+      .eq("client_id", clientRow.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    requestOwnerId = asTrimmedString(clientOwner?.user_id);
+  }
 
   const requestQuery = requestOwnerId
     ? params.supabaseAdmin

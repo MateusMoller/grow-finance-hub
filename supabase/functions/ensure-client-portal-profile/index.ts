@@ -19,6 +19,7 @@ const internalRoles = new Set([
 
 type ClientRow = {
   id: string;
+  organization_id: string;
   name: string | null;
   contact: string | null;
   email: string | null;
@@ -26,6 +27,36 @@ type ClientRow = {
   portal_user_id: string | null;
   created_at?: string | null;
 };
+
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
+
+async function resolveDefaultOrganizationId(supabaseAdmin: ReturnType<typeof createClient>) {
+  const { data, error } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("slug", "grow")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.id) throw new Error("Default Grow organization was not found.");
+  return String(data.id);
+}
+
+async function ensureClientRole(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  organizationId: string,
+) {
+  const { error } = await supabaseAdmin.from("user_roles").upsert(
+    { user_id: userId, organization_id: organizationId, role: "client" },
+    { onConflict: "user_id,organization_id,role" },
+  );
+
+  if (error) throw error;
+}
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -98,20 +129,53 @@ Deno.serve(async (req) => {
 
     const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (callerRolesError) throw callerRolesError;
 
-    const roles = (callerRoles || []).map((row) => String(row.role || "").toLowerCase());
+    const roleRows = (callerRoles || []) as RoleRow[];
+    const roles = roleRows.map((row) => String(row.role || "").toLowerCase());
     const hasInternalRole = roles.some((role) => internalRoles.has(role));
     if (hasInternalRole) {
       return jsonResponse({ error: "Internal users cannot access the client portal profile flow" }, 403);
     }
 
+    const { data: existingClientUserRows, error: existingClientUserError } = await supabaseAdmin
+      .from("client_users")
+      .select("client_id, organization_id")
+      .eq("user_id", callerUser.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (existingClientUserError) throw existingClientUserError;
+    const existingClientUser = (existingClientUserRows || [])[0] || null;
+    if (existingClientUser?.client_id) {
+      const { data: linkedByMembership, error: linkedByMembershipError } = await supabaseAdmin
+        .from("clients")
+        .select("id, organization_id, name, contact, email, status, portal_user_id, created_at")
+        .eq("id", existingClientUser.client_id)
+        .eq("organization_id", existingClientUser.organization_id)
+        .maybeSingle();
+
+      if (linkedByMembershipError) throw linkedByMembershipError;
+      if (linkedByMembership) {
+        if (isInactiveClientStatus(linkedByMembership.status)) {
+          return jsonResponse(
+            { error: "Cliente inativo. O acesso ao portal esta bloqueado." },
+            403,
+          );
+        }
+
+        await ensureClientRole(supabaseAdmin, callerUser.id, linkedByMembership.organization_id);
+        return jsonResponse({ ok: true, action: "already_linked", client: linkedByMembership });
+      }
+    }
+
     const { data: existingClientRows, error: existingClientError } = await supabaseAdmin
       .from("clients")
-      .select("id, name, contact, email, status, portal_user_id, created_at")
+      .select("id, organization_id, name, contact, email, status, portal_user_id, created_at")
       .eq("portal_user_id", callerUser.id)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -126,9 +190,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id: callerUser.id, role: "client" }, { onConflict: "user_id,role" });
+      await ensureClientRole(supabaseAdmin, callerUser.id, existingClient.organization_id);
       return jsonResponse({ ok: true, action: "already_linked", client: existingClient });
     }
 
@@ -139,7 +201,7 @@ Deno.serve(async (req) => {
 
     const { data: emailClientRows, error: emailClientError } = await supabaseAdmin
       .from("clients")
-      .select("id, name, contact, email, status, portal_user_id, created_at")
+      .select("id, organization_id, name, contact, email, status, portal_user_id, created_at")
       .ilike("email", normalizedEmail)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -165,17 +227,16 @@ Deno.serve(async (req) => {
       const { error: linkError } = await supabaseAdmin
         .from("clients")
         .update({ portal_user_id: callerUser.id, updated_at: new Date().toISOString() })
-        .eq("id", emailClient.id);
+        .eq("id", emailClient.id)
+        .eq("organization_id", emailClient.organization_id);
 
       if (linkError) throw linkError;
 
-      await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id: callerUser.id, role: "client" }, { onConflict: "user_id,role" });
+      await ensureClientRole(supabaseAdmin, callerUser.id, emailClient.organization_id);
 
       const { data: linkedClient, error: linkedClientError } = await supabaseAdmin
         .from("clients")
-        .select("id, name, contact, email, portal_user_id")
+        .select("id, organization_id, name, contact, email, portal_user_id")
         .eq("id", emailClient.id)
         .maybeSingle();
 
@@ -191,6 +252,10 @@ Deno.serve(async (req) => {
         403,
       );
     }
+
+    const organizationId =
+      roleRows.find((row) => row.role === "client" && row.organization_id)?.organization_id ||
+      await resolveDefaultOrganizationId(supabaseAdmin);
 
     const { data: profileRow } = await supabaseAdmin
       .from("profiles")
@@ -209,15 +274,14 @@ Deno.serve(async (req) => {
         sector: "Servicos",
         status: "Ativo",
         portal_user_id: callerUser.id,
+        organization_id: organizationId,
       })
-      .select("id, name, contact, email, portal_user_id")
+      .select("id, organization_id, name, contact, email, portal_user_id")
       .single();
 
     if (createClientError) throw createClientError;
 
-    await supabaseAdmin
-      .from("user_roles")
-      .upsert({ user_id: callerUser.id, role: "client" }, { onConflict: "user_id,role" });
+    await ensureClientRole(supabaseAdmin, callerUser.id, organizationId);
 
     return jsonResponse({ ok: true, action: "created_client_profile", client: createdClient });
   } catch (error: unknown) {

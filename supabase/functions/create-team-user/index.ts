@@ -74,6 +74,18 @@ function isUserAlreadyRegisteredError(message?: string) {
   return lowered.includes("already been registered") || lowered.includes("already registered");
 }
 
+async function resolveDefaultOrganizationId(supabaseAdmin: ReturnType<typeof createClient>) {
+  const { data, error } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("slug", "grow")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.id) throw new Error("Default Grow organization was not found.");
+  return String(data.id);
+}
+
 async function findAuthUserByEmail(
   supabaseAdmin: ReturnType<typeof createClient>,
   email: string,
@@ -132,7 +144,7 @@ Deno.serve(async (req) => {
 
     const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (callerRolesError) {
@@ -143,6 +155,11 @@ Deno.serve(async (req) => {
     if (!isCallerAdmin) {
       return jsonResponse({ error: "Only admins can create users" }, 403);
     }
+
+    const callerAdminRole = (callerRoles || []).find((row) => row.role === "admin" && row.organization_id);
+    const organizationId = callerAdminRole?.organization_id
+      ? String(callerAdminRole.organization_id)
+      : await resolveDefaultOrganizationId(supabaseAdmin);
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -200,7 +217,7 @@ Deno.serve(async (req) => {
 
       const { data: existingRoles, error: existingRolesError } = await supabaseAdmin
         .from("user_roles")
-        .select("role")
+        .select("role, organization_id")
         .eq("user_id", userId);
 
       if (existingRolesError) {
@@ -208,6 +225,7 @@ Deno.serve(async (req) => {
       }
 
       const existingRoleValues = (existingRoles || [])
+        .filter((row) => row.organization_id === organizationId)
         .map((row) => String(row.role || "").trim().toLowerCase())
         .filter(Boolean);
 
@@ -237,10 +255,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Unable to resolve user id" }, 400);
     }
 
-    const { error: roleInsertError } = await supabaseAdmin.from("user_roles").insert({
-      user_id: userId,
-      role: parsedPayload.role,
-    });
+    const { error: roleInsertError } = await supabaseAdmin.from("user_roles").upsert(
+      {
+        user_id: userId,
+        organization_id: organizationId,
+        role: parsedPayload.role,
+      },
+      { onConflict: "user_id,organization_id,role" },
+    );
 
     if (roleInsertError) {
       throw roleInsertError;
@@ -263,16 +285,28 @@ Deno.serve(async (req) => {
       .from("user_roles")
       .delete()
       .eq("user_id", userId)
+      .eq("organization_id", organizationId)
       .eq("role", "client");
 
     if (removeClientRoleError) {
       throw removeClientRoleError;
     }
 
+    const { error: revokeClientLinksError } = await supabaseAdmin
+      .from("client_users")
+      .update({ status: "revoked" })
+      .eq("user_id", userId)
+      .eq("organization_id", organizationId);
+
+    if (revokeClientLinksError) {
+      throw revokeClientLinksError;
+    }
+
     const { error: removeClientRecordError } = await supabaseAdmin
       .from("clients")
-      .delete()
-      .eq("portal_user_id", userId);
+      .update({ portal_user_id: null })
+      .eq("portal_user_id", userId)
+      .eq("organization_id", organizationId);
 
     if (removeClientRecordError) {
       throw removeClientRecordError;
@@ -285,6 +319,7 @@ Deno.serve(async (req) => {
         email: parsedPayload.email,
         display_name: parsedPayload.displayName,
         role: parsedPayload.role,
+        organization_id: organizationId,
       },
       created_now: createdNow,
     });

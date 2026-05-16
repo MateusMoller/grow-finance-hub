@@ -40,6 +40,11 @@ type ExistingClientRow = {
   status: string | null;
 };
 
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -176,20 +181,23 @@ Deno.serve(async (req) => {
 
     const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (callerRolesError) {
       throw callerRolesError;
     }
 
-    const canCreateClients = (callerRoles || []).some((roleRow) => clientCreatorRoles.has(roleRow.role));
-    if (!canCreateClients) {
+    const creatorRole = ((callerRoles || []) as RoleRow[]).find(
+      (roleRow) => clientCreatorRoles.has(roleRow.role) && roleRow.organization_id,
+    );
+    if (!creatorRole?.organization_id) {
       return jsonResponse(
         { error: "Only admin, director, manager, or commercial roles can create clients" },
         403,
       );
     }
+    const organizationId = creatorRole.organization_id;
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -242,6 +250,7 @@ Deno.serve(async (req) => {
         .from("clients")
         .select("id, email, cnpj, portal_user_id, status")
         .or(clientMatchFilters.join(","))
+        .eq("organization_id", organizationId)
         .limit(10);
 
       if (existingClientError) {
@@ -338,14 +347,16 @@ Deno.serve(async (req) => {
 
     const { data: existingRoles, error: existingRolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", portalUserId);
 
     if (existingRolesError) {
       throw existingRolesError;
     }
 
-    const hasInternalRole = (existingRoles || []).some((row) => internalRoles.has(row.role));
+    const hasInternalRole = ((existingRoles || []) as RoleRow[]).some(
+      (row) => row.organization_id === organizationId && internalRoles.has(row.role),
+    );
     if (hasInternalRole) {
       return jsonResponse(
         { error: "This email is already linked to an internal account" },
@@ -358,6 +369,7 @@ Deno.serve(async (req) => {
         .from("clients")
         .select("id")
         .eq("portal_user_id", portalUserId)
+        .eq("organization_id", organizationId)
         .limit(1);
 
     if (existingClientByPortalUserError) {
@@ -390,8 +402,8 @@ Deno.serve(async (req) => {
     }
 
     const { error: roleUpsertError } = await supabaseAdmin.from("user_roles").upsert(
-      { user_id: portalUserId, role: "client" },
-      { onConflict: "user_id,role" },
+      { user_id: portalUserId, organization_id: organizationId, role: "client" },
+      { onConflict: "user_id,organization_id,role" },
     );
 
     if (roleUpsertError) {
@@ -420,6 +432,7 @@ Deno.serve(async (req) => {
       phone: normalizedPhone || null,
       obligation_completion_whatsapp_enabled: Boolean(parsedPayload.obligationCompletionWhatsAppEnabled),
       portal_user_id: portalUserId,
+      organization_id: organizationId,
       created_by: callerUser.id,
     };
 
@@ -470,6 +483,7 @@ Deno.serve(async (req) => {
       portal_access_link: portalAccessLink,
       portal_access_link_type: portalAccessLinkType,
       portal_password_applied: portalPasswordApplied,
+      organization_id: organizationId,
     });
   } catch (error: unknown) {
     const message =

@@ -58,11 +58,13 @@ function generateToken() {
 async function syncUserSettingsAccessFlag(
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string,
+  organizationId: string,
   enabled: boolean,
 ) {
   await supabaseAdmin.from("user_settings").upsert(
     {
       user_id: userId,
+      organization_id: organizationId,
       api_access: enabled,
       integrations_api_access: enabled,
     },
@@ -109,16 +111,25 @@ Deno.serve(async (req) => {
 
     const { data: roles, error: rolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", user.id);
 
     if (rolesError) {
       throw rolesError;
     }
 
-    const isInternalUser = (roles || []).some((row) => internalRoles.has(String(row.role)));
+    const firstInternalRole = (roles || []).find((row) => internalRoles.has(String(row.role)));
+    const isInternalUser = Boolean(firstInternalRole);
     if (!isInternalUser) {
       return jsonResponse({ error: "Only internal users can manage integration tokens" }, 403);
+    }
+
+    const organizationId = firstInternalRole?.organization_id
+      ? String(firstInternalRole.organization_id)
+      : null;
+
+    if (!organizationId) {
+      return jsonResponse({ error: "No organization is linked to this internal user." }, 403);
     }
 
     const body = asRecord(await req.json().catch(() => ({}))) || {};
@@ -152,6 +163,7 @@ Deno.serve(async (req) => {
       const { error: upsertError } = await supabaseAdmin.from("integration_api_credentials").upsert(
         {
           user_id: user.id,
+          organization_id: organizationId,
           token_hash: tokenHash,
           token_prefix: revealedToken.slice(0, 12),
           enabled: true,
@@ -167,7 +179,7 @@ Deno.serve(async (req) => {
         throw upsertError;
       }
 
-      await syncUserSettingsAccessFlag(supabaseAdmin, user.id, true);
+      await syncUserSettingsAccessFlag(supabaseAdmin, user.id, organizationId, true);
 
       return jsonResponse({
         enabled: true,
@@ -200,7 +212,7 @@ Deno.serve(async (req) => {
         throw updateError;
       }
 
-      await syncUserSettingsAccessFlag(supabaseAdmin, user.id, enabled);
+      await syncUserSettingsAccessFlag(supabaseAdmin, user.id, organizationId, enabled);
 
       return jsonResponse({
         enabled,

@@ -15,7 +15,12 @@ interface AuthContextType {
   loading: boolean;
   role: string | null;
   roles: string[];
+  allRoles: string[];
   roleLoaded: boolean;
+  organizations: OrganizationSummary[];
+  currentOrganization: OrganizationSummary | null;
+  currentOrganizationId: string | null;
+  setCurrentOrganizationId: (organizationId: string) => void;
   isInternalUser: boolean;
   isClientUser: boolean;
   isDepartmentUser: boolean;
@@ -23,7 +28,21 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
+type OrganizationSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  is_active?: boolean | null;
+};
+
+type RoleRow = {
+  role: string | null;
+  organization_id?: string | null;
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const buildOrganizationStorageKey = (userId: string) => `grow-current-organization-${userId}`;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -31,12 +50,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
+  const [allRoles, setAllRoles] = useState<string[]>([]);
+  const [organizationRoles, setOrganizationRoles] = useState<RoleRow[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
+  const [currentOrganizationId, setCurrentOrganizationIdState] = useState<string | null>(null);
   const [roleLoaded, setRoleLoaded] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setRole(null);
       setRoles([]);
+      setAllRoles([]);
+      setOrganizationRoles([]);
+      setOrganizations([]);
+      setCurrentOrganizationIdState(null);
       setRoleLoaded(true);
       setLoading(false);
       return;
@@ -54,6 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setRole(null);
         setRoles([]);
+        setAllRoles([]);
+        setOrganizationRoles([]);
+        setOrganizations([]);
+        setCurrentOrganizationIdState(null);
         setRoleLoaded(true);
       }
     });
@@ -71,6 +102,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setRole(null);
           setRoles([]);
+          setAllRoles([]);
+          setOrganizationRoles([]);
+          setOrganizations([]);
+          setCurrentOrganizationIdState(null);
           setRoleLoaded(true);
         }
       } catch {
@@ -78,6 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setRole(null);
         setRoles([]);
+        setAllRoles([]);
+        setOrganizationRoles([]);
+        setOrganizations([]);
+        setCurrentOrganizationIdState(null);
         setRoleLoaded(true);
       }
 
@@ -92,24 +131,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchRole = async (userId: string) => {
     const { data, error } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", userId);
 
     if (error) {
       setRole(null);
       setRoles([]);
+      setAllRoles([]);
+      setOrganizationRoles([]);
+      setOrganizations([]);
+      setCurrentOrganizationIdState(null);
       setRoleLoaded(true);
       return;
     }
 
-    const mappedRoles = (data || [])
+    const roleRows = ((data || []) as RoleRow[])
+      .map((item) => ({
+        role: item.role ? String(item.role) : null,
+        organization_id: item.organization_id ? String(item.organization_id) : null,
+      }))
+      .filter((item) => item.role);
+
+    const mappedRoles = roleRows
       .map((item) => String(item.role || ""))
       .filter((value) => value.length > 0);
-    const normalizedRoles = normalizeRoles(mappedRoles);
+    const normalizedAllRoles = normalizeRoles(mappedRoles);
+    const organizationIds = Array.from(
+      new Set(roleRows.map((item) => item.organization_id).filter((value): value is string => Boolean(value))),
+    );
 
-    setRoles(normalizedRoles);
-    setRole(getPrimaryRole(normalizedRoles));
+    let organizationRows: OrganizationSummary[] = [];
+
+    if (organizationIds.length > 0) {
+      const { data: orgData } = await supabase
+        .from("organizations")
+        .select("id, slug, name, is_active")
+        .in("id", organizationIds);
+
+      organizationRows = ((orgData || []) as OrganizationSummary[]).filter((org) => organizationIds.includes(org.id));
+    }
+
+    const storedOrganizationId = localStorage.getItem(buildOrganizationStorageKey(userId));
+    const preferredOrganization =
+      organizationRows.find((org) => org.id === storedOrganizationId) ||
+      organizationRows.find((org) => org.slug === "grow") ||
+      organizationRows[0] ||
+      null;
+
+    const activeOrganizationId = preferredOrganization?.id ?? organizationIds[0] ?? null;
+    const activeRoles = activeOrganizationId
+      ? normalizeRoles(
+          roleRows
+            .filter((item) => item.organization_id === activeOrganizationId)
+            .map((item) => item.role),
+        )
+      : normalizedAllRoles;
+
+    setOrganizationRoles(roleRows);
+    setOrganizations(organizationRows);
+    setCurrentOrganizationIdState(activeOrganizationId);
+    setAllRoles(normalizedAllRoles);
+    setRoles(activeRoles);
+    setRole(getPrimaryRole(activeRoles.length > 0 ? activeRoles : normalizedAllRoles));
     setRoleLoaded(true);
+  };
+
+  const setCurrentOrganizationId = (organizationId: string) => {
+    if (!user || !organizations.some((organization) => organization.id === organizationId)) return;
+
+    localStorage.setItem(buildOrganizationStorageKey(user.id), organizationId);
+    setCurrentOrganizationIdState(organizationId);
+
+    const activeRoles = normalizeRoles(
+      organizationRoles
+        .filter((item) => item.organization_id === organizationId)
+        .map((item) => item.role),
+    );
+
+    setRoles(activeRoles);
+    setRole(getPrimaryRole(activeRoles.length > 0 ? activeRoles : allRoles));
   };
 
   const signIn = async (email: string, password: string) => {
@@ -129,9 +229,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setRole(null);
     setRoles([]);
+    setAllRoles([]);
+    setOrganizationRoles([]);
+    setOrganizations([]);
+    setCurrentOrganizationIdState(null);
     setRoleLoaded(true);
   };
 
+  const currentOrganization = organizations.find((organization) => organization.id === currentOrganizationId) || null;
   const isInternalUser = hasAnyInternalRole(roles);
   const isClientUser = hasClientRole(roles);
   const isDepartmentUser = hasAnyDepartmentRole(roles);
@@ -144,7 +249,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         role,
         roles,
+        allRoles,
         roleLoaded,
+        organizations,
+        currentOrganization,
+        currentOrganizationId,
+        setCurrentOrganizationId,
         isInternalUser,
         isClientUser,
         isDepartmentUser,

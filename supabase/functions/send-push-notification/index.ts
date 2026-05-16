@@ -9,6 +9,10 @@ const corsHeaders = {
 };
 
 type JsonRecord = Record<string, unknown>;
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
 
 type PushSubscriptionRow = {
   id: string;
@@ -122,12 +126,20 @@ Deno.serve(async (req) => {
 
     const { data: callerRoleRows, error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (roleError) throw roleError;
 
-    const callerRoles = (callerRoleRows || [])
+    const callerOrganizationId = ((callerRoleRows || []) as RoleRow[]).find((row) => row.organization_id)
+      ?.organization_id;
+
+    if (!callerOrganizationId) {
+      return jsonResponse({ error: "User does not belong to an organization" }, 403);
+    }
+
+    const callerRoles = ((callerRoleRows || []) as RoleRow[])
+      .filter((row) => row.organization_id === callerOrganizationId)
       .map((row) => String(row.role || "").trim().toLowerCase())
       .filter(Boolean);
 
@@ -164,6 +176,7 @@ Deno.serve(async (req) => {
       .from("push_subscriptions")
       .select("id, user_id, endpoint, p256dh, auth, expiration_time, is_active")
       .in("user_id", resolvedTargets)
+      .eq("organization_id", callerOrganizationId)
       .eq("is_active", true);
 
     if (subscriptionsError) throw subscriptionsError;

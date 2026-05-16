@@ -1902,7 +1902,7 @@ export default function ClientDetailPage() {
           user_id: client.portal_user_id,
           role: "client" as Database["public"]["Enums"]["app_role"],
         },
-        { onConflict: "user_id,role" },
+        { onConflict: "user_id,organization_id,role" },
       );
 
       setSavingPortalAccess(false);

@@ -6,6 +6,10 @@ const corsHeaders = {
 };
 
 type JsonRecord = Record<string, unknown>;
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -87,17 +91,20 @@ Deno.serve(async (req) => {
 
     const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (callerRolesError) {
       throw callerRolesError;
     }
 
-    const isCallerAdmin = (callerRoles || []).some((row) => row.role === "admin");
-    if (!isCallerAdmin) {
+    const callerAdminRole = ((callerRoles || []) as RoleRow[]).find(
+      (row) => row.role === "admin" && row.organization_id,
+    );
+    if (!callerAdminRole?.organization_id) {
       return jsonResponse({ error: "Only admins can create admin users" }, 403);
     }
+    const organizationId = callerAdminRole.organization_id;
 
     const payload = asRecord(await req.json());
     if (!payload) {
@@ -144,7 +151,10 @@ Deno.serve(async (req) => {
 
         const { error: roleError } = await supabaseAdmin
           .from("user_roles")
-          .upsert({ user_id: existingUser.id, role: "admin" }, { onConflict: "user_id,role" });
+          .upsert(
+            { user_id: existingUser.id, organization_id: organizationId, role: "admin" },
+            { onConflict: "user_id,organization_id,role" },
+          );
 
         if (roleError) throw roleError;
 
@@ -165,7 +175,10 @@ Deno.serve(async (req) => {
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
+      .upsert(
+        { user_id: userId, organization_id: organizationId, role: "admin" },
+        { onConflict: "user_id,organization_id,role" },
+      );
 
     if (roleError) throw roleError;
 

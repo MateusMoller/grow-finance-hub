@@ -119,7 +119,7 @@ export default function UsuariosPage() {
         user_id: portalUserId,
         role: nextRole as "admin" | "director" | "manager" | "employee" | "commercial" | "partner" | "departamento_pessoal" | "fiscal" | "contabil" | "client",
       },
-      { onConflict: "user_id,role" },
+      { onConflict: "user_id,organization_id,role" },
     );
 
     if (upsertRoleError) {
