@@ -45,6 +45,9 @@ export type Database = {
       client_users: GenericTable
       clients: GenericTable
       cnpj_lookup_cache: GenericTable
+      crm_goals: GenericTable
+      crm_lead_events: GenericTable
+      crm_leads: GenericTable
       document_inbox_items: GenericTable
       document_ingestion_jobs: GenericTable
       email_inbox_messages: GenericTable
@@ -111,6 +114,7 @@ export type Database = {
       prevent_internal_user_client_link: GenericFunction
       prevent_mixed_portal_internal_roles: GenericFunction
       refresh_client_cashflow_consultive_state: GenericFunction
+      record_operational_audit_log: GenericFunction
       resolve_cashflow_consultive_alerts: GenericFunction
       resolve_cashflow_consultive_tasks: GenericFunction
       revoke_inactive_client_access: GenericFunction

@@ -14,6 +14,7 @@ import {
   MessagesSquare,
   UserCog,
   Lightbulb,
+  Activity,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -29,7 +30,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
+import { routeFeatureMap } from "@/lib/organizationFeatures";
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
@@ -52,6 +55,7 @@ const systemItems = [
   { title: "Usuários", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
+  { title: "Saúde operacional", url: "/app/saude-operacional", icon: Activity },
   { title: "Configurações", url: "/app/configuracoes", icon: Settings },
 ];
 
@@ -91,6 +95,7 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
 export function AppSidebar() {
   const { state } = useSidebar();
   const { role, roles } = useAuth();
+  const { isFeatureEnabled } = useOrganizationSettings();
   const collapsed = state === "collapsed";
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
   const isDepartmentRole = isDepartmentOnlyUser(normalizedRoleList);
@@ -105,16 +110,26 @@ export function AppSidebar() {
     );
   }
 
+  const featureFilteredMainItems = mainItems.filter((item) => {
+    const feature = routeFeatureMap[item.url];
+    return !feature || isFeatureEnabled(feature);
+  });
+
+  const featureFilteredOperationalItems = operationalItems.filter((item) => {
+    const feature = routeFeatureMap[item.url];
+    return !feature || isFeatureEnabled(feature);
+  });
+
   const visibleMainItems = isDepartmentRole
-    ? mainItems.filter((item) =>
+    ? featureFilteredMainItems.filter((item) =>
         item.url === "/app/calendario" ||
         item.url === "/app/tarefas" ||
         item.url === "/app/clientes",
       )
-    : mainItems;
+    : featureFilteredMainItems;
 
   const visibleOperationalItems = isDepartmentRole
-    ? operationalItems.filter(
+    ? featureFilteredOperationalItems.filter(
         (item) =>
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
@@ -122,14 +137,20 @@ export function AppSidebar() {
           item.url === "/app/obrigacoes",
       )
     : isAdmin
-      ? operationalItems
-      : operationalItems.filter((item) => item.url !== "/app/newsletter");
+      ? featureFilteredOperationalItems
+      : featureFilteredOperationalItems.filter((item) => item.url !== "/app/newsletter");
 
   const visibleSystemItems = isDepartmentRole
     ? systemItems.filter((item) => item.url === "/app/manual" || item.url === "/app/sugestoes")
     : isAdmin
-      ? systemItems
-      : systemItems.filter((item) => item.url !== "/app/usuarios");
+      ? systemItems.filter((item) => {
+          const feature = routeFeatureMap[item.url];
+          return !feature || isFeatureEnabled(feature);
+        })
+      : systemItems.filter((item) => {
+          const feature = routeFeatureMap[item.url];
+          return item.url !== "/app/usuarios" && (!feature || isFeatureEnabled(feature));
+        });
 
   const mainItemOrder: Record<string, number> = {
     "/app": 0,

@@ -72,6 +72,25 @@ async function syncUserSettingsAccessFlag(
   );
 }
 
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -131,6 +150,7 @@ Deno.serve(async (req) => {
     if (!organizationId) {
       return jsonResponse({ error: "No organization is linked to this internal user." }, 403);
     }
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "acessorias");
 
     const body = asRecord(await req.json().catch(() => ({}))) || {};
     const action = String(body.action || "status");
@@ -139,6 +159,7 @@ Deno.serve(async (req) => {
       .from("integration_api_credentials")
       .select("user_id, token_prefix, enabled, last_used_at, revoked_at, created_at, updated_at")
       .eq("user_id", user.id)
+      .eq("organization_id", organizationId)
       .maybeSingle();
 
     if (existingCredentialError) {
@@ -206,7 +227,8 @@ Deno.serve(async (req) => {
           revoked_at: enabled ? null : now,
           updated_at: now,
         })
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .eq("organization_id", organizationId);
 
       if (updateError) {
         throw updateError;

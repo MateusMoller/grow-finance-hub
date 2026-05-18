@@ -23,6 +23,10 @@ const CACHE_TTL_HOURS = 24 * 7;
 const FETCH_TIMEOUT_MS = 9000;
 
 type JsonRecord = Record<string, unknown>;
+type RoleRow = {
+  role: string;
+  organization_id: string | null;
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -96,6 +100,25 @@ function isFreshCache(updatedAt: string) {
   const updatedTime = new Date(updatedAt).getTime();
   if (!Number.isFinite(updatedTime)) return false;
   return Date.now() - updatedTime <= CACHE_TTL_HOURS * 60 * 60 * 1000;
+}
+
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
 }
 
 async function fetchJsonWithTimeout(url: string) {
@@ -204,15 +227,19 @@ Deno.serve(async (req) => {
 
     const { data: roleRows, error: rolesError } = await supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", callerUser.id);
 
     if (rolesError) throw rolesError;
 
-    const isInternal = (roleRows || []).some((row) => internalRoles.has(String(row.role || "")));
-    if (!isInternal) {
+    const internalRole = ((roleRows || []) as RoleRow[]).find(
+      (row) => row.organization_id && internalRoles.has(String(row.role || "")),
+    );
+    if (!internalRole?.organization_id) {
       return jsonResponse({ error: "Only internal roles can query CNPJ lookup" }, 403);
     }
+    const organizationId = internalRole.organization_id;
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "crm");
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -231,6 +258,7 @@ Deno.serve(async (req) => {
       const { data: cachedRow, error: cacheReadError } = await supabaseAdmin
         .from("cnpj_lookup_cache")
         .select("cnpj, legal_name, trade_name, main_cnae, cep, street, number, neighborhood, city, state, phone, email, source, raw_payload, updated_at")
+        .eq("organization_id", organizationId)
         .eq("cnpj", cnpj)
         .maybeSingle();
 
@@ -267,6 +295,7 @@ Deno.serve(async (req) => {
       .from("cnpj_lookup_cache")
       .upsert({
         cnpj,
+        organization_id: organizationId,
         legal_name: lookupResult.legal_name,
         trade_name: lookupResult.trade_name,
         main_cnae: lookupResult.main_cnae,
@@ -281,7 +310,7 @@ Deno.serve(async (req) => {
         source: lookupResult.source,
         raw_payload: lookupResult.raw_payload,
         updated_at: new Date().toISOString(),
-      }, { onConflict: "cnpj" });
+      }, { onConflict: "organization_id,cnpj" });
 
     if (cacheUpsertError) throw cacheUpsertError;
 

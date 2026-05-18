@@ -4,6 +4,7 @@ export type RequestStatus = "pending" | "in_progress" | "completed" | "cancelled
 
 export interface PortalClientProfile {
   id: string;
+  organization_id: string;
   name: string;
   contact: string | null;
   email: string | null;
@@ -14,6 +15,7 @@ export interface PortalClientProfile {
 export interface PortalClientRequest {
   id: string;
   user_id: string;
+  client_id: string | null;
   title: string;
   description: string | null;
   category: string;
@@ -36,6 +38,7 @@ export interface PortalRequestMessage {
 export interface PortalClientDocument {
   id: string;
   user_id: string;
+  client_id: string | null;
   request_id: string | null;
   file_name: string;
   file_path: string;

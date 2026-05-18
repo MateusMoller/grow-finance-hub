@@ -67,11 +67,14 @@ import {
   filterSecureDocuments,
   SECURE_DOCUMENT_ACCEPT,
 } from "@/lib/fileUploadSecurity";
+import { recordOperationalAuditLog } from "@/lib/operationalAudit";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
 const DEFAULT_PORTAL_ACCESS_MESSAGE =
   "Este usuário ainda não possui permissão de cliente para acessar o portal.";
+
+const buildPortalClientStorageKey = (userId: string) => `grow-portal-client-${userId}`;
 
 const parseFunctionError = async (error: unknown): Promise<{ message: string; status: number | null }> => {
   const fallbackMessage = error instanceof Error ? error.message : "Erro desconhecido ao sincronizar acesso";
@@ -544,6 +547,8 @@ export default function PortalClientePage() {
   const [portalAccessMessage, setPortalAccessMessage] = useState(DEFAULT_PORTAL_ACCESS_MESSAGE);
 
   const [clientProfile, setClientProfile] = useState<PortalClientProfile | null>(null);
+  const [availableClientProfiles, setAvailableClientProfiles] = useState<PortalClientProfile[]>([]);
+  const [selectedPortalClientId, setSelectedPortalClientId] = useState<string | null>(null);
   const [requests, setRequests] = useState<PortalClientRequest[]>([]);
   const [documents, setDocuments] = useState<PortalClientDocument[]>([]);
   const [portalObligationDocuments, setPortalObligationDocuments] = useState<PortalObligationDocument[]>([]);
@@ -603,6 +608,7 @@ export default function PortalClientePage() {
 
   const resetPortalCollections = useCallback(() => {
     setClientProfile(null);
+    setAvailableClientProfiles([]);
     setRequests([]);
     setDocuments([]);
     setPortalObligationDocuments([]);
@@ -726,20 +732,66 @@ export default function PortalClientePage() {
         .select("user_id")
         .eq("user_id", user.id)
         .eq("role", "client")
-        .maybeSingle();
-
-    const fetchLinkedClient = async () =>
-      supabase
-        .from("clients")
-        .select("id, name, contact, email, portal_user_id, portal_cashflow_enabled")
-        .eq("portal_user_id", user.id)
-        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
+    const fetchLinkedClients = async () => {
+      const { data: linkRows, error: linkError } = await supabase
+        .from("client_users")
+        .select("client_id, organization_id, created_at")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (linkError) {
+        return { data: null, error: linkError };
+      }
+
+      const linkedClientIds = Array.from(
+        new Set((linkRows || []).map((link) => String(link.client_id || "")).filter(Boolean)),
+      );
+
+      let linkedClients: PortalClientProfile[] = [];
+      if (linkedClientIds.length > 0) {
+        const { data, error } = await supabase
+          .from("clients")
+          .select("id, organization_id, name, contact, email, portal_user_id, portal_cashflow_enabled")
+          .in("id", linkedClientIds)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          return { data: null, error };
+        }
+
+        const clientMap = new Map(
+          asArray<PortalClientProfile>(data).map((client) => [client.id, client]),
+        );
+        linkedClients = linkedClientIds
+          .map((clientId) => clientMap.get(clientId))
+          .filter((client): client is PortalClientProfile => Boolean(client));
+      }
+
+      const { data: legacyClients, error: legacyError } = await supabase
+        .from("clients")
+        .select("id, organization_id, name, contact, email, portal_user_id, portal_cashflow_enabled")
+        .eq("portal_user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (legacyError) {
+        return { data: null, error: legacyError };
+      }
+
+      const mergedClientMap = new Map<string, PortalClientProfile>();
+      [...linkedClients, ...asArray<PortalClientProfile>(legacyClients)].forEach((client) => {
+        mergedClientMap.set(client.id, client);
+      });
+
+      return { data: Array.from(mergedClientMap.values()), error: null };
+    };
+
     let [{ data: roleData, error: roleError }, clientRes] = await Promise.all([
       fetchClientRole(),
-      fetchLinkedClient(),
+      fetchLinkedClients(),
     ]);
 
     if (roleError) {
@@ -771,7 +823,7 @@ export default function PortalClientePage() {
       } else {
         [{ data: roleData, error: roleError }, clientRes] = await Promise.all([
           fetchClientRole(),
-          fetchLinkedClient(),
+          fetchLinkedClients(),
         ]);
       }
     }
@@ -793,31 +845,36 @@ export default function PortalClientePage() {
       return;
     }
 
+    const linkedClients = asArray<PortalClientProfile>(clientRes.data);
+    const storedClientId = localStorage.getItem(buildPortalClientStorageKey(user.id));
+    const client =
+      linkedClients.find((item) => item.id === selectedPortalClientId) ||
+      linkedClients.find((item) => item.id === storedClientId) ||
+      linkedClients[0] ||
+      null;
+
+    if (client?.id && selectedPortalClientId !== client.id) {
+      setSelectedPortalClientId(client.id);
+      localStorage.setItem(buildPortalClientStorageKey(user.id), client.id);
+    }
+
     const [requestRes, docRes] = await Promise.all([
       supabase
         .from("client_requests")
-        .select("id, user_id, title, description, category, sector, status, admin_notes, created_at, updated_at")
+        .select("id, user_id, client_id, title, description, category, sector, status, admin_notes, created_at, updated_at")
         .eq("user_id", user.id)
+        .or(client?.id ? `client_id.eq.${client.id},client_id.is.null` : "client_id.is.null")
         .order("created_at", { ascending: false }),
       supabase
         .from("client_documents")
-        .select("id, user_id, request_id, file_name, file_path, file_size, category, created_at, processed_at, processed_by")
+        .select("id, user_id, client_id, request_id, file_name, file_path, file_size, category, created_at, processed_at, processed_by")
         .eq("user_id", user.id)
+        .or(client?.id ? `client_id.eq.${client.id},client_id.is.null` : "client_id.is.null")
         .order("created_at", { ascending: false }),
     ]);
 
     if (clientRes.error) {
-      const isMultipleClientsForPortalUser = String(clientRes.error.message || "")
-        .toLowerCase()
-        .includes("multiple");
-
-      if (isMultipleClientsForPortalUser) {
-        setPortalAccessMessage(
-          "Encontramos mais de um cadastro de cliente para este portal. Solicite ajuste ao admin.",
-        );
-      } else {
-        setPortalAccessMessage("Não foi possível carregar o cadastro do cliente para este portal.");
-      }
+      setPortalAccessMessage("Não foi possível carregar os cadastros de cliente para este portal.");
 
       resetPortalCollections();
       setLoadingData(false);
@@ -827,7 +884,6 @@ export default function PortalClientePage() {
 
     if (requestRes.error) toast.error("Erro ao carregar solicitações.");
     if (docRes.error) toast.error("Erro ao carregar documentos.");
-    const client = (clientRes.data || null) as PortalClientProfile | null;
     const fetchedRequests = asArray<PortalClientRequest>(requestRes.data);
     const fetchedDocuments = asArray<PortalClientDocument>(docRes.data);
 
@@ -1000,6 +1056,7 @@ export default function PortalClientePage() {
       return;
     }
 
+    setAvailableClientProfiles(linkedClients);
     setClientProfile(client);
     setRequests(fetchedRequests);
     setDocuments(fetchedDocuments);
@@ -1019,11 +1076,18 @@ export default function PortalClientePage() {
     }
 
     setLoadingData(false);
-  }, [fetchCashflowAccounts, fetchOpenFinanceData, resetPortalCollections, session, user]);
+  }, [fetchCashflowAccounts, fetchOpenFinanceData, resetPortalCollections, selectedPortalClientId, session, user]);
 
   useEffect(() => {
     if (user && session?.access_token) void fetchPortalData();
   }, [fetchPortalData, session?.access_token, user]);
+
+  const handlePortalClientChange = (clientId: string) => {
+    if (!user?.id) return;
+    localStorage.setItem(buildPortalClientStorageKey(user.id), clientId);
+    setSelectedPortalClientId(clientId);
+    setLoadingData(true);
+  };
 
   useEffect(() => {
     knownPortalTaskIdsRef.current = new Set(asArray<PortalClientTask>(portalTasks).map((task) => task.id));
@@ -1291,7 +1355,7 @@ export default function PortalClientePage() {
     setNewRequestFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
   };
   const uploadFilesToRequest = async (requestId: string, files: File[], category: string) => {
-    if (!user || files.length === 0) return { success: 0, failed: 0 };
+    if (!user || !clientProfile?.id || files.length === 0) return { success: 0, failed: 0 };
 
     let success = 0;
     let failed = 0;
@@ -1315,6 +1379,8 @@ export default function PortalClientePage() {
 
       const { error: dbError } = await supabase.from("client_documents").insert({
         user_id: user.id,
+        client_id: clientProfile.id,
+        organization_id: clientProfile.organization_id,
         request_id: requestId,
         file_name: file.name,
         file_path: filePath,
@@ -1325,6 +1391,14 @@ export default function PortalClientePage() {
       if (dbError) {
         failed += 1;
       } else {
+        await recordOperationalAuditLog({
+          organizationId: clientProfile.organization_id,
+          action: "portal_document_uploaded",
+          entityType: "client_document",
+          clientId: clientProfile.id,
+          requestId,
+          metadata: { fileName: file.name, category },
+        });
         success += 1;
       }
     }
@@ -1364,6 +1438,10 @@ export default function PortalClientePage() {
 
   const handleCreateRequest = async () => {
     if (!user) return;
+    if (!clientProfile?.id) {
+      toast.error("Selecione uma empresa para enviar a solicitação.");
+      return;
+    }
     if (!newRequestSector) {
       toast.error("Selecione o setor responsavel.");
       return;
@@ -1388,6 +1466,8 @@ export default function PortalClientePage() {
       .from("client_requests")
       .insert({
         user_id: user.id,
+        client_id: clientProfile.id,
+        organization_id: clientProfile.organization_id,
         title: newRequestTitle.trim(),
         description: buildRequestDescription(),
         category: selectedRequestReason?.label || "Solicitacao",
@@ -1410,6 +1490,20 @@ export default function PortalClientePage() {
 
     setCreatingRequest(false);
     resetNewRequestForm();
+
+    await recordOperationalAuditLog({
+      organizationId: clientProfile.organization_id,
+      action: "portal_request_created",
+      entityType: "client_request",
+      entityId: createdRequest.id,
+      clientId: clientProfile.id,
+      metadata: {
+        title: newRequestTitle.trim(),
+        sector: newRequestSector,
+        category: selectedRequestReason?.label || "Solicitacao",
+        files: uploadResult.success,
+      },
+    });
 
     if (uploadResult.failed > 0) {
       toast.error(
@@ -1438,7 +1532,7 @@ export default function PortalClientePage() {
   };
 
   const handleUploadDocuments = async () => {
-    if (!user || uploadFiles.length === 0) {
+    if (!user || !clientProfile?.id || uploadFiles.length === 0) {
       toast.error("Selecione ao menos um arquivo para envio.");
       return;
     }
@@ -1467,6 +1561,8 @@ export default function PortalClientePage() {
 
       const { error: dbError } = await supabase.from("client_documents").insert({
         user_id: user.id,
+        client_id: clientProfile.id,
+        organization_id: clientProfile.organization_id,
         request_id: requestId,
         file_name: file.name,
         file_path: filePath,
@@ -1477,6 +1573,14 @@ export default function PortalClientePage() {
       if (dbError) {
         failed += 1;
       } else {
+        await recordOperationalAuditLog({
+          organizationId: clientProfile.organization_id,
+          action: "portal_document_uploaded",
+          entityType: "client_document",
+          clientId: clientProfile.id,
+          requestId,
+          metadata: { fileName: file.name, category: uploadCategory },
+        });
         success += 1;
       }
     }
@@ -1504,7 +1608,11 @@ export default function PortalClientePage() {
       return;
     }
 
-    const { error: deleteError } = await supabase.from("client_documents").delete().eq("id", document.id);
+    const { error: deleteError } = await supabase
+      .from("client_documents")
+      .delete()
+      .eq("id", document.id)
+      .eq("client_id", clientProfile?.id || "");
     if (deleteError) {
       toast.error("Erro ao remover arquivo do histórico.");
       return;
@@ -1832,6 +1940,20 @@ export default function PortalClientePage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {availableClientProfiles.length > 1 ? (
+                <Select value={clientProfile?.id || ""} onValueChange={handlePortalClientChange}>
+                  <SelectTrigger className="h-9 w-[180px] text-xs sm:w-[240px]">
+                    <SelectValue placeholder="Selecionar cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableClientProfiles.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name || client.contact || client.email || "Cliente Grow"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <span className="text-xs text-muted-foreground hidden sm:inline">{user.email}</span>
               <Button
                 variant="ghost"

@@ -120,6 +120,50 @@ function getPortalRedirectUrl() {
     undefined;
 }
 
+async function insertAuditLog(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  params: {
+    organizationId: string;
+    actorUserId: string;
+    clientId?: string | null;
+    action: string;
+    entityType?: string | null;
+    entityId?: string | null;
+    result?: string;
+    metadata?: JsonRecord;
+  },
+) {
+  await supabaseAdmin.from("operational_audit_logs").insert({
+    organization_id: params.organizationId,
+    actor_user_id: params.actorUserId,
+    client_id: params.clientId || null,
+    action: params.action,
+    entity_type: params.entityType || null,
+    entity_id: params.entityId || null,
+    result: params.result || "success",
+    metadata: params.metadata || {},
+  });
+}
+
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 async function findAuthUserByEmail(
   supabaseAdmin: ReturnType<typeof createClient>,
   email: string,
@@ -198,6 +242,7 @@ Deno.serve(async (req) => {
       );
     }
     const organizationId = creatorRole.organization_id;
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "portal");
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -453,8 +498,30 @@ Deno.serve(async (req) => {
       if (portalUserCreatedNow) {
         await supabaseAdmin.auth.admin.deleteUser(portalUserId);
       }
+      await insertAuditLog(supabaseAdmin, {
+        organizationId,
+        actorUserId: callerUser.id,
+        action: "client_create_with_portal_failed",
+        entityType: "client",
+        result: "error",
+        metadata: { email: parsedPayload.email, error: createClientError.message },
+      }).catch(console.error);
       throw createClientError;
     }
+
+    await insertAuditLog(supabaseAdmin, {
+      organizationId,
+      actorUserId: callerUser.id,
+      clientId: createdClient.id,
+      action: existingClientToLink ? "client_portal_access_linked" : "client_created_with_portal",
+      entityType: "client",
+      entityId: createdClient.id,
+      metadata: {
+        email: parsedPayload.email,
+        portalUserCreatedNow,
+        portalAccessLinkType,
+      },
+    }).catch(console.error);
 
     if (!portalAccessLink && !portalPasswordApplied) {
       const { data: recoveryData, error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({

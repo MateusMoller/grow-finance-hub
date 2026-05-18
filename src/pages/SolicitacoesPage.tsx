@@ -42,6 +42,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { recordOperationalAuditLog } from "@/lib/operationalAudit";
 
 type RequestStatus = Database["public"]["Enums"]["request_status"];
 type RequestRow = Database["public"]["Tables"]["client_requests"]["Row"];
@@ -204,7 +205,7 @@ const parseSubmissionEntries = (data: Json): Array<{ key: string; value: string 
 };
 
 export default function SolicitacoesPage() {
-  const { user, role } = useAuth();
+  const { user, role, currentOrganizationId } = useAuth();
 
   const [activeTab, setActiveTab] = useState<PortalTab>("requests");
 
@@ -245,10 +246,15 @@ export default function SolicitacoesPage() {
   const [savingSubmissionStatusId, setSavingSubmissionStatusId] = useState<string | null>(null);
   const [savingSubmissionNotes, setSavingSubmissionNotes] = useState(false);
   const fetchClients = useCallback(async () => {
+    if (!currentOrganizationId) {
+      setLoadingClients(false);
+      return;
+    }
     setLoadingClients(true);
     const { data, error } = await supabase
       .from("clients")
       .select("id, name, contact, email, portal_user_id")
+      .eq("organization_id", currentOrganizationId)
       .order("name", { ascending: true });
 
     if (error) {
@@ -259,14 +265,19 @@ export default function SolicitacoesPage() {
 
     setClients((data || []) as ClientSummary[]);
     setLoadingClients(false);
-  }, []);
+  }, [currentOrganizationId]);
 
   const fetchRequests = useCallback(async () => {
+    if (!currentOrganizationId) {
+      setLoadingRequests(false);
+      return;
+    }
     setLoadingRequests(true);
 
     const { data: requestData, error: requestError } = await supabase
       .from("client_requests")
       .select("id, title, description, category, sector, status, admin_notes, created_at, updated_at, user_id")
+      .eq("organization_id", currentOrganizationId)
       .order("created_at", { ascending: false });
 
     if (requestError) {
@@ -293,6 +304,7 @@ export default function SolicitacoesPage() {
       const { data, error } = await supabase
         .from("clients")
         .select("id, name, contact, email, portal_user_id")
+        .eq("organization_id", currentOrganizationId)
         .in("portal_user_id", userIds);
       if (!error) clientsData = (data || []) as ClientSummary[];
     }
@@ -302,6 +314,7 @@ export default function SolicitacoesPage() {
       const { data, error } = await supabase
         .from("client_documents")
         .select("id, request_id, file_name, file_path, category, created_at, processed_at")
+        .eq("organization_id", currentOrganizationId)
         .in("request_id", requestIds)
         .order("created_at", { ascending: false });
       if (!error) documentsData = (data || []) as DocumentSummary[];
@@ -312,6 +325,7 @@ export default function SolicitacoesPage() {
       const { data, error } = await supabase
         .from("request_messages")
         .select("id, request_id, user_id, content, is_from_team, created_at")
+        .eq("organization_id", currentOrganizationId)
         .in("request_id", requestIds)
         .order("created_at", { ascending: false });
       if (!error) messagesData = (data || []) as RequestMessageRow[];
@@ -356,6 +370,7 @@ export default function SolicitacoesPage() {
       const { data: existingTaskRows, error: existingTaskError } = await supabase
         .from("client_portal_tasks")
         .select("request_id")
+        .eq("organization_id", currentOrganizationId)
         .in("request_id", linkedRequestIds);
 
       if (!existingTaskError) {
@@ -376,6 +391,7 @@ export default function SolicitacoesPage() {
             status: "pending_client" as const,
             sector: request.sector || "Geral",
             created_by: user?.id || request.user_id,
+            organization_id: currentOrganizationId,
           }));
 
           const { error: insertTaskError } = await supabase.from("client_portal_tasks").insert(payload);
@@ -387,13 +403,18 @@ export default function SolicitacoesPage() {
     }
 
     setLoadingRequests(false);
-  }, [user?.id]);
+  }, [currentOrganizationId, user?.id]);
 
   const fetchTasks = useCallback(async () => {
+    if (!currentOrganizationId) {
+      setLoadingTasks(false);
+      return;
+    }
     setLoadingTasks(true);
     const { data, error } = await supabase
       .from("client_portal_tasks")
       .select("id, client_id, title, description, type, status, due_date, sector, request_id, created_by, created_at, updated_at")
+      .eq("organization_id", currentOrganizationId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -411,6 +432,7 @@ export default function SolicitacoesPage() {
       const { data: clientsRows, error: clientsError } = await supabase
         .from("clients")
         .select("id, name, contact, email, portal_user_id")
+        .eq("organization_id", currentOrganizationId)
         .in("id", clientIds);
       if (!clientsError) clientsData = (clientsRows || []) as ClientSummary[];
     }
@@ -420,6 +442,7 @@ export default function SolicitacoesPage() {
       const { data: requestRows, error: requestError } = await supabase
         .from("client_requests")
         .select("id, title, status, sector, user_id")
+        .eq("organization_id", currentOrganizationId)
         .in("id", requestIds);
       if (!requestError) requestsData = (requestRows || []) as RequestSummary[];
     }
@@ -435,13 +458,18 @@ export default function SolicitacoesPage() {
 
     setTasks(mapped);
     setLoadingTasks(false);
-  }, []);
+  }, [currentOrganizationId]);
 
   const fetchSubmissions = useCallback(async () => {
+    if (!currentOrganizationId) {
+      setLoadingSubmissions(false);
+      return;
+    }
     setLoadingSubmissions(true);
     const { data, error } = await supabase
       .from("form_submissions")
       .select("id, template_id, template_title, submitted_by, submitted_by_name, data, status, notes, client_id, request_id, created_at, updated_at")
+      .eq("organization_id", currentOrganizationId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -459,6 +487,7 @@ export default function SolicitacoesPage() {
       const { data: clientsRows, error: clientsError } = await supabase
         .from("clients")
         .select("id, name, contact, email, portal_user_id")
+        .eq("organization_id", currentOrganizationId)
         .in("id", clientIds);
       if (!clientsError) clientsData = (clientsRows || []) as ClientSummary[];
     }
@@ -468,6 +497,7 @@ export default function SolicitacoesPage() {
       const { data: requestRows, error: requestError } = await supabase
         .from("client_requests")
         .select("id, title, status, sector, user_id")
+        .eq("organization_id", currentOrganizationId)
         .in("id", requestIds);
       if (!requestError) requestsData = (requestRows || []) as RequestSummary[];
     }
@@ -483,7 +513,7 @@ export default function SolicitacoesPage() {
 
     setSubmissions(mapped);
     setLoadingSubmissions(false);
-  }, []);
+  }, [currentOrganizationId]);
 
   useEffect(() => {
     void Promise.all([fetchClients(), fetchRequests(), fetchTasks(), fetchSubmissions()]);
@@ -634,6 +664,10 @@ export default function SolicitacoesPage() {
 
   const handleCreateTask = async () => {
     if (!user) return;
+    if (!currentOrganizationId) {
+      toast.error("Organização ativa não encontrada.");
+      return;
+    }
     if (!taskDraft.clientId) {
       toast.error("Selecione o cliente da pendencia.");
       return;
@@ -654,6 +688,7 @@ export default function SolicitacoesPage() {
       due_date: taskDraft.dueDate || null,
       sector: taskDraft.sector,
       created_by: user.id,
+      organization_id: currentOrganizationId,
     });
     setCreatingTask(false);
 
@@ -663,6 +698,13 @@ export default function SolicitacoesPage() {
     }
 
     toast.success("Pendencia publicada para o cliente.");
+    await recordOperationalAuditLog({
+      organizationId: currentOrganizationId,
+      action: "portal_task_created",
+      entityType: "client_portal_task",
+      clientId: taskDraft.clientId,
+      metadata: { title: taskDraft.title.trim(), status: taskDraft.status, type: taskDraft.type },
+    });
     resetTaskDialog();
     await fetchTasks();
   };
@@ -672,7 +714,8 @@ export default function SolicitacoesPage() {
     const { error } = await supabase
       .from("client_portal_tasks")
       .update({ status })
-      .eq("id", task.id);
+      .eq("id", task.id)
+      .eq("organization_id", currentOrganizationId);
     setChangingTaskId(null);
 
     if (error) {
@@ -683,6 +726,14 @@ export default function SolicitacoesPage() {
     setTasks((previous) =>
       previous.map((item) => (item.id === task.id ? { ...item, status } : item))
     );
+    await recordOperationalAuditLog({
+      organizationId: currentOrganizationId,
+      action: "portal_task_status_updated",
+      entityType: "client_portal_task",
+      entityId: task.id,
+      clientId: task.client_id,
+      metadata: { status },
+    });
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -690,7 +741,11 @@ export default function SolicitacoesPage() {
     if (!confirmed) return;
 
     setDeletingTaskId(taskId);
-    const { error } = await supabase.from("client_portal_tasks").delete().eq("id", taskId);
+    const { error } = await supabase
+      .from("client_portal_tasks")
+      .delete()
+      .eq("id", taskId)
+      .eq("organization_id", currentOrganizationId);
     setDeletingTaskId(null);
 
     if (error) {
@@ -699,6 +754,12 @@ export default function SolicitacoesPage() {
     }
 
     setTasks((previous) => previous.filter((task) => task.id !== taskId));
+    await recordOperationalAuditLog({
+      organizationId: currentOrganizationId,
+      action: "portal_task_deleted",
+      entityType: "client_portal_task",
+      entityId: taskId,
+    });
     toast.success("Pendencia removida.");
   };
 
@@ -707,7 +768,8 @@ export default function SolicitacoesPage() {
     const { error } = await supabase
       .from("client_requests")
       .update({ status: newStatus })
-      .eq("id", requestId);
+      .eq("id", requestId)
+      .eq("organization_id", currentOrganizationId);
     setUpdatingRequestStatus(false);
 
     if (error) {
@@ -722,6 +784,13 @@ export default function SolicitacoesPage() {
           : request
       )
     );
+    await recordOperationalAuditLog({
+      organizationId: currentOrganizationId,
+      action: "client_request_status_updated",
+      entityType: "client_request",
+      entityId: requestId,
+      metadata: { status: newStatus },
+    });
     toast.success("Status da solicitação atualizado.");
   };
 
@@ -745,7 +814,8 @@ export default function SolicitacoesPage() {
         processed_at: processed ? new Date().toISOString() : null,
         processed_by: processed ? user.id : null,
       })
-      .eq("id", document.id);
+      .eq("id", document.id)
+      .eq("organization_id", currentOrganizationId);
     setUpdatingDocumentId(null);
 
     if (error) {
@@ -763,6 +833,13 @@ export default function SolicitacoesPage() {
         ),
       }))
     );
+    await recordOperationalAuditLog({
+      organizationId: currentOrganizationId,
+      action: processed ? "client_document_processed" : "client_document_unprocessed",
+      entityType: "client_document",
+      entityId: document.id,
+      metadata: { fileName: document.file_name },
+    });
     toast.success(processed ? "Documento marcado como processado." : "Documento voltou para não processado.");
   };
 
@@ -771,7 +848,8 @@ export default function SolicitacoesPage() {
     const { error } = await supabase
       .from("form_submissions")
       .update({ status })
-      .eq("id", submissionId);
+      .eq("id", submissionId)
+      .eq("organization_id", currentOrganizationId);
     setSavingSubmissionStatusId(null);
 
     if (error) {
@@ -793,7 +871,8 @@ export default function SolicitacoesPage() {
     const { error } = await supabase
       .from("form_submissions")
       .update({ notes: submissionNotes.trim() || null })
-      .eq("id", selectedSubmission.id);
+      .eq("id", selectedSubmission.id)
+      .eq("organization_id", currentOrganizationId);
     setSavingSubmissionNotes(false);
 
     if (error) {
@@ -1689,4 +1768,3 @@ export default function SolicitacoesPage() {
     </AppLayout>
   );
 }
-

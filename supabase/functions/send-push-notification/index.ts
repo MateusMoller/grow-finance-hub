@@ -79,6 +79,25 @@ function readErrorMessage(error: unknown, fallback = "Unknown error") {
     : fallback;
 }
 
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -137,6 +156,8 @@ Deno.serve(async (req) => {
     if (!callerOrganizationId) {
       return jsonResponse({ error: "User does not belong to an organization" }, 403);
     }
+
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, callerOrganizationId, "portal");
 
     const callerRoles = ((callerRoleRows || []) as RoleRow[])
       .filter((row) => row.organization_id === callerOrganizationId)

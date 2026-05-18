@@ -105,6 +105,25 @@ async function findAuthUserByEmail(
   }
 }
 
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -160,6 +179,7 @@ Deno.serve(async (req) => {
     const organizationId = callerAdminRole?.organization_id
       ? String(callerAdminRole.organization_id)
       : await resolveDefaultOrganizationId(supabaseAdmin);
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
 
     const body = await req.json();
     const payload = asRecord(body);

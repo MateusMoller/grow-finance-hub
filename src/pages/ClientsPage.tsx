@@ -19,7 +19,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -139,7 +139,7 @@ const statusColors: Record<string, string> = {
 
 export default function ClientsPage() {
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, currentOrganizationId } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -162,15 +162,13 @@ export default function ClientsPage() {
   const canCreateClients =
     role === "admin" || role === "director" || role === "manager" || role === "commercial";
 
-  useEffect(() => {
-    void loadClients();
-  }, []);
-
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
+    if (!currentOrganizationId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("clients")
       .select("id, name, cnpj, regime, sector, status, contact, email, phone, obligation_completion_whatsapp_enabled, portal_user_id")
+      .eq("organization_id", currentOrganizationId)
       .order("name");
     setLoading(false);
 
@@ -188,7 +186,11 @@ export default function ClientsPage() {
         phone: client.phone ? formatPhoneValue(client.phone) : client.phone,
       })),
     );
-  };
+  }, [currentOrganizationId]);
+
+  useEffect(() => {
+    void loadClients();
+  }, [loadClients]);
 
   const filtered = clients.filter((client) => {
     const normalizedSearch = search.trim().toLowerCase();

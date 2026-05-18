@@ -72,6 +72,47 @@ function extractBearerToken(req: Request): string | null {
   return token.length > 0 ? token : null;
 }
 
+async function insertAuditLog(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  params: {
+    organizationId: string;
+    actorUserId: string;
+    targetUserId: string;
+    action: string;
+    result?: string;
+    metadata?: JsonRecord;
+  },
+) {
+  await supabaseAdmin.from("operational_audit_logs").insert({
+    organization_id: params.organizationId,
+    actor_user_id: params.actorUserId,
+    action: params.action,
+    entity_type: "user",
+    entity_id: params.targetUserId,
+    result: params.result || "success",
+    metadata: params.metadata || {},
+  });
+}
+
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -125,6 +166,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Only admins can manage users" }, 403);
     }
     const organizationId = callerAdminRole.organization_id;
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
 
     const body = await req.json();
     const payload = asRecord(body);
@@ -194,6 +236,16 @@ Deno.serve(async (req) => {
         if (deleteUserError) throw deleteUserError;
       }
 
+      await insertAuditLog(supabaseAdmin, {
+        organizationId,
+        actorUserId: callerUser.id,
+        targetUserId: userId,
+        action: "team_user_deleted_or_revoked",
+        metadata: {
+          deletedAuthUser: (remainingRoles || []).length === 0 && (remainingClientLinks || []).length === 0,
+        },
+      }).catch(console.error);
+
       return jsonResponse({ ok: true, action: "delete", user_id: userId });
     }
 
@@ -252,6 +304,14 @@ Deno.serve(async (req) => {
     if (removeOtherRolesError) {
       throw removeOtherRolesError;
     }
+
+    await insertAuditLog(supabaseAdmin, {
+      organizationId,
+      actorUserId: callerUser.id,
+      targetUserId: userId,
+      action: "team_user_role_updated",
+      metadata: { role, displayName },
+    }).catch(console.error);
 
     return jsonResponse({
       ok: true,

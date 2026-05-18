@@ -3,19 +3,23 @@ import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { hasAnyInternalRole, hasClientRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
+import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
+import type { OrganizationFeatureKey } from "@/lib/organizationFeatures";
 
 type RouteScope = "authenticated" | "internal" | "portal";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   scope?: RouteScope;
+  feature?: OrganizationFeatureKey;
 }
 
-export function ProtectedRoute({ children, scope = "authenticated" }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, scope = "authenticated", feature }: ProtectedRouteProps) {
   const { user, loading, role, roles, roleLoaded } = useAuth();
+  const { isFeatureEnabled, isLoading: settingsLoading } = useOrganizationSettings();
   const location = useLocation();
 
-  if (loading || (user && !roleLoaded)) {
+  if (loading || (user && !roleLoaded) || (user && feature && settingsLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -63,6 +67,19 @@ export function ProtectedRoute({ children, scope = "authenticated" }: ProtectedR
     if (!isAllowed) {
       return <Navigate to="/app/tarefas" replace />;
     }
+  }
+
+  if (feature && !isFeatureEnabled(feature)) {
+    return (
+      <div className="min-h-screen bg-background px-4 py-10">
+        <div className="mx-auto max-w-lg rounded-lg border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold">Módulo indisponível</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Este módulo está desativado para a organização atual.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;

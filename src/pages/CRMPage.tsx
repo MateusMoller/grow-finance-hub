@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   TrendingUp,
   DollarSign,
@@ -33,6 +33,8 @@ import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/li
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { SITE_LEAD_TAG, isSiteLeadSource } from "@/lib/siteLeadCapture";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { recordOperationalAuditLog } from "@/lib/operationalAudit";
 
 const stageOrder = [
   "Oportunidade Nova",
@@ -88,6 +90,8 @@ interface GoalFormState {
 }
 
 type SiteLeadRow = Tables<"site_leads">;
+type CrmLeadRow = Tables<"crm_leads">;
+type CrmGoalRow = Tables<"crm_goals">;
 
 const stageColors: Record<PipelineStage, string> = {
   "Oportunidade Nova": "bg-muted-foreground",
@@ -136,6 +140,12 @@ const siteLeadPrefix = "site-lead-";
 const buildSiteLeadId = (siteLeadId: string) => `${siteLeadPrefix}${siteLeadId}`;
 const extractSiteLeadId = (leadId: string) =>
   leadId.startsWith(siteLeadPrefix) ? leadId.slice(siteLeadPrefix.length) : null;
+const crmLeadPrefix = "crm-lead-";
+const buildCrmLeadId = (leadId: string) => `${crmLeadPrefix}${leadId}`;
+const extractCrmLeadId = (leadId: string) =>
+  leadId.startsWith(crmLeadPrefix) ? leadId.slice(crmLeadPrefix.length) : null;
+const localLeadPrefix = "local-";
+const buildLocalLeadId = (leadId: string) => `${localLeadPrefix}${leadId}`;
 
 const defaultGoals: CrmGoals = {
   wonRevenue: 25000,
@@ -291,18 +301,68 @@ const mapSiteLeadToLead = (siteLead: SiteLeadRow): Lead => {
   };
 };
 
+const mapCrmLeadToLead = (lead: CrmLeadRow): Lead => {
+  const createdAt = String(lead.created_at || new Date().toISOString());
+  const updatedAt = String(lead.updated_at || createdAt);
+  const updatedTimestamp = new Date(updatedAt).getTime();
+  const daysInStage = Number.isNaN(updatedTimestamp)
+    ? 0
+    : Math.max(0, Math.floor((Date.now() - updatedTimestamp) / 86400000));
+
+  return {
+    id: buildCrmLeadId(String(lead.id)),
+    name: String(lead.name || "").trim(),
+    contact: String(lead.contact || "").trim(),
+    email: String(lead.email || "").trim(),
+    phone: String(lead.phone || "").trim(),
+    value: toCurrency(Number(lead.estimated_value || 0)),
+    stage: normalizeStage(lead.stage),
+    daysInStage,
+    competence: normalizeCompetence(lead.competence ? String(lead.competence) : null) || getCurrentCompetence(),
+    source: String(lead.source || "").trim(),
+    notes: String(lead.notes || "").trim(),
+    createdAt,
+    updatedAt,
+  };
+};
+
+const mapGoalRowToGoals = (goal: CrmGoalRow | null | undefined): CrmGoals => {
+  if (!goal) return defaultGoals;
+  return sanitizeGoals({
+    wonRevenue: Number(goal.won_revenue || defaultGoals.wonRevenue),
+    wonDeals: Number(goal.won_deals || defaultGoals.wonDeals),
+    conversionRate: Number(goal.conversion_rate || defaultGoals.conversionRate),
+  });
+};
+
+const buildCrmLeadPayload = (
+  lead: Omit<Lead, "id" | "createdAt" | "updatedAt" | "daysInStage">,
+  organizationId: string,
+  userId: string,
+) => ({
+  organization_id: organizationId,
+  name: lead.name,
+  contact: lead.contact || null,
+  email: lead.email || null,
+  phone: lead.phone || null,
+  estimated_value: parseCurrency(lead.value),
+  stage: lead.stage,
+  competence: lead.competence,
+  source: lead.source || null,
+  notes: lead.notes || null,
+  updated_by: userId,
+});
+
 export default function CRMPage() {
-  const { user } = useAuth();
+  const { user, currentOrganizationId } = useAuth();
+  const queryClient = useQueryClient();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loadingLeads, setLoadingLeads] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [leadForm, setLeadForm] = useState<LeadFormState>(createEmptyLeadForm());
-  const [crmGoals, setCrmGoals] = useState<CrmGoals>(defaultGoals);
   const [goalForm, setGoalForm] = useState<GoalFormState>(createGoalFormState(defaultGoals));
   const [activeStageFilter, setActiveStageFilter] = useState<PipelineStage | "all">("all");
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -310,6 +370,70 @@ export default function CRMPage() {
 
   const actorLabel = user?.email || "Usuário";
   const isEditing = Boolean(editingLeadId);
+  const crmQueryKey = useMemo(
+    () => ["crm", currentOrganizationId, user?.id] as const,
+    [currentOrganizationId, user?.id],
+  );
+  const leadsQueryKey = useMemo(() => [...crmQueryKey, "leads"] as const, [crmQueryKey]);
+  const goalsQueryKey = useMemo(() => [...crmQueryKey, "goals"] as const, [crmQueryKey]);
+
+  const leadsQuery = useQuery({
+    queryKey: leadsQueryKey,
+    enabled: Boolean(user?.id && currentOrganizationId),
+    queryFn: async () => {
+      if (!user?.id || !currentOrganizationId) return [];
+
+      const [crmLeadRes, siteLeadRes] = await Promise.all([
+        supabase
+          .from("crm_leads")
+          .select("*")
+          .eq("organization_id", currentOrganizationId)
+          .order("updated_at", { ascending: false }),
+        supabase
+          .from("site_leads")
+          .select("*")
+          .eq("organization_id", currentOrganizationId)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (crmLeadRes.error) throw crmLeadRes.error;
+      if (siteLeadRes.error) throw siteLeadRes.error;
+
+      const crmRows = (crmLeadRes.data || []) as CrmLeadRow[];
+      const overriddenSiteLeadIds = new Set(
+        crmRows
+          .filter((lead) => lead.external_source === "site_leads" && lead.external_id)
+          .map((lead) => String(lead.external_id)),
+      );
+      const crmLeads = crmRows.map(mapCrmLeadToLead);
+      const siteLeads = ((siteLeadRes.data || []) as SiteLeadRow[])
+        .filter((siteLead) => !overriddenSiteLeadIds.has(String(siteLead.id)))
+        .map(mapSiteLeadToLead);
+      return [...crmLeads, ...siteLeads].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+  });
+
+  const goalsQuery = useQuery({
+    queryKey: goalsQueryKey,
+    enabled: Boolean(user?.id && currentOrganizationId),
+    queryFn: async () => {
+      if (!currentOrganizationId) return defaultGoals;
+
+      const { data, error } = await supabase
+        .from("crm_goals")
+        .select("*")
+        .eq("organization_id", currentOrganizationId)
+        .eq("competence", "default")
+        .maybeSingle();
+
+      if (error) throw error;
+      return mapGoalRowToGoals(data as CrmGoalRow | null);
+    },
+  });
+
+  const leads = useMemo(() => leadsQuery.data || [], [leadsQuery.data]);
+  const loadingLeads = leadsQuery.isLoading || leadsQuery.isFetching;
+  const crmGoals = goalsQuery.data || defaultGoals;
 
   const registerLeadHistory = (leadId: string, action: string, details?: string) => {
     if (!user?.id) return;
@@ -324,85 +448,75 @@ export default function CRMPage() {
   };
 
   useEffect(() => {
-    if (!user?.id) {
-      setCrmGoals(defaultGoals);
-      setGoalForm(createGoalFormState(defaultGoals));
-      return;
-    }
+    setGoalForm(createGoalFormState(crmGoals));
+  }, [crmGoals]);
 
-    const storedGoals = readStoredGoals(user.id);
-    setCrmGoals(storedGoals);
-    setGoalForm(createGoalFormState(storedGoals));
-  }, [user?.id]);
+  const importLocalCrmMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id || !currentOrganizationId) return;
 
-  const loadLeadsFromSources = useCallback(async (showLoader = false) => {
-    if (!user?.id) {
-      setLeads([]);
-      setLoadingLeads(false);
-      return;
-    }
+      const storedLeads = readStoredLeads(user.id);
+      const storedGoals = readStoredGoals(user.id);
+      const importedAt = new Date().toISOString();
 
-    if (showLoader) {
-      setLoadingLeads(true);
-    }
+      if (storedLeads.length > 0) {
+        const rows = storedLeads.map((lead) => ({
+          ...buildCrmLeadPayload(lead, currentOrganizationId, user.id),
+          external_source: "localStorage",
+          external_id: lead.id,
+          created_by: user.id,
+          created_at: lead.createdAt || importedAt,
+          updated_at: lead.updatedAt || importedAt,
+        }));
 
-    const storedLeads = readStoredLeads(user.id);
-    const { data, error } = await supabase
-      .from("site_leads")
-      .select("*")
-      .order("created_at", { ascending: false });
+        const { error } = await supabase
+          .from("crm_leads")
+          .upsert(rows, { onConflict: "organization_id,external_source,external_id" });
 
-    if (error) {
-      setLeads(storedLeads);
-      if (showLoader) {
-        setLoadingLeads(false);
-        toast.error(`Não foi possível carregar leads do site: ${error.message}`);
+        if (error) throw error;
       }
+
+      const { error: goalError } = await supabase.from("crm_goals").upsert(
+        {
+          organization_id: currentOrganizationId,
+          competence: "default",
+          won_revenue: storedGoals.wonRevenue,
+          won_deals: storedGoals.wonDeals,
+          conversion_rate: storedGoals.conversionRate,
+          created_by: user.id,
+          updated_by: user.id,
+        },
+        { onConflict: "organization_id,competence" },
+      );
+
+      if (goalError) throw goalError;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: leadsQueryKey }),
+        queryClient.invalidateQueries({ queryKey: goalsQueryKey }),
+      ]);
+    },
+  });
+
+  useEffect(() => {
+    if (!user?.id || !currentOrganizationId || importLocalCrmMutation.isPending) return;
+    const importFlagKey = `grow-crm-imported-${currentOrganizationId}-${user.id}`;
+    if (localStorage.getItem(importFlagKey)) return;
+    if (readStoredLeads(user.id).length === 0 && !localStorage.getItem(buildGoalStorageKey(user.id))) {
+      localStorage.setItem(importFlagKey, "1");
       return;
     }
 
-    const siteLeads = ((data || []) as SiteLeadRow[]).map(mapSiteLeadToLead);
-    const mergedLeadsMap = new Map<string, Lead>();
-
-    siteLeads.forEach((lead) => {
-      mergedLeadsMap.set(lead.id, lead);
-    });
-
-    storedLeads.forEach((lead) => {
-      mergedLeadsMap.set(lead.id, lead);
-    });
-
-    const mergedLeads = Array.from(mergedLeadsMap.values()).sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    );
-
-    setLeads(mergedLeads);
-
-    if (showLoader) {
-      setLoadingLeads(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setLeads([]);
-      setLoadingLeads(false);
-      return;
-    }
-
-    void loadLeadsFromSources(true);
-  }, [loadLeadsFromSources, user?.id]);
-
-  useEffect(() => {
-    if (!user?.id || loadingLeads) return;
-    localStorage.setItem(buildLeadStorageKey(user.id), JSON.stringify(leads));
-  }, [leads, loadingLeads, user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    localStorage.setItem(buildGoalStorageKey(user.id), JSON.stringify(crmGoals));
-  }, [crmGoals, user?.id]);
-
+    void importLocalCrmMutation.mutateAsync()
+      .then(() => {
+        localStorage.setItem(importFlagKey, "1");
+        toast.success("Dados antigos do CRM importados para o Supabase.");
+      })
+      .catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : "Não foi possível importar o CRM antigo.");
+      });
+  }, [currentOrganizationId, importLocalCrmMutation, user?.id]);
   useEffect(() => {
     if (!selectedLead?.id) return;
     const freshLead = leads.find((lead) => lead.id === selectedLead.id);
@@ -564,12 +678,94 @@ export default function CRMPage() {
     },
   ];
 
+  const saveLeadMutation = useMutation({
+    mutationFn: async ({
+      lead,
+      leadId,
+      externalSource,
+      externalId,
+    }: {
+      lead: Omit<Lead, "id" | "createdAt" | "updatedAt" | "daysInStage">;
+      leadId?: string | null;
+      externalSource?: string | null;
+      externalId?: string | null;
+    }) => {
+      if (!user?.id || !currentOrganizationId) throw new Error("Organização ativa não encontrada.");
+
+      const payload = {
+        ...buildCrmLeadPayload(lead, currentOrganizationId, user.id),
+        ...(leadId ? { id: leadId } : {}),
+        ...(externalSource && externalId ? { external_source: externalSource, external_id: externalId } : {}),
+        created_by: user.id,
+      };
+
+      const query = externalSource && externalId
+        ? supabase
+            .from("crm_leads")
+            .upsert(payload, { onConflict: "organization_id,external_source,external_id" })
+        : supabase.from("crm_leads").upsert(payload);
+
+      const { data, error } = await query.select("*").single();
+
+      if (error) throw error;
+      return mapCrmLeadToLead(data as CrmLeadRow);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: leadsQueryKey });
+    },
+  });
+
+  const deleteLeadMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const crmLeadId = extractCrmLeadId(leadId);
+      const siteLeadId = extractSiteLeadId(leadId);
+
+      if (crmLeadId) {
+        const { error } = await supabase.from("crm_leads").delete().eq("id", crmLeadId);
+        if (error) throw error;
+        return;
+      }
+
+      if (siteLeadId) {
+        const { error } = await supabase.from("site_leads").delete().eq("id", siteLeadId);
+        if (error) throw error;
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: leadsQueryKey });
+    },
+  });
+
+  const saveGoalsMutation = useMutation({
+    mutationFn: async (goals: CrmGoals) => {
+      if (!user?.id || !currentOrganizationId) throw new Error("Organização ativa não encontrada.");
+
+      const { error } = await supabase.from("crm_goals").upsert(
+        {
+          organization_id: currentOrganizationId,
+          competence: "default",
+          won_revenue: goals.wonRevenue,
+          won_deals: goals.wonDeals,
+          conversion_rate: goals.conversionRate,
+          created_by: user.id,
+          updated_by: user.id,
+        },
+        { onConflict: "organization_id,competence" },
+      );
+
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: goalsQueryKey });
+    },
+  });
+
   const openGoalsDialog = () => {
     setGoalForm(createGoalFormState(crmGoals));
     setGoalsDialogOpen(true);
   };
 
-  const handleSaveGoals = () => {
+  const handleSaveGoals = async () => {
     const wonRevenue = parseNumericInput(goalForm.wonRevenue);
     const wonDeals = parseNumericInput(goalForm.wonDeals);
     const conversionRate = parseNumericInput(goalForm.conversionRate);
@@ -595,10 +791,24 @@ export default function CRMPage() {
       conversionRate: Math.round(conversionRate),
     };
 
-    setCrmGoals(nextGoals);
-    setGoalForm(createGoalFormState(nextGoals));
-    setGoalsDialogOpen(false);
-    toast.success("Metas do CRM atualizadas.");
+    try {
+      await saveGoalsMutation.mutateAsync(nextGoals);
+      await recordOperationalAuditLog({
+        organizationId: currentOrganizationId,
+        action: "crm_goals_updated",
+        entityType: "crm_goals",
+        metadata: {
+          wonRevenue: nextGoals.wonRevenue,
+          wonDeals: nextGoals.wonDeals,
+          conversionRate: nextGoals.conversionRate,
+        },
+      });
+      setGoalForm(createGoalFormState(nextGoals));
+      setGoalsDialogOpen(false);
+      toast.success("Metas do CRM atualizadas.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as metas do CRM.");
+    }
   };
 
   const openCreateDialog = () => {
@@ -626,7 +836,7 @@ export default function CRMPage() {
     setFormOpen(true);
   };
 
-  const handleStageChange = (leadId: string, newStage: string) => {
+  const handleStageChange = async (leadId: string, newStage: string) => {
     const stage = newStage as PipelineStage;
     const lead = leads.find((item) => item.id === leadId);
     if (!lead || lead.stage === stage) return;
@@ -639,35 +849,24 @@ export default function CRMPage() {
     }
 
     const previousStage = lead.stage;
-    const previousDaysInStage = lead.daysInStage;
+    const crmLeadId = extractCrmLeadId(leadId);
+    const siteLeadId = extractSiteLeadId(leadId);
 
-    setLeads((prev) =>
-      prev.map((item) =>
-        item.id === leadId
-          ? { ...item, stage, daysInStage: 0, updatedAt: new Date().toISOString() }
-          : item,
-      ),
-    );
-    registerLeadHistory(leadId, "Etapa alterada", `${previousStage} -> ${stage}`);
-
-    toast.success(`Negociacao movida para "${newStage}"`, {
-      action: {
-        label: "Desfazer",
-        onClick: () => {
-          setLeads((prev) =>
-            prev.map((item) =>
-              item.id === leadId
-                ? { ...item, stage: previousStage, daysInStage: previousDaysInStage, updatedAt: new Date().toISOString() }
-                : item,
-            ),
-          );
-          registerLeadHistory(leadId, "Alteração de etapa desfeita", `${stage} -> ${previousStage}`);
-        },
-      },
-    });
+    try {
+      await saveLeadMutation.mutateAsync({
+        lead: { ...lead, stage },
+        leadId: crmLeadId,
+        externalSource: siteLeadId ? "site_leads" : null,
+        externalId: siteLeadId,
+      });
+      registerLeadHistory(leadId, "Etapa alterada", `${previousStage} -> ${stage}`);
+      toast.success(`Negociação movida para "${newStage}"`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível alterar a etapa.");
+    }
   };
 
-  const handleSaveLead = () => {
+  const handleSaveLead = async () => {
     const name = leadForm.name.trim();
     if (!name) {
       toast.error("Nome da empresa e obrigatorio");
@@ -708,22 +907,50 @@ export default function CRMPage() {
         return;
       }
 
-      setLeads((prev) =>
-        prev.map((lead) => (lead.id === editingLeadId ? { ...lead, ...payload } : lead)),
-      );
-      registerLeadHistory(editingLeadId, "Negociação atualizada", previousLead.name);
-      toast.success("Negociação atualizada com sucesso");
+      try {
+        const siteLeadId = extractSiteLeadId(editingLeadId);
+        const savedLead = await saveLeadMutation.mutateAsync({
+          lead: { ...previousLead, ...payload },
+          leadId: extractCrmLeadId(editingLeadId),
+          externalSource: siteLeadId ? "site_leads" : null,
+          externalId: siteLeadId,
+        });
+        await recordOperationalAuditLog({
+          organizationId: currentOrganizationId,
+          action: "crm_lead_updated",
+          entityType: "crm_lead",
+          entityId: extractCrmLeadId(savedLead.id),
+          metadata: { name: savedLead.name, stage: savedLead.stage },
+        });
+        registerLeadHistory(editingLeadId, "Negociação atualizada", previousLead.name);
+        toast.success("Negociação atualizada com sucesso");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível salvar a negociação.");
+        return;
+      }
     } else {
       const createdLead: Lead = {
-        id: createLeadId(),
+        id: buildLocalLeadId(createLeadId()),
         ...payload,
         daysInStage: 0,
         createdAt: now,
       };
 
-      setLeads((prev) => [createdLead, ...prev]);
-      registerLeadHistory(createdLead.id, "Negociação criada", createdLead.name);
-      toast.success("Negociação cadastrada com sucesso");
+      try {
+        const savedLead = await saveLeadMutation.mutateAsync({ lead: createdLead });
+        await recordOperationalAuditLog({
+          organizationId: currentOrganizationId,
+          action: "crm_lead_created",
+          entityType: "crm_lead",
+          entityId: extractCrmLeadId(savedLead.id),
+          metadata: { name: savedLead.name, stage: savedLead.stage },
+        });
+        registerLeadHistory(savedLead.id, "Negociação criada", savedLead.name);
+        toast.success("Negociação cadastrada com sucesso");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível cadastrar a negociação.");
+        return;
+      }
     }
 
     setFormOpen(false);
@@ -731,23 +958,29 @@ export default function CRMPage() {
     setLeadForm(createEmptyLeadForm(selectedCompetence));
   };
 
-  const handleSaveNotes = (leadId: string, notes: string) => {
+  const handleSaveNotes = async (leadId: string, notes: string) => {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead) return;
 
     if ((lead.notes || "") === notes) return;
 
-    setLeads((prev) =>
-      prev.map((item) =>
-        item.id === leadId ? { ...item, notes, updatedAt: new Date().toISOString() } : item,
-      ),
-    );
-    registerLeadHistory(
-      leadId,
-      "Observacoes atualizadas",
-      notes ? "Observacoes registradas" : "Observacoes removidas",
-    );
-    toast.success("Observacoes salvas");
+    try {
+      const siteLeadId = extractSiteLeadId(leadId);
+      await saveLeadMutation.mutateAsync({
+        lead: { ...lead, notes },
+        leadId: extractCrmLeadId(leadId),
+        externalSource: siteLeadId ? "site_leads" : null,
+        externalId: siteLeadId,
+      });
+      registerLeadHistory(
+        leadId,
+        "Observações atualizadas",
+        notes ? "Observações registradas" : "Observações removidas",
+      );
+      toast.success("Observações salvas");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as observações.");
+    }
   };
 
   const handleDeleteLead = async (leadId: string) => {
@@ -757,37 +990,22 @@ export default function CRMPage() {
     const confirmed = window.confirm(`Excluir a negociacao "${lead.name}"?`);
     if (!confirmed) return;
 
-    const siteLeadId = extractSiteLeadId(leadId);
-    if (siteLeadId) {
-      const { error } = await supabase.from("site_leads").delete().eq("id", siteLeadId);
-      if (error) {
-        toast.error(`Não foi possível excluir lead captado via site: ${error.message}`);
-        return;
-      }
-
-      setLeads((prev) => prev.filter((item) => item.id !== leadId));
+    try {
+      await deleteLeadMutation.mutateAsync(leadId);
+      await recordOperationalAuditLog({
+        organizationId: currentOrganizationId,
+        action: "crm_lead_deleted",
+        entityType: "crm_lead",
+        entityId: extractCrmLeadId(leadId),
+        metadata: { name: lead.name, source: lead.source },
+      });
       setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
       setSheetOpen(false);
-      registerLeadHistory(leadId, "Lead captado via site excluido", lead.name);
-      toast.success("Lead captado via site excluido");
-      return;
+      registerLeadHistory(leadId, "Negociação excluída", lead.name);
+      toast.success("Negociação excluída");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir a negociação.");
     }
-
-    setLeads((prev) => prev.filter((item) => item.id !== leadId));
-    setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
-    setSheetOpen(false);
-    registerLeadHistory(leadId, "Negociação excluida", lead.name);
-
-    toast.success("Negociação excluida", {
-      action: {
-        label: "Desfazer",
-        onClick: () => {
-          setLeads((prev) => [lead, ...prev]);
-          registerLeadHistory(leadId, "Exclusao desfeita", lead.name);
-          toast.success("Negociação restaurada");
-        },
-      },
-    });
   };
 
   return (
@@ -804,7 +1022,7 @@ export default function CRMPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void loadLeadsFromSources(true)}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: leadsQueryKey })}
               disabled={loadingLeads}
             >
               {loadingLeads ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}

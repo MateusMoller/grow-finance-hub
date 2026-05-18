@@ -82,6 +82,25 @@ async function isInternalUser(supabaseAdmin: ReturnType<typeof createClient>, us
   return (data || []).some((row) => internalRoles.has(String(row.role)));
 }
 
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 async function resolveClient(
   supabaseAdmin: ReturnType<typeof createClient>,
   params: { userId: string; clientId?: string | null; isInternal: boolean },
@@ -89,7 +108,7 @@ async function resolveClient(
   if (params.clientId) {
     const { data: byId, error: byIdError } = await supabaseAdmin
       .from("clients")
-      .select("id, portal_user_id, portal_cashflow_enabled")
+      .select("id, organization_id, portal_user_id, portal_cashflow_enabled")
       .eq("id", params.clientId)
       .maybeSingle();
     if (byIdError) throw byIdError;
@@ -127,7 +146,7 @@ async function resolveClient(
   if (linkedClientUser?.client_id) {
     const { data: linkedByMembership, error: linkedByMembershipError } = await supabaseAdmin
       .from("clients")
-      .select("id, portal_user_id, portal_cashflow_enabled")
+      .select("id, organization_id, portal_user_id, portal_cashflow_enabled")
       .eq("id", linkedClientUser.client_id)
       .maybeSingle();
 
@@ -137,7 +156,7 @@ async function resolveClient(
 
   const { data: linkedClient, error: linkedClientError } = await supabaseAdmin
     .from("clients")
-    .select("id, portal_user_id, portal_cashflow_enabled")
+    .select("id, organization_id, portal_user_id, portal_cashflow_enabled")
     .eq("portal_user_id", params.userId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -466,6 +485,7 @@ Deno.serve(async (req) => {
     if (action === "create_connect_session") {
       const clientId = asString(body.clientId);
       const client = await resolveClient(supabaseAdmin, { userId: user.id, clientId, isInternal: internal });
+      await ensureOrganizationFeatureEnabled(supabaseAdmin, String(client.organization_id), "open_finance");
       if (!client.portal_cashflow_enabled) {
         return jsonResponse({ error: "Cashflow module is not enabled for this client." }, 403);
       }
@@ -487,6 +507,7 @@ Deno.serve(async (req) => {
     if (action === "list_connections") {
       const clientId = asString(body.clientId);
       const client = await resolveClient(supabaseAdmin, { userId: user.id, clientId, isInternal: internal });
+      await ensureOrganizationFeatureEnabled(supabaseAdmin, String(client.organization_id), "open_finance");
 
       const { data: connections, error: connectionsError } = await supabaseAdmin
         .from("open_finance_connections")
@@ -522,11 +543,12 @@ Deno.serve(async (req) => {
       if (connectionError) throw connectionError;
       if (!connectionRow) return jsonResponse({ error: "Connection not found." }, 404);
 
-      await resolveClient(supabaseAdmin, {
+      const client = await resolveClient(supabaseAdmin, {
         userId: user.id,
         clientId: String(connectionRow.client_id),
         isInternal: internal,
       });
+      await ensureOrganizationFeatureEnabled(supabaseAdmin, String(client.organization_id), "open_finance");
 
       const rowProvider = parseProvider(connectionRow.provider);
       const rowAdapter = getProviderAdapter(rowProvider);
@@ -563,11 +585,12 @@ Deno.serve(async (req) => {
       if (connectionError) throw connectionError;
       if (!connectionRow) return jsonResponse({ error: "Connection not found." }, 404);
 
-      await resolveClient(supabaseAdmin, {
+      const client = await resolveClient(supabaseAdmin, {
         userId: user.id,
         clientId: String(connectionRow.client_id),
         isInternal: internal,
       });
+      await ensureOrganizationFeatureEnabled(supabaseAdmin, String(client.organization_id), "open_finance");
 
       const rowProvider = parseProvider(connectionRow.provider);
       const rowAdapter = getProviderAdapter(rowProvider);
@@ -601,11 +624,12 @@ Deno.serve(async (req) => {
       if (connectionError) throw connectionError;
       if (!connectionRow) return jsonResponse({ error: "Connection not found." }, 404);
 
-      await resolveClient(supabaseAdmin, {
+      const client = await resolveClient(supabaseAdmin, {
         userId: user.id,
         clientId: String(connectionRow.client_id),
         isInternal: internal,
       });
+      await ensureOrganizationFeatureEnabled(supabaseAdmin, String(client.organization_id), "open_finance");
 
       const rowProvider = parseProvider(connectionRow.provider);
       const rowAdapter = getProviderAdapter(rowProvider);

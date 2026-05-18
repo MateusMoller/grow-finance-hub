@@ -108,6 +108,25 @@ function buildNewsletterText(title: string, excerpt: string | null, content: str
   return `Grow Contabilidade\n\n${title}\n\n${summaryBlock}${normalizedContent}`;
 }
 
+async function ensureOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = asRecord(data?.feature_flags);
+  if (flags && flags[featureKey] === false) {
+    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+  }
+}
+
 async function sendEmailViaResend(params: {
   apiKey: string;
   from: string;
@@ -203,6 +222,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Only admins can send newsletters" }, 403);
     }
     const organizationId = callerAdminRole.organization_id;
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "newsletter");
 
     const body = await req.json();
     const payload = asRecord(body);
