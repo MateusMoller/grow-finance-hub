@@ -1609,7 +1609,7 @@ async function buildAuthContext(req: Request, fallbackToken?: string | null) {
 
   const { data: callerRoleRows, error: callerRolesError } = await supabaseAdmin
     .from("user_roles")
-    .select("role")
+    .select("role, organization_id")
     .eq("user_id", callerUser.id);
 
   if (callerRolesError) {
@@ -1619,6 +1619,13 @@ async function buildAuthContext(req: Request, fallbackToken?: string | null) {
   const callerRoles = (callerRoleRows || [])
     .map((row) => String(row.role || "").toLowerCase())
     .filter(Boolean);
+  const organizationIds = Array.from(
+    new Set(
+      (callerRoleRows || [])
+        .map((row) => asTrimmedString((row as JsonRecord).organization_id))
+        .filter((organizationId): organizationId is string => Boolean(organizationId)),
+    ),
+  );
 
   const hasInternalRole = callerRoles.some((role) => internalRoles.has(role));
   if (!hasInternalRole) {
@@ -1633,9 +1640,48 @@ async function buildAuthContext(req: Request, fallbackToken?: string | null) {
     supabaseAdmin,
     callerUser,
     callerRoles,
+    organizationIds,
     acessoriasApiToken,
     acessoriasApiBaseUrl,
   };
+}
+
+function resolveRequestedOrganizationId(payload: JsonRecord, organizationIds: string[]) {
+  const requestedOrganizationId = asTrimmedString(payload.organization_id) || asTrimmedString(payload.organizationId);
+  if (requestedOrganizationId) {
+    if (!organizationIds.includes(requestedOrganizationId)) {
+      throw new Error("User is not authorized for the requested organization.");
+    }
+
+    return requestedOrganizationId;
+  }
+
+  if (organizationIds.length > 0) return organizationIds[0];
+  throw new Error("No organization is available for this user.");
+}
+
+async function assertOrganizationFeatureEnabled(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = data?.feature_flags;
+  if (
+    flags &&
+    typeof flags === "object" &&
+    !Array.isArray(flags) &&
+    (flags as JsonRecord)[featureKey] === false
+  ) {
+    throw new Error(`Module ${featureKey} is disabled for this organization.`);
+  }
 }
 
 async function ensureKanbanTaskForObligation(
@@ -4448,11 +4494,17 @@ Deno.serve(async (req) => {
     const {
       supabaseAdmin,
       callerUser,
+      organizationIds,
       acessoriasApiToken,
       acessoriasApiBaseUrl,
     } = context;
 
     const actionKey = normalizeToken(action);
+    const organizationId = resolveRequestedOrganizationId(body, organizationIds);
+    await assertOrganizationFeatureEnabled(supabaseAdmin, organizationId, "acessorias");
+    if (actionKey === "preflight_econtinuo" || actionKey === "send_econtinuo" || actionKey === "list_uploads") {
+      await assertOrganizationFeatureEnabled(supabaseAdmin, organizationId, "robo_documentos");
+    }
 
     if (actionKey === "overview") {
       const data = await handleOverview(supabaseAdmin);
@@ -4562,4 +4614,3 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: message }, 400);
   }
 });
-

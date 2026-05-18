@@ -131,6 +131,7 @@ export async function runGrowAssistantWithAuthorizedContext(params: RunGrowAssis
     });
 
   const interaction = await logAiInteractionStart(params.supabaseAdmin, {
+    organization_id: context.client.organizationId,
     cliente_id: context.client.id,
     user_id: params.userId,
     channel: params.channel,
@@ -166,6 +167,7 @@ export async function runGrowAssistantWithAuthorizedContext(params: RunGrowAssis
     store: false,
     metadata: {
       channel: params.channel,
+      organization_id: context.client.organizationId,
       client_id: context.client.id,
       user_id: params.userId,
     },

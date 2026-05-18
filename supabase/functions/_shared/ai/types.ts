@@ -65,12 +65,14 @@ export type AuthenticatedAssistantRequestContext = {
     isIdentityVerified: boolean;
   };
   roles: string[];
+  organizationIds: string[];
   isInternalUser: boolean;
   isClientUser: boolean;
 };
 
 export type AuthorizedClientSummary = {
   id: string;
+  organizationId: string;
   name: string;
   cnpjMasked: string | null;
   cnpjDigits: string | null;
@@ -215,6 +217,7 @@ export type ParsedWhatsAppInboundMessage = {
 
 export type WhatsAppClientMatch = {
   clientId: string;
+  organizationId: string;
   clientName: string;
   portalUserId: string | null;
   phone: string | null;

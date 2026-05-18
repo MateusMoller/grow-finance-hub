@@ -90,7 +90,7 @@ function normalizeThemePreference(value: unknown, fallback: ThemePreference = "s
 }
 
 export default function ConfiguracoesPage() {
-  const { user } = useAuth();
+  const { user, currentOrganizationId } = useAuth();
   const { theme, setTheme } = useTheme();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -148,19 +148,30 @@ export default function ConfiguracoesPage() {
 
   const upsertUserSettings = async (payload: Partial<Omit<TablesInsert<"user_settings">, "user_id">>) => {
     if (!user) return { error: new Error("Usuário não autenticado.") };
-    return supabase.from("user_settings").upsert({ user_id: user.id, ...payload }, { onConflict: "user_id" });
+    if (!currentOrganizationId) return { error: new Error("Organizacao ativa nao encontrada.") };
+    return supabase.from("user_settings").upsert(
+      { user_id: user.id, organization_id: currentOrganizationId, ...payload },
+      { onConflict: "user_id,organization_id" },
+    );
   };
 
-  const invokeIntegrationTokenManager = async (body: Record<string, unknown>) =>
-    supabase.functions.invoke<IntegrationTokenStatus>("manage-integration-token", { body });
+  const invokeIntegrationTokenManager = useCallback((body: Record<string, unknown>) =>
+    supabase.functions.invoke<IntegrationTokenStatus>("manage-integration-token", {
+      body: { organization_id: currentOrganizationId, ...body },
+    }), [currentOrganizationId]);
 
   const loadSettings = useCallback(async () => {
-    if (!user) return;
+    if (!user || !currentOrganizationId) return;
     setLoading(true);
 
     const [profileRes, settingsRes, tokenStatusRes] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_url").eq("user_id", user.id).maybeSingle(),
-      supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase
+        .from("user_settings")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("organization_id", currentOrganizationId)
+        .maybeSingle(),
       invokeIntegrationTokenManager({ action: "status" }),
     ]);
 
@@ -219,7 +230,7 @@ export default function ConfiguracoesPage() {
     }
 
     setLoading(false);
-  }, [setTheme, theme, user]);
+  }, [currentOrganizationId, invokeIntegrationTokenManager, setTheme, theme, user]);
 
   useEffect(() => {
     if (user) {

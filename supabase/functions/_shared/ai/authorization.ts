@@ -17,6 +17,8 @@ import {
 } from "./utils.ts";
 
 const internalRoleSet = new Set<string>(INTERNAL_ROLES);
+const clientSelect =
+  "id, organization_id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled";
 
 function extractBearerToken(req: Request): string | null {
   const authorization = req.headers.get("authorization");
@@ -58,7 +60,7 @@ export async function buildAssistantRequestContext(
   const [{ data: rolesData, error: rolesError }, { data: profileData }] = await Promise.all([
     supabaseAdmin
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", user.id),
     supabaseAdmin
       .from("profiles")
@@ -72,6 +74,13 @@ export async function buildAssistantRequestContext(
   }
 
   const roles = normalizeRoles((rolesData || []).map((row) => String(row.role || "")));
+  const organizationIds = Array.from(
+    new Set(
+      (rolesData || [])
+        .map((row) => asTrimmedString((row as { organization_id?: unknown }).organization_id))
+        .filter((organizationId): organizationId is string => Boolean(organizationId)),
+    ),
+  );
   const isInternalUser = roles.some((role) => internalRoleSet.has(role));
   const isClientUser = roles.some((role) => role === CLIENT_ROLE);
 
@@ -86,9 +95,52 @@ export async function buildAssistantRequestContext(
       isIdentityVerified: true,
     },
     roles,
+    organizationIds,
     isInternalUser,
     isClientUser,
   };
+}
+
+async function hasInternalRoleForOrganization(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  organizationId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .in("role", INTERNAL_ROLES as unknown as string[])
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function assertOrganizationFeatureEnabled(
+  supabaseAdmin: SupabaseClient,
+  organizationId: string,
+  featureKey: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = data?.feature_flags;
+  if (
+    flags &&
+    typeof flags === "object" &&
+    !Array.isArray(flags) &&
+    (flags as Record<string, unknown>)[featureKey] === false
+  ) {
+    throw new Error("This module is disabled for the active organization.");
+  }
 }
 
 function buildPermissions(isInternalUser: boolean) {
@@ -125,6 +177,7 @@ export async function getAuthorizedClientContext(params: {
   let clientRow:
     | {
         id: string;
+        organization_id: string;
         name: string;
         cnpj: string | null;
         sector: string | null;
@@ -158,6 +211,7 @@ export async function getAuthorizedClientContext(params: {
     let linkedClients:
       | Array<{
           id: string;
+          organization_id: string;
           name: string;
           cnpj: string | null;
           sector: string | null;
@@ -173,7 +227,7 @@ export async function getAuthorizedClientContext(params: {
     if (linkedClientIds.length > 0) {
       const { data, error } = await params.supabaseAdmin
         .from("clients")
-        .select("id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled")
+        .select(clientSelect)
         .in("id", linkedClientIds)
         .order("created_at", { ascending: false });
 
@@ -182,7 +236,7 @@ export async function getAuthorizedClientContext(params: {
     } else {
       const { data, error } = await params.supabaseAdmin
         .from("clients")
-        .select("id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled")
+        .select(clientSelect)
         .eq("portal_user_id", params.userId)
         .order("created_at", { ascending: false });
 
@@ -211,7 +265,7 @@ export async function getAuthorizedClientContext(params: {
 
     const { data, error } = await params.supabaseAdmin
       .from("clients")
-      .select("id, name, cnpj, sector, status, contact, email, phone, portal_user_id, portal_cashflow_enabled")
+      .select(clientSelect)
       .eq("id", selectedClientId)
       .maybeSingle();
 
@@ -227,11 +281,26 @@ export async function getAuthorizedClientContext(params: {
     throw new Error("Unable to resolve an authorized client context.");
   }
 
+  if (isInternalUser) {
+    const hasTenantRole = await hasInternalRoleForOrganization(
+      params.supabaseAdmin,
+      params.userId,
+      clientRow.organization_id,
+    );
+
+    if (!hasTenantRole) {
+      throw new Error("The requester is not authorized for this organization.");
+    }
+  }
+
+  await assertOrganizationFeatureEnabled(params.supabaseAdmin, clientRow.organization_id, "ia");
+
   let requestOwnerId = clientRow.portal_user_id;
   if (!requestOwnerId) {
     const { data: clientOwner } = await params.supabaseAdmin
       .from("client_users")
       .select("user_id")
+      .eq("organization_id", clientRow.organization_id)
       .eq("client_id", clientRow.id)
       .eq("status", "active")
       .order("created_at", { ascending: true })
@@ -245,6 +314,8 @@ export async function getAuthorizedClientContext(params: {
     ? params.supabaseAdmin
         .from("client_requests")
         .select("id, title, description, category, sector, status, created_at, updated_at")
+        .eq("organization_id", clientRow.organization_id)
+        .eq("client_id", clientRow.id)
         .eq("user_id", requestOwnerId)
         .order("created_at", { ascending: false })
         .limit(12)
@@ -254,6 +325,8 @@ export async function getAuthorizedClientContext(params: {
     ? params.supabaseAdmin
         .from("client_documents")
         .select("id, file_name, category, created_at, request_id")
+        .eq("organization_id", clientRow.organization_id)
+        .eq("client_id", clientRow.id)
         .eq("user_id", requestOwnerId)
         .order("created_at", { ascending: false })
         .limit(12)
@@ -263,6 +336,7 @@ export async function getAuthorizedClientContext(params: {
     params.supabaseAdmin
       .from("client_portal_tasks")
       .select("id, title, description, status, sector, type, due_date")
+      .eq("organization_id", clientRow.organization_id)
       .eq("client_id", clientRow.id)
       .order("due_date", { ascending: true })
       .limit(15),
@@ -271,6 +345,7 @@ export async function getAuthorizedClientContext(params: {
     params.supabaseAdmin
       .from("client_acessorias_obligations")
       .select("id, obligation_name, obligation_period, due_date, status, protocol, notes")
+      .eq("organization_id", clientRow.organization_id)
       .eq("client_id", clientRow.id)
       .order("due_date", { ascending: false })
       .limit(15),
@@ -333,6 +408,7 @@ export async function getAuthorizedClientContext(params: {
     },
     client: {
       id: clientRow.id,
+      organizationId: clientRow.organization_id,
       name: clientRow.name,
       cnpjMasked: maskCnpj(clientRow.cnpj),
       cnpjDigits: asTrimmedString(clientRow.cnpj)?.replace(/\D/g, "") || null,

@@ -265,8 +265,21 @@ export type GrowClientSnapshotPayload = {
   templates: GrowObligationTemplate[];
 };
 
+async function getStoredCurrentOrganizationId() {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user?.id;
+  if (!userId) return null;
+
+  return localStorage.getItem(`grow-current-organization-${userId}`);
+}
+
 export async function invokeGrowObligations<T>(body: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke<T>("grow-obligations-module", { body });
+  const organizationId =
+    typeof body.organization_id === "string" || typeof body.organizationId === "string"
+      ? null
+      : await getStoredCurrentOrganizationId();
+  const scopedBody = organizationId ? { ...body, organization_id: organizationId } : body;
+  const { data, error } = await supabase.functions.invoke<T>("grow-obligations-module", { body: scopedBody });
 
   if (error) {
     const errorWithContext = error as Error & { context?: Response };

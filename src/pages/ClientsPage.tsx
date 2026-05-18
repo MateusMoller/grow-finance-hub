@@ -242,7 +242,7 @@ export default function ClientsPage() {
 
     try {
       const { data, error } = await supabase.functions.invoke<CnpjLookupResponse>("lookup-cnpj", {
-        body: { cnpj: normalizedCnpj },
+        body: { cnpj: normalizedCnpj, organization_id: currentOrganizationId },
       });
 
       if (error || !data?.data) {

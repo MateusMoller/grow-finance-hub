@@ -93,6 +93,7 @@ async function persistActionLog(params: {
   requiresHumanReview?: boolean;
 }) {
   return await logAiAction(params.supabaseAdmin, {
+    organization_id: params.context.client.organizationId,
     cliente_id: params.context.client.id,
     user_id: params.requesterUserId,
     action_type: params.actionType,
@@ -210,6 +211,8 @@ async function detectDuplicateInternal(params: {
   const { data: recentRequests, error } = await params.supabaseAdmin
     .from("client_requests")
     .select("id, title, description, sector, status, created_at")
+    .eq("organization_id", params.context.client.organizationId)
+    .eq("client_id", params.context.client.id)
     .eq("user_id", portalUserId)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -409,6 +412,7 @@ async function detectarDuplicidade(params: {
   });
 
   await logAiDuplicateCheck(params.supabaseAdmin, {
+    organization_id: params.context.client.organizationId,
     cliente_id: params.context.client.id,
     source_type: tipoRegistro,
     source_id: null,
@@ -522,6 +526,7 @@ async function criarChamado(params: {
 
   if (duplicate.duplicidade_detectada && duplicate.nivel_confianca === "alto" && duplicate.registro_relacionado_id) {
     await params.supabaseAdmin.from("request_messages").insert({
+      organization_id: params.context.client.organizationId,
       request_id: duplicate.registro_relacionado_id,
       user_id: params.requesterUserId,
       content: `Nova solicitacao semelhante detectada pela assistente Grow. Assunto: ${assunto}. Descricao: ${descricao || "sem descricao adicional"}`,
@@ -610,6 +615,8 @@ async function criarChamado(params: {
   const { data: createdRequest, error } = await params.supabaseAdmin
     .from("client_requests")
     .insert({
+      organization_id: params.context.client.organizationId,
+      client_id: params.context.client.id,
       user_id: portalUserId,
       title: assunto,
       description: descricao,

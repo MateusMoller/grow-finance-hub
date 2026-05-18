@@ -54,6 +54,21 @@ function deriveCashflowCategory(direction: string, rawCategory: string | null): 
   return direction === "in" ? "Recebimento de clientes" : "Outras saidas";
 }
 
+async function resolveClientOrganizationId(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  clientId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .select("organization_id")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.organization_id) throw new Error("Client organization was not found.");
+  return String(data.organization_id);
+}
+
 function resolveProvider(headers: Headers, payload: Record<string, unknown>): OpenFinanceProvider {
   const headerProvider =
     headers.get("x-open-finance-provider") ||
@@ -71,6 +86,7 @@ async function upsertCashflowAccountsFromOpenFinanceAccounts(
   supabaseAdmin: ReturnType<typeof createClient>,
   rows: Array<{
     id: string;
+    organization_id: string;
     client_id: string;
     connection_id: string;
     account_name: string | null;
@@ -87,6 +103,7 @@ async function upsertCashflowAccountsFromOpenFinanceAccounts(
     label:
       `${row.account_name || row.institution_name || "Conta bancaria"}${row.account_mask ? ` (${row.account_mask})` : ""}`,
     source_type: "bank_open_finance",
+    organization_id: row.organization_id,
     currency_code: row.currency_code || "BRL",
     open_finance_account_id: row.id,
     open_finance_connection_id: row.connection_id,
@@ -123,6 +140,7 @@ async function getCashflowAccountMapForConnection(
 
 async function persistSyncData(params: {
   supabaseAdmin: ReturnType<typeof createClient>;
+  organizationId: string;
   clientId: string;
   provider: OpenFinanceProvider;
   connection: ProviderConnectionRef;
@@ -131,6 +149,7 @@ async function persistSyncData(params: {
 }) {
   const {
     supabaseAdmin,
+    organizationId,
     clientId,
     provider,
     connection,
@@ -140,6 +159,7 @@ async function persistSyncData(params: {
   const nowIso = new Date().toISOString();
 
   const connectionUpsertPayload = {
+    organization_id: organizationId,
     client_id: clientId,
     provider,
     external_item_id: connection.externalConnectionId,
@@ -162,6 +182,7 @@ async function persistSyncData(params: {
 
   const accountUpsertPayload = accounts.map((account) => ({
     connection_id: connectionId,
+    organization_id: organizationId,
     client_id: clientId,
     external_account_id: account.externalAccountId,
     account_name: account.accountName,
@@ -175,6 +196,7 @@ async function persistSyncData(params: {
   let accountIdByExternalId = new Map<string, string>();
   let persistedOpenFinanceAccounts: Array<{
     id: string;
+    organization_id: string;
     client_id: string;
     connection_id: string;
     external_account_id: string;
@@ -192,6 +214,7 @@ async function persistSyncData(params: {
     if (accountUpsertError) throw accountUpsertError;
     persistedOpenFinanceAccounts = (accountRows || []).map((row) => ({
       id: String(row.id),
+      organization_id: organizationId,
       client_id: String(row.client_id),
       connection_id: String(row.connection_id),
       external_account_id: String(row.external_account_id),
@@ -211,7 +234,8 @@ async function persistSyncData(params: {
       .eq("connection_id", connectionId);
     if (existingAccountsError) throw existingAccountsError;
     persistedOpenFinanceAccounts = (existingAccounts || []).map((row) => ({
-      id: String(row.id),
+     id: String(row.id),
+      organization_id: organizationId,
       client_id: String(row.client_id),
       connection_id: String(row.connection_id),
       external_account_id: String(row.external_account_id),
@@ -237,6 +261,7 @@ async function persistSyncData(params: {
         connection_id: connectionId,
         account_id: accountId,
         client_id: clientId,
+        organization_id: organizationId,
         external_transaction_id: transaction.externalTransactionId,
         occurred_at: transaction.occurredAt,
         description: transaction.description,
@@ -274,6 +299,7 @@ async function persistSyncData(params: {
       .from("client_cashflow_entries")
       .select("integration_key")
       .eq("client_id", clientId)
+      .eq("organization_id", organizationId)
       .eq("integration_source", source)
       .in("integration_key", integrationKeys);
     if (existingEntriesError) throw existingEntriesError;
@@ -289,6 +315,7 @@ async function persistSyncData(params: {
 
       return {
         client_id: clientId,
+        organization_id: organizationId,
         entry_date: effectiveDate,
         due_date: effectiveDate,
         effective_date: effectiveDate,
@@ -389,7 +416,7 @@ Deno.serve(async (req) => {
 
     const { data: initialConnectionRow, error: connectionError } = await supabaseAdmin
       .from("open_finance_connections")
-      .select("id, client_id, provider, external_item_id")
+      .select("id, organization_id, client_id, provider, external_item_id")
       .eq("provider", provider)
       .eq("external_item_id", event.externalConnectionId)
       .maybeSingle();
@@ -414,10 +441,12 @@ Deno.serve(async (req) => {
         return jsonResponse({ ok: true, ignored: true });
       }
 
+      const organizationId = await resolveClientOrganizationId(supabaseAdmin, candidateClientId);
       const { data: insertedConnection, error: insertedConnectionError } = await supabaseAdmin
         .from("open_finance_connections")
         .upsert(
           {
+            organization_id: organizationId,
             client_id: candidateClientId,
             provider,
             external_item_id: event.externalConnectionId,
@@ -427,11 +456,16 @@ Deno.serve(async (req) => {
           },
           { onConflict: "provider,external_item_id" },
         )
-        .select("id, client_id, provider, external_item_id")
+        .select("id, organization_id, client_id, provider, external_item_id")
         .single();
       if (insertedConnectionError) throw insertedConnectionError;
       connectionRow = insertedConnection;
     }
+
+    const organizationId =
+      connectionRow.organization_id
+        ? String(connectionRow.organization_id)
+        : await resolveClientOrganizationId(supabaseAdmin, String(connectionRow.client_id));
 
     const syncData = await adapter.syncConnection({
       externalConnectionId: String(connectionRow.external_item_id),
@@ -439,6 +473,7 @@ Deno.serve(async (req) => {
 
     await persistSyncData({
       supabaseAdmin,
+      organizationId,
       clientId: String(connectionRow.client_id),
       provider,
       connection: syncData.connection,

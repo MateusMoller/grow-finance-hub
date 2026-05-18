@@ -68,7 +68,7 @@ async function syncUserSettingsAccessFlag(
       api_access: enabled,
       integrations_api_access: enabled,
     },
-    { onConflict: "user_id" },
+    { onConflict: "user_id,organization_id" },
   );
 }
 
@@ -137,7 +137,12 @@ Deno.serve(async (req) => {
       throw rolesError;
     }
 
-    const firstInternalRole = (roles || []).find((row) => internalRoles.has(String(row.role)));
+    const body = asRecord(await req.json().catch(() => ({}))) || {};
+    const requestedOrganizationId = typeof body.organization_id === "string" ? body.organization_id.trim() : "";
+    const firstInternalRole = (roles || []).find((row) =>
+      internalRoles.has(String(row.role)) &&
+      (!requestedOrganizationId || String(row.organization_id) === requestedOrganizationId)
+    );
     const isInternalUser = Boolean(firstInternalRole);
     if (!isInternalUser) {
       return jsonResponse({ error: "Only internal users can manage integration tokens" }, 403);
@@ -152,7 +157,6 @@ Deno.serve(async (req) => {
     }
     await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "acessorias");
 
-    const body = asRecord(await req.json().catch(() => ({}))) || {};
     const action = String(body.action || "status");
 
     const { data: existingCredential, error: existingCredentialError } = await supabaseAdmin
@@ -193,7 +197,7 @@ Deno.serve(async (req) => {
           created_by: user.id,
           updated_at: now,
         },
-        { onConflict: "user_id" },
+        { onConflict: "user_id,organization_id" },
       );
 
       if (upsertError) {

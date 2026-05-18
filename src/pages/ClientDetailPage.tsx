@@ -1152,7 +1152,7 @@ const isInactiveClientStatus = (status: string | null | undefined) =>
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, currentOrganizationId } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generalAutoSaveTimerRef = useRef<number | null>(null);
   const categoryAutoSaveTimerRef = useRef<Partial<Record<ClientCategoryKey, number>>>({});
@@ -1465,7 +1465,7 @@ export default function ClientDetailPage() {
 
     try {
       const { data, error } = await supabase.functions.invoke<CnpjLookupResponse>("lookup-cnpj", {
-        body: { cnpj: normalizedCnpj },
+        body: { cnpj: normalizedCnpj, organization_id: currentOrganizationId },
       });
 
       if (error || !data?.data) {

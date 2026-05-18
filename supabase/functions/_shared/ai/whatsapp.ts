@@ -17,6 +17,24 @@ function getWhatsAppConfig() {
   };
 }
 
+async function isWhatsAppEnabledForOrganization(supabaseAdmin: SupabaseClient, organizationId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("feature_flags")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const flags = data?.feature_flags;
+  return !(
+    flags &&
+    typeof flags === "object" &&
+    !Array.isArray(flags) &&
+    (flags as Record<string, unknown>).whatsapp === false
+  );
+}
+
 function combineDddAndPhone(ddd: string | null | undefined, phone: string | null | undefined) {
   const dddDigits = normalizePhoneDigits(ddd);
   const phoneDigits = normalizePhoneDigits(phone);
@@ -154,7 +172,7 @@ export async function findClientByPhone(
   const [clientsResult, clientDataResult] = await Promise.all([
     supabaseAdmin
       .from("clients")
-      .select("id, name, cnpj, phone, portal_user_id")
+      .select("id, organization_id, name, cnpj, phone, portal_user_id")
       .not("status", "eq", "Inativo"),
     supabaseAdmin
       .from("client_data")
@@ -191,6 +209,7 @@ export async function findClientByPhone(
     if (clientPhone && clientPhone === normalizedPhone) {
       matches.set(client.id, {
         clientId: client.id,
+        organizationId: client.organization_id,
         clientName: client.name,
         portalUserId: client.portal_user_id,
         phone: client.phone,
@@ -204,6 +223,7 @@ export async function findClientByPhone(
     if (whatsappPhone && whatsappPhone === normalizedPhone) {
       matches.set(client.id, {
         clientId: client.id,
+        organizationId: client.organization_id,
         clientName: client.name,
         portalUserId: client.portal_user_id,
         phone: whatsappByClient.get(client.id) || client.phone,
@@ -217,6 +237,7 @@ export async function findClientByPhone(
     if ((telefonePhone && telefonePhone === normalizedPhone) || (fallbackPhone && fallbackPhone === normalizedPhone)) {
       matches.set(client.id, {
         clientId: client.id,
+        organizationId: client.organization_id,
         clientName: client.name,
         portalUserId: client.portal_user_id,
         phone: telefoneByClient.get(client.id) || client.phone,
@@ -340,6 +361,7 @@ export async function handleWhatsAppInboundMessage(params: {
 
     let reply = "";
     let clientId: string | null = null;
+    let organizationId: string | null = null;
     let userId: string | null = null;
     let processingStatus = "processed";
 
@@ -356,41 +378,49 @@ export async function handleWhatsAppInboundMessage(params: {
         processingStatus = "multiple_clients";
       } else if (!resolvedMatch.portalUserId) {
         clientId = resolvedMatch.clientId;
+        organizationId = resolvedMatch.organizationId;
         reply =
           "Identifiquei a empresa, mas este numero ainda nao esta habilitado para atendimento automatizado com acesso seguro ao portal. Vou direcionar para atendimento humano.";
         processingStatus = "missing_portal_user";
       } else {
         clientId = resolvedMatch.clientId;
+        organizationId = resolvedMatch.organizationId;
         userId = resolvedMatch.portalUserId;
 
-        const authorizedContext = await getAuthorizedClientContext({
-          supabaseAdmin: params.supabaseAdmin,
-          userId: resolvedMatch.portalUserId,
-          requesterRoles: ["client"],
-          clienteId: resolvedMatch.clientId,
-          requesterDisplayName: message.profileName || "Contato WhatsApp",
-          requesterEmail: null,
-          requesterIdentityMethod: "phone_match",
-          requesterIdentityVerified: false,
-        });
+        if (!await isWhatsAppEnabledForOrganization(params.supabaseAdmin, resolvedMatch.organizationId)) {
+          reply = "O atendimento automatico por WhatsApp esta temporariamente indisponivel para esta organizacao.";
+          processingStatus = "module_disabled";
+        } else {
+          const authorizedContext = await getAuthorizedClientContext({
+            supabaseAdmin: params.supabaseAdmin,
+            userId: resolvedMatch.portalUserId,
+            requesterRoles: ["client"],
+            clienteId: resolvedMatch.clientId,
+            requesterDisplayName: message.profileName || "Contato WhatsApp",
+            requesterEmail: null,
+            requesterIdentityMethod: "phone_match",
+            requesterIdentityVerified: false,
+          });
 
-        const result = await runGrowAssistantWithAuthorizedContext({
-          supabaseAdmin: params.supabaseAdmin,
-          userId: resolvedMatch.portalUserId,
-          requesterRoles: ["client"],
-          clienteId: resolvedMatch.clientId,
-          message: message.text || "Mensagem recebida sem conteudo textual.",
-          channel: "whatsapp",
-          attachments: message.attachments,
-          authorizedContext,
-        });
+          const result = await runGrowAssistantWithAuthorizedContext({
+            supabaseAdmin: params.supabaseAdmin,
+            userId: resolvedMatch.portalUserId,
+            requesterRoles: ["client"],
+            clienteId: resolvedMatch.clientId,
+            message: message.text || "Mensagem recebida sem conteudo textual.",
+            channel: "whatsapp",
+            attachments: message.attachments,
+            authorizedContext,
+          });
 
-        reply = result.reply;
-        processingStatus = result.action.type;
+          reply = result.reply;
+          processingStatus = result.action.type;
+        }
       }
     } else {
       const match = matches[0];
       clientId = match.clientId;
+      organizationId = match.organizationId;
       userId = match.portalUserId;
 
       if (!match.portalUserId) {
@@ -398,30 +428,35 @@ export async function handleWhatsAppInboundMessage(params: {
           "Encontrei o cliente, mas este numero ainda nao esta habilitado para atendimento automatizado com acesso seguro ao portal. Vou direcionar para atendimento humano.";
         processingStatus = "missing_portal_user";
       } else {
-        const authorizedContext = await getAuthorizedClientContext({
-          supabaseAdmin: params.supabaseAdmin,
-          userId: match.portalUserId,
-          requesterRoles: ["client"],
-          clienteId: match.clientId,
-          requesterDisplayName: message.profileName || "Contato WhatsApp",
-          requesterEmail: null,
-          requesterIdentityMethod: "phone_match",
-          requesterIdentityVerified: false,
-        });
+        if (!await isWhatsAppEnabledForOrganization(params.supabaseAdmin, match.organizationId)) {
+          reply = "O atendimento automatico por WhatsApp esta temporariamente indisponivel para esta organizacao.";
+          processingStatus = "module_disabled";
+        } else {
+          const authorizedContext = await getAuthorizedClientContext({
+            supabaseAdmin: params.supabaseAdmin,
+            userId: match.portalUserId,
+            requesterRoles: ["client"],
+            clienteId: match.clientId,
+            requesterDisplayName: message.profileName || "Contato WhatsApp",
+            requesterEmail: null,
+            requesterIdentityMethod: "phone_match",
+            requesterIdentityVerified: false,
+          });
 
-        const result = await runGrowAssistantWithAuthorizedContext({
-          supabaseAdmin: params.supabaseAdmin,
-          userId: match.portalUserId,
-          requesterRoles: ["client"],
-          clienteId: match.clientId,
-          message: message.text || "Mensagem recebida sem conteudo textual.",
-          channel: "whatsapp",
-          attachments: message.attachments,
-          authorizedContext,
-        });
+          const result = await runGrowAssistantWithAuthorizedContext({
+            supabaseAdmin: params.supabaseAdmin,
+            userId: match.portalUserId,
+            requesterRoles: ["client"],
+            clienteId: match.clientId,
+            message: message.text || "Mensagem recebida sem conteudo textual.",
+            channel: "whatsapp",
+            attachments: message.attachments,
+            authorizedContext,
+          });
 
-        reply = result.reply;
-        processingStatus = result.action.type;
+          reply = result.reply;
+          processingStatus = result.action.type;
+        }
       }
     }
 
@@ -430,6 +465,7 @@ export async function handleWhatsAppInboundMessage(params: {
       : { sent: false, skipped: true, response: null };
 
     await logWhatsAppWebhookEvent(params.supabaseAdmin, {
+      organization_id: organizationId,
       cliente_id: clientId,
       user_id: userId,
       direction: "outgoing",
@@ -451,6 +487,7 @@ export async function handleWhatsAppInboundMessage(params: {
 
     replies.push({
       phone: message.from,
+      organizationId,
       clientId,
       userId,
       reply,
