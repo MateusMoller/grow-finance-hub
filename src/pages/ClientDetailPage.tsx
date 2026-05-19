@@ -1897,12 +1897,14 @@ export default function ClientDetailPage() {
     setSavingPortalAccess(true);
 
     if (checked) {
+      const rolePayload = {
+        user_id: client.portal_user_id,
+        role: "client" as Database["public"]["Enums"]["app_role"],
+        ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+      };
       const { error: upsertError } = await supabase.from("user_roles").upsert(
-        {
-          user_id: client.portal_user_id,
-          role: "client" as Database["public"]["Enums"]["app_role"],
-        },
-        { onConflict: "user_id,organization_id,role" },
+        rolePayload,
+        { onConflict: currentOrganizationId ? "user_id,organization_id,role" : "user_id,role" },
       );
 
       setSavingPortalAccess(false);

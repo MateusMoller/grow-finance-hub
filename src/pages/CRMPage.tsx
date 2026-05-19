@@ -267,6 +267,16 @@ const readStoredLeads = (userId: string): Lead[] => {
   }
 };
 
+const writeStoredLeads = (userId: string, leads: Lead[]) => {
+  if (!userId) return;
+  localStorage.setItem(buildLeadStorageKey(userId), JSON.stringify(leads));
+};
+
+const writeStoredGoals = (userId: string, goals: CrmGoals) => {
+  if (!userId) return;
+  localStorage.setItem(buildGoalStorageKey(userId), JSON.stringify(goals));
+};
+
 const mapSiteLeadToLead = (siteLead: SiteLeadRow): Lead => {
   const createdAt = siteLead.created_at;
   const createdTimestamp = new Date(createdAt).getTime();
@@ -379,9 +389,10 @@ export default function CRMPage() {
 
   const leadsQuery = useQuery({
     queryKey: leadsQueryKey,
-    enabled: Boolean(user?.id && currentOrganizationId),
+    enabled: Boolean(user?.id),
     queryFn: async () => {
-      if (!user?.id || !currentOrganizationId) return [];
+      if (!user?.id) return [];
+      if (!currentOrganizationId) return readStoredLeads(user.id);
 
       const [crmLeadRes, siteLeadRes] = await Promise.all([
         supabase
@@ -415,9 +426,10 @@ export default function CRMPage() {
 
   const goalsQuery = useQuery({
     queryKey: goalsQueryKey,
-    enabled: Boolean(user?.id && currentOrganizationId),
+    enabled: Boolean(user?.id),
     queryFn: async () => {
-      if (!currentOrganizationId) return defaultGoals;
+      if (!user?.id) return defaultGoals;
+      if (!currentOrganizationId) return readStoredGoals(user.id);
 
       const { data, error } = await supabase
         .from("crm_goals")
@@ -690,7 +702,27 @@ export default function CRMPage() {
       externalSource?: string | null;
       externalId?: string | null;
     }) => {
-      if (!user?.id || !currentOrganizationId) throw new Error("Organização ativa não encontrada.");
+      if (!user?.id) throw new Error("Usuário não autenticado.");
+      if (!currentOrganizationId) {
+        const now = new Date().toISOString();
+        const existingLeads = readStoredLeads(user.id);
+        const previousLead = leadId ? existingLeads.find((item) => item.id === leadId) : null;
+        const nextLead: Lead = {
+          ...lead,
+          id: leadId || createLeadId(),
+          createdAt: previousLead?.createdAt || now,
+          updatedAt: now,
+          daysInStage: previousLead?.daysInStage || 0,
+        };
+
+        writeStoredLeads(
+          user.id,
+          [nextLead, ...existingLeads.filter((item) => item.id !== nextLead.id)].sort((a, b) =>
+            b.updatedAt.localeCompare(a.updatedAt),
+          ),
+        );
+        return nextLead;
+      }
 
       const payload = {
         ...buildCrmLeadPayload(lead, currentOrganizationId, user.id),
@@ -717,6 +749,11 @@ export default function CRMPage() {
 
   const deleteLeadMutation = useMutation({
     mutationFn: async (leadId: string) => {
+      if (!currentOrganizationId && user?.id) {
+        writeStoredLeads(user.id, readStoredLeads(user.id).filter((lead) => lead.id !== leadId));
+        return;
+      }
+
       const crmLeadId = extractCrmLeadId(leadId);
       const siteLeadId = extractSiteLeadId(leadId);
 
@@ -738,7 +775,11 @@ export default function CRMPage() {
 
   const saveGoalsMutation = useMutation({
     mutationFn: async (goals: CrmGoals) => {
-      if (!user?.id || !currentOrganizationId) throw new Error("Organização ativa não encontrada.");
+      if (!user?.id) throw new Error("Usuário não autenticado.");
+      if (!currentOrganizationId) {
+        writeStoredGoals(user.id, goals);
+        return;
+      }
 
       const { error } = await supabase.from("crm_goals").upsert(
         {

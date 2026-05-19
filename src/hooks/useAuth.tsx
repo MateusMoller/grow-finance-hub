@@ -44,6 +44,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const buildOrganizationStorageKey = (userId: string) => `grow-current-organization-${userId}`;
 
+function isMissingOrganizationColumnError(error: { message?: string; details?: string } | null) {
+  const text = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return text.includes("organization_id") && (text.includes("column") || text.includes("schema cache"));
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -129,10 +134,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchRole = async (userId: string) => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role, organization_id")
       .eq("user_id", userId);
+
+    if (error && isMissingOrganizationColumnError(error)) {
+      const fallback = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+
+      data = fallback.data?.map((item) => ({ ...item, organization_id: null })) || null;
+      error = fallback.error;
+    }
 
     if (error) {
       setRole(null);
@@ -148,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const roleRows = ((data || []) as RoleRow[])
       .map((item) => ({
         role: item.role ? String(item.role) : null,
-        organization_id: null,
+        organization_id: item.organization_id ? String(item.organization_id) : null,
       }))
       .filter((item) => item.role);
 

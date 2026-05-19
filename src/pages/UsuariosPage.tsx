@@ -48,7 +48,7 @@ const roleColorMap: Record<string, string> = {
 };
 
 export default function UsuariosPage() {
-  const { role } = useAuth();
+  const { role, currentOrganizationId } = useAuth();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -114,12 +114,15 @@ export default function UsuariosPage() {
     const portalUserId = clientRow?.portal_user_id;
     if (!portalUserId) return false;
 
+    const rolePayload = {
+      user_id: portalUserId,
+      role: nextRole as "admin" | "director" | "manager" | "employee" | "commercial" | "partner" | "departamento_pessoal" | "fiscal" | "contabil" | "client",
+      ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+    };
+
     const { error: upsertRoleError } = await supabase.from("user_roles").upsert(
-      {
-        user_id: portalUserId,
-        role: nextRole as "admin" | "director" | "manager" | "employee" | "commercial" | "partner" | "departamento_pessoal" | "fiscal" | "contabil" | "client",
-      },
-      { onConflict: "user_id,organization_id,role" },
+      rolePayload,
+      { onConflict: currentOrganizationId ? "user_id,organization_id,role" : "user_id,role" },
     );
 
     if (upsertRoleError) {

@@ -24,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import type { TablesInsert } from "@/integrations/supabase/types";
+import { applyOrganizationScope, withOrganizationId } from "@/lib/tenantCompatibility";
 
 type SettingSectionId = "profile" | "company" | "security" | "notifications" | "appearance" | "integrations";
 type ThemePreference = "light" | "dark" | "system";
@@ -148,30 +149,32 @@ export default function ConfiguracoesPage() {
 
   const upsertUserSettings = async (payload: Partial<Omit<TablesInsert<"user_settings">, "user_id">>) => {
     if (!user) return { error: new Error("Usuário não autenticado.") };
-    if (!currentOrganizationId) return { error: new Error("Organizacao ativa nao encontrada.") };
-    return supabase.from("user_settings").upsert(
-      { user_id: user.id, organization_id: currentOrganizationId, ...payload },
-      { onConflict: "user_id,organization_id" },
-    );
+    return currentOrganizationId
+      ? supabase.from("user_settings").upsert(
+          { user_id: user.id, organization_id: currentOrganizationId, ...payload },
+          { onConflict: "user_id,organization_id" },
+        )
+      : supabase.from("user_settings").upsert({ user_id: user.id, ...payload }, { onConflict: "user_id" });
   };
 
   const invokeIntegrationTokenManager = useCallback((body: Record<string, unknown>) =>
     supabase.functions.invoke<IntegrationTokenStatus>("manage-integration-token", {
-      body: { organization_id: currentOrganizationId, ...body },
+      body: withOrganizationId(body, currentOrganizationId),
     }), [currentOrganizationId]);
 
   const loadSettings = useCallback(async () => {
-    if (!user || !currentOrganizationId) return;
+    if (!user) return;
     setLoading(true);
 
     const [profileRes, settingsRes, tokenStatusRes] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_url").eq("user_id", user.id).maybeSingle(),
-      supabase
-        .from("user_settings")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("organization_id", currentOrganizationId)
-        .maybeSingle(),
+      applyOrganizationScope(
+        supabase
+          .from("user_settings")
+          .select("*")
+          .eq("user_id", user.id),
+        currentOrganizationId,
+      ).maybeSingle(),
       invokeIntegrationTokenManager({ action: "status" }),
     ]);
 

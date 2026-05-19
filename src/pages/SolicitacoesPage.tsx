@@ -43,6 +43,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { recordOperationalAuditLog } from "@/lib/operationalAudit";
+import { applyOrganizationScope, withOrganizationId } from "@/lib/tenantCompatibility";
 
 type RequestStatus = Database["public"]["Enums"]["request_status"];
 type RequestRow = Database["public"]["Tables"]["client_requests"]["Row"];
@@ -246,16 +247,13 @@ export default function SolicitacoesPage() {
   const [savingSubmissionStatusId, setSavingSubmissionStatusId] = useState<string | null>(null);
   const [savingSubmissionNotes, setSavingSubmissionNotes] = useState(false);
   const fetchClients = useCallback(async () => {
-    if (!currentOrganizationId) {
-      setLoadingClients(false);
-      return;
-    }
     setLoadingClients(true);
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, name, contact, email, portal_user_id")
-      .eq("organization_id", currentOrganizationId)
-      .order("name", { ascending: true });
+    const { data, error } = await applyOrganizationScope(
+      supabase
+        .from("clients")
+        .select("id, name, contact, email, portal_user_id"),
+      currentOrganizationId,
+    ).order("name", { ascending: true });
 
     if (error) {
       toast.error("Erro ao carregar clientes.");
@@ -268,17 +266,14 @@ export default function SolicitacoesPage() {
   }, [currentOrganizationId]);
 
   const fetchRequests = useCallback(async () => {
-    if (!currentOrganizationId) {
-      setLoadingRequests(false);
-      return;
-    }
     setLoadingRequests(true);
 
-    const { data: requestData, error: requestError } = await supabase
-      .from("client_requests")
-      .select("id, title, description, category, sector, status, admin_notes, created_at, updated_at, user_id")
-      .eq("organization_id", currentOrganizationId)
-      .order("created_at", { ascending: false });
+    const { data: requestData, error: requestError } = await applyOrganizationScope(
+      supabase
+        .from("client_requests")
+        .select("id, title, description, category, sector, status, admin_notes, created_at, updated_at, user_id"),
+      currentOrganizationId,
+    ).order("created_at", { ascending: false });
 
     if (requestError) {
       toast.error("Erro ao carregar solicitações.");
@@ -301,32 +296,35 @@ export default function SolicitacoesPage() {
 
     let clientsData: ClientSummary[] = [];
     if (userIds.length > 0) {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, contact, email, portal_user_id")
-        .eq("organization_id", currentOrganizationId)
-        .in("portal_user_id", userIds);
+      const { data, error } = await applyOrganizationScope(
+        supabase
+          .from("clients")
+          .select("id, name, contact, email, portal_user_id"),
+        currentOrganizationId,
+      ).in("portal_user_id", userIds);
       if (!error) clientsData = (data || []) as ClientSummary[];
     }
 
     let documentsData: DocumentSummary[] = [];
     if (requestIds.length > 0) {
-      const { data, error } = await supabase
-        .from("client_documents")
-        .select("id, request_id, file_name, file_path, category, created_at, processed_at")
-        .eq("organization_id", currentOrganizationId)
-        .in("request_id", requestIds)
+      const { data, error } = await applyOrganizationScope(
+        supabase
+          .from("client_documents")
+          .select("id, request_id, file_name, file_path, category, created_at, processed_at"),
+        currentOrganizationId,
+      ).in("request_id", requestIds)
         .order("created_at", { ascending: false });
       if (!error) documentsData = (data || []) as DocumentSummary[];
     }
 
     let messagesData: RequestMessageRow[] = [];
     if (requestIds.length > 0) {
-      const { data, error } = await supabase
-        .from("request_messages")
-        .select("id, request_id, user_id, content, is_from_team, created_at")
-        .eq("organization_id", currentOrganizationId)
-        .in("request_id", requestIds)
+      const { data, error } = await applyOrganizationScope(
+        supabase
+          .from("request_messages")
+          .select("id, request_id, user_id, content, is_from_team, created_at"),
+        currentOrganizationId,
+      ).in("request_id", requestIds)
         .order("created_at", { ascending: false });
       if (!error) messagesData = (data || []) as RequestMessageRow[];
     }
@@ -367,11 +365,12 @@ export default function SolicitacoesPage() {
     const linkedRequests = enriched.filter((request) => Boolean(request.client?.id));
     if (linkedRequests.length > 0) {
       const linkedRequestIds = linkedRequests.map((request) => request.id);
-      const { data: existingTaskRows, error: existingTaskError } = await supabase
-        .from("client_portal_tasks")
-        .select("request_id")
-        .eq("organization_id", currentOrganizationId)
-        .in("request_id", linkedRequestIds);
+      const { data: existingTaskRows, error: existingTaskError } = await applyOrganizationScope(
+        supabase
+          .from("client_portal_tasks")
+          .select("request_id"),
+        currentOrganizationId,
+      ).in("request_id", linkedRequestIds);
 
       if (!existingTaskError) {
         const existingRequestTaskIds = new Set(
@@ -382,7 +381,7 @@ export default function SolicitacoesPage() {
 
         const missingTasks = linkedRequests.filter((request) => !existingRequestTaskIds.has(request.id));
         if (missingTasks.length > 0) {
-          const payload = missingTasks.map((request) => ({
+          const payload = missingTasks.map((request) => withOrganizationId({
             client_id: request.client!.id,
             request_id: request.id,
             title: `Retorno da solicitacao: ${request.title}`,
@@ -391,8 +390,7 @@ export default function SolicitacoesPage() {
             status: "pending_client" as const,
             sector: request.sector || "Geral",
             created_by: user?.id || request.user_id,
-            organization_id: currentOrganizationId,
-          }));
+          }, currentOrganizationId));
 
           const { error: insertTaskError } = await supabase.from("client_portal_tasks").insert(payload);
           if (insertTaskError) {
@@ -406,16 +404,13 @@ export default function SolicitacoesPage() {
   }, [currentOrganizationId, user?.id]);
 
   const fetchTasks = useCallback(async () => {
-    if (!currentOrganizationId) {
-      setLoadingTasks(false);
-      return;
-    }
     setLoadingTasks(true);
-    const { data, error } = await supabase
-      .from("client_portal_tasks")
-      .select("id, client_id, title, description, type, status, due_date, sector, request_id, created_by, created_at, updated_at")
-      .eq("organization_id", currentOrganizationId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await applyOrganizationScope(
+      supabase
+        .from("client_portal_tasks")
+        .select("id, client_id, title, description, type, status, due_date, sector, request_id, created_by, created_at, updated_at"),
+      currentOrganizationId,
+    ).order("created_at", { ascending: false });
 
     if (error) {
       toast.error("Erro ao carregar pendências do portal.");
@@ -429,21 +424,23 @@ export default function SolicitacoesPage() {
 
     let clientsData: ClientSummary[] = [];
     if (clientIds.length > 0) {
-      const { data: clientsRows, error: clientsError } = await supabase
-        .from("clients")
-        .select("id, name, contact, email, portal_user_id")
-        .eq("organization_id", currentOrganizationId)
-        .in("id", clientIds);
+      const { data: clientsRows, error: clientsError } = await applyOrganizationScope(
+        supabase
+          .from("clients")
+          .select("id, name, contact, email, portal_user_id"),
+        currentOrganizationId,
+      ).in("id", clientIds);
       if (!clientsError) clientsData = (clientsRows || []) as ClientSummary[];
     }
 
     let requestsData: RequestSummary[] = [];
     if (requestIds.length > 0) {
-      const { data: requestRows, error: requestError } = await supabase
-        .from("client_requests")
-        .select("id, title, status, sector, user_id")
-        .eq("organization_id", currentOrganizationId)
-        .in("id", requestIds);
+      const { data: requestRows, error: requestError } = await applyOrganizationScope(
+        supabase
+          .from("client_requests")
+          .select("id, title, status, sector, user_id"),
+        currentOrganizationId,
+      ).in("id", requestIds);
       if (!requestError) requestsData = (requestRows || []) as RequestSummary[];
     }
 
@@ -461,16 +458,13 @@ export default function SolicitacoesPage() {
   }, [currentOrganizationId]);
 
   const fetchSubmissions = useCallback(async () => {
-    if (!currentOrganizationId) {
-      setLoadingSubmissions(false);
-      return;
-    }
     setLoadingSubmissions(true);
-    const { data, error } = await supabase
-      .from("form_submissions")
-      .select("id, template_id, template_title, submitted_by, submitted_by_name, data, status, notes, client_id, request_id, created_at, updated_at")
-      .eq("organization_id", currentOrganizationId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await applyOrganizationScope(
+      supabase
+        .from("form_submissions")
+        .select("id, template_id, template_title, submitted_by, submitted_by_name, data, status, notes, client_id, request_id, created_at, updated_at"),
+      currentOrganizationId,
+    ).order("created_at", { ascending: false });
 
     if (error) {
       toast.error("Erro ao carregar formulários recebidos.");
@@ -484,21 +478,23 @@ export default function SolicitacoesPage() {
 
     let clientsData: ClientSummary[] = [];
     if (clientIds.length > 0) {
-      const { data: clientsRows, error: clientsError } = await supabase
-        .from("clients")
-        .select("id, name, contact, email, portal_user_id")
-        .eq("organization_id", currentOrganizationId)
-        .in("id", clientIds);
+      const { data: clientsRows, error: clientsError } = await applyOrganizationScope(
+        supabase
+          .from("clients")
+          .select("id, name, contact, email, portal_user_id"),
+        currentOrganizationId,
+      ).in("id", clientIds);
       if (!clientsError) clientsData = (clientsRows || []) as ClientSummary[];
     }
 
     let requestsData: RequestSummary[] = [];
     if (requestIds.length > 0) {
-      const { data: requestRows, error: requestError } = await supabase
-        .from("client_requests")
-        .select("id, title, status, sector, user_id")
-        .eq("organization_id", currentOrganizationId)
-        .in("id", requestIds);
+      const { data: requestRows, error: requestError } = await applyOrganizationScope(
+        supabase
+          .from("client_requests")
+          .select("id, title, status, sector, user_id"),
+        currentOrganizationId,
+      ).in("id", requestIds);
       if (!requestError) requestsData = (requestRows || []) as RequestSummary[];
     }
 
@@ -664,10 +660,6 @@ export default function SolicitacoesPage() {
 
   const handleCreateTask = async () => {
     if (!user) return;
-    if (!currentOrganizationId) {
-      toast.error("Organização ativa não encontrada.");
-      return;
-    }
     if (!taskDraft.clientId) {
       toast.error("Selecione o cliente da pendencia.");
       return;
@@ -678,7 +670,7 @@ export default function SolicitacoesPage() {
     }
 
     setCreatingTask(true);
-    const { error } = await supabase.from("client_portal_tasks").insert({
+    const { error } = await supabase.from("client_portal_tasks").insert(withOrganizationId({
       client_id: taskDraft.clientId,
       request_id: taskDraft.requestId !== "none" ? taskDraft.requestId : null,
       title: taskDraft.title.trim(),
@@ -688,8 +680,7 @@ export default function SolicitacoesPage() {
       due_date: taskDraft.dueDate || null,
       sector: taskDraft.sector,
       created_by: user.id,
-      organization_id: currentOrganizationId,
-    });
+    }, currentOrganizationId));
     setCreatingTask(false);
 
     if (error) {
@@ -711,11 +702,13 @@ export default function SolicitacoesPage() {
 
   const handleTaskStatusChange = async (task: PortalTaskView, status: TaskStatus) => {
     setChangingTaskId(task.id);
-    const { error } = await supabase
-      .from("client_portal_tasks")
-      .update({ status })
-      .eq("id", task.id)
-      .eq("organization_id", currentOrganizationId);
+    const { error } = await applyOrganizationScope(
+      supabase
+        .from("client_portal_tasks")
+        .update({ status })
+        .eq("id", task.id),
+      currentOrganizationId,
+    );
     setChangingTaskId(null);
 
     if (error) {
@@ -741,11 +734,13 @@ export default function SolicitacoesPage() {
     if (!confirmed) return;
 
     setDeletingTaskId(taskId);
-    const { error } = await supabase
-      .from("client_portal_tasks")
-      .delete()
-      .eq("id", taskId)
-      .eq("organization_id", currentOrganizationId);
+    const { error } = await applyOrganizationScope(
+      supabase
+        .from("client_portal_tasks")
+        .delete()
+        .eq("id", taskId),
+      currentOrganizationId,
+    );
     setDeletingTaskId(null);
 
     if (error) {
@@ -765,11 +760,13 @@ export default function SolicitacoesPage() {
 
   const handleRequestStatusChange = async (requestId: string, newStatus: RequestStatus) => {
     setUpdatingRequestStatus(true);
-    const { error } = await supabase
-      .from("client_requests")
-      .update({ status: newStatus })
-      .eq("id", requestId)
-      .eq("organization_id", currentOrganizationId);
+    const { error } = await applyOrganizationScope(
+      supabase
+        .from("client_requests")
+        .update({ status: newStatus })
+        .eq("id", requestId),
+      currentOrganizationId,
+    );
     setUpdatingRequestStatus(false);
 
     if (error) {
@@ -808,14 +805,16 @@ export default function SolicitacoesPage() {
   const handleToggleDocumentProcessed = async (document: DocumentSummary, processed: boolean) => {
     if (!user) return;
     setUpdatingDocumentId(document.id);
-    const { error } = await supabase
-      .from("client_documents")
-      .update({
+    const { error } = await applyOrganizationScope(
+      supabase
+        .from("client_documents")
+        .update({
         processed_at: processed ? new Date().toISOString() : null,
         processed_by: processed ? user.id : null,
-      })
-      .eq("id", document.id)
-      .eq("organization_id", currentOrganizationId);
+        })
+        .eq("id", document.id),
+      currentOrganizationId,
+    );
     setUpdatingDocumentId(null);
 
     if (error) {
@@ -845,11 +844,13 @@ export default function SolicitacoesPage() {
 
   const handleSubmissionStatusChange = async (submissionId: string, status: string) => {
     setSavingSubmissionStatusId(submissionId);
-    const { error } = await supabase
-      .from("form_submissions")
-      .update({ status })
-      .eq("id", submissionId)
-      .eq("organization_id", currentOrganizationId);
+    const { error } = await applyOrganizationScope(
+      supabase
+        .from("form_submissions")
+        .update({ status })
+        .eq("id", submissionId),
+      currentOrganizationId,
+    );
     setSavingSubmissionStatusId(null);
 
     if (error) {
@@ -868,11 +869,13 @@ export default function SolicitacoesPage() {
   const handleSaveSubmissionNotes = async () => {
     if (!selectedSubmission) return;
     setSavingSubmissionNotes(true);
-    const { error } = await supabase
-      .from("form_submissions")
-      .update({ notes: submissionNotes.trim() || null })
-      .eq("id", selectedSubmission.id)
-      .eq("organization_id", currentOrganizationId);
+    const { error } = await applyOrganizationScope(
+      supabase
+        .from("form_submissions")
+        .update({ notes: submissionNotes.trim() || null })
+        .eq("id", selectedSubmission.id),
+      currentOrganizationId,
+    );
     setSavingSubmissionNotes(false);
 
     if (error) {
