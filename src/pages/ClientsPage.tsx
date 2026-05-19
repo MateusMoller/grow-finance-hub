@@ -163,13 +163,17 @@ export default function ClientsPage() {
     role === "admin" || role === "director" || role === "manager" || role === "commercial";
 
   const loadClients = useCallback(async () => {
-    if (!currentOrganizationId) return;
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("clients")
       .select("id, name, cnpj, regime, sector, status, contact, email, phone, obligation_completion_whatsapp_enabled, portal_user_id")
-      .eq("organization_id", currentOrganizationId)
       .order("name");
+
+    if (currentOrganizationId) {
+      query = query.eq("organization_id", currentOrganizationId);
+    }
+
+    const { data, error } = await query;
     setLoading(false);
 
     if (error) {

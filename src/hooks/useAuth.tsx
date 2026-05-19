@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchRole = async (userId: string) => {
     const { data, error } = await supabase
       .from("user_roles")
-      .select("role, organization_id")
+      .select("role")
       .eq("user_id", userId);
 
     if (error) {
@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const roleRows = ((data || []) as RoleRow[])
       .map((item) => ({
         role: item.role ? String(item.role) : null,
-        organization_id: item.organization_id ? String(item.organization_id) : null,
+        organization_id: null,
       }))
       .filter((item) => item.role);
 
