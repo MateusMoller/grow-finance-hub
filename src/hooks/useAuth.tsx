@@ -43,6 +43,7 @@ type RoleRow = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const buildOrganizationStorageKey = (userId: string) => `grow-current-organization-${userId}`;
+const sameUserSessionEvents = new Set(["INITIAL_SESSION", "SIGNED_IN", "TOKEN_REFRESHED"]);
 
 function isMissingOrganizationColumnError(error: { message?: string; details?: string } | null) {
   const text = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
@@ -77,9 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       const nextUserId = nextSession?.user?.id ?? null;
-      const isSameUserRefresh = event === "TOKEN_REFRESHED" && nextUserId && nextUserId === currentUserIdRef.current;
+      const isSameUserSessionEvent =
+        Boolean(nextUserId) &&
+        nextUserId === currentUserIdRef.current &&
+        sameUserSessionEvents.has(event);
 
-      if (isSameUserRefresh) {
+      if (isSameUserSessionEvent) {
         return;
       }
 
