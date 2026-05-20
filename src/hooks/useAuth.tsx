@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import {
@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [currentOrganizationId, setCurrentOrganizationIdState] = useState<string | null>(null);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -74,7 +75,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      const nextUserId = nextSession?.user?.id ?? null;
+      const isSameUserRefresh = event === "TOKEN_REFRESHED" && nextUserId && nextUserId === currentUserIdRef.current;
+
+      if (isSameUserRefresh) {
+        return;
+      }
+
+      currentUserIdRef.current = nextUserId;
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
@@ -84,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           void fetchRole(nextSession.user.id);
         }, 0);
       } else {
+        currentUserIdRef.current = null;
         setRole(null);
         setRoles([]);
         setAllRoles([]);
@@ -98,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
 
+        currentUserIdRef.current = initialSession?.user?.id ?? null;
         setSession(initialSession);
         setUser(initialSession?.user ?? null);
 
@@ -114,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setRoleLoaded(true);
         }
       } catch {
+        currentUserIdRef.current = null;
         setSession(null);
         setUser(null);
         setRole(null);
@@ -240,6 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    currentUserIdRef.current = null;
     setUser(null);
     setSession(null);
     setRole(null);

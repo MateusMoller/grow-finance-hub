@@ -1,4 +1,4 @@
-const CACHE_NAME = "grow-finance-hub-cache-v9";
+const CACHE_NAME = "grow-finance-hub-cache-v10";
 const APP_SHELL = [
   "./index.html",
   "./manifest.webmanifest",
@@ -23,7 +23,6 @@ const isInServiceWorkerScope = (pathname) => {
 };
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined),
   );
@@ -37,7 +36,7 @@ self.addEventListener("activate", (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key)),
       ),
-    ).then(() => self.clients.claim()),
+    ),
   );
 });
 
