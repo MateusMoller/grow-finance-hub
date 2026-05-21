@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/app/AppLayout";
 import { KanbanTaskDetailSheet, type KanbanStatus, type KanbanTaskItem } from "@/components/app/KanbanTaskDetailSheet";
+import { TaskOriginLegend } from "@/components/app/TaskOriginLegend";
 import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -511,6 +512,8 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
           </div>
         </div>
 
+        <TaskOriginLegend />
+
         {loading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -822,7 +825,6 @@ function KanbanCard({
     </motion.div>
   );
 }
-
 
 
 

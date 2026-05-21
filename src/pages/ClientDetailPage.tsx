@@ -2790,6 +2790,22 @@ export default function ClientDetailPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-xs">Inscricao Municipal</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("inscricao_municipal")}
+                    onChange={(event) => setGeneralInfoFieldValue("inscricao_municipal", event.target.value)}
+                    maxLength={40}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Inscricao Estadual</Label>
+                  <Input
+                    value={getGeneralInfoFieldValue("inscricao_estadual")}
+                    onChange={(event) => setGeneralInfoFieldValue("inscricao_estadual", event.target.value)}
+                    maxLength={40}
+                  />
+                </div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">CEP</Label>
                   <div className="flex gap-2">
                     <Input
@@ -2819,22 +2835,6 @@ export default function ClientDetailPage() {
                   {dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")] && (
                     <p className="text-[11px] text-destructive">{dataFieldErrors[getCategoryFieldEntryKey("cadastro_clientes", "cep")]}</p>
                   )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Inscricao Estadual</Label>
-                  <Input
-                    value={getGeneralInfoFieldValue("inscricao_estadual")}
-                    onChange={(event) => setGeneralInfoFieldValue("inscricao_estadual", event.target.value)}
-                    maxLength={40}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Inscricao Municipal</Label>
-                  <Input
-                    value={getGeneralInfoFieldValue("inscricao_municipal")}
-                    onChange={(event) => setGeneralInfoFieldValue("inscricao_municipal", event.target.value)}
-                    maxLength={40}
-                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Rua / Logradouro</Label>

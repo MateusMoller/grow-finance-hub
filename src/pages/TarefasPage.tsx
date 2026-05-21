@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { TaskOriginLegend } from "@/components/app/TaskOriginLegend";
 import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,7 +37,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
-import { taskOriginMeta, type TaskOrigin } from "@/lib/taskOrigin";
 import type { Tables } from "@/integrations/supabase/types";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
@@ -105,8 +105,6 @@ const statusConfig: Record<string, { color: string; bg: string; icon: typeof Cir
 
 const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"];
 const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
-
-const taskOriginLegendOrder: TaskOrigin[] = ["portal", "obrigacoes", "interno"];
 
 const normalizeText = (value: string) =>
   value
@@ -571,25 +569,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           </Button>
         </div>}
 
-        <div className="inline-flex max-w-full flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card/80 px-3 py-2 shadow-sm">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-            Origem
-          </span>
-          {taskOriginLegendOrder.map((origin) => {
-            const meta = taskOriginMeta[origin];
-
-            return (
-              <div key={origin} className="flex items-center gap-2 rounded-full bg-muted/50 px-2.5 py-1">
-                <span
-                  className={cn("h-4 w-2.5 shrink-0 rounded-b-[2px] bg-gradient-to-b", meta.ribbonClass)}
-                  style={{ clipPath: "polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%)" }}
-                  aria-hidden="true"
-                />
-                <span className="text-xs text-muted-foreground">{meta.label}</span>
-              </div>
-            );
-          })}
-        </div>
+        <TaskOriginLegend />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {[
@@ -892,4 +872,3 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
 export default function TarefasPage() {
   return <TaskListView />;
 }
-
