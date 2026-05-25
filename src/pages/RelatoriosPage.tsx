@@ -13,6 +13,7 @@ import {
   PlayCircle,
   RefreshCw,
   Save,
+  Search,
   Trash2,
   TrendingUp,
   Users,
@@ -58,7 +59,7 @@ type SavedReportRow = Pick<
 
 type ClientDataRow = Pick<
   Tables<"client_data">,
-  "client_id" | "category" | "field_name" | "field_value" | "period"
+  "id" | "client_id" | "category" | "field_name" | "field_value" | "period" | "created_at" | "updated_at"
 >;
 
 interface TeamReportRow {
@@ -116,6 +117,28 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+
+const repairCommonEncodingIssues = (value: string) =>
+  value
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã /g, "à")
+    .replace(/Ã¢/g, "â")
+    .replace(/Ã£/g, "ã")
+    .replace(/Ã©/g, "é")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ãµ/g, "õ")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ã‡/g, "Ç");
+
+const normalizeClientDataFieldToken = (value: string) =>
+  normalizeText(repairCommonEncodingIssues(value)).replace(/[^\w]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
 
 const formatDateTime = (value: unknown) => {
   if (typeof value !== "string" || !value) return "-";
@@ -317,6 +340,7 @@ const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, C
     { name: "cep", label: "CEP" },
     { name: "endereço", label: "Rua / Logradouro" },
     { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
+    { name: "complemento", label: "Complemento" },
     { name: "bairro", label: "Bairro" },
     { name: "perfil_atuacao", label: "Classificação de Atividade" },
     { name: "cidade", label: "Cidade" },
@@ -476,6 +500,52 @@ const toCadastralClientDataColumnKey = (category: CadastralClientDataCategory, f
 
 const monthlyClientDataCategorySet = new Set<string>(monthlyClientDataCategories);
 const cadastralClientDataCategorySet = new Set<string>(cadastralClientDataCategories);
+
+const clientDataFieldNameByCategoryAndToken = new Map<string, Map<string, string>>([
+  ...monthlyClientDataCategories.map((category): [string, Map<string, string>] => [
+    category,
+    new Map(
+      monthlyClientDataFieldsByCategory[category].map((field) => [
+        normalizeClientDataFieldToken(field.name),
+        field.name,
+      ]),
+    ),
+  ]),
+  ...cadastralClientDataCategories.map((category): [string, Map<string, string>] => [
+    category,
+    new Map(
+      [
+        ...cadastralClientDataFieldsByCategory[category].map((field) => [
+          normalizeClientDataFieldToken(field.name),
+          field.name,
+        ] as const),
+        ...(category === "cadastro_clientes" ? [["socios", "socios"] as const] : []),
+      ],
+    ),
+  ]),
+]);
+
+const resolveClientDataFieldName = (category: string, fieldName: string) => {
+  const fieldNameByToken = clientDataFieldNameByCategoryAndToken.get(category);
+  if (!fieldNameByToken) return fieldName;
+  return fieldNameByToken.get(normalizeClientDataFieldToken(fieldName)) || fieldName;
+};
+
+const compareClientDataEntriesForReport = (a: ClientDataRow, b: ClientDataRow) => {
+  const aIsCadastral = cadastralClientDataCategorySet.has(a.category);
+  const bIsCadastral = cadastralClientDataCategorySet.has(b.category);
+  const aPeriodRank = aIsCadastral ? (a.period ? 0 : 1) : 0;
+  const bPeriodRank = bIsCadastral ? (b.period ? 0 : 1) : 0;
+
+  if (aPeriodRank !== bPeriodRank) return aPeriodRank - bPeriodRank;
+
+  const aTime = new Date(a.updated_at || a.created_at || "").getTime();
+  const bTime = new Date(b.updated_at || b.created_at || "").getTime();
+  const safeATime = Number.isNaN(aTime) ? 0 : aTime;
+  const safeBTime = Number.isNaN(bTime) ? 0 : bTime;
+
+  return safeATime - safeBTime;
+};
 
 const clientDataReportColumns: ReportColumnDefinition[] = [
   { key: "dados_mensais_periodo", label: "Dados Mensais: Período" },
@@ -735,6 +805,7 @@ export default function RelatoriosPage() {
   const [rightSelectedKeys, setRightSelectedKeys] = useState<string[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReportConfig[]>([]);
   const [savedReportName, setSavedReportName] = useState("");
+  const [availableColumnSearch, setAvailableColumnSearch] = useState("");
   const [editingSavedReportId, setEditingSavedReportId] = useState<string | null>(null);
   const skipDatasetResetRef = useRef(false);
 
@@ -748,14 +819,13 @@ export default function RelatoriosPage() {
         .order("name"),
       supabase
         .from("client_data")
-        .select("client_id, category, field_name, field_value, period")
+        .select("id, client_id, category, field_name, field_value, period, created_at, updated_at")
         .in("category", [...monthlyClientDataCategories])
         .eq("period", clientDataReportPeriod),
       supabase
         .from("client_data")
-        .select("client_id, category, field_name, field_value, period")
-        .in("category", [...cadastralClientDataCategories])
-        .is("period", null),
+        .select("id, client_id, category, field_name, field_value, period, created_at, updated_at")
+        .in("category", [...cadastralClientDataCategories]),
       supabase
         .from("site_leads")
         .select("id, full_name, company_name, email, phone, source_tag, origin_page, created_at")
@@ -885,12 +955,8 @@ export default function RelatoriosPage() {
 
   const filteredClients = useMemo(
     () =>
-      clients.filter(
-        (client) =>
-          matchesSelectedCompany(client.name, selectedCompany) &&
-          matchesSelectedCompetence(client.created_at, selectedCompetence),
-      ),
-    [clients, selectedCompany, selectedCompetence],
+      clients.filter((client) => matchesSelectedCompany(client.name, selectedCompany)),
+    [clients, selectedCompany],
   );
 
   const filteredLeads = useMemo(
@@ -924,10 +990,11 @@ export default function RelatoriosPage() {
   const clientDataByClientId = useMemo(() => {
     const byClientId = new Map<string, Record<string, string>>();
 
-    clientDataEntries.forEach((entry) => {
+    [...clientDataEntries].sort(compareClientDataEntriesForReport).forEach((entry) => {
       const current = byClientId.get(entry.client_id) || {};
+      const fieldName = resolveClientDataFieldName(entry.category, entry.field_name);
 
-      if (entry.category === "cadastro_clientes" && !entry.period && entry.field_name === "socios") {
+      if (entry.category === "cadastro_clientes" && fieldName === "socios") {
         const partners = parseClientPartnersField(entry.field_value);
         const summary = summarizeClientPartners(partners);
         current.cadastral_cadastro_clientes_socios_quantidade = String(summary.total);
@@ -944,9 +1011,9 @@ export default function RelatoriosPage() {
       let columnKey: string | null = null;
 
       if (entry.period && monthlyClientDataCategorySet.has(entry.category)) {
-        columnKey = toMonthlyClientDataColumnKey(entry.category as MonthlyClientDataCategory, entry.field_name);
-      } else if (!entry.period && cadastralClientDataCategorySet.has(entry.category)) {
-        columnKey = toCadastralClientDataColumnKey(entry.category as CadastralClientDataCategory, entry.field_name);
+        columnKey = toMonthlyClientDataColumnKey(entry.category as MonthlyClientDataCategory, fieldName);
+      } else if (cadastralClientDataCategorySet.has(entry.category)) {
+        columnKey = toCadastralClientDataColumnKey(entry.category as CadastralClientDataCategory, fieldName);
       }
 
       if (!columnKey) return;
@@ -960,21 +1027,31 @@ export default function RelatoriosPage() {
 
   const rowsByDataset = useMemo<Record<ReportDatasetId, ReportRow[]>>(
     () => ({
-      clientes: filteredClients.map((client) => ({
-        id: client.id,
-        nome: client.name,
-        cnpj: client.cnpj || "",
-        regime: client.regime || "",
-        segmento: client.sector || "",
-        status: client.status || "",
-        contato: client.contact || "",
-        email: (client.email || "").toLowerCase(),
-        telefone: client.phone || "",
-        criado_em: client.created_at,
-        atualizado_em: client.updated_at,
-        dados_mensais_periodo: clientDataReportPeriod,
-        ...(clientDataByClientId.get(client.id) || {}),
-      })),
+      clientes: filteredClients.map((client) => {
+        const clientData = { ...(clientDataByClientId.get(client.id) || {}) };
+        const cadastralRegimeKey = "cadastral_cadastro_clientes_regime_tributário";
+        const reportRegime = client.regime || clientData[cadastralRegimeKey] || "";
+
+        if (!clientData[cadastralRegimeKey] && reportRegime) {
+          clientData[cadastralRegimeKey] = reportRegime;
+        }
+
+        return {
+          id: client.id,
+          nome: client.name,
+          cnpj: client.cnpj || "",
+          regime: reportRegime,
+          segmento: client.sector || "",
+          status: client.status || "",
+          contato: client.contact || "",
+          email: (client.email || "").toLowerCase(),
+          telefone: client.phone || "",
+          criado_em: client.created_at,
+          atualizado_em: client.updated_at,
+          dados_mensais_periodo: clientDataReportPeriod,
+          ...clientData,
+        };
+      }),
       leads_crm: filteredLeads.map((lead) => ({
         id: lead.id,
         nome: lead.full_name,
@@ -1033,6 +1110,20 @@ export default function RelatoriosPage() {
     [customDefinition.columns, selectedColumns],
   );
 
+  const filteredAvailableColumns = useMemo(() => {
+    const searchTerm = normalizeText(repairCommonEncodingIssues(availableColumnSearch));
+    if (!searchTerm) return availableColumns;
+
+    return availableColumns.filter((column) => {
+      const [moduleLabel, subfolderLabel] = getColumnModulePath(customDatasetId, column.key);
+      const searchableText = normalizeText(
+        repairCommonEncodingIssues(`${column.label} ${column.key} ${moduleLabel} ${subfolderLabel}`),
+      );
+
+      return searchableText.includes(searchTerm);
+    });
+  }, [availableColumnSearch, availableColumns, customDatasetId]);
+
   const availableColumnsByModule = useMemo(() => {
     const moduleMap = new Map<
       string,
@@ -1043,7 +1134,7 @@ export default function RelatoriosPage() {
       }
     >();
 
-    availableColumns.forEach((column) => {
+    filteredAvailableColumns.forEach((column) => {
       const [moduleLabel, subfolderLabel] = getColumnModulePath(customDatasetId, column.key);
       const moduleId = normalizeText(moduleLabel);
       const subfolderId = normalizeText(subfolderLabel);
@@ -1070,7 +1161,7 @@ export default function RelatoriosPage() {
         totalColumns,
       };
     });
-  }, [availableColumns, customDatasetId]);
+  }, [customDatasetId, filteredAvailableColumns]);
 
   useEffect(() => {
     const selectedSet = new Set(selectedColumns);
@@ -1375,11 +1466,23 @@ export default function RelatoriosPage() {
                 <div className="rounded-lg border p-3">
                   <p className="text-sm font-medium">Colunas disponíveis</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {availableColumns.length} campo(s) disponível(is)
+                    {filteredAvailableColumns.length} de {availableColumns.length} campo(s) disponível(is)
                   </p>
+                  <div className="relative mt-3">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={availableColumnSearch}
+                      onChange={(event) => setAvailableColumnSearch(event.target.value)}
+                      placeholder="Pesquisar campo para adicionar"
+                      className="pl-9"
+                    />
+                  </div>
                   <div className="mt-3 max-h-72 overflow-auto space-y-2 pr-1">
                     {availableColumns.length === 0 && (
                       <p className="text-sm text-muted-foreground py-6 text-center">Sem colunas para adicionar.</p>
+                    )}
+                    {availableColumns.length > 0 && filteredAvailableColumns.length === 0 && (
+                      <p className="text-sm text-muted-foreground py-6 text-center">Nenhum campo encontrado para esta busca.</p>
                     )}
                     {availableColumnsByModule.map((moduleEntry) => (
                       <div key={moduleEntry.id} className="rounded-md border bg-muted/20 p-2 space-y-2">
