@@ -14,7 +14,6 @@ import {
   MessagesSquare,
   UserCog,
   Lightbulb,
-  Activity,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
@@ -55,7 +54,6 @@ const systemItems = [
   { title: "Usuários", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
   { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
-  { title: "Saúde operacional", url: "/app/saude-operacional", icon: Activity },
   { title: "Configurações", url: "/app/configuracoes", icon: Settings },
 ];
 

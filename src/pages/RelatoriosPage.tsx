@@ -23,6 +23,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
 import { useAuth } from "@/hooks/useAuth";
@@ -257,6 +258,8 @@ const cadastralClientDataCategories = [
 ] as const;
 type CadastralClientDataCategory = (typeof cadastralClientDataCategories)[number];
 type ClientDataCategory = MonthlyClientDataCategory | CadastralClientDataCategory;
+
+const REPORT_QUERY_PAGE_SIZE = 1000;
 
 interface ClientDataFieldDefinition {
   name: string;
@@ -547,6 +550,43 @@ const compareClientDataEntriesForReport = (a: ClientDataRow, b: ClientDataRow) =
   return safeATime - safeBTime;
 };
 
+const fetchClientDataRowsForReport = async (
+  categories: readonly ClientDataCategory[],
+  options: { period?: string } = {},
+): Promise<{ data: ClientDataRow[]; error: PostgrestError | null }> => {
+  const rows: ClientDataRow[] = [];
+
+  for (let from = 0; ; from += REPORT_QUERY_PAGE_SIZE) {
+    const to = from + REPORT_QUERY_PAGE_SIZE - 1;
+    let query = supabase
+      .from("client_data")
+      .select("id, client_id, category, field_name, field_value, period, created_at, updated_at")
+      .in("category", [...categories])
+      .order("client_id", { ascending: true })
+      .order("category", { ascending: true })
+      .order("field_name", { ascending: true })
+      .order("updated_at", { ascending: true })
+      .range(from, to);
+
+    if (options.period) {
+      query = query.eq("period", options.period);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return { data: rows, error };
+    }
+
+    const pageRows = (data || []) as ClientDataRow[];
+    rows.push(...pageRows);
+
+    if (pageRows.length < REPORT_QUERY_PAGE_SIZE) {
+      return { data: rows, error: null };
+    }
+  }
+};
+
 const clientDataReportColumns: ReportColumnDefinition[] = [
   { key: "dados_mensais_periodo", label: "Dados Mensais: Período" },
   ...monthlyClientDataCategories.flatMap((category) =>
@@ -817,15 +857,8 @@ export default function RelatoriosPage() {
         .from("clients")
         .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
         .order("name"),
-      supabase
-        .from("client_data")
-        .select("id, client_id, category, field_name, field_value, period, created_at, updated_at")
-        .in("category", [...monthlyClientDataCategories])
-        .eq("period", clientDataReportPeriod),
-      supabase
-        .from("client_data")
-        .select("id, client_id, category, field_name, field_value, period, created_at, updated_at")
-        .in("category", [...cadastralClientDataCategories]),
+      fetchClientDataRowsForReport(monthlyClientDataCategories, { period: clientDataReportPeriod }),
+      fetchClientDataRowsForReport(cadastralClientDataCategories),
       supabase
         .from("site_leads")
         .select("id, full_name, company_name, email, phone, source_tag, origin_page, created_at")
@@ -861,8 +894,8 @@ export default function RelatoriosPage() {
 
     const nextClients = (clientsRes.data || []) as ClientRow[];
     const nextClientData = [
-      ...((monthlyClientDataRes.data || []) as ClientDataRow[]),
-      ...((cadastralClientDataRes.data || []) as ClientDataRow[]),
+      ...(monthlyClientDataRes.data || []),
+      ...(cadastralClientDataRes.data || []),
     ];
     const nextLeads = (leadsRes.data || []) as LeadRow[];
     const nextTasks = (tasksRes.data || []) as TaskRow[];

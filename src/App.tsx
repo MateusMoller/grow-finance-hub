@@ -36,7 +36,6 @@ const PortalClientePage = lazy(() => import("./pages/PortalClientePage"));
 const ManualPage = lazy(() => import("./pages/ManualPage"));
 const UsuariosPage = lazy(() => import("./pages/UsuariosPage"));
 const SugestoesPage = lazy(() => import("./pages/SugestoesPage"));
-const OperationalHealthPage = lazy(() => import("./pages/OperationalHealthPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -187,7 +186,6 @@ const App = () => (
                   <Route path="/app/manual" element={<ProtectedRoute scope="internal"><ManualPage /></ProtectedRoute>} />
                   <Route path="/app/usuarios" element={<ProtectedRoute scope="internal" feature="usuarios"><UsuariosPage /></ProtectedRoute>} />
                   <Route path="/app/sugestoes" element={<ProtectedRoute scope="internal"><SugestoesPage /></ProtectedRoute>} />
-                  <Route path="/app/saude-operacional" element={<ProtectedRoute scope="internal"><OperationalHealthPage /></ProtectedRoute>} />
                   <Route path="/app/portal" element={<ProtectedRoute scope="portal" feature="portal"><PortalClientePage /></ProtectedRoute>} />
 
                   {/* Portal do Cliente - Protegido */}
