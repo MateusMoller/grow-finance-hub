@@ -28,6 +28,8 @@ type CreateClientPayload = {
   contact?: string;
   email: string;
   phone?: string;
+  clientEntityType: "matriz" | "filial";
+  parentClientId?: string | null;
   obligationCompletionWhatsAppEnabled?: boolean;
   portalPassword?: string;
 };
@@ -38,6 +40,12 @@ type ExistingClientRow = {
   cnpj: string | null;
   portal_user_id: string | null;
   status: string | null;
+};
+
+type ParentClientRow = {
+  id: string;
+  organization_id: string;
+  client_entity_type: string | null;
 };
 
 type RoleRow = {
@@ -61,6 +69,19 @@ function asTrimmedString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function asUuid(value: unknown): string | null {
+  const maybeUuid = asTrimmedString(value);
+  if (!maybeUuid) return null;
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(maybeUuid) ? maybeUuid : null;
+}
+
+function normalizeClientEntityType(value: unknown): "matriz" | "filial" {
+  const normalized = asTrimmedString(value)?.toLowerCase();
+  return normalized === "filial" ? "filial" : "matriz";
 }
 
 function normalizeEmail(value: unknown): string | null {
@@ -258,6 +279,8 @@ Deno.serve(async (req) => {
       contact: asTrimmedString(payload.contact) || undefined,
       email: normalizeEmail(payload.email) || "",
       phone: asTrimmedString(payload.phone) || undefined,
+      clientEntityType: normalizeClientEntityType(payload.clientEntityType),
+      parentClientId: asUuid(payload.parentClientId),
       obligationCompletionWhatsAppEnabled: typeof payload.obligationCompletionWhatsAppEnabled === "boolean"
         ? payload.obligationCompletionWhatsAppEnabled
         : false,
@@ -283,9 +306,33 @@ Deno.serve(async (req) => {
     }
 
     const normalizedPortalPassword = parsedPayload.portalPassword || "123456";
+    const isBranchClient = parsedPayload.clientEntityType === "filial";
+    let parentClient: ParentClientRow | null = null;
+
+    if (isBranchClient) {
+      if (!parsedPayload.parentClientId) {
+        return jsonResponse({ error: "Selecione a matriz desta filial." }, 400);
+      }
+
+      const { data: parentClientData, error: parentClientError } = await supabaseAdmin
+        .from("clients")
+        .select("id, organization_id, client_entity_type")
+        .eq("id", parsedPayload.parentClientId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+
+      if (parentClientError) {
+        throw parentClientError;
+      }
+
+      parentClient = parentClientData as ParentClientRow | null;
+      if (!parentClient || parentClient.client_entity_type === "filial") {
+        return jsonResponse({ error: "A matriz vinculada precisa ser um cliente do tipo matriz." }, 400);
+      }
+    }
 
     const clientMatchFilters = [
-      `email.ilike.${parsedPayload.email}`,
+      isBranchClient ? null : `email.ilike.${parsedPayload.email}`,
       normalizedCnpj ? `cnpj.eq.${normalizedCnpj}` : null,
     ].filter(Boolean);
 
@@ -303,7 +350,9 @@ Deno.serve(async (req) => {
       }
 
       const matches = (existingClientMatches || []) as ExistingClientRow[];
-      const emailMatch = matches.find((client) => normalizeEmail(client.email) === parsedPayload.email);
+      const emailMatch = isBranchClient
+        ? null
+        : matches.find((client) => normalizeEmail(client.email) === parsedPayload.email);
       const cnpjMatch = normalizedCnpj
         ? matches.find((client) => normalizeCnpj(client.cnpj) === normalizedCnpj)
         : null;
@@ -421,7 +470,7 @@ Deno.serve(async (req) => {
       throw existingClientByPortalUserError;
     }
 
-    if ((existingClientByPortalUser || []).length > 0) {
+    if ((existingClientByPortalUser || []).length > 0 && !isBranchClient) {
       return jsonResponse(
         { error: "Portal user is already linked to another client" },
         409,
@@ -477,6 +526,8 @@ Deno.serve(async (req) => {
       phone: normalizedPhone || null,
       obligation_completion_whatsapp_enabled: Boolean(parsedPayload.obligationCompletionWhatsAppEnabled),
       portal_user_id: portalUserId,
+      client_entity_type: parsedPayload.clientEntityType,
+      parent_client_id: isBranchClient ? parsedPayload.parentClientId : null,
       organization_id: organizationId,
       created_by: callerUser.id,
     };
@@ -509,6 +560,21 @@ Deno.serve(async (req) => {
       throw createClientError;
     }
 
+    const { error: clientUserLinkError } = await supabaseAdmin.from("client_users").upsert(
+      {
+        organization_id: organizationId,
+        client_id: createdClient.id,
+        user_id: portalUserId,
+        role: "owner",
+        status: "active",
+      },
+      { onConflict: "client_id,user_id" },
+    );
+
+    if (clientUserLinkError) {
+      throw clientUserLinkError;
+    }
+
     await insertAuditLog(supabaseAdmin, {
       organizationId,
       actorUserId: callerUser.id,
@@ -518,6 +584,8 @@ Deno.serve(async (req) => {
       entityId: createdClient.id,
       metadata: {
         email: parsedPayload.email,
+        clientEntityType: parsedPayload.clientEntityType,
+        parentClientId: isBranchClient ? parsedPayload.parentClientId : null,
         portalUserCreatedNow,
         portalAccessLinkType,
       },

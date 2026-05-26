@@ -35,6 +35,12 @@ interface Client {
   phone: string | null;
   obligation_completion_whatsapp_enabled: boolean;
   portal_user_id: string | null;
+  client_entity_type: "matriz" | "filial" | null;
+  parent_client_id: string | null;
+  parent_client?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 type CnpjLookupResponse = {
@@ -137,6 +143,16 @@ const statusColors: Record<string, string> = {
   Inativo: "bg-muted text-muted-foreground",
 };
 
+const clientEntityLabel: Record<"matriz" | "filial", string> = {
+  matriz: "Matriz",
+  filial: "Filial",
+};
+
+const clientEntityBadgeClass: Record<"matriz" | "filial", string> = {
+  matriz: "bg-primary/10 text-primary",
+  filial: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
+};
+
 export default function ClientsPage() {
   const navigate = useNavigate();
   const { role, currentOrganizationId } = useAuth();
@@ -155,6 +171,8 @@ export default function ClientsPage() {
     contact: "",
     email: "",
     phone: "",
+    entityType: "matriz" as "matriz" | "filial",
+    parentClientId: "",
     obligationCompletionWhatsAppEnabled: false,
     portalPassword: "123456",
   });
@@ -166,7 +184,7 @@ export default function ClientsPage() {
     setLoading(true);
     let query = supabase
       .from("clients")
-      .select("id, name, cnpj, regime, sector, status, contact, email, phone, obligation_completion_whatsapp_enabled, portal_user_id")
+      .select("id, name, cnpj, regime, sector, status, contact, email, phone, obligation_completion_whatsapp_enabled, portal_user_id, client_entity_type, parent_client_id, parent_client:parent_client_id(id, name)")
       .order("name");
 
     if (currentOrganizationId) {
@@ -222,6 +240,9 @@ export default function ClientsPage() {
 
   const activeClients = filtered.filter((client) => !isInactiveClient(client));
   const inactiveClients = filtered.filter(isInactiveClient);
+  const matrixClientOptions = clients
+    .filter((client) => (client.client_entity_type || "matriz") === "matriz")
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   const openCreateDialog = () => {
     if (!canCreateClients) {
@@ -316,9 +337,16 @@ export default function ClientsPage() {
     const normalizedPhone = formatPhoneValue(newClient.phone);
     const phoneDigits = normalizePhoneDigits(normalizedPhone);
     const password = newClient.portalPassword.trim() || "123456";
+    const entityType = newClient.entityType;
+    const parentClientId = entityType === "filial" ? newClient.parentClientId : null;
 
     if (newClient.cnpj.trim() && !normalizedCnpj) {
       toast.error("Informe um CNPJ valido com 14 digitos ou deixe em branco.");
+      return;
+    }
+
+    if (entityType === "filial" && !parentClientId) {
+      toast.error("Selecione a matriz desta filial.");
       return;
     }
 
@@ -356,6 +384,8 @@ export default function ClientsPage() {
         contact: normalizedContact || null,
         email: normalizedEmail,
         phone: normalizedPhone || null,
+        clientEntityType: entityType,
+        parentClientId,
         obligationCompletionWhatsAppEnabled: newClient.obligationCompletionWhatsAppEnabled,
         portalPassword: password,
       },
@@ -387,6 +417,8 @@ export default function ClientsPage() {
       contact: "",
       email: "",
       phone: "",
+      entityType: "matriz",
+      parentClientId: "",
       obligationCompletionWhatsAppEnabled: false,
       portalPassword: "123456",
     });
@@ -440,6 +472,7 @@ export default function ClientsPage() {
                   <tr className="border-b bg-muted/30">
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Empresa</th>
                     <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground md:table-cell">CNPJ</th>
+                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Tipo</th>
                     <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Tributação</th>
                     <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Segmento</th>
                     <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Status</th>
@@ -462,11 +495,25 @@ export default function ClientsPage() {
                           </div>
                           <div>
                             <div className="text-sm font-medium">{client.name}</div>
-                            <div className="text-xs text-muted-foreground">{client.contact}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {(client.client_entity_type || "matriz") === "filial" && client.parent_client?.name
+                                ? `Filial de ${client.parent_client.name}`
+                                : client.contact}
+                            </div>
                           </div>
                         </div>
                       </td>
                       <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
+                      <td className="hidden p-4 lg:table-cell">
+                        {(() => {
+                          const entityType = client.client_entity_type || "matriz";
+                          return (
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${clientEntityBadgeClass[entityType]}`}>
+                              {clientEntityLabel[entityType]}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="hidden p-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
                       <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
                       <td className="p-4">
@@ -481,7 +528,7 @@ export default function ClientsPage() {
                   {inactiveClients.length > 0 && (
                     <>
                       <tr className="bg-muted/30">
-                        <td colSpan={5} className="p-0">
+                        <td colSpan={6} className="p-0">
                           <button
                             type="button"
                             className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/40"
@@ -520,11 +567,25 @@ export default function ClientsPage() {
                                 </div>
                                 <div>
                                   <div className="text-sm font-medium">{client.name}</div>
-                                  <div className="text-xs text-muted-foreground">{client.contact}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {(client.client_entity_type || "matriz") === "filial" && client.parent_client?.name
+                                      ? `Filial de ${client.parent_client.name}`
+                                      : client.contact}
+                                  </div>
                                 </div>
                               </div>
                             </td>
                             <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
+                            <td className="hidden p-4 lg:table-cell">
+                              {(() => {
+                                const entityType = client.client_entity_type || "matriz";
+                                return (
+                                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${clientEntityBadgeClass[entityType]}`}>
+                                    {clientEntityLabel[entityType]}
+                                  </span>
+                                );
+                              })()}
+                            </td>
                             <td className="hidden p-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
                             <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
                             <td className="p-4">
@@ -540,7 +601,7 @@ export default function ClientsPage() {
                   )}
                   {activeClients.length === 0 && inactiveClients.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                      <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
                         Nenhum cliente encontrado
                       </td>
                     </tr>
@@ -597,6 +658,45 @@ export default function ClientsPage() {
                 </div>
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Tipo de unidade *</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={newClient.entityType === "matriz" ? "default" : "outline"}
+                  onClick={() => setNewClient((prev) => ({ ...prev, entityType: "matriz", parentClientId: "" }))}
+                >
+                  Matriz
+                </Button>
+                <Button
+                  type="button"
+                  variant={newClient.entityType === "filial" ? "default" : "outline"}
+                  onClick={() => setNewClient((prev) => ({ ...prev, entityType: "filial" }))}
+                >
+                  Filial
+                </Button>
+              </div>
+            </div>
+            {newClient.entityType === "filial" && (
+              <div className="space-y-2">
+                <Label>Matriz vinculada *</Label>
+                <select
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
+                  value={newClient.parentClientId}
+                  onChange={(event) => setNewClient((prev) => ({ ...prev, parentClientId: event.target.value }))}
+                >
+                  <option value="">Selecione a matriz</option>
+                  {matrixClientOptions.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Filiais podem usar o mesmo e-mail de portal da matriz vinculada.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Regime Tributario</Label>
