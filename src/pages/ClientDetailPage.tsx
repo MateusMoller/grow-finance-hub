@@ -50,7 +50,6 @@ type ClientDataRow = Database["public"]["Tables"]["client_data"]["Row"];
 type ClientPortalTaskRow = Database["public"]["Tables"]["client_portal_tasks"]["Row"];
 type PortalTaskStatus = "pending_client" | "in_analysis" | "completed" | "cancelled";
 type PortalTaskType = "document" | "request_return" | "analysis" | "deliverable" | "general";
-type DataMode = "monthly" | "cadastral";
 
 type ClientAcessoriasObligation = {
   id: string;
@@ -81,12 +80,9 @@ interface ClientCategoryConfig {
   icon: LucideIcon;
   label: string;
   color: string;
-  mode: DataMode;
   description: string;
   allowFiles?: boolean;
 }
-const monthlyCategoryKeys = ["contabilidade", "fiscal", "dp"] as const;
-type MonthlyCategoryKey = (typeof monthlyCategoryKeys)[number];
 const cadastralCategoryKeys = [
   "cadastro_clientes",
   "cadastro_fiscal",
@@ -105,46 +101,7 @@ const cadastralCategoryTabKeys = [
   "cadastro_honorarios",
   "cadastro_documentos",
 ] as const;
-type ClientCategoryKey = MonthlyCategoryKey | CadastralCategoryKey;
-const contabilidadeFields = [
-  { name: "faturamento_mensal", label: "Faturamento Mensal (R$)" },
-  { name: "despesas_operacionais", label: "Despesas Operacionais (R$)" },
-  { name: "lucro_liquido", label: "Lucro Liquido (R$)" },
-  { name: "ativo_total", label: "Ativo Total (R$)" },
-  { name: "passivo_total", label: "Passivo Total (R$)" },
-  { name: "patrimonio_liquido", label: "Patrimonio Liquido (R$)" },
-  { name: "capital_social", label: "Capital Social (R$)" },
-  { name: "contas_a_receber", label: "Contas a Receber (R$)" },
-  { name: "contas_a_pagar", label: "Contas a Pagar (R$)" },
-  { name: "estoque", label: "Estoque (R$)" },
-];
-const fiscalFields = [
-  { name: "regime_tributário", label: "Regime Tributario" },
-  { name: "aliquota_irpj", label: "Aliquota IRPJ (%)" },
-  { name: "aliquota_csll", label: "Aliquota CSLL (%)" },
-  { name: "aliquota_pis", label: "Aliquota PIS (%)" },
-  { name: "aliquota_cofins", label: "Aliquota COFINS (%)" },
-  { name: "aliquota_iss", label: "Aliquota ISS (%)" },
-  { name: "aliquota_icms", label: "Aliquota ICMS (%)" },
-  { name: "inscricao_estadual", label: "Inscricao Estadual" },
-  { name: "inscricao_municipal", label: "Inscricao Municipal" },
-  { name: "cnae_principal", label: "CNAE Principal" },
-  { name: "nfe_emitidas", label: "NF-e Emitidas no Período" },
-  { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
-];
-const dpFields = [
-  { name: "total_funcionarios", label: "Total de Funcionários" },
-  { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
-  { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
-  { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
-  { name: "inss_patronal", label: "INSS Patronal (R$)" },
-  { name: "vale_transporte", label: "Vale Transporte (R$)" },
-  { name: "vale_alimentacao", label: "Vale Alimentacao (R$)" },
-  { name: "admissões_periodo", label: "Admissoes no Período" },
-  { name: "demissoes_periodo", label: "Demissões no Período" },
-  { name: "ferias_programadas", label: "Férias Programadas" },
-  { name: "sindical_contribuicao", label: "Contribuicao Sindical (R$)" },
-];
+type ClientCategoryKey = CadastralCategoryKey;
 const cadastroClientesFields = [
   { name: "codigo", label: "Codigo" },
   { name: "nome_fantasia", label: "Nome Fantasia" },
@@ -257,39 +214,11 @@ const cadastroDocumentosFields = [
   { name: "outros_documentos", label: "Outros Documentos" },
 ];
 const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
-  contabilidade: {
-    fields: contabilidadeFields,
-    icon: Calculator,
-    label: "Contabilidade",
-    color: "text-primary",
-    mode: "monthly",
-    description: "Indicadores mensais para relatório gerencial financeiro e contábil.",
-    allowFiles: true,
-  },
-  fiscal: {
-    fields: fiscalFields,
-    icon: Receipt,
-    label: "Fiscal",
-    color: "text-amber-600",
-    mode: "monthly",
-    description: "Indicadores mensais da area fiscal para análise gerencial.",
-    allowFiles: true,
-  },
-  dp: {
-    fields: dpFields,
-    icon: Users,
-    label: "Dept. Pessoal",
-    color: "text-emerald-600",
-    mode: "monthly",
-    description: "Indicadores mensais de Departamento Pessoal para acompanhamento.",
-    allowFiles: true,
-  },
   cadastro_clientes: {
     fields: cadastroClientesFields,
     icon: Building2,
     label: "Cadastro Clientes",
     color: "text-primary",
-    mode: "cadastral",
     description: "Campos da aba Cadastro_Clientes da planilha (Razao Social e CNPJ ficam em Dados Gerais).",
   },
   cadastro_fiscal: {
@@ -297,7 +226,6 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     icon: Receipt,
     label: "Setor Fiscal",
     color: "text-amber-600",
-    mode: "cadastral",
     description: "Informações cadastrais do setor Fiscal conforme planilha.",
   },
   cadastro_departamento_pessoal: {
@@ -305,7 +233,6 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     icon: Users,
     label: "Setor DP",
     color: "text-emerald-600",
-    mode: "cadastral",
     description: "Informações cadastrais do setor Departamento Pessoal conforme planilha.",
   },
   cadastro_contabil: {
@@ -313,7 +240,6 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     icon: Calculator,
     label: "Setor Contábil",
     color: "text-primary",
-    mode: "cadastral",
     description: "Informações cadastrais do setor Contábil conforme planilha.",
   },
   cadastro_obrigacoes: {
@@ -321,7 +247,6 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     icon: ClipboardList,
     label: "Obrigações",
     color: "text-violet-600",
-    mode: "cadastral",
     description: "Obrigações acessorias cadastradas por cliente conforme planilha.",
   },
   cadastro_honorarios: {
@@ -329,7 +254,6 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     icon: FileText,
     label: "Honorarios",
     color: "text-cyan-700",
-    mode: "cadastral",
     description: "Dados cadastrais de plano e cobranca de honorarios conforme planilha.",
   },
   cadastro_documentos: {
@@ -337,7 +261,6 @@ const categoryConfig: Record<ClientCategoryKey, ClientCategoryConfig> = {
     icon: FolderOpen,
     label: "Documentos",
     color: "text-muted-foreground",
-    mode: "cadastral",
     description: "Checklist cadastral de documentos conforme planilha.",
     allowFiles: true,
   },
@@ -355,40 +278,6 @@ const yesNoRule: FieldValidationRule = { type: "yesNo" };
 const currencyRule: FieldValidationRule = { type: "number", min: 0 };
 
 const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, FieldValidationRule>>> = {
-  contabilidade: {
-    faturamento_mensal: currencyRule,
-    despesas_operacionais: currencyRule,
-    lucro_liquido: currencyRule,
-    ativo_total: currencyRule,
-    passivo_total: currencyRule,
-    patrimonio_liquido: currencyRule,
-    capital_social: currencyRule,
-    contas_a_receber: currencyRule,
-    contas_a_pagar: currencyRule,
-    estoque: currencyRule,
-  },
-  fiscal: {
-    aliquota_irpj: { type: "percent", min: 0, max: 100 },
-    aliquota_csll: { type: "percent", min: 0, max: 100 },
-    aliquota_pis: { type: "percent", min: 0, max: 100 },
-    aliquota_cofins: { type: "percent", min: 0, max: 100 },
-    aliquota_iss: { type: "percent", min: 0, max: 100 },
-    aliquota_icms: { type: "percent", min: 0, max: 100 },
-    nfe_emitidas: { type: "integer", min: 0 },
-    valor_total_nfe: currencyRule,
-  },
-  dp: {
-    total_funcionarios: { type: "integer", min: 0 },
-    folha_pagamento: currencyRule,
-    encargos_sociais: currencyRule,
-    fgts_mensal: currencyRule,
-    inss_patronal: currencyRule,
-    vale_transporte: currencyRule,
-    vale_alimentacao: currencyRule,
-    admissões_periodo: { type: "integer", min: 0 },
-    demissoes_periodo: { type: "integer", min: 0 },
-    sindical_contribuicao: currencyRule,
-  },
   cadastro_clientes: {
     codigo: { type: "integer", min: 0 },
     data_abertura: { type: "date" },
@@ -1169,16 +1058,12 @@ export default function ClientDetailPage() {
   const [saving, setSaving] = useState(false);
   const [savingData, setSavingData] = useState<ClientCategoryKey | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadCategory, setUploadCategory] = useState<ClientCategoryKey>("contabilidade");
+  const [uploadCategory, setUploadCategory] = useState<ClientCategoryKey>("cadastro_documentos");
   const [portalAccessEnabled, setPortalAccessEnabled] = useState(false);
   const [savingPortalAccess, setSavingPortalAccess] = useState(false);
   const [searchingCep, setSearchingCep] = useState(false);
   const [searchingCnpj, setSearchingCnpj] = useState(false);
   const [autoSaveGeneralInfo, setAutoSaveGeneralInfo] = useState(true);
-  const [period, setPeriod] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
   const [obligationMonthFilter, setObligationMonthFilter] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1201,28 +1086,20 @@ export default function ClientDetailPage() {
   const loadClientData = useCallback(async () => {
     if (!id) return;
 
-    const [monthlyRes, cadastralRes] = await Promise.all([
-      supabase
-        .from("client_data")
-        .select("*")
-        .eq("client_id", id)
-        .in("category", [...monthlyCategoryKeys])
-        .eq("period", period),
-      supabase
-        .from("client_data")
-        .select("*")
-        .eq("client_id", id)
-        .in("category", [...cadastralCategoryKeys])
-        .is("period", null),
-    ]);
+    const cadastralRes = await supabase
+      .from("client_data")
+      .select("*")
+      .eq("client_id", id)
+      .in("category", [...cadastralCategoryKeys])
+      .is("period", null);
 
-    if (monthlyRes.error || cadastralRes.error) {
-      toast.error("Não foi possível carregar os dados mensais e cadastrais.");
+    if (cadastralRes.error) {
+      toast.error("Não foi possível carregar os dados cadastrais.");
       return;
     }
 
     const map: Record<string, string> = {};
-    [...(monthlyRes.data || []), ...(cadastralRes.data || [])].forEach((dataRow: ClientDataRow) => {
+    (cadastralRes.data || []).forEach((dataRow: ClientDataRow) => {
       map[`${dataRow.category}__${dataRow.field_name}`] = dataRow.field_value || "";
     });
 
@@ -1230,7 +1107,7 @@ export default function ClientDetailPage() {
     setClientPartners(parsePartnersEntry(map[cadastroClientesPartnersEntryKey]));
     setDataFieldErrors({});
     setPartnerFieldErrors({});
-  }, [id, period]);
+  }, [id]);
 
   const loadClientObligations = useCallback(async () => {
     if (!id) return;
@@ -1340,7 +1217,7 @@ export default function ClientDetailPage() {
     if (id) {
       void loadClientData();
     }
-  }, [id, loadClientData, period]);
+  }, [id, loadClientData]);
 
   useEffect(() => {
     if (id) {
@@ -2077,7 +1954,7 @@ export default function ClientDetailPage() {
     setSavingData(category);
 
     const config = categoryConfig[category];
-    const entryPeriod = config.mode === "monthly" ? period : null;
+    const entryPeriod = null;
     const nextCategoryErrors: Record<string, string> = {};
     let nextPartnerErrors: Record<string, string> = {};
     const hasEmployees = category === "cadastro_departamento_pessoal"
@@ -2644,9 +2521,8 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="info">Dados Gerais</TabsTrigger>
-            <TabsTrigger value="dados_mensais">Dados Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
             <TabsTrigger value="obrigações">Obrigações</TabsTrigger>
             <TabsTrigger value="pendencias">Pendências</TabsTrigger>
@@ -3008,48 +2884,6 @@ export default function ClientDetailPage() {
                   Salvar Informações (opcional)
                 </Button>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="dados_mensais" className="space-y-4">
-            <div className="rounded-xl border bg-card p-6 space-y-5">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div className="space-y-1">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4" /> Dados mensais
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Informações necessarias para o relatório gerencial mensal.
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Período de referência</Label>
-                  <Input
-                    type="month"
-                    value={period}
-                    onChange={(event) => setPeriod(event.target.value)}
-                    className="h-9 w-48"
-                  />
-                </div>
-              </div>
-
-              <Tabs defaultValue={monthlyCategoryKeys[0]} className="space-y-4">
-                <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
-                  {monthlyCategoryKeys.map((category) => (
-                    <TabsTrigger key={category} value={category} className="h-9">
-                      {categoryConfig[category].label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                {monthlyCategoryKeys.map((category) => (
-                  <TabsContent key={category} value={category}>
-                    <div className="rounded-lg border p-4">
-                      {renderDataFields(category)}
-                    </div>
-                  </TabsContent>
-                ))}
-              </Tabs>
             </div>
           </TabsContent>
 

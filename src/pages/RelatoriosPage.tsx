@@ -25,7 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
+import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -239,14 +239,6 @@ const formatCellValue = (value: unknown, formatter?: (value: unknown) => string)
   return JSON.stringify(value);
 };
 
-const getCurrentCompetence = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-};
-
-const monthlyClientDataCategories = ["contabilidade", "fiscal", "dp"] as const;
-type MonthlyClientDataCategory = (typeof monthlyClientDataCategories)[number];
-
 const cadastralClientDataCategories = [
   "cadastro_clientes",
   "cadastro_fiscal",
@@ -257,7 +249,7 @@ const cadastralClientDataCategories = [
   "cadastro_documentos",
 ] as const;
 type CadastralClientDataCategory = (typeof cadastralClientDataCategories)[number];
-type ClientDataCategory = MonthlyClientDataCategory | CadastralClientDataCategory;
+type ClientDataCategory = CadastralClientDataCategory;
 
 const REPORT_QUERY_PAGE_SIZE = 1000;
 
@@ -273,12 +265,6 @@ interface ClientPartnerReportEntry {
   senha_gov: string;
 }
 
-const monthlyClientDataCategoryLabel: Record<MonthlyClientDataCategory, string> = {
-  contabilidade: "Contabilidade",
-  fiscal: "Fiscal",
-  dp: "Dept. Pessoal",
-};
-
 const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, string> = {
   cadastro_clientes: "Cadastro Clientes",
   cadastro_fiscal: "Setor Fiscal",
@@ -287,48 +273,6 @@ const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, stri
   cadastro_obrigacoes: "Obrigações",
   cadastro_honorarios: "Honorarios",
   cadastro_documentos: "Documentos",
-};
-
-const monthlyClientDataFieldsByCategory: Record<MonthlyClientDataCategory, ClientDataFieldDefinition[]> = {
-  contabilidade: [
-    { name: "faturamento_mensal", label: "Faturamento Mensal (R$)" },
-    { name: "despesas_operacionais", label: "Despesas Operacionais (R$)" },
-    { name: "lucro_liquido", label: "Lucro Liquido (R$)" },
-    { name: "ativo_total", label: "Ativo Total (R$)" },
-    { name: "passivo_total", label: "Passivo Total (R$)" },
-    { name: "patrimonio_liquido", label: "Patrimonio Liquido (R$)" },
-    { name: "capital_social", label: "Capital Social (R$)" },
-    { name: "contas_a_receber", label: "Contas a Receber (R$)" },
-    { name: "contas_a_pagar", label: "Contas a Pagar (R$)" },
-    { name: "estoque", label: "Estoque (R$)" },
-  ],
-  fiscal: [
-    { name: "regime_tributário", label: "Regime Tributario" },
-    { name: "aliquota_irpj", label: "Aliquota IRPJ (%)" },
-    { name: "aliquota_csll", label: "Aliquota CSLL (%)" },
-    { name: "aliquota_pis", label: "Aliquota PIS (%)" },
-    { name: "aliquota_cofins", label: "Aliquota COFINS (%)" },
-    { name: "aliquota_iss", label: "Aliquota ISS (%)" },
-    { name: "aliquota_icms", label: "Aliquota ICMS (%)" },
-    { name: "inscricao_estadual", label: "Inscricao Estadual" },
-    { name: "inscricao_municipal", label: "Inscricao Municipal" },
-    { name: "cnae_principal", label: "CNAE Principal" },
-    { name: "nfe_emitidas", label: "NF-e Emitidas no Período" },
-    { name: "valor_total_nfe", label: "Valor Total NF-e (R$)" },
-  ],
-  dp: [
-    { name: "total_funcionarios", label: "Total de Funcionários" },
-    { name: "folha_pagamento", label: "Folha de Pagamento (R$)" },
-    { name: "encargos_sociais", label: "Encargos Sociais (R$)" },
-    { name: "fgts_mensal", label: "FGTS Mensal (R$)" },
-    { name: "inss_patronal", label: "INSS Patronal (R$)" },
-    { name: "vale_transporte", label: "Vale Transporte (R$)" },
-    { name: "vale_alimentacao", label: "Vale Alimentacao (R$)" },
-    { name: "admissões_periodo", label: "Admissoes no Período" },
-    { name: "demissoes_periodo", label: "Demissões no Período" },
-    { name: "ferias_programadas", label: "Férias Programadas" },
-    { name: "sindical_contribuicao", label: "Contribuicao Sindical (R$)" },
-  ],
 };
 
 const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, ClientDataFieldDefinition[]> = {
@@ -496,24 +440,12 @@ const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
   };
 };
 
-const toMonthlyClientDataColumnKey = (category: MonthlyClientDataCategory, fieldName: string) =>
-  `mensal_${category}_${fieldName}`;
 const toCadastralClientDataColumnKey = (category: CadastralClientDataCategory, fieldName: string) =>
   `cadastral_${category}_${fieldName}`;
 
-const monthlyClientDataCategorySet = new Set<string>(monthlyClientDataCategories);
 const cadastralClientDataCategorySet = new Set<string>(cadastralClientDataCategories);
 
 const clientDataFieldNameByCategoryAndToken = new Map<string, Map<string, string>>([
-  ...monthlyClientDataCategories.map((category): [string, Map<string, string>] => [
-    category,
-    new Map(
-      monthlyClientDataFieldsByCategory[category].map((field) => [
-        normalizeClientDataFieldToken(field.name),
-        field.name,
-      ]),
-    ),
-  ]),
   ...cadastralClientDataCategories.map((category): [string, Map<string, string>] => [
     category,
     new Map(
@@ -588,13 +520,6 @@ const fetchClientDataRowsForReport = async (
 };
 
 const clientDataReportColumns: ReportColumnDefinition[] = [
-  { key: "dados_mensais_periodo", label: "Dados Mensais: Período" },
-  ...monthlyClientDataCategories.flatMap((category) =>
-    monthlyClientDataFieldsByCategory[category].map((field) => ({
-      key: toMonthlyClientDataColumnKey(category, field.name),
-      label: `Mensal ${monthlyClientDataCategoryLabel[category]}: ${field.label}`,
-    })),
-  ),
   ...cadastralClientDataCategories.flatMap((category) =>
     cadastralClientDataFieldsByCategory[category].map((field) => ({
       key: toCadastralClientDataColumnKey(category, field.name),
@@ -660,11 +585,6 @@ const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
       "contato",
       "email",
       "telefone",
-      "dados_mensais_periodo",
-      "mensal_contabilidade_faturamento_mensal",
-      "mensal_contabilidade_lucro_liquido",
-      "mensal_fiscal_regime_tributário",
-      "mensal_dp_total_funcionarios",
       "cadastral_cadastro_clientes_nome_fantasia",
       "cadastral_cadastro_clientes_regime_tributário",
       "cadastral_cadastro_clientes_socios_quantidade",
@@ -746,21 +666,11 @@ const taskTimelineColumnKeys = new Set(["prazo", "criado_em", "atualizado_em"]);
 const teamIdentityColumnKeys = new Set(["colaborador", "papel", "usuario_id"]);
 const teamTimelineColumnKeys = new Set(["criado_em", "atualizado_em", "papel_definido_em"]);
 
-const resolveMonthlyCategoryFromColumnKey = (columnKey: string): MonthlyClientDataCategory | null =>
-  monthlyClientDataCategories.find((category) => columnKey.startsWith(`mensal_${category}_`)) || null;
-
 const resolveCadastralCategoryFromColumnKey = (columnKey: string): CadastralClientDataCategory | null =>
   cadastralClientDataCategories.find((category) => columnKey.startsWith(`cadastral_${category}_`)) || null;
 
 const getColumnModulePath = (datasetId: ReportDatasetId, columnKey: string): [string, string] => {
   if (datasetId === "clientes") {
-    if (columnKey === "dados_mensais_periodo") return ["Clientes", "Dados Mensais > Período"];
-
-    const monthlyCategory = resolveMonthlyCategoryFromColumnKey(columnKey);
-    if (monthlyCategory) {
-      return ["Clientes", `Dados Mensais > ${monthlyClientDataCategoryLabel[monthlyCategory]}`];
-    }
-
     const cadastralCategory = resolveCadastralCategoryFromColumnKey(columnKey);
     if (cadastralCategory) {
       return ["Clientes", `Dados Cadastrais > ${cadastralClientDataCategoryLabel[cadastralCategory]}`];
@@ -829,7 +739,6 @@ const mapSavedReportRow = (row: SavedReportRow): SavedReportConfig | null => {
 export default function RelatoriosPage() {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
-  const clientDataReportPeriod = normalizeCompetence(selectedCompetence) || getCurrentCompetence();
 
   const [loading, setLoading] = useState(true);
   const [loadingSavedReports, setLoadingSavedReports] = useState(true);
@@ -852,12 +761,11 @@ export default function RelatoriosPage() {
   const loadReportData = useCallback(async () => {
     setLoading(true);
 
-    const [clientsRes, monthlyClientDataRes, cadastralClientDataRes, leadsRes, tasksRes, profilesRes, rolesRes] = await Promise.all([
+    const [clientsRes, cadastralClientDataRes, leadsRes, tasksRes, profilesRes, rolesRes] = await Promise.all([
       supabase
         .from("clients")
         .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
         .order("name"),
-      fetchClientDataRowsForReport(monthlyClientDataCategories, { period: clientDataReportPeriod }),
       fetchClientDataRowsForReport(cadastralClientDataCategories),
       supabase
         .from("site_leads")
@@ -881,7 +789,6 @@ export default function RelatoriosPage() {
 
     const firstError =
       clientsRes.error ||
-      monthlyClientDataRes.error ||
       cadastralClientDataRes.error ||
       leadsRes.error ||
       tasksRes.error ||
@@ -893,10 +800,7 @@ export default function RelatoriosPage() {
     }
 
     const nextClients = (clientsRes.data || []) as ClientRow[];
-    const nextClientData = [
-      ...(monthlyClientDataRes.data || []),
-      ...(cadastralClientDataRes.data || []),
-    ];
+    const nextClientData = cadastralClientDataRes.data || [];
     const nextLeads = (leadsRes.data || []) as LeadRow[];
     const nextTasks = (tasksRes.data || []) as TaskRow[];
     const nextProfiles = (profilesRes.data || []) as ProfileRow[];
@@ -939,7 +843,7 @@ export default function RelatoriosPage() {
     setTeam(teamRows);
     setLastUpdatedAt(new Date().toISOString());
     setLoading(false);
-  }, [clientDataReportPeriod]);
+  }, []);
 
   const loadSavedReports = useCallback(async () => {
     if (!user?.id) {
@@ -1043,9 +947,7 @@ export default function RelatoriosPage() {
 
       let columnKey: string | null = null;
 
-      if (entry.period && monthlyClientDataCategorySet.has(entry.category)) {
-        columnKey = toMonthlyClientDataColumnKey(entry.category as MonthlyClientDataCategory, fieldName);
-      } else if (cadastralClientDataCategorySet.has(entry.category)) {
+      if (cadastralClientDataCategorySet.has(entry.category)) {
         columnKey = toCadastralClientDataColumnKey(entry.category as CadastralClientDataCategory, fieldName);
       }
 
@@ -1081,7 +983,6 @@ export default function RelatoriosPage() {
           telefone: client.phone || "",
           criado_em: client.created_at,
           atualizado_em: client.updated_at,
-          dados_mensais_periodo: clientDataReportPeriod,
           ...clientData,
         };
       }),
@@ -1117,16 +1018,15 @@ export default function RelatoriosPage() {
         papel_definido_em: member.role_created_at,
       })),
     }),
-    [clientDataByClientId, clientDataReportPeriod, filteredClients, filteredLeads, filteredTasks, filteredTeam],
+    [clientDataByClientId, filteredClients, filteredLeads, filteredTasks, filteredTeam],
   );
 
   const activeFilterBadges = useMemo(() => {
     const items: string[] = [];
     if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
     if (selectedCompetence) items.push(`Competência: ${selectedCompetence}`);
-    items.push(`Dados mensais (relatório): ${clientDataReportPeriod}`);
     return items;
-  }, [clientDataReportPeriod, selectedCompany, selectedCompetence]);
+  }, [selectedCompany, selectedCompetence]);
 
   const customDefinition = reportDefinitions[customDatasetId];
 
