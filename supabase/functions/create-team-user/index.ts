@@ -170,22 +170,28 @@ Deno.serve(async (req) => {
       throw callerRolesError;
     }
 
-    const isCallerAdmin = (callerRoles || []).some((row) => row.role === "admin");
-    if (!isCallerAdmin) {
-      return jsonResponse({ error: "Only admins can create users" }, 403);
-    }
-
-    const callerAdminRole = (callerRoles || []).find((row) => row.role === "admin" && row.organization_id);
-    const organizationId = callerAdminRole?.organization_id
-      ? String(callerAdminRole.organization_id)
-      : await resolveDefaultOrganizationId(supabaseAdmin);
-    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
-
     const body = await req.json();
     const payload = asRecord(body);
     if (!payload) {
       return jsonResponse({ error: "Invalid payload" }, 400);
     }
+
+    const requestedOrganizationId = asTrimmedString(payload.organizationId);
+    const callerAdminRole = (callerRoles || []).find(
+      (row) =>
+        row.role === "admin" &&
+        row.organization_id &&
+        (!requestedOrganizationId || row.organization_id === requestedOrganizationId),
+    );
+    const hasLegacyAdminRole = !requestedOrganizationId && (callerRoles || []).some((row) => row.role === "admin");
+    if (!callerAdminRole && !hasLegacyAdminRole) {
+      return jsonResponse({ error: "Only admins can create users" }, 403);
+    }
+
+    const organizationId = callerAdminRole?.organization_id
+      ? String(callerAdminRole.organization_id)
+      : await resolveDefaultOrganizationId(supabaseAdmin);
+    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
 
     const parsedPayload: CreateTeamUserPayload = {
       displayName: asTrimmedString(payload.displayName) || "",

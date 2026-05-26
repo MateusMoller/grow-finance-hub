@@ -159,20 +159,24 @@ Deno.serve(async (req) => {
       throw callerRolesError;
     }
 
+    const body = await req.json();
+    const payload = asRecord(body);
+    if (!payload) {
+      return jsonResponse({ error: "Invalid payload" }, 400);
+    }
+
+    const requestedOrganizationId = asUuid(payload.organizationId);
     const callerAdminRole = ((callerRoles || []) as RoleRow[]).find(
-      (row) => row.role === "admin" && row.organization_id,
+      (row) =>
+        row.role === "admin" &&
+        row.organization_id &&
+        (!requestedOrganizationId || row.organization_id === requestedOrganizationId),
     );
     if (!callerAdminRole?.organization_id) {
       return jsonResponse({ error: "Only admins can manage users" }, 403);
     }
     const organizationId = callerAdminRole.organization_id;
     await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
-
-    const body = await req.json();
-    const payload = asRecord(body);
-    if (!payload) {
-      return jsonResponse({ error: "Invalid payload" }, 400);
-    }
 
     const action = asAction(payload.action);
     const userId = asUuid(payload.userId);
