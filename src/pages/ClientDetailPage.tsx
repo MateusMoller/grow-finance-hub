@@ -1049,6 +1049,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<ClientRecord | null>(null);
   const [clientForm, setClientForm] = useState<Partial<ClientRecord>>({});
   const [dataEntries, setDataEntries] = useState<Record<string, string>>({});
+  const dataEntriesRef = useRef<Record<string, string>>({});
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
   const [clientPartners, setClientPartners] = useState<ClientPartnerForm[]>([]);
   const [partnerFieldErrors, setPartnerFieldErrors] = useState<Record<string, string>>({});
@@ -1077,6 +1078,10 @@ export default function ClientDetailPage() {
     sector: "Geral",
     dueDate: "",
   });
+
+  useEffect(() => {
+    dataEntriesRef.current = dataEntries;
+  }, [dataEntries]);
   const [creatingPortalTask, setCreatingPortalTask] = useState(false);
   const [updatingPortalTaskId, setUpdatingPortalTaskId] = useState<string | null>(null);
   const [deletingPortalTaskId, setDeletingPortalTaskId] = useState<string | null>(null);
@@ -1103,6 +1108,7 @@ export default function ClientDetailPage() {
       map[`${dataRow.category}__${dataRow.field_name}`] = dataRow.field_value || "";
     });
 
+    dataEntriesRef.current = map;
     setDataEntries(map);
     setClientPartners(parsePartnersEntry(map[cadastroClientesPartnersEntryKey]));
     setDataFieldErrors({});
@@ -1234,7 +1240,11 @@ export default function ClientDetailPage() {
     const draftValue = normalizeFieldValueForInput(rule, fieldName, value, category);
     const normalizedValue = normalizeFieldValueForSave(rule, draftValue);
 
-    setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
+    setDataEntries((prev) => {
+      const next = { ...prev, [key]: draftValue };
+      dataEntriesRef.current = next;
+      return next;
+    });
 
     if (category === "cadastro_clientes") {
       if (fieldName === "regime_tributário") {
@@ -1244,10 +1254,10 @@ export default function ClientDetailPage() {
       if (fieldName === "ddd" || fieldName === "telefone") {
         const nextDdd = fieldName === "ddd"
           ? draftValue
-          : (dataEntries[getCategoryFieldEntryKey("cadastro_clientes", "ddd")] || "");
+          : (dataEntriesRef.current[getCategoryFieldEntryKey("cadastro_clientes", "ddd")] || "");
         const nextPhone = fieldName === "telefone"
           ? draftValue
-          : (dataEntries[getCategoryFieldEntryKey("cadastro_clientes", "telefone")] || "");
+          : (dataEntriesRef.current[getCategoryFieldEntryKey("cadastro_clientes", "telefone")] || "");
         const mergedPhone = buildClientPhoneFromCadastro(nextDdd, nextPhone);
         setClientForm((prev) => ({ ...prev, phone: mergedPhone }));
       }
@@ -1272,7 +1282,11 @@ export default function ClientDetailPage() {
 
     // Preserve the raw typed value for address-related inputs.
     // Canonical normalization still runs on save.
-    setDataEntries((prev) => ({ ...prev, [key]: draftValue }));
+    setDataEntries((prev) => {
+      const next = { ...prev, [key]: draftValue };
+      dataEntriesRef.current = next;
+      return next;
+    });
 
     const error = validateFieldValue(
       rule,
@@ -1295,10 +1309,22 @@ export default function ClientDetailPage() {
     parseBusinessProfilesValue(getGeneralInfoFieldValue("perfil_atuacao"));
 
   const toggleBusinessProfile = (profile: ClientBusinessProfileKey) => {
-    const selected = getSelectedBusinessProfiles();
-    const isSelected = selected.includes(profile);
-    const next = isSelected ? selected.filter((item) => item !== profile) : [...selected, profile];
-    setGeneralInfoFieldValue("perfil_atuacao", serializeBusinessProfilesValue(next));
+    const key = getCategoryFieldEntryKey("cadastro_clientes", "perfil_atuacao");
+
+    setDataEntries((prev) => {
+      const selected = parseBusinessProfilesValue(prev[key] || "");
+      const isSelected = selected.includes(profile);
+      const nextSelected = isSelected ? selected.filter((item) => item !== profile) : [...selected, profile];
+      const next = { ...prev, [key]: serializeBusinessProfilesValue(nextSelected) };
+      dataEntriesRef.current = next;
+      return next;
+    });
+
+    setDataFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const handleCepLookup = async (rawCep: string) => {
@@ -1537,9 +1563,10 @@ export default function ClientDetailPage() {
     }
 
     const nextGeneralFieldErrors: Record<string, string> = {};
+    const latestDataEntries = dataEntriesRef.current;
     const normalizedGeneralFieldValues = generalInfoCadastralFields.map((fieldName) => {
       const key = getCategoryFieldEntryKey("cadastro_clientes", fieldName);
-      const currentValue = dataEntries[key] || "";
+      const currentValue = latestDataEntries[key] || "";
       const rule = getFieldRule("cadastro_clientes", fieldName);
       const normalizedValue = normalizeFieldValueForSave(rule, currentValue);
       const fieldValidationError = validateFieldValue(rule, normalizedValue, "cadastro_clientes", fieldName);
@@ -1728,6 +1755,7 @@ export default function ClientDetailPage() {
         mirroredCadastroFieldValues.forEach((entry) => {
           next[getCategoryFieldEntryKey("cadastro_clientes", entry.fieldName)] = entry.value;
         });
+        dataEntriesRef.current = next;
         return next;
       });
     } finally {
