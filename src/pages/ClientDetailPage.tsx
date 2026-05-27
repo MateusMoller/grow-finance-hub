@@ -1969,7 +1969,11 @@ export default function ClientDetailPage() {
       const currentValue = dataEntries[key] || "";
       const shouldClearEmployeeDependentField =
         category === "cadastro_departamento_pessoal" &&
-        cadastroDpEmployeeDependentFieldNames.has(f.name) &&
+        (
+          cadastroDpEmployeeDependentFieldNames.has(f.name) ||
+          cadastroDpClinicaParceiraFieldNames.has(f.name) ||
+          cadastroDpSindicatoFieldNames.has(f.name)
+        ) &&
         !hasEmployees;
       const normalizedValue = shouldClearEmployeeDependentField
         ? ""
@@ -2225,6 +2229,7 @@ export default function ClientDetailPage() {
           dataEntries[getCategoryFieldEntryKey("cadastro_departamento_pessoal", "possui_funcionarios")] || "",
         )
       : "";
+    const shouldShowEmployeeLinkedSections = isCadastroDp && possuiFuncionariosValue === "sim";
     const primaryFields = isCadastroDp
       ? config.fields.filter(
           (field) =>
@@ -2292,7 +2297,7 @@ export default function ClientDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {primaryFields.map(renderField)}
         </div>
-        {isCadastroDp && (
+        {shouldShowEmployeeLinkedSections && (
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
             <div className="space-y-1">
               <h4 className="text-sm font-medium">Informacoes da Clinica Parceira</h4>
@@ -2305,7 +2310,7 @@ export default function ClientDetailPage() {
             </div>
           </div>
         )}
-        {isCadastroDp && (
+        {shouldShowEmployeeLinkedSections && (
           <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
             <div className="space-y-1">
               <h4 className="text-sm font-medium">Informacoes do Sindicato</h4>
