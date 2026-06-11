@@ -37,6 +37,26 @@ Geração rápida das chaves VAPID:
 npx web-push generate-vapid-keys
 ```
 
+## E-mails via Resend
+
+Os envios de contato do site, newsletter e conclusao de obrigacoes usam a Resend nas Edge Functions.
+
+Configure estes secrets no Supabase:
+
+- `RESEND_API_KEY`
+- `SITE_CONTACT_FROM_EMAIL` (opcional, fallback: `NEWSLETTER_FROM_EMAIL`)
+- `SITE_CONTACT_TO_EMAIL` (opcional, fallback: `contato@contabilidadegrow.com.br`)
+- `NEWSLETTER_FROM_EMAIL`
+- `OBLIGATION_FROM_EMAIL` (opcional, fallback: `NEWSLETTER_FROM_EMAIL`)
+
+Functions relacionadas:
+
+- `send-site-contact-email`
+- `send-newsletter-broadcast`
+- `grow-obligations-module`
+
+Antes do envio real, valide o dominio/remetente na Resend e aplique os registros DNS solicitados por ela.
+
 ## Comandos principais
 
 ```bash

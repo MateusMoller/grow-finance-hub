@@ -59,3 +59,8 @@ Adaptacao ao Grow Finance Hub:
 - Para tarefas de codigo: implementar, validar com comandos disponiveis e reportar arquivos alterados e testes executados.
 - Para tarefas visuais: entregar algo avaliavel visualmente sempre que possivel, preservando funcionalidades.
 - Para novo projeto ou nova stack: apresentar opcoes de linguagem/framework com pontos fortes/fracos e perguntar a preferencia antes de iniciar.
+
+<!-- SPECKIT START -->
+Current Spec Kit feature plan:
+`specs/001-security-parameters/plan.md`
+<!-- SPECKIT END -->

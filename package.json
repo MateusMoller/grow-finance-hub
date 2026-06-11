@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "check:env": "node scripts/validate-env.mjs",
+    "security:inventory": "node scripts/security/build-security-control-matrix.mjs",
     "build": "vite build",
     "build:robot": "npx tsc -p tools/grow-document-robot/tsconfig.json",
     "build:pages": "vite build --base=/grow-finance-hub/",
