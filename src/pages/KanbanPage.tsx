@@ -14,12 +14,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
 import { Check, ChevronsUpDown, Filter, Loader2, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
+import { canAccessTaskSector, getTaskSectorAccess, normalizeTaskSectorLabel } from "@/lib/taskSectorAccess";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -36,6 +37,8 @@ const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
 };
 
 const sectors = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
+
+const taskSectorOptions = ["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societario", "Geral"];
 
 const priorityDot: Record<string, string> = {
   Urgente: "bg-destructive",
@@ -66,6 +69,8 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+
+const normalizeVisibleSector = (value: string) => normalizeTaskSectorLabel(normalizeSector(value));
 
 const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
   const normalized = normalizeText(errorMessage || "");
@@ -116,7 +121,7 @@ interface TaskKanbanViewProps {
 }
 
 export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
-  const { user, role } = useAuth();
+  const { user, role, roles } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const location = useLocation();
   const navigate = useNavigate();
@@ -146,6 +151,12 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   });
 
   const actorLabel = user?.email || "Usuário";
+  const activeRoles = useMemo(() => (roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
+  const taskSectorAccess = useMemo(() => getTaskSectorAccess(activeRoles), [activeRoles]);
+  const availableSectors = useMemo(() => {
+    if (taskSectorAccess.canAccessAllTaskSectors) return taskSectorOptions;
+    return taskSectorAccess.allowedTaskSectors;
+  }, [taskSectorAccess]);
 
   const registerTaskHistory = (taskId: string, action: string, details?: string) => {
     if (!user?.id) return;
@@ -165,11 +176,6 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   );
 
   useEffect(() => {
-    void fetchTasks();
-    void fetchClients();
-  }, []);
-
-  useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("create") !== "1") return;
 
@@ -185,7 +191,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     );
   }, [location.pathname, location.search, navigate]);
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from("kanban_tasks").select("*").order("created_at", { ascending: false });
 
@@ -200,9 +206,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return {
         ...task,
         priority: normalizePriority(task.priority || ""),
-        sector: normalizeSector(task.sector || ""),
+        sector: normalizeVisibleSector(task.sector || ""),
         status: task.status as KanbanStatus,
-        tags: (task.tags?.length ? task.tags : task.sector ? [task.sector] : []).map((sector) => normalizeSector(sector)),
+        tags: (task.tags?.length ? task.tags : task.sector ? [task.sector] : []).map((sector) => normalizeVisibleSector(sector)),
         subtasks: parseSubtasks(task.subtasks),
         integration_source:
           typeof taskRecord.integration_source === "string" ? taskRecord.integration_source : null,
@@ -210,11 +216,11 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
           typeof taskRecord.integration_task_id === "string" ? taskRecord.integration_task_id : null,
       };
     });
-    setTasks(normalized as KanbanTaskItem[]);
+    setTasks(normalized.filter((task) => canAccessTaskSector(task.sector, activeRoles)) as KanbanTaskItem[]);
     setLoading(false);
-  };
+  }, [activeRoles]);
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     setLoadingClients(true);
     const { data, error } = await supabase
       .from("clients")
@@ -229,16 +235,33 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
     setClients((data || []) as ClientOption[]);
     setLoadingClients(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchTasks();
+    void fetchClients();
+  }, [fetchClients, fetchTasks, user?.id]);
 
   const filteredTasks = tasks.filter((task) => {
     if (!isAdmin && task.status === "archived") return false;
     if (!matchesSelectedCompany(task.client_name, selectedCompany)) return false;
     if (!matchesSelectedCompetence(getTaskCompetence(task.due_date, task.created_at), selectedCompetence)) return false;
     const taskSectors = task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
-    if (sectorFilter !== "all" && !taskSectors.includes(sectorFilter)) return false;
+    if (sectorFilter !== "all" && !taskSectors.some((sector) => normalizeVisibleSector(sector) === sectorFilter)) return false;
     return true;
   });
+
+  useEffect(() => {
+    if (sectorFilter === "all") return;
+    if (!availableSectors.includes(sectorFilter)) setSectorFilter("all");
+  }, [availableSectors, sectorFilter]);
+
+  useEffect(() => {
+    if (availableSectors.length === 0) return;
+    if (!availableSectors.includes(newTask.sector)) {
+      setNewTask((prev) => ({ ...prev, sector: availableSectors[0] }));
+    }
+  }, [availableSectors, newTask.sector]);
 
   const tasksByStatus = useMemo(() => {
     const grouped = tasksByStatusTemplate();
@@ -392,6 +415,11 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
+    if (!canAccessTaskSector(newTask.sector, activeRoles)) {
+      toast.error("Voce nao tem permissao para criar tarefas neste setor");
+      return;
+    }
+
     const selectedClient = clients.find(
       (client) => normalizeText(client.name) === normalizeText(newTask.client_name)
     );
@@ -426,7 +454,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
     setNewSubtaskTitle("");
-    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil", subtasks: [] });
+    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
     void fetchTasks();
   };
 
@@ -499,7 +527,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Setores</SelectItem>
-                {sectors.map((sector) => (
+                {availableSectors.map((sector) => (
                   <SelectItem key={sector} value={sector}>
                     {sector}
                   </SelectItem>
@@ -690,7 +718,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                 <Label>Setor</Label>
                 <Select value={newTask.sector} onValueChange={(value) => setNewTask((prev) => ({ ...prev, sector: value }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
+                  <SelectContent>{availableSectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
@@ -708,7 +736,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               onClick={() => {
                 setCreateOpen(false);
                 setNewSubtaskTitle("");
-                setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil", subtasks: [] });
+                setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
               }}
             >
               Cancelar
@@ -825,6 +853,3 @@ function KanbanCard({
     </motion.div>
   );
 }
-
-
-

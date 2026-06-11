@@ -3,6 +3,7 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
+import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -23,17 +24,6 @@ interface InternalUser {
 }
 
 type ActiveChat = { type: "group" } | { type: "direct"; targetUserId: string };
-
-const internalRoles = new Set([
-  "admin",
-  "director",
-  "manager",
-  "employee",
-  "commercial",
-  "departamento_pessoal",
-  "fiscal",
-  "contabil",
-]);
 
 const formatMessageTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -65,7 +55,7 @@ const initialsFromName = (name: string) => {
 };
 
 export default function ChatInternoPage() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, role, roles, currentOrganizationId, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<InternalMessage[]>([]);
   const [contacts, setContacts] = useState<InternalUser[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
@@ -75,7 +65,8 @@ export default function ChatInternoPage() {
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const canAccess = internalRoles.has(String(role || ""));
+  const activeRoles = useMemo(() => normalizeRoles(roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
+  const canAccess = hasAnyInternalRole(activeRoles);
   const activeDirectUser = activeChat.type === "direct"
     ? contacts.find((contact) => contact.userId === activeChat.targetUserId) || null
     : null;
@@ -89,7 +80,9 @@ export default function ChatInternoPage() {
 
     setLoadingContacts(true);
 
-    const { data, error } = await supabase.rpc("list_internal_user_profiles");
+    const { data, error } = currentOrganizationId
+      ? await supabase.rpc("list_internal_user_profiles", { _organization_id: currentOrganizationId })
+      : await supabase.rpc("list_internal_user_profiles");
     if (error) {
       toast.error(`Não foi possível carregar usuários do chat: ${error.message}`);
       setContacts([]);
@@ -106,7 +99,7 @@ export default function ChatInternoPage() {
 
     setContacts(users);
     setLoadingContacts(false);
-  }, [user?.id]);
+  }, [currentOrganizationId, user?.id]);
 
   const fetchMessages = useCallback(async () => {
     if (!user?.id) {
@@ -122,6 +115,10 @@ export default function ChatInternoPage() {
       .select("*")
       .order("created_at", { ascending: true })
       .limit(500);
+
+    if (currentOrganizationId) {
+      query = query.eq("organization_id", currentOrganizationId);
+    }
 
     if (activeChat.type === "group") {
       query = query.eq("chat_type", "group").is("recipient_user_id", null);
@@ -173,7 +170,7 @@ export default function ChatInternoPage() {
     );
 
     setLoadingMessages(false);
-  }, [activeChat, user?.id]);
+  }, [activeChat, currentOrganizationId, user?.id]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -238,16 +235,18 @@ export default function ChatInternoPage() {
     const payload =
       activeChat.type === "group"
         ? {
-            user_id: user.id,
-            content,
-            chat_type: "group",
-            recipient_user_id: null,
-          }
+          user_id: user.id,
+          content,
+          chat_type: "group",
+          recipient_user_id: null,
+          ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+        }
         : {
             user_id: user.id,
             content,
             chat_type: "direct",
             recipient_user_id: activeChat.targetUserId,
+            ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
           };
 
     const { error } = await supabase.from("internal_chat_messages").insert(payload);

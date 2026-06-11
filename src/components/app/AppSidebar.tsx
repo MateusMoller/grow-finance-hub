@@ -131,12 +131,13 @@ export function AppSidebar() {
         (item) =>
           item.url === "/app/chat-interno" ||
           item.url === "/app/relatorios" ||
-          item.url === "/app/financeiro" ||
           item.url === "/app/obrigacoes",
       )
     : isAdmin
       ? featureFilteredOperationalItems
-      : featureFilteredOperationalItems.filter((item) => item.url !== "/app/newsletter");
+      : featureFilteredOperationalItems.filter(
+          (item) => item.url !== "/app/newsletter" && item.url !== "/app/financeiro",
+        );
 
   const visibleSystemItems = isDepartmentRole
     ? systemItems.filter((item) => item.url === "/app/manual" || item.url === "/app/sugestoes")

@@ -37,6 +37,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import { canAccessTaskSector, getTaskSectorAccess, normalizeTaskSectorLabel } from "@/lib/taskSectorAccess";
 import type { Tables } from "@/integrations/supabase/types";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
@@ -103,7 +104,7 @@ const statusConfig: Record<string, { color: string; bg: string; icon: typeof Cir
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
 };
 
-const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"];
+const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Geral"];
 const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
 
 const normalizeText = (value: string) =>
@@ -114,12 +115,7 @@ const normalizeText = (value: string) =>
     .trim();
 
 const normalizeSector = (value: string): string => {
-  const normalized = normalizeText(value);
-  if (normalized.includes("contabil")) return "Contabil";
-  if (normalized.includes("fiscal")) return "Fiscal";
-  if (normalized.includes("pessoal")) return "Departamento Pessoal";
-  if (normalized.includes("finance")) return "Financeiro";
-  return value || "Geral";
+  return normalizeTaskSectorLabel(value);
 };
 
 const normalizePriority = (value: string): Task["priority"] => {
@@ -198,7 +194,7 @@ interface TaskListViewProps {
 }
 
 export function TaskListView({ embedded = false }: TaskListViewProps) {
-  const { user } = useAuth();
+  const { user, role, roles } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const location = useLocation();
   const navigate = useNavigate();
@@ -229,6 +225,16 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   });
 
   const actorLabel = user?.email || "Usuário";
+  const activeRoles = useMemo(() => (roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
+  const taskSectorAccess = useMemo(() => getTaskSectorAccess(activeRoles), [activeRoles]);
+  const availableSectors = useMemo(() => {
+    if (taskSectorAccess.canAccessAllTaskSectors) return sectors.filter((sector) => sector !== "Todos");
+    return taskSectorAccess.allowedTaskSectors;
+  }, [taskSectorAccess]);
+  const sectorFilterOptions = useMemo(
+    () => (taskSectorAccess.canAccessAllTaskSectors ? sectors : ["Todos", ...availableSectors]),
+    [availableSectors, taskSectorAccess.canAccessAllTaskSectors],
+  );
 
   const registerTaskHistory = (taskId: string, action: string, details?: string) => {
     if (!user?.id) return;
@@ -276,12 +282,13 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     const subtasksColumnReturned = rows.some((row) => Object.prototype.hasOwnProperty.call(row, "subtasks"));
     const mapped = rows
       .filter((row) => row.status !== "archived")
-      .map(mapRowToTask);
+      .map(mapRowToTask)
+      .filter((task) => canAccessTaskSector(task.sector, activeRoles));
 
     setSubtasksAvailable((prev) => (rows.length === 0 ? prev : subtasksColumnReturned));
     setTasks(mapped);
     setLoading(false);
-  }, []);
+  }, [activeRoles]);
 
   const loadClients = useCallback(async () => {
     setLoadingClients(true);
@@ -305,6 +312,18 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     void loadTasks();
     void loadClients();
   }, [loadClients, loadTasks]);
+
+  useEffect(() => {
+    if (sectorFilter === "Todos") return;
+    if (!availableSectors.includes(sectorFilter)) setSectorFilter("Todos");
+  }, [availableSectors, sectorFilter]);
+
+  useEffect(() => {
+    if (availableSectors.length === 0) return;
+    if (!availableSectors.includes(newTask.sector)) {
+      setNewTask((prev) => ({ ...prev, sector: availableSectors[0] }));
+    }
+  }, [availableSectors, newTask.sector]);
 
   const scopedTasks = useMemo(
     () =>
@@ -395,6 +414,11 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
+    if (!canAccessTaskSector(newTask.sector, activeRoles)) {
+      toast.error("Voce nao tem permissao para criar tarefas neste setor");
+      return;
+    }
+
     const selectedClient = clients.find(
       (client) => normalizeText(client.name) === normalizeText(newTask.client)
     );
@@ -451,7 +475,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       title: "",
       description: "",
       client: "",
-      sector: "Contabil",
+      sector: availableSectors[0] || "Geral",
       assignee: "",
       priority: "Media",
       dueDate: "",
@@ -599,7 +623,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)}>
-              {sectors.map((sector) => (
+              {sectorFilterOptions.map((sector) => (
                 <option key={sector}>{sector}</option>
               ))}
             </select>
@@ -820,7 +844,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               <div className="space-y-2">
                 <Label>Setor</Label>
                 <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={(event) => setNewTask((prev) => ({ ...prev, sector: event.target.value }))}>
-                  {sectors.filter((sector) => sector !== "Todos").map((sector) => <option key={sector}>{sector}</option>)}
+                  {availableSectors.map((sector) => <option key={sector}>{sector}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
@@ -845,7 +869,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   title: "",
                   description: "",
                   client: "",
-                  sector: "Contabil",
+                  sector: availableSectors[0] || "Geral",
                   assignee: "",
                   priority: "Media",
                   dueDate: "",

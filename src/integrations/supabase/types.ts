@@ -56,6 +56,7 @@ export type Database = {
       form_templates: GenericTable
       integration_api_credentials: GenericTable
       internal_chat_messages: GenericTable
+      kanban_task_comments: GenericTable
       kanban_tasks: GenericTable
       kb_chunks: GenericTable
       kb_documents: GenericTable

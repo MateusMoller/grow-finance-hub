@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,9 +11,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { CalendarDays, Building2, Download, FileText, FolderOpen, Loader2, User } from "lucide-react";
+import { CalendarDays, Building2, Download, FileText, FolderOpen, Loader2, MessageSquare, Send, User } from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
+import { useAuth } from "@/hooks/useAuth";
 
 export type KanbanStatus = "backlog" | "todo" | "doing" | "review" | "done" | "archived";
 
@@ -69,6 +70,17 @@ interface LinkedRequestAttachment {
   created_at: string;
 }
 
+interface TaskComment {
+  id: string;
+  task_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profile?: {
+    display_name: string | null;
+  } | null;
+}
+
 interface KanbanTaskDetailSheetProps {
   task: KanbanTaskItem | null;
   open: boolean;
@@ -102,6 +114,7 @@ export function KanbanTaskDetailSheet({
   onSubtaskToggle,
   historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
+  const { user, currentOrganizationId } = useAuth();
   const [form, setForm] = useState({
     description: "",
     client_name: "",
@@ -114,6 +127,11 @@ export function KanbanTaskDetailSheet({
   const [requestInfo, setRequestInfo] = useState<LinkedRequestInfo | null>(null);
   const [requestAttachments, setRequestAttachments] = useState<LinkedRequestAttachment[]>([]);
   const [loadingRequest, setLoadingRequest] = useState(false);
+  const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [sendingComment, setSendingComment] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const commentsBottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!task) return;
@@ -174,6 +192,77 @@ export function KanbanTaskDetailSheet({
     };
   }, [open, task?.request_id]);
 
+  const fetchTaskComments = useCallback(async () => {
+    if (!task?.id) {
+      setTaskComments([]);
+      return;
+    }
+
+    setLoadingComments(true);
+    const { data, error } = await supabase
+      .from("kanban_task_comments")
+      .select("id, task_id, user_id, content, created_at")
+      .eq("task_id", task.id)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      toast.error("Não foi possível carregar o chat da tarefa.");
+      setTaskComments([]);
+      setLoadingComments(false);
+      return;
+    }
+
+    const rows = (data || []) as TaskComment[];
+    const userIds = Array.from(new Set(rows.map((comment) => comment.user_id).filter(Boolean)));
+    let profileMap = new Map<string, { display_name: string | null }>();
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name")
+        .in("user_id", userIds);
+
+      profileMap = new Map(
+        ((profiles || []) as Array<{ user_id: string; display_name: string | null }>).map((profile) => [
+          profile.user_id,
+          { display_name: profile.display_name },
+        ]),
+      );
+    }
+
+    setTaskComments(rows.map((comment) => ({ ...comment, profile: profileMap.get(comment.user_id) || null })));
+    setLoadingComments(false);
+  }, [task?.id]);
+
+  useEffect(() => {
+    if (!open || !task?.id) return;
+    void fetchTaskComments();
+
+    const channel = supabase
+      .channel(`kanban-task-comments-${task.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "kanban_task_comments",
+          filter: `task_id=eq.${task.id}`,
+        },
+        () => {
+          void fetchTaskComments();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchTaskComments, open, task?.id]);
+
+  useEffect(() => {
+    commentsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [taskComments.length]);
+
   if (!task) return null;
   const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
   const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
@@ -212,6 +301,28 @@ export function KanbanTaskDetailSheet({
       return;
     }
     window.open(data.signedUrl, "_blank");
+  };
+
+  const handleSendTaskComment = async () => {
+    const content = newComment.trim();
+    if (!task?.id || !user?.id || !content) return;
+
+    setSendingComment(true);
+    const { error } = await supabase.from("kanban_task_comments").insert({
+      task_id: task.id,
+      user_id: user.id,
+      content,
+      ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+    });
+    setSendingComment(false);
+
+    if (error) {
+      toast.error("Não foi possível enviar a mensagem da tarefa.");
+      return;
+    }
+
+    setNewComment("");
+    void fetchTaskComments();
   };
 
   return (
@@ -264,8 +375,9 @@ export function KanbanTaskDetailSheet({
           <Separator />
 
           <Tabs defaultValue="informações" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
               <TabsTrigger value="informações">Informações</TabsTrigger>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
               <TabsTrigger value="solicitação">Solicitação</TabsTrigger>
               <TabsTrigger value="histórico">Histórico</TabsTrigger>
             </TabsList>
@@ -370,6 +482,88 @@ export function KanbanTaskDetailSheet({
                   </div>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="chat" className="space-y-4">
+              <div className="rounded-lg border">
+                <div className="border-b px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <MessageSquare className="h-4 w-4" />
+                    Chat da tarefa
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Conversa interna vinculada somente a esta tarefa.
+                  </p>
+                </div>
+
+                <div className="max-h-[320px] min-h-[220px] space-y-3 overflow-y-auto p-3">
+                  {loadingComments ? (
+                    <div className="flex h-[180px] items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                  ) : taskComments.length === 0 ? (
+                    <div className="flex h-[180px] items-center justify-center text-center">
+                      <div>
+                        <MessageSquare className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Nenhuma mensagem nesta tarefa.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    taskComments.map((comment) => {
+                      const isOwn = comment.user_id === user?.id;
+                      const displayName = comment.profile?.display_name?.trim() || (isOwn ? "Você" : "Equipe");
+
+                      return (
+                        <div key={comment.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[86%] rounded-2xl px-3 py-2 ${isOwn ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"}`}>
+                            <div className="mb-1 flex items-center justify-between gap-3">
+                              <span className="text-xs font-semibold opacity-80">{displayName}</span>
+                              <span className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                                {new Date(comment.created_at).toLocaleString("pt-BR", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6">{comment.content}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={commentsBottomRef} />
+                </div>
+
+                <div className="border-t p-3">
+                  <div className="flex items-end gap-2">
+                    <Textarea
+                      rows={2}
+                      value={newComment}
+                      onChange={(event) => setNewComment(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void handleSendTaskComment();
+                        }
+                      }}
+                      placeholder="Escreva uma mensagem sobre esta tarefa..."
+                      className="resize-none text-sm"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      onClick={() => void handleSendTaskComment()}
+                      disabled={sendingComment || !newComment.trim()}
+                    >
+                      {sendingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">Enter para enviar. Shift+Enter para nova linha.</p>
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="solicitação" className="space-y-4">

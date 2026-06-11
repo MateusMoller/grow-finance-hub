@@ -141,6 +141,20 @@ const repairCommonEncodingIssues = (value: string) =>
 const normalizeClientDataFieldToken = (value: string) =>
   normalizeText(repairCommonEncodingIssues(value)).replace(/[^\w]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
 
+const normalizeTaxRegimeForReport = (value: unknown) => {
+  if (typeof value !== "string") return "";
+
+  const repaired = repairCommonEncodingIssues(value).trim();
+  if (!repaired) return "";
+
+  const normalized = normalizeText(repaired);
+  if (normalized === "simples" || normalized === "simples nacional") {
+    return "Simples Nacional";
+  }
+
+  return repaired;
+};
+
 const formatDateTime = (value: unknown) => {
   if (typeof value !== "string" || !value) return "-";
   const date = new Date(value);
@@ -965,9 +979,9 @@ export default function RelatoriosPage() {
       clientes: filteredClients.map((client) => {
         const clientData = { ...(clientDataByClientId.get(client.id) || {}) };
         const cadastralRegimeKey = "cadastral_cadastro_clientes_regime_tributário";
-        const reportRegime = client.regime || clientData[cadastralRegimeKey] || "";
+        const reportRegime = normalizeTaxRegimeForReport(client.regime || clientData[cadastralRegimeKey]);
 
-        if (!clientData[cadastralRegimeKey] && reportRegime) {
+        if (reportRegime) {
           clientData[cadastralRegimeKey] = reportRegime;
         }
 
