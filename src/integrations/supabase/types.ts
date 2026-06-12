@@ -20,6 +20,49 @@ type GenericFunction = {
   Returns: any
 }
 
+type SavedReportsTable = {
+  Row: {
+    id: string
+    organization_id: string
+    user_id: string
+    name: string
+    normalized_name: string | null
+    dataset_id: string
+    column_keys: string[]
+    format: string
+    auto_generate: boolean
+    created_at: string
+    updated_at: string
+  }
+  Insert: {
+    id?: string
+    organization_id?: string
+    user_id: string
+    name: string
+    normalized_name?: string | null
+    dataset_id: string
+    column_keys: string[]
+    format?: string
+    auto_generate?: boolean
+    created_at?: string
+    updated_at?: string
+  }
+  Update: {
+    id?: string
+    organization_id?: string
+    user_id?: string
+    name?: string
+    normalized_name?: string | null
+    dataset_id?: string
+    column_keys?: string[]
+    format?: string
+    auto_generate?: boolean
+    created_at?: string
+    updated_at?: string
+  }
+  Relationships: []
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -80,7 +123,7 @@ export type Database = {
       profiles: GenericTable
       push_subscriptions: GenericTable
       request_messages: GenericTable
-      saved_reports: GenericTable
+      saved_reports: SavedReportsTable
       site_leads: GenericTable
       transactions: GenericTable
       user_access_control: GenericTable

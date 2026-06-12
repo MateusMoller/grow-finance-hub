@@ -213,12 +213,12 @@ export const manualModules: ManualModule[] = [
       {
         key: "internal_reports_custom",
         title: "Relatórios personalizados",
-        summary: "Monte relatórios por colunas relevantes e exporte com consistência.",
+        summary: "Monte relatórios com base governada, filtros ativos, colunas classificadas e exportação controlada.",
         estimatedMinutes: 6,
         steps: [
-          "Escolha módulo e recorte correto.",
-          "Selecione colunas com objetivo analítico claro.",
-          "Exporte e valide antes de compartilhar.",
+          "Escolha a base de relatório permitida para seu perfil.",
+          "Confira filtros globais e selecione somente colunas necessárias.",
+          "Salve modelos recorrentes e valide avisos antes de exportar.",
         ],
         actions: [{ label: "Ir para relatórios", actionKey: "route:/app/relatorios" }],
         tags: ["relatórios", "gestão", "indicadores"],

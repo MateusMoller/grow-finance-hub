@@ -1,1690 +1,339 @@
-
-import { AppLayout } from "@/components/app/AppLayout";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  BarChart3,
-  Briefcase,
-  ClipboardList,
-  Edit3,
-  FileSpreadsheet,
-  Loader2,
-  PlayCircle,
-  RefreshCw,
-  Save,
-  Search,
-  Trash2,
-  TrendingUp,
-  Users,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Columns3, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
-import type { PostgrestError } from "@supabase/supabase-js";
-import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
-import { useAuth } from "@/hooks/useAuth";
+import { AppLayout } from "@/components/app/AppLayout";
+import { ReportDatasetSelector } from "@/components/reports/ReportDatasetSelector";
+import { ReportFilterSummary } from "@/components/reports/ReportFilterSummary";
+import { ReportExportControls } from "@/components/reports/ReportExportControls";
+import { ReportFieldBrowser } from "@/components/reports/ReportFieldBrowser";
+import { ReportPreviewTable } from "@/components/reports/ReportPreviewTable";
+import { SelectedReportFields } from "@/components/reports/SelectedReportFields";
+import { SavedReportForm } from "@/components/reports/SavedReportForm";
+import { SavedReportList } from "@/components/reports/SavedReportList";
+import { SavedReportWarnings } from "@/components/reports/SavedReportWarnings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-
-type ReportDatasetId = "clientes" | "leads_crm" | "tarefas" | "equipe";
-type ExportFormat = "xlsx";
-type ReportRow = Record<string, unknown>;
-
-type ClientRow = Pick<
-  Tables<"clients">,
-  "id" | "name" | "cnpj" | "regime" | "sector" | "status" | "contact" | "email" | "phone" | "created_at" | "updated_at"
->;
-
-type LeadRow = Pick<
-  Tables<"site_leads">,
-  "id" | "full_name" | "company_name" | "email" | "phone" | "source_tag" | "origin_page" | "created_at"
->;
-
-type TaskRow = Pick<
-  Tables<"kanban_tasks">,
-  "id" | "title" | "client_name" | "assignee" | "sector" | "priority" | "status" | "due_date" | "created_at" | "updated_at"
->;
-
-type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name" | "created_at" | "updated_at">;
-type RoleRow = Pick<Tables<"user_roles">, "user_id" | "role" | "created_at">;
-
-type SavedReportRow = Pick<
-  Tables<"saved_reports">,
-  "id" | "name" | "dataset_id" | "column_keys" | "format" | "auto_generate" | "created_at" | "updated_at"
->;
-
-type ClientDataRow = Pick<
-  Tables<"client_data">,
-  "id" | "client_id" | "category" | "field_name" | "field_value" | "period" | "created_at" | "updated_at"
->;
-
-interface TeamReportRow {
-  user_id: string;
-  display_name: string;
-  role: string;
-  created_at: string;
-  updated_at: string;
-  role_created_at: string | null;
-}
-
-interface ReportColumnDefinition {
-  key: string;
-  label: string;
-  formatter?: (value: unknown) => string;
-}
-
-interface ReportDatasetDefinition {
-  id: ReportDatasetId;
-  name: string;
-  description: string;
-  icon: LucideIcon;
-  colorClass: string;
-  columns: ReportColumnDefinition[];
-  defaultColumns: string[];
-}
-
-interface SavedReportConfig {
-  id: string;
-  name: string;
-  datasetId: ReportDatasetId;
-  columnKeys: string[];
-  format: ExportFormat;
-  autoGenerate: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const roleOrder = [
-  "admin",
-  "director",
-  "manager",
-  "employee",
-  "commercial",
-  "departamento_pessoal",
-  "fiscal",
-  "contabil",
-] as const;
-
-const rolePriority = new Map(roleOrder.map((role, index) => [role, index]));
-
-const normalizeText = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-
-const repairCommonEncodingIssues = (value: string) =>
-  value
-    .replace(/Ã¡/g, "á")
-    .replace(/Ã /g, "à")
-    .replace(/Ã¢/g, "â")
-    .replace(/Ã£/g, "ã")
-    .replace(/Ã©/g, "é")
-    .replace(/Ãª/g, "ê")
-    .replace(/Ã­/g, "í")
-    .replace(/Ã³/g, "ó")
-    .replace(/Ã´/g, "ô")
-    .replace(/Ãµ/g, "õ")
-    .replace(/Ãº/g, "ú")
-    .replace(/Ã§/g, "ç")
-    .replace(/Ã/g, "Á")
-    .replace(/Ã‰/g, "É")
-    .replace(/Ã“/g, "Ó")
-    .replace(/Ã‡/g, "Ç");
-
-const normalizeClientDataFieldToken = (value: string) =>
-  normalizeText(repairCommonEncodingIssues(value)).replace(/[^\w]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
-
-const normalizeTaxRegimeForReport = (value: unknown) => {
-  if (typeof value !== "string") return "";
-
-  const repaired = repairCommonEncodingIssues(value).trim();
-  if (!repaired) return "";
-
-  const normalized = normalizeText(repaired);
-  if (normalized === "simples" || normalized === "simples nacional") {
-    return "Simples Nacional";
-  }
-
-  return repaired;
-};
-
-const formatDateTime = (value: unknown) => {
-  if (typeof value !== "string" || !value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("pt-BR");
-};
-
-const formatDate = (value: unknown) => {
-  if (typeof value !== "string" || !value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("pt-BR");
-};
-
-const parseNumericValue = (value: unknown): number | null => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value !== "string") return null;
-
-  const cleaned = value.trim().replace(/\s+/g, "").replace(/r\$/gi, "");
-  if (!cleaned) return null;
-
-  let normalized = cleaned;
-  if (cleaned.includes(",") && cleaned.includes(".")) {
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
-  } else {
-    normalized = cleaned.replace(",", ".");
-  }
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const formatDecimal = (value: unknown, fractionDigits = 2) => {
-  const numeric = parseNumericValue(value);
-  if (numeric === null) return "-";
-  return numeric.toLocaleString("pt-BR", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  });
-};
-
-const formatCurrency = (value: unknown) => {
-  const numeric = parseNumericValue(value);
-  if (numeric === null) return "-";
-  return numeric.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const formatPercent = (value: unknown) => {
-  const decimal = formatDecimal(value, 2);
-  if (decimal === "-") return "-";
-  return `${decimal}%`;
-};
-
-const formatRole = (role: string) =>
-  role
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-const pickPrimaryRole = (roles: string[]) => {
-  if (roles.length === 0) return "";
-  const sorted = [...roles].sort((a, b) => {
-    const aPriority = rolePriority.get(a as (typeof roleOrder)[number]) ?? 999;
-    const bPriority = rolePriority.get(b as (typeof roleOrder)[number]) ?? 999;
-    return aPriority - bPriority;
-  });
-  return sorted[0];
-};
-
-const taskStatusLabel = (status: string) => {
-  const normalized = normalizeText(status || "");
-  if (normalized === "todo") return "A fazer";
-  if (normalized === "doing") return "Em andamento";
-  if (normalized === "review") return "Em revisão";
-  if (normalized === "done") return "Concluído";
-  if (normalized === "archived") return "Arquivado";
-  return status || "Sem status";
-};
-
-const sanitizeFileName = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w-]+/g, "-")
-    .replace(/--+/g, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase();
-
-const formatCellValue = (value: unknown, formatter?: (value: unknown) => string) => {
-  if (formatter) return formatter(value);
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
-  return JSON.stringify(value);
-};
-
-const cadastralClientDataCategories = [
-  "cadastro_clientes",
-  "cadastro_fiscal",
-  "cadastro_departamento_pessoal",
-  "cadastro_contabil",
-  "cadastro_obrigacoes",
-  "cadastro_honorarios",
-  "cadastro_documentos",
-] as const;
-type CadastralClientDataCategory = (typeof cadastralClientDataCategories)[number];
-type ClientDataCategory = CadastralClientDataCategory;
-
-const REPORT_QUERY_PAGE_SIZE = 1000;
-
-interface ClientDataFieldDefinition {
-  name: string;
-  label: string;
-}
-
-interface ClientPartnerReportEntry {
-  nome: string;
-  percentual_participacao: number;
-  pro_labore: number;
-  senha_gov: string;
-}
-
-const cadastralClientDataCategoryLabel: Record<CadastralClientDataCategory, string> = {
-  cadastro_clientes: "Cadastro Clientes",
-  cadastro_fiscal: "Setor Fiscal",
-  cadastro_departamento_pessoal: "Setor DP",
-  cadastro_contabil: "Setor Contábil",
-  cadastro_obrigacoes: "Obrigações",
-  cadastro_honorarios: "Honorarios",
-  cadastro_documentos: "Documentos",
-};
-
-const cadastralClientDataFieldsByCategory: Record<CadastralClientDataCategory, ClientDataFieldDefinition[]> = {
-  cadastro_clientes: [
-    { name: "codigo", label: "Codigo" },
-    { name: "nome_fantasia", label: "Nome Fantasia" },
-    { name: "inscricao_estadual", label: "Inscricao Estadual" },
-    { name: "inscricao_municipal", label: "Inscricao Municipal" },
-    { name: "regime_tributário", label: "Regime Tributario" },
-    { name: "cnae_principal", label: "CNAE Principal" },
-    { name: "data_abertura", label: "Data de Abertura" },
-    { name: "cep", label: "CEP" },
-    { name: "endereço", label: "Rua / Logradouro" },
-    { name: "numero_estabelecimento", label: "Número do Estabelecimento" },
-    { name: "complemento", label: "Complemento" },
-    { name: "bairro", label: "Bairro" },
-    { name: "perfil_atuacao", label: "Classificação de Atividade" },
-    { name: "cidade", label: "Cidade" },
-    { name: "estado", label: "Estado" },
-    { name: "ddd", label: "DDD" },
-    { name: "telefone", label: "Telefone" },
-    { name: "whatsapp", label: "WhatsApp" },
-  ],
-  cadastro_fiscal: [
-    { name: "regime_icms", label: "Regime ICMS" },
-    { name: "contribuinte_icms", label: "Contribuinte ICMS" },
-    { name: "contribuinte_ipi", label: "Contribuinte IPI" },
-    { name: "tipo_operacao", label: "Tipo de Operação" },
-    { name: "emite_nfe", label: "Emite NF-e" },
-    { name: "emite_nfse", label: "Emite NFS-e" },
-    { name: "portal_nf_utilizado", label: "Portal NF utilizado" },
-    { name: "possui_st", label: "Possui ST" },
-    { name: "estados_que_opera", label: "Estados que Opera" },
-    { name: "controle_estoque", label: "Controle de Estoque" },
-    { name: "sistema_vendas", label: "Sistema de Vendas" },
-    { name: "integracao_contabil", label: "Integração Contábil" },
-    { name: "entrega_gia", label: "Entrega GIA" },
-    { name: "entrega_sped_fiscal", label: "Entrega SPED Fiscal" },
-  ],
-  cadastro_departamento_pessoal: [
-    { name: "possui_pro_labore", label: "Possui Pro-labore" },
-    { name: "possui_funcionarios", label: "Possui Funcionários" },
-    { name: "possui_variaveis", label: "Possui Variaveis" },
-    { name: "possui_inss", label: "Possui INSS" },
-    { name: "possui_fgts", label: "Possui FGTS" },
-    { name: "possui_adiantamento_salarial", label: "Possui adiantamento salarial?" },
-    { name: "envia_folha_ponto", label: "Envia Folha Ponto?" },
-    { name: "beneficios", label: "Beneficios" },
-    { name: "hora_extra_banco_horas", label: "Hora extra / Banco de horas" },
-    { name: "envia_relatorio_ferias", label: "Envia relatório de férias?" },
-    { name: "clinica_parceira", label: "Nome da Clinica Parceira" },
-    { name: "clinica_parceira_cnpj", label: "CNPJ da Clinica Parceira" },
-    { name: "clinica_parceira_contato", label: "Contato da Clinica Parceira" },
-    { name: "clinica_parceira_telefone_whatsapp", label: "Telefone/WhatsApp da Clinica Parceira" },
-    { name: "clinica_parceira_email", label: "E-mail da Clinica Parceira" },
-    { name: "clinica_parceira_observacoes", label: "Observacoes da Clinica Parceira" },
-    { name: "possui_decimo_terceiro", label: "Possui 13o?" },
-    { name: "sindicato_nome", label: "Nome do Sindicato" },
-    { name: "sindicato_cnpj", label: "CNPJ do Sindicato" },
-    { name: "sindicato_codigo_registro", label: "Codigo/Registro do Sindicato" },
-    { name: "sindicato_contato", label: "Contato do Sindicato" },
-    { name: "sindicato_telefone_whatsapp", label: "Telefone/WhatsApp do Sindicato" },
-    { name: "sindicato_observacoes", label: "Observacoes do Sindicato" },
-  ],
-  cadastro_contabil: [
-    { name: "obrigacao_contabil", label: "Obrigação Contábil" },
-    { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
-    { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
-    { name: "controle_financeiro", label: "Controle Financeiro" },
-    { name: "sistema_financeiro", label: "Sistema Financeiro" },
-    { name: "integracao_contabil", label: "Integração Contábil" },
-    { name: "balanco_anual", label: "Balanco Anual" },
-    { name: "responsavel_contabil_grow", label: "Responsavel Contábil Grow" },
-    { name: "periodicidade_relatorios", label: "Periodicidade Relatórios" },
-    { name: "observacoes_contabeis", label: "Observacoes Contabeis" },
-  ],
-  cadastro_obrigacoes: [
-    { name: "pgdas", label: "PGDAS" },
-    { name: "gia", label: "GIA" },
-    { name: "sped_fiscal", label: "SPED Fiscal" },
-    { name: "efd_contribuicoes", label: "EFD Contribuicoes" },
-    { name: "dctf", label: "DCTF" },
-    { name: "defis", label: "DEFIS" },
-    { name: "ecd", label: "ECD" },
-    { name: "ecf", label: "ECF" },
-  ],
-  cadastro_honorarios: [
-    { name: "plano", label: "Plano" },
-    { name: "valor_mensal", label: "Valor Mensal (R$)" },
-    { name: "forma_pagamento", label: "Forma de Pagamento" },
-    { name: "vencimento", label: "Vencimento" },
-    { name: "situacao", label: "Situacao" },
-  ],
-  cadastro_documentos: [
-    { name: "contrato", label: "Contrato" },
-    { name: "procuracao", label: "Procuracao" },
-    { name: "certificado_digital", label: "Certificado Digital" },
-    { name: "contrato_social", label: "Contrato Social" },
-    { name: "alteracoes_contratuais", label: "Alterações Contratuais" },
-    { name: "outros_documentos", label: "Outros Documentos" },
-  ],
-};
-
-const parseClientPartnersField = (rawValue: string | null | undefined): ClientPartnerReportEntry[] => {
-  if (!rawValue?.trim()) return [];
-
-  try {
-    const parsed = JSON.parse(rawValue) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map((item): ClientPartnerReportEntry | null => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
-        const row = item as Record<string, unknown>;
-
-        const nome = typeof row.nome === "string"
-          ? row.nome.trim()
-          : typeof row.name === "string"
-            ? row.name.trim()
-            : "";
-        const percentual = parseNumericValue(row.percentual_participacao ?? row.percentual ?? row.ownershipPercent);
-        const proLabore = parseNumericValue(row.pro_labore ?? row.proLabore ?? row.prolabore);
-        const senhaGov = typeof row.senha_gov === "string"
-          ? row.senha_gov.trim()
-          : typeof row.govPassword === "string"
-            ? row.govPassword.trim()
-            : "";
-
-        return {
-          nome,
-          percentual_participacao: percentual ?? 0,
-          pro_labore: proLabore ?? 0,
-          senha_gov: senhaGov,
-        };
-      })
-      .filter((partner): partner is ClientPartnerReportEntry => Boolean(partner));
-  } catch {
-    return [];
-  }
-};
-
-const summarizeClientPartners = (partners: ClientPartnerReportEntry[]) => {
-  const total = partners.length;
-  const names = partners.map((partner) => partner.nome).filter(Boolean).join("; ");
-  const totalOwnership = partners.reduce((sum, partner) => sum + partner.percentual_participacao, 0);
-  const totalProLabore = partners.reduce((sum, partner) => sum + partner.pro_labore, 0);
-  const withGovPassword = partners.filter((partner) => Boolean(partner.senha_gov)).length;
-  const govPasswordStatus =
-    total === 0 ? "Não informado" : withGovPassword === total ? "Completo" : withGovPassword > 0 ? "Parcial" : "Não";
-  const ownershipByPartner = partners
-    .map((partner) => {
-      const partnerName = partner.nome || "Sócio sem nome";
-      return `${partnerName}: ${formatPercent(partner.percentual_participacao)}`;
-    })
-    .join(" | ");
-
-  return {
-    total,
-    names,
-    totalOwnership,
-    totalProLabore,
-    withGovPassword,
-    govPasswordStatus,
-    ownershipByPartner,
-  };
-};
-
-const toCadastralClientDataColumnKey = (category: CadastralClientDataCategory, fieldName: string) =>
-  `cadastral_${category}_${fieldName}`;
-
-const cadastralClientDataCategorySet = new Set<string>(cadastralClientDataCategories);
-
-const clientDataFieldNameByCategoryAndToken = new Map<string, Map<string, string>>([
-  ...cadastralClientDataCategories.map((category): [string, Map<string, string>] => [
-    category,
-    new Map(
-      [
-        ...cadastralClientDataFieldsByCategory[category].map((field) => [
-          normalizeClientDataFieldToken(field.name),
-          field.name,
-        ] as const),
-        ...(category === "cadastro_clientes" ? [["socios", "socios"] as const] : []),
-      ],
-    ),
-  ]),
-]);
-
-const resolveClientDataFieldName = (category: string, fieldName: string) => {
-  const fieldNameByToken = clientDataFieldNameByCategoryAndToken.get(category);
-  if (!fieldNameByToken) return fieldName;
-  return fieldNameByToken.get(normalizeClientDataFieldToken(fieldName)) || fieldName;
-};
-
-const compareClientDataEntriesForReport = (a: ClientDataRow, b: ClientDataRow) => {
-  const aIsCadastral = cadastralClientDataCategorySet.has(a.category);
-  const bIsCadastral = cadastralClientDataCategorySet.has(b.category);
-  const aPeriodRank = aIsCadastral ? (a.period ? 0 : 1) : 0;
-  const bPeriodRank = bIsCadastral ? (b.period ? 0 : 1) : 0;
-
-  if (aPeriodRank !== bPeriodRank) return aPeriodRank - bPeriodRank;
-
-  const aTime = new Date(a.updated_at || a.created_at || "").getTime();
-  const bTime = new Date(b.updated_at || b.created_at || "").getTime();
-  const safeATime = Number.isNaN(aTime) ? 0 : aTime;
-  const safeBTime = Number.isNaN(bTime) ? 0 : bTime;
-
-  return safeATime - safeBTime;
-};
-
-const fetchClientDataRowsForReport = async (
-  categories: readonly ClientDataCategory[],
-  options: { period?: string } = {},
-): Promise<{ data: ClientDataRow[]; error: PostgrestError | null }> => {
-  const rows: ClientDataRow[] = [];
-
-  for (let from = 0; ; from += REPORT_QUERY_PAGE_SIZE) {
-    const to = from + REPORT_QUERY_PAGE_SIZE - 1;
-    let query = supabase
-      .from("client_data")
-      .select("id, client_id, category, field_name, field_value, period, created_at, updated_at")
-      .in("category", [...categories])
-      .order("client_id", { ascending: true })
-      .order("category", { ascending: true })
-      .order("field_name", { ascending: true })
-      .order("updated_at", { ascending: true })
-      .range(from, to);
-
-    if (options.period) {
-      query = query.eq("period", options.period);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return { data: rows, error };
-    }
-
-    const pageRows = (data || []) as ClientDataRow[];
-    rows.push(...pageRows);
-
-    if (pageRows.length < REPORT_QUERY_PAGE_SIZE) {
-      return { data: rows, error: null };
-    }
-  }
-};
-
-const clientDataReportColumns: ReportColumnDefinition[] = [
-  ...cadastralClientDataCategories.flatMap((category) =>
-    cadastralClientDataFieldsByCategory[category].map((field) => ({
-      key: toCadastralClientDataColumnKey(category, field.name),
-      label: `Cadastral ${cadastralClientDataCategoryLabel[category]}: ${field.label}`,
-    })),
-  ),
-  {
-    key: "cadastral_cadastro_clientes_socios_quantidade",
-    label: "Cadastral Cadastro Clientes: Sócios - Quantidade",
-  },
-  {
-    key: "cadastral_cadastro_clientes_socios_nomes",
-    label: "Cadastral Cadastro Clientes: Sócios - Nomes",
-  },
-  {
-    key: "cadastral_cadastro_clientes_socios_participacao_total",
-    label: "Cadastral Cadastro Clientes: Sócios - Participação Total (%)",
-    formatter: formatPercent,
-  },
-  {
-    key: "cadastral_cadastro_clientes_socios_participacao_por_socio",
-    label: "Cadastral Cadastro Clientes: Sócios - Participação por Sócio",
-  },
-  {
-    key: "cadastral_cadastro_clientes_socios_pro_labore_total",
-    label: "Cadastral Cadastro Clientes: Sócios - Pro-labore Total (R$)",
-    formatter: formatCurrency,
-  },
-  {
-    key: "cadastral_cadastro_clientes_socios_com_senha_gov",
-    label: "Cadastral Cadastro Clientes: Sócios com Senha GOV",
-  },
-  {
-    key: "cadastral_cadastro_clientes_socios_status_senha_gov",
-    label: "Cadastral Cadastro Clientes: Sócios - Status Senha GOV",
-  },
-];
-
-const reportDefinitions: Record<ReportDatasetId, ReportDatasetDefinition> = {
-  clientes: {
-    id: "clientes",
-    name: "Clientes",
-    description: "Carteira de clientes ativos, inativos e dados cadastrais.",
-    icon: Users,
-    colorClass: "bg-primary/10 text-primary",
-    columns: [
-      { key: "nome", label: "Nome" },
-      { key: "cnpj", label: "CNPJ" },
-      { key: "regime", label: "Regime" },
-      { key: "segmento", label: "Segmento" },
-      { key: "status", label: "Status" },
-      { key: "contato", label: "Contato" },
-      { key: "email", label: "E-mail" },
-      { key: "telefone", label: "Telefone" },
-      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
-      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
-      ...clientDataReportColumns,
-    ],
-    defaultColumns: [
-      "nome",
-      "status",
-      "segmento",
-      "contato",
-      "email",
-      "telefone",
-      "cadastral_cadastro_clientes_nome_fantasia",
-      "cadastral_cadastro_clientes_regime_tributário",
-      "cadastral_cadastro_clientes_socios_quantidade",
-      "cadastral_cadastro_clientes_socios_pro_labore_total",
-    ],
-  },
-  leads_crm: {
-    id: "leads_crm",
-    name: "Leads e CRM",
-    description: "Leads capturados no site e distribuicao por origem.",
-    icon: TrendingUp,
-    colorClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/20",
-    columns: [
-      { key: "nome", label: "Nome" },
-      { key: "empresa", label: "Empresa" },
-      { key: "email", label: "E-mail" },
-      { key: "telefone", label: "Telefone" },
-      { key: "origem", label: "Origem" },
-      { key: "pagina_origem", label: "Página de origem" },
-      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
-    ],
-    defaultColumns: ["nome", "empresa", "email", "telefone", "origem", "criado_em"],
-  },
-  tarefas: {
-    id: "tarefas",
-    name: "Tarefas",
-    description: "Produtividade da operação com status, prioridade e prazos.",
-    icon: ClipboardList,
-    colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
-    columns: [
-      { key: "titulo", label: "Titulo" },
-      { key: "cliente", label: "Cliente" },
-      { key: "responsavel", label: "Responsavel" },
-      { key: "setor", label: "Setor" },
-      { key: "prioridade", label: "Prioridade" },
-      { key: "status", label: "Status" },
-      { key: "prazo", label: "Prazo", formatter: formatDate },
-      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
-      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
-    ],
-    defaultColumns: ["titulo", "cliente", "setor", "responsavel", "prioridade", "status", "prazo"],
-  },
-  equipe: {
-    id: "equipe",
-    name: "Equipe",
-    description: "Visão da equipe interna com papeis e datas de cadastro.",
-    icon: Briefcase,
-    colorClass: "bg-orange-100 text-orange-700 dark:bg-orange-900/20",
-    columns: [
-      { key: "colaborador", label: "Colaborador" },
-      { key: "papel", label: "Papel" },
-      { key: "usuario_id", label: "Usuário ID" },
-      { key: "criado_em", label: "Criado em", formatter: formatDateTime },
-      { key: "atualizado_em", label: "Atualizado em", formatter: formatDateTime },
-      { key: "papel_definido_em", label: "Papel definido em", formatter: formatDateTime },
-    ],
-    defaultColumns: ["colaborador", "papel", "usuario_id", "criado_em", "atualizado_em"],
-  },
-};
-
-const reportDatasetIds = Object.keys(reportDefinitions) as ReportDatasetId[];
-
-const clientGeneralColumnKeys = new Set([
-  "nome",
-  "cnpj",
-  "regime",
-  "segmento",
-  "status",
-  "contato",
-  "email",
-  "telefone",
-]);
-
-const clientTimelineColumnKeys = new Set(["criado_em", "atualizado_em"]);
-const leadsSourceColumnKeys = new Set(["origem", "pagina_origem"]);
-const leadsContactColumnKeys = new Set(["nome", "empresa", "email", "telefone"]);
-const taskExecutionColumnKeys = new Set(["titulo", "cliente", "responsavel", "setor", "prioridade", "status"]);
-const taskTimelineColumnKeys = new Set(["prazo", "criado_em", "atualizado_em"]);
-const teamIdentityColumnKeys = new Set(["colaborador", "papel", "usuario_id"]);
-const teamTimelineColumnKeys = new Set(["criado_em", "atualizado_em", "papel_definido_em"]);
-
-const resolveCadastralCategoryFromColumnKey = (columnKey: string): CadastralClientDataCategory | null =>
-  cadastralClientDataCategories.find((category) => columnKey.startsWith(`cadastral_${category}_`)) || null;
-
-const getColumnModulePath = (datasetId: ReportDatasetId, columnKey: string): [string, string] => {
-  if (datasetId === "clientes") {
-    const cadastralCategory = resolveCadastralCategoryFromColumnKey(columnKey);
-    if (cadastralCategory) {
-      return ["Clientes", `Dados Cadastrais > ${cadastralClientDataCategoryLabel[cadastralCategory]}`];
-    }
-
-    if (clientGeneralColumnKeys.has(columnKey)) return ["Clientes", "Dados Gerais"];
-    if (clientTimelineColumnKeys.has(columnKey)) return ["Clientes", "Datas de Controle"];
-    return ["Clientes", "Outros"];
-  }
-
-  if (datasetId === "leads_crm") {
-    if (leadsSourceColumnKeys.has(columnKey)) return ["Leads e CRM", "Origem e Captação"];
-    if (leadsContactColumnKeys.has(columnKey)) return ["Leads e CRM", "Identificação e Contato"];
-    return ["Leads e CRM", "Datas e Controle"];
-  }
-
-  if (datasetId === "tarefas") {
-    if (taskExecutionColumnKeys.has(columnKey)) return ["Tarefas", "Execucao e Responsabilidade"];
-    if (taskTimelineColumnKeys.has(columnKey)) return ["Tarefas", "Datas e Prazos"];
-    return ["Tarefas", "Outros"];
-  }
-
-  if (teamIdentityColumnKeys.has(columnKey)) return ["Equipe", "Identificação e Papel"];
-  if (teamTimelineColumnKeys.has(columnKey)) return ["Equipe", "Datas de Controle"];
-  return ["Equipe", "Outros"];
-};
-
-const isReportDatasetId = (value: string): value is ReportDatasetId =>
-  reportDatasetIds.includes(value as ReportDatasetId);
-
-const sanitizeColumnKeysForDataset = (datasetId: ReportDatasetId, columnKeys: unknown): string[] => {
-  if (!Array.isArray(columnKeys)) return [];
-  const validColumns = new Set(reportDefinitions[datasetId].columns.map((column) => column.key));
-
-  return Array.from(
-    new Set(
-      columnKeys
-        .filter((item): item is string => typeof item === "string")
-        .filter((columnKey) => validColumns.has(columnKey)),
-    ),
-  );
-};
-
-const mapSavedReportRow = (row: SavedReportRow): SavedReportConfig | null => {
-  const datasetId = isReportDatasetId(row.dataset_id) ? row.dataset_id : null;
-  if (!datasetId) return null;
-
-  const name = (row.name || "").trim();
-  if (!name) return null;
-
-  const columnKeys = sanitizeColumnKeysForDataset(datasetId, row.column_keys);
-  if (columnKeys.length === 0) return null;
-
-  return {
-    id: row.id,
-    name,
-    datasetId,
-    columnKeys,
-    format: "xlsx",
-    autoGenerate: Boolean(row.auto_generate),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-};
+import { useAuth } from "@/hooks/useAuth";
+import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { getDefaultReportColumns, reportCatalogById } from "@/lib/reports/catalog";
+import { exportReport } from "@/lib/reports/exportClient";
+import { normalizeReportFilters } from "@/lib/reports/filters";
+import { filterAuthorizedReportFields } from "@/lib/reports/permissions";
+import type { ReportDatasetId } from "@/lib/reports/types";
+import { useReportCatalog, useReportPreview } from "@/hooks/reports/useReports";
+import { useSavedReports } from "@/hooks/reports/useSavedReports";
+import type { ReportColumnWarning, ReportExportResult, SavedReportModel } from "@/lib/reports/types";
+
+const initialDatasetId: ReportDatasetId = "clientes";
 
 export default function RelatoriosPage() {
-  const { user } = useAuth();
+  const { roles, role, currentOrganizationId, user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
-
-  const [loading, setLoading] = useState(true);
-  const [loadingSavedReports, setLoadingSavedReports] = useState(true);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
-  const [clients, setClients] = useState<ClientRow[]>([]);
-  const [clientDataEntries, setClientDataEntries] = useState<ClientDataRow[]>([]);
-  const [leads, setLeads] = useState<LeadRow[]>([]);
-  const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [team, setTeam] = useState<TeamReportRow[]>([]);
-
-  const [customDatasetId, setCustomDatasetId] = useState<ReportDatasetId>("clientes");
-  const [selectedColumns, setSelectedColumns] = useState<string[]>(reportDefinitions.clientes.defaultColumns);
-  const [rightSelectedKeys, setRightSelectedKeys] = useState<string[]>([]);
-  const [savedReports, setSavedReports] = useState<SavedReportConfig[]>([]);
+  const activeRoles = useMemo(() => (roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
+  const [datasetId, setDatasetId] = useState<ReportDatasetId>(initialDatasetId);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(() => getDefaultReportColumns(initialDatasetId));
   const [savedReportName, setSavedReportName] = useState("");
-  const [availableColumnSearch, setAvailableColumnSearch] = useState("");
-  const [editingSavedReportId, setEditingSavedReportId] = useState<string | null>(null);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [savedReportWarnings, setSavedReportWarnings] = useState<ReportColumnWarning[]>([]);
+  const [exportResult, setExportResult] = useState<ReportExportResult | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const skipDatasetResetRef = useRef(false);
 
-  const loadReportData = useCallback(async () => {
-    setLoading(true);
-
-    const [clientsRes, cadastralClientDataRes, leadsRes, tasksRes, profilesRes, rolesRes] = await Promise.all([
-      supabase
-        .from("clients")
-        .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
-        .order("name"),
-      fetchClientDataRowsForReport(cadastralClientDataCategories),
-      supabase
-        .from("site_leads")
-        .select("id, full_name, company_name, email, phone, source_tag, origin_page, created_at")
-        .order("created_at", { ascending: false })
-        .limit(2000),
-      supabase
-        .from("kanban_tasks")
-        .select("id, title, client_name, assignee, sector, priority, status, due_date, created_at, updated_at")
-        .order("created_at", { ascending: false })
-        .limit(3000),
-      supabase
-        .from("profiles")
-        .select("user_id, display_name, created_at, updated_at")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("user_roles")
-        .select("user_id, role, created_at")
-        .order("created_at", { ascending: false }),
-    ]);
-
-    const firstError =
-      clientsRes.error ||
-      cadastralClientDataRes.error ||
-      leadsRes.error ||
-      tasksRes.error ||
-      profilesRes.error ||
-      rolesRes.error;
-
-    if (firstError) {
-      toast.error(`Falha ao carregar relatórios: ${firstError.message}`);
-    }
-
-    const nextClients = (clientsRes.data || []) as ClientRow[];
-    const nextClientData = cadastralClientDataRes.data || [];
-    const nextLeads = (leadsRes.data || []) as LeadRow[];
-    const nextTasks = (tasksRes.data || []) as TaskRow[];
-    const nextProfiles = (profilesRes.data || []) as ProfileRow[];
-    const nextRoles = (rolesRes.data || []) as RoleRow[];
-
-    const profileByUserId = new Map(nextProfiles.map((profile) => [profile.user_id, profile]));
-    const rolesByUserId = new Map<string, RoleRow[]>();
-    nextRoles.forEach((role) => {
-      const current = rolesByUserId.get(role.user_id) || [];
-      current.push(role);
-      rolesByUserId.set(role.user_id, current);
+  const catalogQuery = useReportCatalog(currentOrganizationId, activeRoles);
+  const datasets = useMemo(() => catalogQuery.data || [], [catalogQuery.data]);
+  const activeDataset = reportCatalogById.get(datasetId) || datasets[0] || reportCatalogById.get(initialDatasetId)!;
+  const filters = useMemo(
+    () =>
+      normalizeReportFilters({
+        organizationId: currentOrganizationId,
+        company: selectedCompany,
+        competence: selectedCompetence,
+      }),
+    [currentOrganizationId, selectedCompany, selectedCompetence],
+  );
+  const authorizedFields = useMemo(
+    () => filterAuthorizedReportFields(activeDataset, activeRoles, { preview: true }),
+    [activeDataset, activeRoles],
+  );
+  const selectedSet = useMemo(() => new Set(selectedColumns), [selectedColumns]);
+  const selectedFieldDefinitions = useMemo(() => {
+    const fieldByKey = new Map(authorizedFields.map((field) => [field.key, field]));
+    return selectedColumns.flatMap((columnKey) => {
+      const field = fieldByKey.get(columnKey);
+      return field ? [field] : [];
     });
-
-    const allTeamUserIds = new Set<string>();
-    nextProfiles.forEach((profile) => allTeamUserIds.add(profile.user_id));
-    nextRoles.forEach((role) => allTeamUserIds.add(role.user_id));
-
-    const teamRows = Array.from(allTeamUserIds)
-      .map((userId) => {
-        const profile = profileByUserId.get(userId);
-        const userRoles = (rolesByUserId.get(userId) || []).map((item) => item.role);
-        const mainRole = pickPrimaryRole(userRoles);
-        const firstRoleCreatedAt = (rolesByUserId.get(userId) || [])[0]?.created_at || null;
-
-        return {
-          user_id: userId,
-          display_name: profile?.display_name || `Usuário ${userId.slice(0, 6)}`,
-          role: mainRole ? formatRole(mainRole) : "Sem papel",
-          created_at: profile?.created_at || firstRoleCreatedAt || "",
-          updated_at: profile?.updated_at || profile?.created_at || firstRoleCreatedAt || "",
-          role_created_at: firstRoleCreatedAt,
-        };
-      })
-      .sort((a, b) => a.display_name.localeCompare(b.display_name, "pt-BR"));
-
-    setClients(nextClients);
-    setClientDataEntries(nextClientData);
-    setLeads(nextLeads);
-    setTasks(nextTasks);
-    setTeam(teamRows);
-    setLastUpdatedAt(new Date().toISOString());
-    setLoading(false);
-  }, []);
-
-  const loadSavedReports = useCallback(async () => {
-    if (!user?.id) {
-      setSavedReports([]);
-      setLoadingSavedReports(false);
-      return;
-    }
-
-    setLoadingSavedReports(true);
-    const { data, error } = await supabase
-      .from("saved_reports")
-      .select("id, name, dataset_id, column_keys, format, auto_generate, created_at, updated_at")
-      .order("updated_at", { ascending: false });
-
-    if (error) {
-      toast.error(`Falha ao carregar relatórios salvos: ${error.message}`);
-      setSavedReports([]);
-      setLoadingSavedReports(false);
-      return;
-    }
-
-    const mapped = ((data || []) as SavedReportRow[])
-      .map((row) => mapSavedReportRow(row))
-      .filter((item): item is SavedReportConfig => Boolean(item));
-
-    setSavedReports(mapped);
-    setLoadingSavedReports(false);
-  }, [user?.id]);
+  }, [authorizedFields, selectedColumns]);
+  const previewQuery = useReportPreview({
+    datasetId: activeDataset.id,
+    filters,
+    columnKeys: selectedColumns,
+    roles: activeRoles,
+  });
+  const savedReportsQuery = useSavedReports({ organizationId: currentOrganizationId, userId: user?.id || null });
 
   useEffect(() => {
-    void loadReportData();
-  }, [loadReportData]);
-
-  useEffect(() => {
-    void loadSavedReports();
-  }, [loadSavedReports]);
+    if (datasets.length > 0 && !datasets.some((dataset) => dataset.id === datasetId)) {
+      setDatasetId(datasets[0].id);
+    }
+  }, [datasetId, datasets]);
 
   useEffect(() => {
     if (skipDatasetResetRef.current) {
       skipDatasetResetRef.current = false;
       return;
     }
-    setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns);
-    setRightSelectedKeys([]);
-  }, [customDatasetId]);
+    const defaults = getDefaultReportColumns(datasetId);
+    setSelectedColumns(defaults);
+    setSavedReportWarnings([]);
+  }, [datasetId]);
 
-  const filteredClients = useMemo(
-    () =>
-      clients.filter((client) => matchesSelectedCompany(client.name, selectedCompany)),
-    [clients, selectedCompany],
-  );
-
-  const filteredLeads = useMemo(
-    () =>
-      leads.filter(
-        (lead) =>
-          matchesSelectedCompany(lead.company_name || lead.full_name, selectedCompany) &&
-          matchesSelectedCompetence(lead.created_at, selectedCompetence),
-      ),
-    [leads, selectedCompany, selectedCompetence],
-  );
-
-  const filteredTasks = useMemo(
-    () =>
-      tasks.filter(
-        (task) =>
-          matchesSelectedCompany(task.client_name, selectedCompany) &&
-          matchesSelectedCompetence(getTaskCompetence(task.due_date, task.created_at), selectedCompetence),
-      ),
-    [tasks, selectedCompany, selectedCompetence],
-  );
-
-  const filteredTeam = useMemo(
-    () =>
-      team.filter((member) =>
-        selectedCompetence ? matchesSelectedCompetence(member.created_at, selectedCompetence) : true,
-      ),
-    [team, selectedCompetence],
-  );
-
-  const clientDataByClientId = useMemo(() => {
-    const byClientId = new Map<string, Record<string, string>>();
-
-    [...clientDataEntries].sort(compareClientDataEntriesForReport).forEach((entry) => {
-      const current = byClientId.get(entry.client_id) || {};
-      const fieldName = resolveClientDataFieldName(entry.category, entry.field_name);
-
-      if (entry.category === "cadastro_clientes" && fieldName === "socios") {
-        const partners = parseClientPartnersField(entry.field_value);
-        const summary = summarizeClientPartners(partners);
-        current.cadastral_cadastro_clientes_socios_quantidade = String(summary.total);
-        current.cadastral_cadastro_clientes_socios_nomes = summary.names;
-        current.cadastral_cadastro_clientes_socios_participacao_total = String(summary.totalOwnership);
-        current.cadastral_cadastro_clientes_socios_participacao_por_socio = summary.ownershipByPartner;
-        current.cadastral_cadastro_clientes_socios_pro_labore_total = String(summary.totalProLabore);
-        current.cadastral_cadastro_clientes_socios_com_senha_gov = `${summary.withGovPassword}/${summary.total}`;
-        current.cadastral_cadastro_clientes_socios_status_senha_gov = summary.govPasswordStatus;
-        byClientId.set(entry.client_id, current);
-        return;
-      }
-
-      let columnKey: string | null = null;
-
-      if (cadastralClientDataCategorySet.has(entry.category)) {
-        columnKey = toCadastralClientDataColumnKey(entry.category as CadastralClientDataCategory, fieldName);
-      }
-
-      if (!columnKey) return;
-
-      current[columnKey] = entry.field_value || "";
-      byClientId.set(entry.client_id, current);
-    });
-
-    return byClientId;
-  }, [clientDataEntries]);
-
-  const rowsByDataset = useMemo<Record<ReportDatasetId, ReportRow[]>>(
-    () => ({
-      clientes: filteredClients.map((client) => {
-        const clientData = { ...(clientDataByClientId.get(client.id) || {}) };
-        const cadastralRegimeKey = "cadastral_cadastro_clientes_regime_tributário";
-        const reportRegime = normalizeTaxRegimeForReport(client.regime || clientData[cadastralRegimeKey]);
-
-        if (reportRegime) {
-          clientData[cadastralRegimeKey] = reportRegime;
-        }
-
-        return {
-          id: client.id,
-          nome: client.name,
-          cnpj: client.cnpj || "",
-          regime: reportRegime,
-          segmento: client.sector || "",
-          status: client.status || "",
-          contato: client.contact || "",
-          email: (client.email || "").toLowerCase(),
-          telefone: client.phone || "",
-          criado_em: client.created_at,
-          atualizado_em: client.updated_at,
-          ...clientData,
-        };
-      }),
-      leads_crm: filteredLeads.map((lead) => ({
-        id: lead.id,
-        nome: lead.full_name,
-        empresa: lead.company_name || "",
-        email: lead.email,
-        telefone: lead.phone || "",
-        origem: lead.source_tag,
-        pagina_origem: lead.origin_page || "",
-        criado_em: lead.created_at,
-      })),
-      tarefas: filteredTasks.map((task) => ({
-        id: task.id,
-        titulo: task.title,
-        cliente: task.client_name || "",
-        responsavel: task.assignee || "",
-        setor: task.sector,
-        prioridade: task.priority,
-        status: taskStatusLabel(task.status),
-        prazo: task.due_date || "",
-        criado_em: task.created_at,
-        atualizado_em: task.updated_at,
-      })),
-      equipe: filteredTeam.map((member) => ({
-        id: member.user_id,
-        colaborador: member.display_name,
-        papel: member.role,
-        usuario_id: member.user_id,
-        criado_em: member.created_at,
-        atualizado_em: member.updated_at,
-        papel_definido_em: member.role_created_at,
-      })),
-    }),
-    [clientDataByClientId, filteredClients, filteredLeads, filteredTasks, filteredTeam],
-  );
-
-  const activeFilterBadges = useMemo(() => {
-    const items: string[] = [];
-    if (selectedCompany) items.push(`Empresa: ${selectedCompany}`);
-    if (selectedCompetence) items.push(`Competência: ${selectedCompetence}`);
-    return items;
-  }, [selectedCompany, selectedCompetence]);
-
-  const customDefinition = reportDefinitions[customDatasetId];
-
-  const selectedColumnDefinitions = useMemo(
-    () =>
-      selectedColumns
-        .map((columnKey) => customDefinition.columns.find((column) => column.key === columnKey))
-        .filter((column): column is ReportColumnDefinition => Boolean(column)),
-    [customDefinition.columns, selectedColumns],
-  );
-
-  const availableColumns = useMemo(
-    () => customDefinition.columns.filter((column) => !selectedColumns.includes(column.key)),
-    [customDefinition.columns, selectedColumns],
-  );
-
-  const filteredAvailableColumns = useMemo(() => {
-    const searchTerm = normalizeText(repairCommonEncodingIssues(availableColumnSearch));
-    if (!searchTerm) return availableColumns;
-
-    return availableColumns.filter((column) => {
-      const [moduleLabel, subfolderLabel] = getColumnModulePath(customDatasetId, column.key);
-      const searchableText = normalizeText(
-        repairCommonEncodingIssues(`${column.label} ${column.key} ${moduleLabel} ${subfolderLabel}`),
-      );
-
-      return searchableText.includes(searchTerm);
-    });
-  }, [availableColumnSearch, availableColumns, customDatasetId]);
-
-  const availableColumnsByModule = useMemo(() => {
-    const moduleMap = new Map<
-      string,
-      {
-        id: string;
-        label: string;
-        subfolders: Map<string, { id: string; label: string; columns: ReportColumnDefinition[] }>;
-      }
-    >();
-
-    filteredAvailableColumns.forEach((column) => {
-      const [moduleLabel, subfolderLabel] = getColumnModulePath(customDatasetId, column.key);
-      const moduleId = normalizeText(moduleLabel);
-      const subfolderId = normalizeText(subfolderLabel);
-
-      if (!moduleMap.has(moduleId)) {
-        moduleMap.set(moduleId, { id: moduleId, label: moduleLabel, subfolders: new Map() });
-      }
-
-      const moduleEntry = moduleMap.get(moduleId)!;
-      if (!moduleEntry.subfolders.has(subfolderId)) {
-        moduleEntry.subfolders.set(subfolderId, { id: subfolderId, label: subfolderLabel, columns: [] });
-      }
-
-      moduleEntry.subfolders.get(subfolderId)!.columns.push(column);
-    });
-
-    return Array.from(moduleMap.values()).map((moduleEntry) => {
-      const subfolderList = Array.from(moduleEntry.subfolders.values());
-      const totalColumns = subfolderList.reduce((sum, subfolder) => sum + subfolder.columns.length, 0);
-      return {
-        id: moduleEntry.id,
-        label: moduleEntry.label,
-        subfolders: subfolderList,
-        totalColumns,
-      };
-    });
-  }, [customDatasetId, filteredAvailableColumns]);
-
-  useEffect(() => {
-    const selectedSet = new Set(selectedColumns);
-    setRightSelectedKeys((current) => current.filter((key) => selectedSet.has(key)));
-  }, [selectedColumns]);
-
-  const toggleRightSelection = (columnKey: string) => {
-    setRightSelectedKeys((current) =>
-      current.includes(columnKey) ? current.filter((key) => key !== columnKey) : [...current, columnKey],
+  const toggleColumn = (columnKey: string) => {
+    setSelectedColumns((current) =>
+      current.includes(columnKey)
+        ? current.filter((key) => key !== columnKey)
+        : [...current, columnKey],
     );
   };
 
-  const handleAddColumn = (columnKey: string) => {
-    if (selectedColumns.includes(columnKey)) return;
-    setSelectedColumns((current) => [...current, columnKey]);
-  };
-
-  const handleRemoveColumn = (columnKey: string) => {
+  const removeColumn = (columnKey: string) => {
     setSelectedColumns((current) => current.filter((key) => key !== columnKey));
-    setRightSelectedKeys((current) => current.filter((key) => key !== columnKey));
   };
 
-  const canMoveSelectedColumn = rightSelectedKeys.length === 1;
-  const selectedColumnForMove = canMoveSelectedColumn ? rightSelectedKeys[0] : null;
-  const selectedColumnIndex = selectedColumnForMove ? selectedColumns.indexOf(selectedColumnForMove) : -1;
-
-  const handleMoveSelectedColumn = (direction: "up" | "down") => {
-    if (!selectedColumnForMove || selectedColumnIndex < 0) return;
-    const targetIndex = direction === "up" ? selectedColumnIndex - 1 : selectedColumnIndex + 1;
-    if (targetIndex < 0 || targetIndex >= selectedColumns.length) return;
-
-    const next = [...selectedColumns];
-    const [moved] = next.splice(selectedColumnIndex, 1);
-    next.splice(targetIndex, 0, moved);
-    setSelectedColumns(next);
+  const moveColumn = (columnKey: string, direction: "up" | "down") => {
+    setSelectedColumns((current) => {
+      const index = current.indexOf(columnKey);
+      if (index < 0) return current;
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= current.length) return current;
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
   };
 
-  const buildExportRows = useCallback(
-    (datasetId: ReportDatasetId, columnKeys: string[]) => {
-      const definition = reportDefinitions[datasetId];
-      const sourceRows = rowsByDataset[datasetId];
-
-      return sourceRows.map((row) => {
-        const output: Record<string, string> = {};
-        columnKeys.forEach((columnKey) => {
-          const column = definition.columns.find((item) => item.key === columnKey);
-          if (!column) return;
-          output[column.label] = formatCellValue(row[column.key], column.formatter);
-        });
-        return output;
-      });
-    },
-    [rowsByDataset],
-  );
-
-  const handleExport = useCallback(
-    async (datasetId: ReportDatasetId, columnKeys: string[], scopeLabel: string) => {
-      const definition = reportDefinitions[datasetId];
-      const totalRows = rowsByDataset[datasetId].length;
-
-      if (totalRows === 0) {
-        toast.warning("Não há dados para exportar neste relatório.");
-        return;
-      }
-      if (columnKeys.length === 0) {
-        toast.warning("Selecione ao menos uma coluna para exportar.");
-        return;
-      }
-
-      const XLSX = await import("xlsx");
-      const exportRows = buildExportRows(datasetId, columnKeys);
-      const worksheet = XLSX.utils.json_to_sheet(exportRows);
-      const now = new Date().toISOString().replace(/[:.]/g, "-");
-      const baseName = sanitizeFileName(`${definition.name}-${scopeLabel}-${now}`);
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, definition.name.slice(0, 30));
-      XLSX.writeFile(workbook, `${baseName}.xlsx`);
-
-      toast.success(`Relatório ${definition.name} exportado com sucesso.`);
-    },
-    [buildExportRows, rowsByDataset],
-  );
-
-  const handleSaveCurrentReport = useCallback(async () => {
-    if (!user?.id) {
-      toast.error("Voce precisa estar autenticado para salvar relatórios.");
+  const handleSaveReport = async () => {
+    if (!currentOrganizationId) {
+      toast.error("Organizacao ativa obrigatoria para salvar modelo.");
       return;
     }
-
+    if (!user?.id) {
+      toast.error("Usuario autenticado obrigatorio para salvar modelo.");
+      return;
+    }
     const name = savedReportName.trim();
     if (!name) {
-      toast.error("Informe um nome para salvar o relatório.");
+      toast.error("Informe um nome para o modelo.");
       return;
     }
 
-    const sanitizedColumns = sanitizeColumnKeysForDataset(customDatasetId, selectedColumns);
-    if (sanitizedColumns.length === 0) {
-      toast.error("Selecione ao menos uma coluna para salvar.");
-      return;
+    try {
+      const result = await savedReportsQuery.saveReport({
+        id: editingReportId,
+        name,
+        datasetId: activeDataset.id,
+        columnKeys: selectedColumns,
+      });
+      setEditingReportId(result.model.id);
+      setSavedReportName(result.model.name);
+      setSavedReportWarnings(result.validation.warnings);
+      toast.success(editingReportId ? "Modelo atualizado." : "Modelo salvo.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao salvar modelo.";
+      toast.error(message);
     }
+  };
 
-    const now = new Date().toISOString();
-    const normalizedName = normalizeText(name);
-    const existing = savedReports.find(
-      (report) => report.datasetId === customDatasetId && normalizeText(report.name) === normalizedName,
-    );
-    const isEditing = Boolean(editingSavedReportId);
-    const payload = {
-      user_id: user.id,
-      name,
-      dataset_id: customDatasetId,
-      column_keys: sanitizedColumns,
-      format: "xlsx",
-      auto_generate: false,
-      updated_at: now,
-    };
+  const loadSavedReport = (model: SavedReportModel, edit = false) => {
+    const validation = savedReportsQuery.validateSavedReportModel(model);
+    skipDatasetResetRef.current = true;
+    setDatasetId(model.datasetId);
+    setSelectedColumns(validation.validColumnKeys);
+    setSavedReportName(model.name);
+    setEditingReportId(edit ? model.id : null);
+    setSavedReportWarnings(validation.warnings);
+    toast.success(edit ? "Modelo carregado para edicao." : "Modelo carregado.");
+  };
 
-    const query = isEditing
-      ? supabase.from("saved_reports").update(payload).eq("id", editingSavedReportId).eq("user_id", user.id)
-      : supabase.from("saved_reports").upsert(payload, { onConflict: "user_id,name,dataset_id" });
-
-    const { data, error } = await query
-      .select("id, name, dataset_id, column_keys, format, auto_generate, created_at, updated_at")
-      .single();
-
-    if (error) {
-      if (error.code === "23505") {
-        toast.error("Ja existe um relatório salvo com este nome nesta categoria.");
-        return;
+  const handleDeleteReport = async (model: SavedReportModel) => {
+    try {
+      await savedReportsQuery.deleteReport(model);
+      if (editingReportId === model.id) {
+        setEditingReportId(null);
+        setSavedReportName("");
       }
-      toast.error(`Falha ao salvar relatório: ${error.message}`);
-      return;
+      toast.success("Modelo removido.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao remover modelo.";
+      toast.error(message);
     }
-
-    const mapped = mapSavedReportRow(data as SavedReportRow);
-    if (!mapped) {
-      await loadSavedReports();
-      toast.success(isEditing ? "Relatório atualizado com sucesso." : existing ? "Relatório salvo atualizado." : "Relatório salvo com sucesso.");
-      return;
-    }
-
-    setSavedReports((current) => {
-      const filtered = current.filter((report) => report.id !== mapped.id);
-      return [mapped, ...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    });
-
-    setEditingSavedReportId(mapped.id);
-    toast.success(isEditing ? "Relatório atualizado com sucesso." : existing ? "Relatório salvo atualizado." : "Relatório salvo com sucesso.");
-  }, [
-    customDatasetId,
-    editingSavedReportId,
-    loadSavedReports,
-    savedReportName,
-    savedReports,
-    selectedColumns,
-    user?.id,
-  ]);
-
-  const handleLoadSavedReport = (report: SavedReportConfig) => {
-    setEditingSavedReportId(null);
-    skipDatasetResetRef.current = true;
-    setCustomDatasetId(report.datasetId);
-    setSelectedColumns(report.columnKeys);
-    setSavedReportName(report.name);
-    setRightSelectedKeys([]);
-    toast.success("Configuração do relatório carregada.");
   };
 
-  const handleStartEditingSavedReport = (report: SavedReportConfig) => {
-    skipDatasetResetRef.current = true;
-    setCustomDatasetId(report.datasetId);
-    setSelectedColumns(report.columnKeys);
-    setSavedReportName(report.name);
-    setRightSelectedKeys([]);
-    setEditingSavedReportId(report.id);
-    toast.success("Relatório carregado em modo de edicao.");
+  const handleExport = async () => {
+    if (!currentOrganizationId || !previewQuery.data) return;
+    setIsExporting(true);
+    setExportResult(null);
+
+    try {
+      const result = await exportReport({
+        organizationId: currentOrganizationId,
+        dataset: activeDataset,
+        filters,
+        fields: previewQuery.data.columns,
+        rows: previewQuery.data.rows,
+        modelId: editingReportId,
+      });
+      setExportResult(result);
+      if (result.status === "completed") toast.success("Exportacao processada.");
+      if (result.status === "blocked") toast.warning(result.message || "Exportacao bloqueada.");
+      if (result.status === "failed") toast.error(result.message || "Falha ao exportar.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao exportar relatorio.";
+      setExportResult({ status: "failed", message, warnings: [] });
+      toast.error(message);
+    } finally {
+      setIsExporting(false);
+    }
   };
-
-  const handleCancelEditingSavedReport = () => {
-    setEditingSavedReportId(null);
-    setSavedReportName("");
-    toast.success("Edicao de relatório cancelada.");
-  };
-
-  const handleDeleteSavedReport = useCallback(async (reportId: string, reportName: string) => {
-    if (!user?.id) {
-      toast.error("Voce precisa estar autenticado para excluir relatórios salvos.");
-      return;
-    }
-
-    const shouldDelete = window.confirm(`Excluir o relatório salvo "${reportName}"?`);
-    if (!shouldDelete) return;
-
-    const { error } = await supabase
-      .from("saved_reports")
-      .delete()
-      .eq("id", reportId)
-      .eq("user_id", user.id);
-
-    if (error) {
-      toast.error(`Falha ao remover relatório salvo: ${error.message}`);
-      return;
-    }
-
-    setSavedReports((current) => current.filter((report) => report.id !== reportId));
-    if (editingSavedReportId === reportId) {
-      setEditingSavedReportId(null);
-      setSavedReportName("");
-    }
-    toast.success("Relatório salvo removido.");
-  }, [editingSavedReportId, user?.id]);
-
-  const handleRunSavedReport = useCallback(
-    async (report: SavedReportConfig, scope: "manual" | "automático" = "manual") => {
-      await handleExport(
-        report.datasetId,
-        report.columnKeys,
-        `salvo-${scope}-${sanitizeFileName(report.name)}`,
-      );
-    },
-    [handleExport],
-  );
-
-  const customRows = rowsByDataset[customDatasetId];
-  const customPreviewRows = customRows.slice(0, 10);
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-7xl">
+      <div className="max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Relatórios</h1>
+            <h1 className="font-heading text-2xl font-bold">Relatorios</h1>
             <p className="text-sm text-muted-foreground">
-              Construtor de relatórios personalizados com dados do banco.
+              Preview governado por base, filtros, permissao e classificacao de dados.
             </p>
-            {lastUpdatedAt && (
-              <p className="text-xs text-muted-foreground mt-1">Atualizado em {formatDateTime(lastUpdatedAt)}</p>
-            )}
           </div>
-          <Button variant="outline" className="gap-2 w-fit" onClick={() => void loadReportData()} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Atualizar dados
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit gap-2"
+            onClick={() => void previewQuery.refetch()}
+            disabled={previewQuery.isFetching || !currentOrganizationId}
+          >
+            {previewQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Atualizar preview
           </Button>
         </div>
 
-        {activeFilterBadges.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {activeFilterBadges.map((badge) => (
-              <Badge key={badge} variant="secondary">
-                <FilterBadgeLabel text={badge} />
-              </Badge>
-            ))}
+        <ReportFilterSummary filters={filters} />
+
+        {!currentOrganizationId && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            Nenhuma organizacao ativa encontrada para carregar relatorios.
           </div>
         )}
 
-        <div className="space-y-4">
-          <div className="space-y-4">
-            <div className="rounded-xl border bg-card p-4 space-y-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h2 className="font-heading font-semibold">Gerar relatório</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Ajuste as colunas e exporte em XLSX.
-                  </p>
-                </div>
-              </div>
+        {catalogQuery.isLoading ? (
+          <div className="flex min-h-52 items-center justify-center rounded-lg border bg-card">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : datasets.length === 0 ? (
+          <div className="rounded-lg border bg-card p-8 text-center">
+            <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-3 text-sm font-medium">Nenhuma base de relatorio disponivel para seu perfil.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Verifique permissoes e organizacao ativa.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <aside className="space-y-4 rounded-lg border bg-card p-4">
+              <ReportDatasetSelector
+                datasets={datasets}
+                value={activeDataset.id}
+                onValueChange={setDatasetId}
+                disabled={catalogQuery.isFetching}
+              />
 
-              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Modelo salvo</p>
-                    <p className="text-xs text-muted-foreground">Opcional. Use quando quiser repetir este relatório depois.</p>
-                  </div>
-                  <Badge variant="outline" className="w-fit gap-1.5">
-                    <FileSpreadsheet className="h-3.5 w-3.5" />
-                    XLSX
-                  </Badge>
-                </div>
-                {editingSavedReportId && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs">
-                    <span className="text-primary font-medium">Modo edicao ativo para relatório salvo.</span>
-                    <Button type="button" size="sm" variant="ghost" className="h-7" onClick={handleCancelEditingSavedReport}>
-                      Cancelar edicao
-                    </Button>
-                  </div>
-                )}
-                <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-                  <Input
-                    placeholder="Nome do modelo"
-                    value={savedReportName}
-                    onChange={(event) => setSavedReportName(event.target.value)}
-                  />
-                  <Button type="button" variant="outline" className="gap-2" onClick={() => void handleSaveCurrentReport()}>
-                    <Save className="h-4 w-4" />
-                    {editingSavedReportId ? "Atualizar modelo" : "Salvar modelo"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <p className="text-sm font-medium">Colunas disponíveis</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {filteredAvailableColumns.length} de {availableColumns.length} campo(s) disponível(is)
-                  </p>
-                  <div className="relative mt-3">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={availableColumnSearch}
-                      onChange={(event) => setAvailableColumnSearch(event.target.value)}
-                      placeholder="Pesquisar campo para adicionar"
-                      className="pl-9"
-                    />
-                  </div>
-                  <div className="mt-3 max-h-72 overflow-auto space-y-2 pr-1">
-                    {availableColumns.length === 0 && (
-                      <p className="text-sm text-muted-foreground py-6 text-center">Sem colunas para adicionar.</p>
-                    )}
-                    {availableColumns.length > 0 && filteredAvailableColumns.length === 0 && (
-                      <p className="text-sm text-muted-foreground py-6 text-center">Nenhum campo encontrado para esta busca.</p>
-                    )}
-                    {availableColumnsByModule.map((moduleEntry) => (
-                      <div key={moduleEntry.id} className="rounded-md border bg-muted/20 p-2 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                            {moduleEntry.label}
-                          </p>
-                          <Badge variant="outline" className="h-5 text-[10px]">
-                            {moduleEntry.totalColumns}
-                          </Badge>
-                        </div>
-                        <div className="space-y-2">
-                          {moduleEntry.subfolders.map((subfolder) => (
-                            <div key={`${moduleEntry.id}-${subfolder.id}`} className="rounded-md border bg-background p-2 space-y-1">
-                              <p className="text-[11px] font-medium text-muted-foreground">{subfolder.label}</p>
-                              {subfolder.columns.map((column) => (
-                                <button
-                                  key={column.key}
-                                  type="button"
-                                  onClick={() => handleAddColumn(column.key)}
-                                  className="flex w-full items-center justify-between gap-3 rounded-md border px-2.5 py-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-primary/5"
-                                >
-                                  <span>{column.label}</span>
-                                  <span className="text-xs font-medium text-primary">Adicionar</span>
-                                </button>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">Colunas selecionadas</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {selectedColumnDefinitions.length} campo(s) no relatório
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => handleMoveSelectedColumn("up")}
-                        disabled={!canMoveSelectedColumn || selectedColumnIndex <= 0}
-                        aria-label="Mover coluna para cima"
-                      >
-                        <ArrowUp className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => handleMoveSelectedColumn("down")}
-                        disabled={!canMoveSelectedColumn || selectedColumnIndex < 0 || selectedColumnIndex >= selectedColumns.length - 1}
-                        aria-label="Mover coluna para baixo"
-                      >
-                        <ArrowDown className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-3 max-h-72 overflow-auto space-y-1">
-                    {selectedColumnDefinitions.length === 0 && (
-                      <p className="text-sm text-muted-foreground py-6 text-center">Adicione colunas para montar o relatório.</p>
-                    )}
-                    {selectedColumnDefinitions.map((column) => {
-                      const selected = rightSelectedKeys.includes(column.key);
-                      return (
-                        <div
-                          key={column.key}
-                          className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm transition-colors ${
-                            selected ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/40"
-                          }`}
-                        >
-                          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleRightSelection(column.key)}>
-                            {column.label}
-                          </button>
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-muted-foreground transition-colors hover:text-destructive"
-                            onClick={() => handleRemoveColumn(column.key)}
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setSelectedColumns(reportDefinitions[customDatasetId].defaultColumns)}
-                  >
-                    Usar colunas padrão
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setSelectedColumns([])}>
-                    Limpar seleção
-                  </Button>
-                </div>
-                <Button
-                  type="button"
-                  className="gap-2"
-                  onClick={() => void handleExport(customDatasetId, selectedColumns, "personalizado")}
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Exportar XLSX
-                </Button>
-              </div>
-
-              <div className="rounded-lg border p-3 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Relatórios salvos</p>
-                  <Badge variant="outline">{savedReports.length}</Badge>
-                </div>
-                {loadingSavedReports ? (
-                  <p className="text-sm text-muted-foreground">Carregando relatórios salvos...</p>
-                ) : savedReports.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum relatório salvo ainda. Monte o relatório e clique em salvar.
-                  </p>
+              <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                <SavedReportForm
+                  name={savedReportName}
+                  onNameChange={setSavedReportName}
+                  onSubmit={() => void handleSaveReport()}
+                  isSaving={savedReportsQuery.isSaving}
+                  isEditing={Boolean(editingReportId)}
+                  disabled={!currentOrganizationId || selectedColumns.length === 0}
+                />
+                <SavedReportWarnings warnings={savedReportWarnings} />
+                {savedReportsQuery.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Carregando modelos...</p>
                 ) : (
-                  <div className="space-y-2 max-h-72 overflow-auto pr-1">
-                    {savedReports.map((report) => {
-                      const definition = reportDefinitions[report.datasetId];
-                      return (
-                        <div key={report.id} className="rounded-md border p-2.5">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-medium">{report.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {definition.name} · {report.columnKeys.length} colunas · XLSX
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Badge variant="outline">{formatDateTime(report.updatedAt)}</Badge>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            <Button type="button" size="sm" variant="outline" onClick={() => handleLoadSavedReport(report)}>
-                              Carregar
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() => handleStartEditingSavedReport(report)}
-                            >
-                              <Edit3 className="h-3.5 w-3.5" />
-                              Editar
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() => void handleRunSavedReport(report)}
-                            >
-                              <PlayCircle className="h-3.5 w-3.5" />
-                              Gerar
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="gap-1.5 text-destructive hover:text-destructive"
-                              onClick={() => void handleDeleteSavedReport(report.id, report.name)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Excluir
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <SavedReportList
+                    reports={savedReportsQuery.data || []}
+                    onLoad={(model) => loadSavedReport(model)}
+                    onEdit={(model) => loadSavedReport(model, true)}
+                    onDelete={(model) => void handleDeleteReport(model)}
+                    isDeleting={savedReportsQuery.isDeleting}
+                  />
                 )}
               </div>
-            </div>
 
-            <div className="rounded-xl border bg-card">
-              <div className="p-4 border-b flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-heading font-semibold">Preview do relatório</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Mostrando ate 10 linhas de {customRows.length} registro(s) da base.
-                  </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Campos disponiveis</p>
+                  <Badge variant="outline">{selectedColumns.length}</Badge>
                 </div>
-                <Badge variant="outline">{reportDefinitions[customDatasetId].name}</Badge>
+                <ReportFieldBrowser fields={authorizedFields} selectedKeys={selectedSet} onToggle={toggleColumn} />
               </div>
 
-              {selectedColumnDefinitions.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  Selecione colunas para exibir o preview do relatório.
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Colunas selecionadas</p>
+                <SelectedReportFields fields={selectedFieldDefinitions} onRemove={removeColumn} onMove={moveColumn} />
+              </div>
+            </aside>
+
+            <section className="rounded-lg border bg-card">
+              <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-heading font-semibold">Preview do relatorio</h2>
+                    <Badge variant="outline">{activeDataset.name}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Limite de preview: {activeDataset.previewLimit} linhas. Limite direto de exportacao planejado: {activeDataset.exportLimit} linhas.
+                  </p>
                 </div>
-              ) : customRows.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  Nenhum dado encontrado para os filtros atuais.
+                <Badge variant="secondary" className="w-fit gap-1.5">
+                  <Columns3 className="h-3.5 w-3.5" />
+                  {selectedColumns.length} colunas
+                </Badge>
+                <ReportExportControls
+                  onExport={() => void handleExport()}
+                  disabled={!previewQuery.data || previewQuery.data.columns.length === 0 || previewQuery.data.rows.length === 0}
+                  isExporting={isExporting}
+                  result={exportResult}
+                />
+              </div>
+
+              {previewQuery.isLoading || previewQuery.isFetching ? (
+                <div className="flex min-h-72 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : previewQuery.isError ? (
+                <div className="p-8 text-center text-sm text-destructive">
+                  Falha ao carregar preview. Verifique permissoes, filtros e disponibilidade da base.
+                </div>
+              ) : previewQuery.data ? (
+                <div>
+                  {previewQuery.data.warnings.length > 0 && (
+                    <div className="border-b bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                      {previewQuery.data.warnings.length} coluna(s) foram ignoradas por validacao de catalogo ou permissao.
+                    </div>
+                  )}
+                  <ReportPreviewTable preview={previewQuery.data} />
+                  <div className="border-t p-3 text-xs text-muted-foreground">
+                    Mostrando {previewQuery.data.rows.length} de {previewQuery.data.rowCount} registro(s) elegiveis.
+                  </div>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
-                        {selectedColumnDefinitions.map((column) => (
-                          <th key={column.key} className="text-left text-xs font-semibold text-muted-foreground p-3 whitespace-nowrap">
-                            {column.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {customPreviewRows.map((row, rowIndex) => {
-                        const rowKey = String(row.id || `${customDatasetId}-${rowIndex}`);
-                        return (
-                          <tr key={rowKey} className="hover:bg-muted/20 transition-colors">
-                            {selectedColumnDefinitions.map((column) => {
-                              const value = formatCellValue(row[column.key], column.formatter);
-                              return (
-                                <td key={`${rowKey}-${column.key}`} className="p-3 text-sm whitespace-nowrap">
-                                  {value || "-"}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <div className="p-8 text-center text-sm text-muted-foreground">Selecione colunas para carregar o preview.</div>
               )}
-            </div>
+            </section>
           </div>
-        </div>
+        )}
       </div>
     </AppLayout>
-  );
-}
-
-function FilterBadgeLabel({ text }: { text: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <BarChart3 className="h-3.5 w-3.5" />
-      {text}
-    </span>
   );
 }

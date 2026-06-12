@@ -61,6 +61,8 @@ import { supabase } from "@/integrations/supabase/client";
 type WorkspaceTab = "catalogo" | "execucao" | "documentos";
 type MatchStrategy = "manual_instance" | "direct_expected_doc" | "alias_match" | "single_open_instance" | "manual_review";
 
+const showLocalRobotPanel = false;
+
 interface GrowObligationsWorkspaceProps {
   defaultTab?: WorkspaceTab;
   initialClientId?: string | null;
@@ -1108,6 +1110,7 @@ export function GrowObligationsWorkspace({
                   </Button>
                 </div>
 
+                {showLocalRobotPanel && (
                 <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1185,6 +1188,8 @@ export function GrowObligationsWorkspace({
                     <p className="text-xs text-muted-foreground">Nenhuma falha recente do robÃ´ local.</p>
                   )}
                 </div>
+
+                )}
 
                 <div className="space-y-3">
                   {uploadQueue.map((item) => {

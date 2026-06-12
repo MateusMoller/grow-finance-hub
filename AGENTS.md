@@ -62,5 +62,5 @@ Adaptacao ao Grow Finance Hub:
 
 <!-- SPECKIT START -->
 Current Spec Kit feature plan:
-`specs/001-security-parameters/plan.md`
+`specs/002-reports-module-restructure/plan.md`
 <!-- SPECKIT END -->
