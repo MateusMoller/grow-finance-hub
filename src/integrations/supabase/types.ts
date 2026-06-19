@@ -63,6 +63,107 @@ type SavedReportsTable = {
   Relationships: []
 }
 
+type TaxRegimeDefinitionsTable = {
+  Row: {
+    id: string
+    organization_id: string
+    code: string
+    label: string
+    aliases: string[]
+    is_active: boolean
+    sort_order: number
+    created_at: string
+    updated_at: string
+  }
+  Insert: Partial<TaxRegimeDefinitionsTable["Row"]> & {
+    code: string
+    label: string
+  }
+  Update: Partial<TaxRegimeDefinitionsTable["Row"]>
+  Relationships: []
+}
+
+type ObligationRegimeLoadsTable = {
+  Row: {
+    id: string
+    organization_id: string
+    tax_regime_code: string
+    name: string
+    status: string
+    version: number
+    description: string | null
+    owner_sector: string | null
+    review_notes: string | null
+    effective_from: string
+    effective_until: string | null
+    created_by: string | null
+    updated_by: string | null
+    created_at: string
+    updated_at: string
+  }
+  Insert: Partial<ObligationRegimeLoadsTable["Row"]> & {
+    tax_regime_code: string
+    name: string
+  }
+  Update: Partial<ObligationRegimeLoadsTable["Row"]>
+  Relationships: []
+}
+
+type ObligationRegimeLoadItemsTable = {
+  Row: {
+    id: string
+    organization_id: string
+    load_id: string
+    template_id: string
+    applicability: string
+    condition_key: string | null
+    default_start_policy: string
+    default_due_day_override: number | null
+    notes: string | null
+    is_active: boolean
+    sort_order: number
+    created_by: string | null
+    updated_by: string | null
+    created_at: string
+    updated_at: string
+  }
+  Insert: Partial<ObligationRegimeLoadItemsTable["Row"]> & {
+    load_id: string
+    template_id: string
+  }
+  Update: Partial<ObligationRegimeLoadItemsTable["Row"]>
+  Relationships: []
+}
+
+type ObligationLoadApplicationBatchesTable = {
+  Row: {
+    id: string
+    organization_id: string
+    client_id: string | null
+    tax_regime_code: string
+    load_id: string | null
+    mode: string
+    sync_scope: string
+    status: string
+    summary: Json
+    warnings: Json
+    created_by: string | null
+    applied_by: string | null
+    created_at: string
+    applied_at: string | null
+  }
+  Insert: Partial<ObligationLoadApplicationBatchesTable["Row"]> & {
+    tax_regime_code: string
+    mode: string
+  }
+  Update: Partial<ObligationLoadApplicationBatchesTable["Row"]>
+  Relationships: []
+}
+
+type ObligationLoadApplicationReviewsTable = GenericTable
+type ObligationLoadSyncRunsTable = GenericTable
+type ObligationAuditEventsTable = GenericTable
+
 export type Database = {
   public: {
     Tables: {
@@ -125,12 +226,19 @@ export type Database = {
       request_messages: GenericTable
       saved_reports: SavedReportsTable
       site_leads: GenericTable
+      tax_regime_definitions: TaxRegimeDefinitionsTable
       transactions: GenericTable
       user_access_control: GenericTable
       user_profiles: GenericTable
       user_roles: GenericTable
       user_settings: GenericTable
       whatsapp_webhook_logs: GenericTable
+      obligation_regime_loads: ObligationRegimeLoadsTable
+      obligation_regime_load_items: ObligationRegimeLoadItemsTable
+      obligation_load_application_batches: ObligationLoadApplicationBatchesTable
+      obligation_load_application_reviews: ObligationLoadApplicationReviewsTable
+      obligation_load_sync_runs: ObligationLoadSyncRunsTable
+      obligation_audit_events: ObligationAuditEventsTable
     }
     Views: {
       [_ in never]: never

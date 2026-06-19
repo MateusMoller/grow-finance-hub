@@ -58,7 +58,7 @@ import {
 } from "@/lib/growObligations";
 import { supabase } from "@/integrations/supabase/client";
 
-type WorkspaceTab = "catalogo" | "execucao" | "documentos";
+type WorkspaceTab = "catalogo" | "documentos";
 type MatchStrategy = "manual_instance" | "direct_expected_doc" | "alias_match" | "single_open_instance" | "manual_review";
 
 const showLocalRobotPanel = false;
@@ -415,7 +415,7 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
 const overviewQueryKey = ["grow-obligations-overview"];
 
 export function GrowObligationsWorkspace({
-  defaultTab = "execucao",
+  defaultTab = "catalogo",
   initialClientId = null,
 }: GrowObligationsWorkspaceProps) {
   const queryClient = useQueryClient();
@@ -898,9 +898,8 @@ export function GrowObligationsWorkspace({
       </section>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-muted/50 p-1">
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-muted/50 p-1">
           <TabsTrigger value="catalogo" className="rounded-xl">Catalogo</TabsTrigger>
-          <TabsTrigger value="execucao" className="rounded-xl">Execucao</TabsTrigger>
           <TabsTrigger value="documentos" className="rounded-xl">Central de Documentos</TabsTrigger>
         </TabsList>
 
@@ -1012,11 +1011,11 @@ export function GrowObligationsWorkspace({
           <Card className="rounded-3xl">
             <CardHeader>
               <CardTitle>Central de Documentos</CardTitle>
-              <CardDescription>Arraste PDFs em lote. A Grow extrai texto, detecta CNPJ e compara cada arquivo contra os documentos modelo das obrigações vinculadas.</CardDescription>
+              <CardDescription>Arraste ou selecione PDFs para enviar.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <CardContent className="space-y-4">
               <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="hidden">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">Modo web</Badge>
@@ -1037,7 +1036,7 @@ export function GrowObligationsWorkspace({
                   </div>
                 </div>
                 <div
-                  className={`rounded-3xl border border-dashed p-6 transition-colors ${
+                  className={`min-h-[280px] rounded-3xl border border-dashed p-8 transition-colors ${
                     isDraggingUpload
                       ? "border-primary bg-primary/10 shadow-sm"
                       : "border-primary/30 bg-primary/5"
@@ -1063,11 +1062,11 @@ export function GrowObligationsWorkspace({
                     }
                   }}
                 >
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <UploadCloud className="h-10 w-10 text-primary" />
+                  <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 text-center">
+                    <UploadCloud className="h-12 w-12 text-primary" />
                     <div>
-                      <p className="font-medium">{isDraggingUpload ? "Solte os PDFs para adicionar" : "Arraste PDFs aqui"}</p>
-                      <p className="text-sm text-muted-foreground">O sistema analisa cada arquivo, monta o preview e, quando houver match confiavel, ja tenta concluir a obrigacao no proprio envio.</p>
+                      <p className="text-lg font-medium">{isDraggingUpload ? "Solte os PDFs para adicionar" : "Arraste PDFs aqui"}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">PDFs serão adicionados à fila de envio.</p>
                     </div>
                     <input
                       ref={uploadInputRef}
@@ -1092,7 +1091,7 @@ export function GrowObligationsWorkspace({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                <div className="hidden">
                   <div>
                     <p className="text-sm font-medium">Pós-processamento operacional</p>
                     <p className="text-xs text-muted-foreground">
@@ -1285,7 +1284,7 @@ export function GrowObligationsWorkspace({
                   <p className="text-sm text-orange-600">{uploadQueueValidationError}</p>
                 )}
                 <Button
-                  className="rounded-2xl"
+                  className={`rounded-2xl ${uploadQueue.length === 0 ? "hidden" : ""}`}
                   onClick={() => uploadQueueMutation.mutate()}
                   disabled={uploadQueueMutation.isPending || uploadQueue.length === 0 || Boolean(uploadQueueValidationError)}
                 >
@@ -1294,7 +1293,7 @@ export function GrowObligationsWorkspace({
                 </Button>
               </div>
 
-              <div className="space-y-4">
+              <div className="hidden">
                 <div className="rounded-3xl border p-5">
                   <div className="mb-4 flex items-center justify-between">
                     <div><p className="text-sm font-medium">Triagem pendente</p><p className="text-xs text-muted-foreground">{pendingDocuments.length} documentos aguardando analise</p></div>

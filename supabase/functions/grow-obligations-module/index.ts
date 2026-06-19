@@ -3594,6 +3594,294 @@ async function handleClientSnapshot(supabaseAdmin: SupabaseAdmin, actorId: strin
   });
 }
 
+function hasTemplateManagerRole(roles: string[]) {
+  return roles.some((role) => templateManagerRoles.has(role));
+}
+
+function normalizeRegimeCode(value: unknown) {
+  const normalized = asTrimmedString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  const aliases = new Map([
+    ["simples", "simples_nacional"],
+    ["simples nacional", "simples_nacional"],
+    ["sn", "simples_nacional"],
+    ["lucro presumido", "lucro_presumido"],
+    ["presumido", "lucro_presumido"],
+    ["lp", "lucro_presumido"],
+    ["lucro real", "lucro_real"],
+    ["real", "lucro_real"],
+    ["lr", "lucro_real"],
+    ["mei", "mei"],
+    ["microempreendedor individual", "mei"],
+    ["simei", "mei"],
+  ]);
+
+  return aliases.get(normalized) || normalized.replace(/\s+/g, "_");
+}
+
+function normalizeDuplicateText(value: unknown) {
+  return asTrimmedString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\bf\s*g\s*t\s*s\b/g, "fgts")
+    .replace(/\bd\s*c\s*t\s*f\s*web\b/g, "dctfweb")
+    .replace(/\be\s*social\b/g, "esocial")
+    .trim();
+}
+
+function normalizeDuplicateCode(value: unknown) {
+  return asTrimmedString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+async function handleDetectObligationDuplicates(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const id = asTrimmedString(payload.id);
+  const code = normalizeDuplicateCode(payload.code);
+  const name = normalizeDuplicateText(payload.name);
+
+  if (!code && !name) {
+    return jsonResponse({ error: "Nome ou codigo da obrigacao e obrigatorio." }, 400);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("obligation_templates")
+    .select("id, code, name, normalized_name, is_active")
+    .eq("organization_id", organizationId)
+    .eq("is_active", true);
+
+  if (error) return jsonResponse({ error: error.message }, 400);
+
+  const matches = ((data || []) as Array<JsonRecord>)
+    .filter((template) => asTrimmedString(template.id) !== id)
+    .map((template) => {
+      const templateCode = normalizeDuplicateCode(template.code);
+      const templateName = normalizeDuplicateText(asTrimmedString(template.normalized_name) || template.name);
+      if (code && templateCode && code === templateCode) {
+        return {
+          template_id: template.id,
+          code: template.code,
+          name: template.name,
+          match_type: "code",
+          severity: "block",
+        };
+      }
+      if (name && templateName && name === templateName) {
+        return {
+          template_id: template.id,
+          code: template.code,
+          name: template.name,
+          match_type: "normalized_name",
+          severity: "block",
+        };
+      }
+      if (name && templateName && (name.includes(templateName) || templateName.includes(name))) {
+        return {
+          template_id: template.id,
+          code: template.code,
+          name: template.name,
+          match_type: "semantic",
+          severity: "review",
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  return jsonResponse({ ok: true, matches });
+}
+
+async function handleListRegimeLoads(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const taxRegimeCode = asTrimmedString(payload.tax_regime_code);
+  const status = asTrimmedString(payload.status);
+
+  const regimesQuery = supabaseAdmin
+    .from("tax_regime_definitions")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("sort_order", { ascending: true });
+
+  let loadsQuery = supabaseAdmin
+    .from("obligation_regime_loads")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("tax_regime_code", { ascending: true })
+    .order("version", { ascending: false });
+
+  if (taxRegimeCode) loadsQuery = loadsQuery.eq("tax_regime_code", normalizeRegimeCode(taxRegimeCode));
+  if (status) loadsQuery = loadsQuery.eq("status", status);
+
+  const [{ data: regimes, error: regimesError }, { data: loads, error: loadsError }] = await Promise.all([
+    regimesQuery,
+    loadsQuery,
+  ]);
+
+  if (regimesError) return jsonResponse({ error: regimesError.message }, 400);
+  if (loadsError) return jsonResponse({ error: loadsError.message }, 400);
+
+  const loadIds = ((loads || []) as Array<JsonRecord>).map((load) => String(load.id));
+
+  const [itemsResult, templatesResult, syncRunsResult] = await Promise.all([
+    loadIds.length
+      ? supabaseAdmin.from("obligation_regime_load_items").select("*").eq("organization_id", organizationId).in("load_id", loadIds)
+      : Promise.resolve({ data: [], error: null }),
+    supabaseAdmin.from("obligation_templates").select("*").eq("organization_id", organizationId).order("name", { ascending: true }),
+    loadIds.length
+      ? supabaseAdmin
+          .from("obligation_load_sync_runs")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .in("load_id", loadIds)
+          .order("started_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (itemsResult.error) return jsonResponse({ error: itemsResult.error.message }, 400);
+  if (templatesResult.error) return jsonResponse({ error: templatesResult.error.message }, 400);
+  if (syncRunsResult.error) return jsonResponse({ error: syncRunsResult.error.message }, 400);
+
+  return jsonResponse({
+    ok: true,
+    regimes: regimes || [],
+    loads: loads || [],
+    items: itemsResult.data || [],
+    templates: templatesResult.data || [],
+    sync_runs: syncRunsResult.data || [],
+    duplicate_warnings: [],
+  });
+}
+
+async function handleUpsertRegimeLoad(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  roles: string[],
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  if (!hasTemplateManagerRole(roles)) {
+    return jsonResponse({ error: "Only admin, director, or manager can manage regime loads" }, 403);
+  }
+
+  const id = asTrimmedString(payload.id);
+  const taxRegimeCode = normalizeRegimeCode(payload.tax_regime_code);
+  const name = asTrimmedString(payload.name);
+  const status = asTrimmedString(payload.status) || "in_review";
+
+  if (!taxRegimeCode || !name) {
+    return jsonResponse({ error: "Regime e nome da carga sao obrigatorios." }, 400);
+  }
+
+  if (status === "active") {
+    let activeQuery = supabaseAdmin
+      .from("obligation_regime_loads")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("tax_regime_code", taxRegimeCode)
+      .eq("status", "active")
+      .limit(1);
+    if (id) activeQuery = activeQuery.neq("id", id);
+    const { data: activeLoads, error: activeError } = await activeQuery;
+    if (activeError) return jsonResponse({ error: activeError.message }, 400);
+    if ((activeLoads || []).length > 0) {
+      return jsonResponse({ error: "Ja existe uma carga ativa para este regime." }, 409);
+    }
+  }
+
+  const row = {
+    organization_id: organizationId,
+    tax_regime_code: taxRegimeCode,
+    name,
+    status,
+    description: asTrimmedString(payload.description),
+    owner_sector: asTrimmedString(payload.owner_sector),
+    review_notes: asTrimmedString(payload.review_notes),
+    effective_from: asTrimmedString(payload.effective_from) || toIsoDate(new Date()),
+    effective_until: asTrimmedString(payload.effective_until),
+    updated_by: actorId,
+    ...(id ? {} : { created_by: actorId }),
+  };
+
+  const query = id
+    ? supabaseAdmin.from("obligation_regime_loads").update(row).eq("organization_id", organizationId).eq("id", id).select("*").single()
+    : supabaseAdmin.from("obligation_regime_loads").insert(row).select("*").single();
+
+  const { data, error } = await query;
+  if (error) return jsonResponse({ error: error.message }, 400);
+  return jsonResponse({ ok: true, load: data });
+}
+
+async function handleUpsertRegimeLoadItem(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  roles: string[],
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  if (!hasTemplateManagerRole(roles)) {
+    return jsonResponse({ error: "Only admin, director, or manager can manage regime load items" }, 403);
+  }
+
+  const id = asTrimmedString(payload.id);
+  const loadId = asTrimmedString(payload.load_id);
+  const templateId = asTrimmedString(payload.template_id);
+  const applicability = asTrimmedString(payload.applicability) || "required";
+  const conditionKey = asTrimmedString(payload.condition_key);
+
+  if (!loadId || !templateId) {
+    return jsonResponse({ error: "Carga e obrigacao mestre sao obrigatorias." }, 400);
+  }
+
+  if (applicability === "conditional" && !conditionKey) {
+    return jsonResponse({ error: "Obrigacoes condicionais exigem condition_key." }, 400);
+  }
+
+  const row = {
+    organization_id: organizationId,
+    load_id: loadId,
+    template_id: templateId,
+    applicability,
+    condition_key: applicability === "conditional" ? conditionKey : null,
+    default_start_policy: asTrimmedString(payload.default_start_policy) || "client_created_at",
+    default_due_day_override: asInteger(payload.default_due_day_override, null),
+    notes: asTrimmedString(payload.notes),
+    is_active: asBoolean(payload.is_active, true),
+    sort_order: asInteger(payload.sort_order, 0),
+    updated_by: actorId,
+    ...(id ? {} : { created_by: actorId }),
+  };
+
+  const query = id
+    ? supabaseAdmin
+        .from("obligation_regime_load_items")
+        .update(row)
+        .eq("organization_id", organizationId)
+        .eq("id", id)
+        .select("*")
+        .single()
+    : supabaseAdmin.from("obligation_regime_load_items").insert(row).select("*").single();
+
+  const { data, error } = await query;
+  if (error) return jsonResponse({ error: error.message }, 400);
+  return jsonResponse({ ok: true, item: data, warnings: [] });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -3635,6 +3923,22 @@ Deno.serve(async (req) => {
 
     if (action === "upsert_template") {
       return await handleUpsertTemplate(supabaseAdmin, user.id, roles, payload);
+    }
+
+    if (action === "list_regime_loads") {
+      return await handleListRegimeLoads(supabaseAdmin, organizationId, payload);
+    }
+
+    if (action === "upsert_regime_load") {
+      return await handleUpsertRegimeLoad(supabaseAdmin, user.id, roles, organizationId, payload);
+    }
+
+    if (action === "upsert_regime_load_item") {
+      return await handleUpsertRegimeLoadItem(supabaseAdmin, user.id, roles, organizationId, payload);
+    }
+
+    if (action === "detect_obligation_duplicates") {
+      return await handleDetectObligationDuplicates(supabaseAdmin, organizationId, payload);
     }
 
     if (action === "upsert_profile") {

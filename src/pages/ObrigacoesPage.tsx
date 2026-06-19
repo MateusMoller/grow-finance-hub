@@ -7,9 +7,9 @@ export default function ObrigacoesPage() {
   const searchParams = new URLSearchParams(location.search);
   const requestedTab = searchParams.get("tab");
   const defaultTab =
-    requestedTab === "catalogo" || requestedTab === "execucao" || requestedTab === "documentos"
+    requestedTab === "catalogo" || requestedTab === "documentos"
       ? requestedTab
-      : "execucao";
+      : "catalogo";
 
   return (
     <AppLayout>

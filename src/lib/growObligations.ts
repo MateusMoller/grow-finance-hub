@@ -37,6 +37,10 @@ export type GrowObligationTemplate = {
   id: string;
   code: string;
   name: string;
+  normalized_name?: string | null;
+  duplicate_group_key?: string | null;
+  baseline_source?: "manual" | "seed" | "migration" | "legacy_import";
+  catalog_review_status?: "approved" | "needs_review" | "duplicate_candidate" | "inactive";
   sector: string;
   periodicity: "monthly" | "quarterly" | "yearly" | "custom";
   competence_reference: "vigente" | "anterior";
@@ -91,6 +95,14 @@ export type GrowObligationProfile = {
   id: string;
   client_id: string;
   template_id: string;
+  source_kind?: "standard_load" | "manual" | "regime_migration" | "legacy" | "exception";
+  source_load_id?: string | null;
+  source_load_item_id?: string | null;
+  applied_regime?: string | null;
+  application_batch_id?: string | null;
+  inactivation_reason?: string | null;
+  sync_status?: "current" | "pending_review" | "skipped" | "not_applicable";
+  conditional_review_reason?: string | null;
   assigned_to: string | null;
   start_date: string;
   end_date: string | null;
@@ -255,6 +267,9 @@ export type GrowObligationsOverviewPayload = {
   instances: GrowObligationInstance[];
   documents: GrowDocumentInboxItem[];
   ingestion_jobs: GrowDocumentIngestionJob[];
+  regime_loads?: unknown[];
+  regime_load_items?: unknown[];
+  obligation_load_sync_runs?: unknown[];
 };
 
 export type GrowClientSnapshotPayload = {
