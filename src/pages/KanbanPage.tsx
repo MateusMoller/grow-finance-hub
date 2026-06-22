@@ -225,6 +225,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     const { data, error } = await supabase
       .from("clients")
       .select("id, name")
+      .eq("status", "Ativo")
       .order("name");
 
     if (error) {
@@ -455,8 +456,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
   useEffect(() => {
     if (!selectedCompany) return;
-    setNewTask((prev) => ({ ...prev, client_name: selectedCompany }));
-  }, [selectedCompany]);
+    const selectedActiveClient = clients.find(
+      (client) => normalizeText(client.name) === normalizeText(selectedCompany)
+    );
+    if (selectedActiveClient) {
+      setNewTask((prev) => ({ ...prev, client_name: selectedActiveClient.name }));
+    }
+  }, [clients, selectedCompany]);
 
   const handleAddDraftSubtask = () => {
     const title = newSubtaskTitle.trim();
