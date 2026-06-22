@@ -410,20 +410,15 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    if (!newTask.client_name.trim()) {
-      toast.error("Selecione um cliente cadastrado");
-      return;
-    }
-
     if (!canAccessTaskSector(newTask.sector, activeRoles)) {
       toast.error("Voce nao tem permissao para criar tarefas neste setor");
       return;
     }
 
-    const selectedClient = clients.find(
-      (client) => normalizeText(client.name) === normalizeText(newTask.client_name)
-    );
-    if (!selectedClient) {
+    const selectedClient = newTask.client_name.trim()
+      ? clients.find((client) => normalizeText(client.name) === normalizeText(newTask.client_name))
+      : null;
+    if (newTask.client_name.trim() && !selectedClient) {
       toast.error("Cliente invalido. Selecione um cliente da lista");
       return;
     }
@@ -432,7 +427,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       .from("kanban_tasks")
       .insert({
         title: newTask.title,
-        client_name: selectedClient.name,
+        client_name: selectedClient?.name || null,
         assignee: newTask.assignee || null,
         priority: newTask.priority,
         sector: newTask.sector,
@@ -658,7 +653,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Cliente</Label>
+                <Label>Cliente (opcional)</Label>
                 <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -669,7 +664,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       className="w-full justify-between"
                       disabled={loadingClients}
                     >
-                      {newTask.client_name || (loadingClients ? "Carregando clientes..." : "Selecione um cliente")}
+                      {newTask.client_name || (loadingClients ? "Carregando clientes..." : "Sem cliente")}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -679,6 +674,21 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       <CommandList>
                         <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                         <CommandGroup>
+                          <CommandItem
+                            value="sem cliente"
+                            onSelect={() => {
+                              setNewTask((prev) => ({ ...prev, client_name: "" }));
+                              setClientPickerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                !newTask.client_name ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            Sem cliente
+                          </CommandItem>
                           {clients.map((client) => (
                             <CommandItem
                               key={client.id}

@@ -409,20 +409,15 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
-    if (!newTask.client.trim()) {
-      toast.error("Selecione um cliente cadastrado");
-      return;
-    }
-
     if (!canAccessTaskSector(newTask.sector, activeRoles)) {
       toast.error("Voce nao tem permissao para criar tarefas neste setor");
       return;
     }
 
-    const selectedClient = clients.find(
-      (client) => normalizeText(client.name) === normalizeText(newTask.client)
-    );
-    if (!selectedClient) {
+    const selectedClient = newTask.client.trim()
+      ? clients.find((client) => normalizeText(client.name) === normalizeText(newTask.client))
+      : null;
+    if (newTask.client.trim() && !selectedClient) {
       toast.error("Cliente invalido. Selecione um cliente da lista");
       return;
     }
@@ -430,7 +425,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     const baseInsertPayload = {
       title: newTask.title.trim(),
       description: newTask.description.trim() || null,
-      client_name: selectedClient.name,
+      client_name: selectedClient?.name || null,
       sector: newTask.sector,
       assignee: newTask.assignee.trim() || null,
       priority: newTask.priority,
@@ -785,7 +780,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Cliente</Label>
+                <Label>Cliente (opcional)</Label>
                 <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -796,7 +791,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                       className="w-full justify-between"
                       disabled={loadingClients}
                     >
-                      {newTask.client || (loadingClients ? "Carregando clientes..." : "Selecione um cliente")}
+                      {newTask.client || (loadingClients ? "Carregando clientes..." : "Sem cliente")}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -806,6 +801,21 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                       <CommandList>
                         <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                         <CommandGroup>
+                          <CommandItem
+                            value="sem cliente"
+                            onSelect={() => {
+                              setNewTask((prev) => ({ ...prev, client: "" }));
+                              setClientPickerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                !newTask.client ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            Sem cliente
+                          </CommandItem>
                           {clients.map((client) => (
                             <CommandItem
                               key={client.id}
