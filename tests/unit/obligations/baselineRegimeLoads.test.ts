@@ -22,6 +22,47 @@ describe("baseline regime loads", () => {
     expect(fgtsLoadReferences).toHaveLength(4);
   });
 
+  it("registers the governed catalog routines as separate master obligations", () => {
+    const masterCodes = new Set(baselineMasterObligations.map((obligation) => obligation.code));
+
+    expect(masterCodes).toEqual(
+      new Set([
+        "accounting_monthly_closing",
+        "annual_cadastral_fiscal_review",
+        "client_document_checklist",
+        "das_complementar_review",
+        "dasn_simei",
+        "defis",
+        "dctf_mensal",
+        "dctfweb_mit",
+        "ecd",
+        "ecf",
+        "efd_contribuicoes",
+        "efd_icms_ipi",
+        "efd_reinf",
+        "esocial",
+        "fgts",
+        "icms_state_routine",
+        "inss_contribution_review",
+        "irpj_csll_lucro_real",
+        "irpj_csll_presumido",
+        "iss_municipal",
+        "lalur_lacs_review",
+        "mei_migration_alert",
+        "mei_revenue_support",
+        "mei_status_limit_review",
+        "payroll_closing",
+        "pgdas_d",
+        "pgmei",
+        "pis_cofins_cumulativo",
+        "pis_cofins_nao_cumulativo",
+        "simples_option_status_review",
+        "tax_regularidade_review",
+        "tax_withholding_review",
+      ]),
+    );
+  });
+
   it("requires condition keys for conditional baseline items", () => {
     const conditionalItems = baselineRegimeLoads.flatMap((load) =>
       load.items.filter((item) => item.applicability === "conditional"),

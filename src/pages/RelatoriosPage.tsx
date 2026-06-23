@@ -238,25 +238,86 @@ export default function RelatoriosPage() {
             <p className="mt-1 text-sm text-muted-foreground">Verifique permissoes e organizacao ativa.</p>
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <aside className="space-y-4 rounded-lg border bg-card p-4">
-              <ReportDatasetSelector
-                datasets={datasets}
-                value={activeDataset.id}
-                onValueChange={setDatasetId}
-                disabled={catalogQuery.isFetching}
-              />
+          <div className="space-y-4">
+            <section className="space-y-4 rounded-xl border bg-card p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="font-heading font-semibold">Gerar relatorio</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Ajuste a base, escolha as colunas e exporte em XLSX.
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit gap-1.5">
+                  <Columns3 className="h-3.5 w-3.5" />
+                  {selectedColumns.length} colunas
+                </Badge>
+              </div>
 
-              <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-                <SavedReportForm
-                  name={savedReportName}
-                  onNameChange={setSavedReportName}
-                  onSubmit={() => void handleSaveReport()}
-                  isSaving={savedReportsQuery.isSaving}
-                  isEditing={Boolean(editingReportId)}
-                  disabled={!currentOrganizationId || selectedColumns.length === 0}
+              <div className="grid gap-3 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
+                <ReportDatasetSelector
+                  datasets={datasets}
+                  value={activeDataset.id}
+                  onValueChange={setDatasetId}
+                  disabled={catalogQuery.isFetching}
                 />
-                <SavedReportWarnings warnings={savedReportWarnings} />
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <SavedReportForm
+                    name={savedReportName}
+                    onNameChange={setSavedReportName}
+                    onSubmit={() => void handleSaveReport()}
+                    isSaving={savedReportsQuery.isSaving}
+                    isEditing={Boolean(editingReportId)}
+                    disabled={!currentOrganizationId || selectedColumns.length === 0}
+                  />
+                  <SavedReportWarnings warnings={savedReportWarnings} />
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Campos disponiveis</p>
+                      <p className="text-xs text-muted-foreground">
+                        Selecione os campos que entram no relatorio.
+                      </p>
+                    </div>
+                    <Badge variant="outline">{authorizedFields.length}</Badge>
+                  </div>
+                  <ReportFieldBrowser fields={authorizedFields} selectedKeys={selectedSet} onToggle={toggleColumn} />
+                </div>
+
+                <div className="rounded-lg border p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Colunas selecionadas</p>
+                      <p className="text-xs text-muted-foreground">
+                        Reordene ou remova campos antes de exportar.
+                      </p>
+                    </div>
+                    <Badge variant="outline">{selectedFieldDefinitions.length}</Badge>
+                  </div>
+                  <SelectedReportFields fields={selectedFieldDefinitions} onRemove={removeColumn} onMove={moveColumn} />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-muted-foreground">
+                  Preview limitado a {activeDataset.previewLimit} linhas. Exportacao direta planejada ate {activeDataset.exportLimit} linhas.
+                </div>
+                <ReportExportControls
+                  onExport={() => void handleExport()}
+                  disabled={!previewQuery.data || previewQuery.data.columns.length === 0 || previewQuery.data.rows.length === 0}
+                  isExporting={isExporting}
+                  result={exportResult}
+                />
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Modelos salvos</p>
+                  <Badge variant="outline">{savedReportsQuery.data?.length || 0}</Badge>
+                </div>
                 {savedReportsQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">Carregando modelos...</p>
                 ) : (
@@ -269,22 +330,9 @@ export default function RelatoriosPage() {
                   />
                 )}
               </div>
+            </section>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Campos disponiveis</p>
-                  <Badge variant="outline">{selectedColumns.length}</Badge>
-                </div>
-                <ReportFieldBrowser fields={authorizedFields} selectedKeys={selectedSet} onToggle={toggleColumn} />
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Colunas selecionadas</p>
-                <SelectedReportFields fields={selectedFieldDefinitions} onRemove={removeColumn} onMove={moveColumn} />
-              </div>
-            </aside>
-
-            <section className="rounded-lg border bg-card">
+            <section className="rounded-xl border bg-card">
               <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -292,19 +340,10 @@ export default function RelatoriosPage() {
                     <Badge variant="outline">{activeDataset.name}</Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Limite de preview: {activeDataset.previewLimit} linhas. Limite direto de exportacao planejado: {activeDataset.exportLimit} linhas.
+                    Mostrando ate {activeDataset.previewLimit} linhas da base selecionada.
                   </p>
                 </div>
-                <Badge variant="secondary" className="w-fit gap-1.5">
-                  <Columns3 className="h-3.5 w-3.5" />
-                  {selectedColumns.length} colunas
-                </Badge>
-                <ReportExportControls
-                  onExport={() => void handleExport()}
-                  disabled={!previewQuery.data || previewQuery.data.columns.length === 0 || previewQuery.data.rows.length === 0}
-                  isExporting={isExporting}
-                  result={exportResult}
-                />
+                <Badge variant="secondary" className="w-fit">{selectedColumns.length} colunas</Badge>
               </div>
 
               {previewQuery.isLoading || previewQuery.isFetching ? (

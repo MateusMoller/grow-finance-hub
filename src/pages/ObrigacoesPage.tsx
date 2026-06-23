@@ -9,7 +9,7 @@ export default function ObrigacoesPage() {
   const defaultTab =
     requestedTab === "catalogo" || requestedTab === "documentos"
       ? requestedTab
-      : "catalogo";
+      : "documentos";
 
   return (
     <AppLayout>

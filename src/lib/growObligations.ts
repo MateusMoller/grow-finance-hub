@@ -83,6 +83,8 @@ export type GrowClientSummary = {
   id: string;
   name: string;
   cnpj: string | null;
+  regime?: string | null;
+  tax_regime_code?: string | null;
   sector: string;
   status: string;
   email?: string | null;

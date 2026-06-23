@@ -634,7 +634,7 @@ async function assertOrganizationFeatureEnabled(
 async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, cnpj, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
+    .select("id, name, cnpj, regime, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
     .order("name");
 
   if (error) throw error;
@@ -646,6 +646,8 @@ async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
         id: String((row as JsonRecord).id),
         name: String((row as JsonRecord).name || ""),
         cnpj: normalizeCnpj(asTrimmedString((row as JsonRecord).cnpj)),
+        regime: asTrimmedString((row as JsonRecord).regime),
+        tax_regime_code: normalizeRegimeCode((row as JsonRecord).regime),
         sector: asTrimmedString((row as JsonRecord).sector) || "Geral",
         status: asTrimmedString((row as JsonRecord).status) || "Ativo",
         email: normalizeEmail((row as JsonRecord).email),

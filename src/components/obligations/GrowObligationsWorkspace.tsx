@@ -1,20 +1,22 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
 import {
-  AlertTriangle,
   CalendarClock,
+  CheckCircle2,
   ClipboardList,
-  FileArchive,
+  FileText,
   FileSpreadsheet,
   FolderUp,
   Loader2,
+  Mail,
+  MessageCircle,
   Plus,
   RefreshCcw,
-  ShieldCheck,
+  Settings2,
   Sparkles,
   Trash2,
   UploadCloud,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +37,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzePdfDocument, type AnalyzedDocument } from "@/lib/documentRecognition";
+import { normalizeTaxRegime, taxRegimeDefinitions } from "@/lib/obligations/taxRegimes";
+import type { TaxRegimeCode } from "@/lib/obligations/regimeLoadTypes";
 import {
   buildSecureStoragePath,
   SECURE_DOCUMENT_ACCEPT,
@@ -415,7 +419,7 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
 const overviewQueryKey = ["grow-obligations-overview"];
 
 export function GrowObligationsWorkspace({
-  defaultTab = "catalogo",
+  defaultTab = "documentos",
   initialClientId = null,
 }: GrowObligationsWorkspaceProps) {
   const queryClient = useQueryClient();
@@ -760,12 +764,51 @@ export function GrowObligationsWorkspace({
     [overview?.templates],
   );
 
+  const activeTemplateClients = useMemo(
+    () => (overview?.clients || []).filter((client) => client.status.toLowerCase() === "ativo"),
+    [overview?.clients],
+  );
+
   const filteredTemplateClients = useMemo(() => {
-    const items = overview?.clients || [];
+    const items = activeTemplateClients;
     const token = templateClientSearch.trim().toLowerCase();
     if (!token) return items;
-    return items.filter((client) => `${client.name} ${client.cnpj || ""}`.toLowerCase().includes(token));
-  }, [overview?.clients, templateClientSearch]);
+    return items.filter((client) => `${client.name} ${client.cnpj || ""} ${client.regime || ""}`.toLowerCase().includes(token));
+  }, [activeTemplateClients, templateClientSearch]);
+
+  const templateClientsByRegime = useMemo(() => {
+    const selectedIds = new Set(templateForm.linked_client_ids);
+
+    return taxRegimeDefinitions
+      .map((definition) => {
+        const clientIds = activeTemplateClients
+          .filter((client) => normalizeTaxRegime(client.tax_regime_code || client.regime) === definition.code)
+          .map((client) => client.id);
+
+        return {
+          ...definition,
+          clientIds,
+          selectedCount: clientIds.filter((clientId) => selectedIds.has(clientId)).length,
+        };
+      })
+      .filter((definition) => definition.clientIds.length > 0);
+  }, [activeTemplateClients, templateForm.linked_client_ids]);
+
+  function setTemplateRegimeClients(regimeCode: TaxRegimeCode, selected: boolean) {
+    const targetClientIds = activeTemplateClients
+      .filter((client) => normalizeTaxRegime(client.tax_regime_code || client.regime) === regimeCode)
+      .map((client) => client.id);
+
+    if (targetClientIds.length === 0) return;
+
+    const targetSet = new Set(targetClientIds);
+    setTemplateForm((prev) => ({
+      ...prev,
+      linked_client_ids: selected
+        ? Array.from(new Set([...prev.linked_client_ids, ...targetClientIds]))
+        : prev.linked_client_ids.filter((clientId) => !targetSet.has(clientId)),
+    }));
+  }
 
   async function runPreview(item: UploadQueueItem) {
     if (!item.file?.name) {
@@ -880,27 +923,12 @@ export function GrowObligationsWorkspace({
             </Button>
           </div>
         </div>
-        <div className="relative mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Pendentes", value: overview.summary.pending_instances, icon: ClipboardList, accent: "text-amber-600" },
-            { label: "Atrasadas", value: overview.summary.overdue_instances, icon: AlertTriangle, accent: "text-red-600" },
-            { label: "Fila documental", value: overview.summary.inbox_processing + overview.summary.inbox_pending, icon: FileArchive, accent: "text-orange-600" },
-            { label: "Falhas no robô", value: overview.summary.robot_failed_total, icon: ShieldCheck, accent: "text-primary" },
-          ].map((item) => (
-            <motion.div key={item.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="rounded-3xl border border-border/60 bg-background/75 p-4">
-              <div className="flex items-start justify-between">
-                <div><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p><p className="mt-3 text-3xl font-semibold">{item.value}</p></div>
-                <item.icon className={`h-5 w-5 ${item.accent}`} />
-              </div>
-            </motion.div>
-          ))}
-        </div>
       </section>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-muted/50 p-1">
-          <TabsTrigger value="catalogo" className="rounded-xl">Catalogo</TabsTrigger>
           <TabsTrigger value="documentos" className="rounded-xl">Central de Documentos</TabsTrigger>
+          <TabsTrigger value="catalogo" className="rounded-xl">Catalogo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="catalogo" className="space-y-4">
@@ -1364,13 +1392,29 @@ export function GrowObligationsWorkspace({
       </Tabs>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>{templateForm.id ? "Editar obrigação" : "Nova obrigação"}</DialogTitle>
-            <DialogDescription>Salve o template e depois anexe PDFs modelo em cada documento esperado.</DialogDescription>
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto p-0">
+          <DialogHeader className="border-b border-border/70 bg-muted/20 px-6 py-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <DialogTitle className="text-xl">{templateForm.id ? "Editar obrigação" : "Nova obrigação"}</DialogTitle>
+                <DialogDescription>Configure prazos, automações, clientes e documentos esperados do template.</DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="grid gap-4 py-2 md:grid-cols-2">
+          <details open className="group mx-6 mt-5 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <summary className="mb-4 flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Dados principais</h3>
+              </div>
+              <span className="text-xs text-muted-foreground group-open:hidden">Expandir</span>
+              <span className="text-xs text-muted-foreground group-open:inline hidden">Recolher</span>
+            </summary>
+            <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2"><Label>Nome</Label><Input value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} /></div>
             <div className="space-y-2"><Label>Setor</Label><Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Periodicidade</Label><Select value={templateForm.periodicity} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, periodicity: value as GrowObligationTemplate["periodicity"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent></Select></div>
@@ -1406,18 +1450,28 @@ export function GrowObligationsWorkspace({
             <div className="space-y-2"><Label>Prioridade</Label><Select value={templateForm.priority} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, priority: value as GrowObligationInstance["priority"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Dia do vencimento legal</Label><Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} /></div>
             <div className="space-y-2 md:col-span-2"><Label>Observacoes operacionais</Label><Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} /></div>
-          </div>
+            </div>
+          </details>
 
-          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label>WhatsApp automatico ao concluir</Label>
-                <p className="text-xs text-muted-foreground">
-                  Dispara automaticamente para clientes com opt-in no cadastro quando a obrigação for concluída por documento válido.
-                </p>
+          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                  <MessageCircle className="h-4 w-4" />
+                </div>
+                <div>
+                  <Label>WhatsApp automatico ao concluir</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Dispara automaticamente para clientes com opt-in no cadastro quando a obrigação for concluída por documento válido.
+                  </p>
+                </div>
               </div>
+              <span className="ml-auto text-xs text-muted-foreground group-open:hidden">Expandir</span>
+              <span className="ml-auto hidden text-xs text-muted-foreground group-open:inline">Recolher</span>
               <input
+                className="h-4 w-4 accent-primary"
                 type="checkbox"
+                onClick={(event) => event.stopPropagation()}
                 checked={templateForm.completion_whatsapp_enabled}
                 onChange={(event) =>
                   setTemplateForm((prev) => ({
@@ -1426,7 +1480,7 @@ export function GrowObligationsWorkspace({
                   }))
                 }
               />
-            </div>
+            </summary>
             <div className="space-y-2">
               <Label>Mensagem padrao</Label>
               <Textarea
@@ -1437,21 +1491,30 @@ export function GrowObligationsWorkspace({
                 disabled={!templateForm.completion_whatsapp_enabled}
               />
             </div>
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
               O número não é configurado aqui. A Grow usa primeiro `Cadastro Clientes &gt; WhatsApp` e, se estiver vazio, usa o telefone principal do cliente.
             </div>
-          </div>
+          </details>
 
-          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label>E-mail automatico ao concluir</Label>
-                <p className="text-xs text-muted-foreground">
-                  Dispara automaticamente para o e-mail do cliente quando a obrigação for concluída por documento válido.
-                </p>
+          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div>
+                  <Label>E-mail automatico ao concluir</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Dispara automaticamente para o e-mail do cliente quando a obrigação for concluída por documento válido.
+                  </p>
+                </div>
               </div>
+              <span className="ml-auto text-xs text-muted-foreground group-open:hidden">Expandir</span>
+              <span className="ml-auto hidden text-xs text-muted-foreground group-open:inline">Recolher</span>
               <input
+                className="h-4 w-4 accent-primary"
                 type="checkbox"
+                onClick={(event) => event.stopPropagation()}
                 checked={templateForm.completion_email_enabled}
                 onChange={(event) =>
                   setTemplateForm((prev) => ({
@@ -1460,7 +1523,7 @@ export function GrowObligationsWorkspace({
                   }))
                 }
               />
-            </div>
+            </summary>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <Label>Assunto padrao</Label>
@@ -1482,47 +1545,83 @@ export function GrowObligationsWorkspace({
                 />
               </div>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
               {"Placeholders disponíveis: {{cliente_nome}}, {{obrigacao_nome}}, {{competencia}}, {{setor}}, {{prazo_tecnico}}."}
             </div>
-          </div>
+          </details>
 
-          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <Label>Clientes vinculados</Label>
-                <p className="text-xs text-muted-foreground">
-                  Selecione aqui os clientes que já devem receber esta obrigação assim que o template for salvo.
-                </p>
+          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <summary className="flex cursor-pointer list-none flex-col gap-3 lg:flex-row lg:items-center lg:justify-between [&::-webkit-details-marker]:hidden">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div>
+                  <Label>Clientes vinculados</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Selecione aqui os clientes que já devem receber esta obrigação assim que o template for salvo.
+                  </p>
+                </div>
               </div>
-              <div className="w-full lg:w-80">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground group-open:hidden">Expandir</span>
+                <span className="hidden text-xs text-muted-foreground group-open:inline">Recolher</span>
+              </div>
+              <div className="w-full lg:w-80" onClick={(event) => event.stopPropagation()}>
                 <Input
                   value={templateClientSearch}
                   onChange={(event) => setTemplateClientSearch(event.target.value)}
                   placeholder="Buscar cliente por nome ou CNPJ"
                 />
               </div>
-            </div>
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
+            </summary>
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">
                 {templateForm.linked_client_ids.length} cliente(s) selecionado(s) para vinculo automatico.
               </p>
             </div>
+            {templateClientsByRegime.length > 0 ? (
+              <div className="grid gap-2 rounded-xl border border-border/60 bg-background/70 p-3 md:grid-cols-2 xl:grid-cols-4">
+                {templateClientsByRegime.map((regime) => (
+                  <div key={regime.code} className="space-y-2 rounded-lg border border-border/50 bg-muted/20 p-3">
+                    <div>
+                      <p className="text-sm font-medium">{regime.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {regime.selectedCount}/{regime.clientIds.length} selecionado(s)
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Button type="button" variant="outline" size="sm" className="justify-start rounded-lg" onClick={() => setTemplateRegimeClients(regime.code, true)}>
+                        Selecionar {regime.label}
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" className="justify-start rounded-lg text-muted-foreground" onClick={() => setTemplateRegimeClients(regime.code, false)}>
+                        Limpar {regime.label}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+                Nenhum cliente ativo com tributação informada para seleção em massa.
+              </p>
+            )}
             <div className="grid max-h-72 gap-2 overflow-y-auto md:grid-cols-2">
               {filteredTemplateClients.map((client) => {
                 const checked = templateForm.linked_client_ids.includes(client.id);
                 return (
                   <label
                     key={client.id}
-                    className="flex items-start justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 p-3 text-sm"
+                    className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/70 p-3 text-sm transition-colors hover:border-primary/40 hover:bg-muted/20"
                   >
                     <div className="space-y-1">
                       <p className="font-medium">{client.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {client.cnpj || "Sem CNPJ"} · {client.sector || "Sem setor"}
+                        {client.cnpj || "Sem CNPJ"} · {client.regime || "Sem tributação"} · {client.sector || "Sem setor"}
                       </p>
                     </div>
                     <input
+                      className="mt-1 h-4 w-4 accent-primary"
                       type="checkbox"
                       checked={checked}
                       onChange={(event) =>
@@ -1541,28 +1640,33 @@ export function GrowObligationsWorkspace({
             {filteredTemplateClients.length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhum cliente encontrado para este filtro.</p>
             ) : null}
-          </div>
+          </details>
 
-          <div className="space-y-3 rounded-2xl border border-border/70 p-4">
-            <div className="flex items-center justify-between">
-              <Label>Documentos esperados</Label>
-              <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setTemplateForm((prev) => ({ ...prev, expected_documents: [...prev.expected_documents, makeDocumentDraft()] }))}><Plus className="mr-2 h-4 w-4" />Adicionar documento esperado</Button>
-            </div>
+          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <Label>Documentos esperados</Label>
+              </div>
+              <span className="ml-auto text-xs text-muted-foreground group-open:hidden">Expandir</span>
+              <span className="ml-auto hidden text-xs text-muted-foreground group-open:inline">Recolher</span>
+              <Button type="button" variant="outline" className="rounded-xl" onClick={(event) => { event.stopPropagation(); setTemplateForm((prev) => ({ ...prev, expected_documents: [...prev.expected_documents, makeDocumentDraft()] })); }}><Plus className="mr-2 h-4 w-4" />Adicionar documento esperado</Button>
+            </summary>
             {templateForm.expected_documents.map((document, index) => (
-              <div key={`${document.document_type_key || "novo"}-${index}`} className="rounded-2xl border border-border/60 p-4">
+              <div key={`${document.document_type_key || "novo"}-${index}`} className="rounded-xl border border-border/60 bg-background/70 p-4">
                 <div className="grid gap-3 md:grid-cols-[1fr_1fr_120px_auto]">
                   <div className="space-y-2"><Label>Nome</Label><Input value={document.label} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, label: event.target.value, document_type_key: current.document_type_key || slugifyDocumentKey(event.target.value) } : current) }))} /></div>
                   <div className="space-y-2"><Label>Apelidos</Label><Input value={document.aliases_text} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, aliases_text: event.target.value } : current) }))} placeholder="folha, pagamento, holerite" /></div>
                   <div className="space-y-3">
-                    <label className="flex items-center justify-between gap-4 text-sm"><span>Obrigatorio</span><input type="checkbox" checked={document.required} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, required: event.target.checked } : current) }))} /></label>
-                    <label className="flex items-center justify-between gap-4 text-sm"><span>Ativo</span><input type="checkbox" checked={document.active} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, active: event.target.checked } : current) }))} /></label>
+                    <label className="flex items-center justify-between gap-4 text-sm"><span>Obrigatorio</span><input className="h-4 w-4 accent-primary" type="checkbox" checked={document.required} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, required: event.target.checked } : current) }))} /></label>
+                    <label className="flex items-center justify-between gap-4 text-sm"><span>Ativo</span><input className="h-4 w-4 accent-primary" type="checkbox" checked={document.active} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, active: event.target.checked } : current) }))} /></label>
                   </div>
                   <div className="flex items-start justify-end">
                     <Button type="button" variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={() => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.length <= 1 ? [makeDocumentDraft()] : prev.expected_documents.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 p-4">
+                <div className="mt-4 space-y-3 rounded-xl border border-dashed border-border/60 bg-muted/20 p-4">
                   <div className="flex items-center justify-between">
                     <div><p className="text-sm font-medium">Documentos modelo</p><p className="text-xs text-muted-foreground">{document.reference_files_count || 0} arquivo(s) de referencia anexados</p></div>
                     <Input
@@ -1599,11 +1703,16 @@ export function GrowObligationsWorkspace({
                 </div>
               </div>
             ))}
-          </div>
+          </details>
 
-          <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 md:grid-cols-2">
+          <details open className="group mx-6 my-4 rounded-xl border border-border/70 bg-muted/20 p-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <p className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-primary" />Regras fixas da obrigação</p>
+              <span className="text-xs text-muted-foreground group-open:hidden">Expandir</span>
+              <span className="hidden text-xs text-muted-foreground group-open:inline">Recolher</span>
+            </summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <p className="text-sm font-medium">Regras fixas da obrigação</p>
               <p className="text-xs text-muted-foreground">
                 Toda obrigação gera tarefa automática para o setor, entra no calendário e exige documento anexado.
               </p>
@@ -1612,6 +1721,7 @@ export function GrowObligationsWorkspace({
               <label className="flex items-center justify-between gap-4 text-sm">
                 <span>Template ativo</span>
                 <input
+                  className="h-4 w-4 accent-primary"
                   type="checkbox"
                   checked={templateForm.is_active}
                   onChange={(event) => setTemplateForm((prev) => ({ ...prev, is_active: event.target.checked }))}
@@ -1622,8 +1732,9 @@ export function GrowObligationsWorkspace({
               <div className="flex items-center justify-between"><span>Documento anexado</span><span>Obrigatório</span></div>
             </div>
           </div>
+          </details>
 
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 px-6 py-4 backdrop-blur">
             <Button
               variant="outline"
               onClick={() => {
