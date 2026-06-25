@@ -29,4 +29,34 @@ describe("report row builders", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].titulo).toBe("Fiscal");
   });
+
+  it("maps every client data entry and summarizes partners without exposing credentials", () => {
+    const rows = buildClientReportRows(
+      [{ id: "1", name: "Empresa A", status: "ativo" }],
+      [
+        {
+          client_id: "1",
+          category: "cadastro_fiscal",
+          field_name: "emite_nfe",
+          field_value: "sim",
+        },
+        {
+          client_id: "1",
+          category: "cadastro_clientes",
+          field_name: "socios",
+          field_value: JSON.stringify([
+            { nome: "Socio A", percentual_participacao: "60", pro_labore: "1500", senha_gov: "segredo" },
+            { nome: "Socio B", percentual_participacao: "40", pro_labore: "1000" },
+          ]),
+        },
+      ],
+      normalizeReportFilters({ organizationId: "org" }),
+    );
+
+    expect(rows[0].cadastral_cadastro_fiscal_emite_nfe).toBe("sim");
+    expect(rows[0].cadastral_cadastro_clientes_socios_nomes).toBe("Socio A; Socio B");
+    expect(rows[0].cadastral_cadastro_clientes_socios_participacao_total).toBe("100");
+    expect(rows[0].cadastral_cadastro_clientes_socios_pro_labore_total).toBe("2500");
+    expect(JSON.stringify(rows[0])).not.toContain("segredo");
+  });
 });

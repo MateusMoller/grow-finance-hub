@@ -1,4 +1,5 @@
 import { maxReportClassification } from "./classification";
+import { clientDataReportFields, clientPartnerReportFields } from "./clientDataCatalog";
 import type { ReportDatasetDefinition, ReportDatasetId, ReportFieldDefinition } from "./types";
 
 const internalManagementRoles = ["admin", "director", "manager"] as const;
@@ -27,11 +28,24 @@ const clientFields: ReportFieldDefinition[] = [
   field({ key: "telefone", label: "Telefone", sourcePath: "clients.phone", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Clientes", group: "Contato" }),
   field({ key: "criado_em", label: "Criado em", sourcePath: "clients.created_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, module: "Clientes", group: "Controle" }),
   field({ key: "atualizado_em", label: "Atualizado em", sourcePath: "clients.updated_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, module: "Clientes", group: "Controle" }),
-  field({ key: "cadastral_cadastro_clientes_nome_fantasia", label: "Cadastral Cadastro Clientes: Nome Fantasia", sourcePath: "client_data.cadastro_clientes.nome_fantasia", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Clientes", group: "Dados Cadastrais" }),
-  field({ key: "cadastral_cadastro_clientes_regime_tributario", label: "Cadastral Cadastro Clientes: Regime Tributario", sourcePath: "client_data.cadastro_clientes.regime_tributario", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Clientes", group: "Dados Cadastrais" }),
-  field({ key: "cadastral_cadastro_clientes_socios_quantidade", label: "Cadastral Cadastro Clientes: Socios - Quantidade", sourcePath: "client_data.cadastro_clientes.socios", dataType: "number", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Clientes", group: "Socios" }),
-  field({ key: "cadastral_cadastro_clientes_socios_pro_labore_total", label: "Cadastral Cadastro Clientes: Socios - Pro-labore Total (R$)", sourcePath: "client_data.cadastro_clientes.socios.pro_labore", dataType: "currency", formatter: "currency", classification: "regulated", exportable: true, previewable: true, defaultSelected: true, module: "Clientes", group: "Socios" }),
-  field({ key: "cadastral_cadastro_clientes_socios_status_senha_gov", label: "Cadastral Cadastro Clientes: Socios - Status Senha GOV", sourcePath: "client_data.cadastro_clientes.socios.senha_gov", dataType: "text", classification: "prohibited", exportable: false, previewable: false, module: "Clientes", group: "Socios" }),
+  ...clientDataReportFields.map((definition) =>
+    field({
+      ...definition,
+      defaultSelected: [
+        "cadastral_cadastro_clientes_nome_fantasia",
+        "cadastral_cadastro_clientes_regime_tributario",
+      ].includes(definition.key),
+    }),
+  ),
+  ...clientPartnerReportFields.map((definition) =>
+    field({
+      ...definition,
+      defaultSelected: [
+        "cadastral_cadastro_clientes_socios_quantidade",
+        "cadastral_cadastro_clientes_socios_pro_labore_total",
+      ].includes(definition.key),
+    }),
+  ),
 ];
 
 const leadFields: ReportFieldDefinition[] = [

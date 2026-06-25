@@ -72,27 +72,74 @@ function normalizeToken(value: string) {
     .replace(/^_|_$/g, "");
 }
 
+function repairCommonEncodingIssues(value: string) {
+  return value
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã£/g, "a")
+    .replace(/Ã§/g, "c")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u");
+}
+
+function readPartnerText(partner: Record<string, unknown>, ...keys: string[]) {
+  const value = keys.map((key) => partner[key]).find((candidate) => typeof candidate === "string");
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildPartnerSummary(rawValue: string | null | undefined) {
+  try {
+    const parsed = JSON.parse(rawValue || "[]") as unknown;
+    if (!Array.isArray(parsed)) return null;
+
+    const partners = parsed.filter(
+      (partner): partner is Record<string, unknown> => Boolean(partner) && typeof partner === "object" && !Array.isArray(partner),
+    );
+    const names = partners.map((partner) => readPartnerText(partner, "nome", "name")).filter(Boolean);
+    const participationByPartner = partners.map((partner) => {
+      const name = readPartnerText(partner, "nome", "name") || "Socio sem nome";
+      const participation = parseReportNumber(
+        partner.percentual_participacao ?? partner.percentual ?? partner.ownershipPercent,
+      ) || 0;
+      return `${name}: ${participation.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+    });
+
+    return {
+      quantidade: partners.length,
+      nomes: names.join("; "),
+      participacaoTotal: partners.reduce(
+        (sum, partner) =>
+          sum + (parseReportNumber(partner.percentual_participacao ?? partner.percentual ?? partner.ownershipPercent) || 0),
+        0,
+      ),
+      participacaoPorSocio: participationByPartner.join(" | "),
+      proLaboreTotal: partners.reduce(
+        (sum, partner) => sum + (parseReportNumber(partner.pro_labore ?? partner.proLabore ?? partner.prolabore) || 0),
+        0,
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function buildClientDataByClientId(entries: readonly ClientDataSourceRow[]) {
   const byClientId = new Map<string, Record<string, string>>();
 
   entries.forEach((entry) => {
     const current = byClientId.get(entry.client_id) || {};
-    const category = normalizeToken(entry.category);
-    const fieldName = normalizeToken(entry.field_name);
+    const category = normalizeToken(repairCommonEncodingIssues(entry.category));
+    const fieldName = normalizeToken(repairCommonEncodingIssues(entry.field_name));
     const columnKey = `cadastral_${category}_${fieldName}`;
 
     if (category === "cadastro_clientes" && fieldName === "socios") {
-      try {
-        const parsed = JSON.parse(entry.field_value || "[]") as Array<Record<string, unknown>>;
-        const totalProLabore = Array.isArray(parsed)
-          ? parsed.reduce((sum, partner) => sum + (parseReportNumber(partner.pro_labore) || 0), 0)
-          : 0;
-        current.cadastral_cadastro_clientes_socios_quantidade = String(Array.isArray(parsed) ? parsed.length : 0);
-        current.cadastral_cadastro_clientes_socios_pro_labore_total = String(totalProLabore);
-      } catch {
-        current.cadastral_cadastro_clientes_socios_quantidade = "0";
-        current.cadastral_cadastro_clientes_socios_pro_labore_total = "0";
-      }
+      const summary = buildPartnerSummary(entry.field_value);
+      current.cadastral_cadastro_clientes_socios_quantidade = String(summary?.quantidade || 0);
+      current.cadastral_cadastro_clientes_socios_nomes = summary?.nomes || "";
+      current.cadastral_cadastro_clientes_socios_participacao_total = String(summary?.participacaoTotal || 0);
+      current.cadastral_cadastro_clientes_socios_participacao_por_socio = summary?.participacaoPorSocio || "";
+      current.cadastral_cadastro_clientes_socios_pro_labore_total = String(summary?.proLaboreTotal || 0);
     } else {
       current[columnKey] = entry.field_value || "";
     }

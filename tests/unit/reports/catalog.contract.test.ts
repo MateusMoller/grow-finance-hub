@@ -11,4 +11,14 @@ describe("report catalog contract", () => {
       expect(dataset.fields.every((field) => field.classification)).toBe(true);
     });
   });
+
+  it("keeps the complete editable client field catalog available", () => {
+    const clients = reportCatalog.find((dataset) => dataset.id === "clientes")!;
+    const availableFields = clients.fields.filter((field) => field.previewable && field.exportable);
+
+    expect(availableFields.length).toBeGreaterThanOrEqual(95);
+    expect(availableFields.some((field) => field.key === "cadastral_cadastro_fiscal_emite_nfe")).toBe(true);
+    expect(availableFields.some((field) => field.key === "cadastral_cadastro_departamento_pessoal_sindicato_nome")).toBe(true);
+    expect(availableFields.some((field) => field.key === "cadastral_cadastro_honorarios_valor_mensal")).toBe(true);
+  });
 });
