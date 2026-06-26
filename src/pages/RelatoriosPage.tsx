@@ -21,7 +21,7 @@ import { exportReport } from "@/lib/reports/exportClient";
 import { normalizeReportFilters } from "@/lib/reports/filters";
 import { filterAuthorizedReportFields } from "@/lib/reports/permissions";
 import type { ReportDatasetId } from "@/lib/reports/types";
-import { useReportCatalog, useReportPreview } from "@/hooks/reports/useReports";
+import { applyReportFilters, fetchRowsForDataset, useReportCatalog, useReportPreview } from "@/hooks/reports/useReports";
 import { useSavedReports } from "@/hooks/reports/useSavedReports";
 import type { ReportColumnWarning, ReportExportResult, SavedReportModel } from "@/lib/reports/types";
 
@@ -176,12 +176,21 @@ export default function RelatoriosPage() {
     setExportResult(null);
 
     try {
+      const exportableFieldByKey = new Map(
+        filterAuthorizedReportFields(activeDataset, activeRoles, { export: true }).map((field) => [field.key, field]),
+      );
+      const exportFields = selectedColumns.flatMap((columnKey) => {
+        const field = exportableFieldByKey.get(columnKey);
+        return field ? [field] : [];
+      });
+      const allRows = await fetchRowsForDataset(activeDataset, currentOrganizationId);
+      const filteredRows = applyReportFilters(activeDataset.id, allRows, filters);
       const result = await exportReport({
         organizationId: currentOrganizationId,
         dataset: activeDataset,
         filters,
-        fields: previewQuery.data.columns,
-        rows: previewQuery.data.rows,
+        fields: exportFields,
+        rows: filteredRows,
         modelId: editingReportId,
       });
       setExportResult(result);

@@ -17,87 +17,124 @@ import {
   type RoleSourceRow,
   type TaskSourceRow,
 } from "@/lib/reports/rowBuilders";
-import type { ReportDatasetId, ReportFilters, ReportRow } from "@/lib/reports/types";
+import type { ReportDatasetDefinition, ReportDatasetId, ReportFilters, ReportRow } from "@/lib/reports/types";
 import { reportQueryKeys } from "./reportQueryKeys";
 
-async function fetchRowsForDataset(datasetId: ReportDatasetId, organizationId: string | null): Promise<ReportRow[]> {
-  if (!organizationId) return [];
+const REPORT_PAGE_SIZE = 1000;
 
-  if (datasetId === "clientes") {
+async function fetchClientDataRows(organizationId: string, maxRows: number) {
+  const rows: ClientDataSourceRow[] = [];
+  const categories = [
+    "cadastro_clientes",
+    "cadastro_fiscal",
+    "cadastro_departamento_pessoal",
+    "cadastro_contabil",
+    "cadastro_obrigacoes",
+    "cadastro_honorarios",
+    "cadastro_documentos",
+  ];
+
+  for (let from = 0; rows.length < maxRows; from += REPORT_PAGE_SIZE) {
+    const to = Math.min(from + REPORT_PAGE_SIZE - 1, maxRows - 1);
+    const { data, error } = await supabase
+      .from("client_data")
+      .select("client_id, category, field_name, field_value, updated_at, created_at")
+      .eq("organization_id", organizationId)
+      .in("category", categories)
+      .range(from, to);
+
+    if (error) throw error;
+    const page = (data || []) as ClientDataSourceRow[];
+    rows.push(...page);
+    if (page.length < REPORT_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
+export async function fetchRowsForDataset(dataset: ReportDatasetDefinition, organizationId: string | null): Promise<ReportRow[]> {
+  if (!organizationId) return [];
+  const maxRows = dataset.exportLimit + 1;
+
+  if (dataset.id === "clientes") {
     const [clientsRes, clientDataRes] = await Promise.all([
       supabase
         .from("clients")
         .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
         .eq("organization_id", organizationId)
-        .order("name"),
-      supabase
-        .from("client_data")
-        .select("client_id, category, field_name, field_value, updated_at, created_at")
-        .eq("organization_id", organizationId)
-        .in("category", [
-          "cadastro_clientes",
-          "cadastro_fiscal",
-          "cadastro_departamento_pessoal",
-          "cadastro_contabil",
-          "cadastro_obrigacoes",
-          "cadastro_honorarios",
-          "cadastro_documentos",
-        ])
-        .limit(5000),
+        .order("name")
+        .range(0, maxRows - 1),
+      fetchClientDataRows(organizationId, Math.max(maxRows * 50, 50000)),
     ]);
     if (clientsRes.error) throw clientsRes.error;
-    if (clientDataRes.error) throw clientDataRes.error;
     return buildClientReportRows(
       (clientsRes.data || []) as ClientSourceRow[],
-      (clientDataRes.data || []) as ClientDataSourceRow[],
+      clientDataRes,
       normalizeReportFilters({ organizationId }),
     );
   }
 
-  if (datasetId === "leads_crm") {
+  if (dataset.id === "leads_crm") {
     const { data, error } = await supabase
       .from("site_leads")
       .select("id, full_name, company_name, email, phone, source_tag, origin_page, created_at")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
-      .limit(2000);
+      .range(0, maxRows - 1);
     if (error) throw error;
     return buildLeadReportRows((data || []) as LeadSourceRow[], normalizeReportFilters({ organizationId }));
   }
 
-  if (datasetId === "tarefas") {
+  if (dataset.id === "tarefas") {
     const { data, error } = await supabase
       .from("kanban_tasks")
       .select("id, title, client_name, assignee, sector, priority, status, due_date, created_at, updated_at")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
-      .limit(3000);
+      .range(0, maxRows - 1);
     if (error) throw error;
     return buildTaskReportRows((data || []) as TaskSourceRow[], normalizeReportFilters({ organizationId }));
   }
 
-  const [profilesRes, rolesRes] = await Promise.all([
+  const [profilesRes, rolesRes, grantsRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("user_id, display_name, created_at, updated_at")
       .eq("organization_id", organizationId)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .range(0, maxRows - 1),
     supabase
-      .from("user_roles")
-      .select("user_id, role, created_at")
+      .from("organization_user_access")
+      .select("user_id, role:primary_role, sector_code, status, created_at")
       .eq("organization_id", organizationId)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .range(0, maxRows - 1),
+    supabase
+      .from("user_module_grants")
+      .select("user_id, module_key")
+      .eq("organization_id", organizationId),
   ]);
   if (profilesRes.error) throw profilesRes.error;
   if (rolesRes.error) throw rolesRes.error;
+  if (grantsRes.error) throw grantsRes.error;
+  const modulesByUser = new Map<string, string[]>();
+  (grantsRes.data || []).forEach((grant) => {
+    const userId = String(grant.user_id);
+    const current = modulesByUser.get(userId) || [];
+    current.push(String(grant.module_key));
+    modulesByUser.set(userId, current);
+  });
   return buildTeamReportRows(
     (profilesRes.data || []) as ProfileSourceRow[],
-    (rolesRes.data || []) as RoleSourceRow[],
+    ((rolesRes.data || []) as RoleSourceRow[]).map((row) => ({
+      ...row,
+      enabled_modules: modulesByUser.get(row.user_id) || [],
+    })),
     normalizeReportFilters({ organizationId }),
   );
 }
 
-function applyFilters(datasetId: ReportDatasetId, rows: readonly ReportRow[], filters: ReportFilters) {
+export function applyReportFilters(datasetId: ReportDatasetId, rows: readonly ReportRow[], filters: ReportFilters) {
   if (datasetId === "clientes") {
     return rows.filter((row) => !filters.company || String(row.nome || "").trim() === filters.company);
   }
@@ -128,10 +165,10 @@ export function useReportPreview(input: {
       if (!canAccessReportDataset(dataset, input.roles)) {
         throw new Error("permission_denied");
       }
-      const rows = await fetchRowsForDataset(input.datasetId, filters.organizationId);
+      const rows = await fetchRowsForDataset(dataset, filters.organizationId);
       return buildReportPreview({
         dataset,
-        rows: applyFilters(input.datasetId, rows, filters),
+        rows: applyReportFilters(input.datasetId, rows, filters),
         columnKeys: input.columnKeys,
         roles: input.roles,
       });
