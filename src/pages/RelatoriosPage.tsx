@@ -12,8 +12,10 @@ import { SelectedReportFields } from "@/components/reports/SelectedReportFields"
 import { SavedReportForm } from "@/components/reports/SavedReportForm";
 import { SavedReportList } from "@/components/reports/SavedReportList";
 import { SavedReportWarnings } from "@/components/reports/SavedReportWarnings";
+import { ManagerialReportPanel } from "@/components/reports/ManagerialReportPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getDefaultReportColumns, reportCatalogById } from "@/lib/reports/catalog";
@@ -26,6 +28,7 @@ import { useSavedReports } from "@/hooks/reports/useSavedReports";
 import type { ReportColumnWarning, ReportExportResult, SavedReportModel } from "@/lib/reports/types";
 
 const initialDatasetId: ReportDatasetId = "clientes";
+type ReportWorkspaceTab = "customizado" | "gerencial";
 
 export default function RelatoriosPage() {
   const { roles, role, currentOrganizationId, user } = useAuth();
@@ -38,6 +41,7 @@ export default function RelatoriosPage() {
   const [savedReportWarnings, setSavedReportWarnings] = useState<ReportColumnWarning[]>([]);
   const [exportResult, setExportResult] = useState<ReportExportResult | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>("customizado");
   const skipDatasetResetRef = useRef(false);
 
   const catalogQuery = useReportCatalog(currentOrganizationId, activeRoles);
@@ -216,16 +220,18 @@ export default function RelatoriosPage() {
               Preview governado por base, filtros, permissao e classificacao de dados.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-fit gap-2"
-            onClick={() => void previewQuery.refetch()}
-            disabled={previewQuery.isFetching || !currentOrganizationId}
-          >
-            {previewQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Atualizar preview
-          </Button>
+          {activeTab === "customizado" && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-fit gap-2"
+              onClick={() => void previewQuery.refetch()}
+              disabled={previewQuery.isFetching || !currentOrganizationId}
+            >
+              {previewQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Atualizar preview
+            </Button>
+          )}
         </div>
 
         <ReportFilterSummary filters={filters} />
@@ -236,19 +242,30 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        {catalogQuery.isLoading ? (
-          <div className="flex min-h-52 items-center justify-center rounded-lg border bg-card">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        ) : datasets.length === 0 ? (
-          <div className="rounded-lg border bg-card p-8 text-center">
-            <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium">Nenhuma base de relatorio disponivel para seu perfil.</p>
-            <p className="mt-1 text-sm text-muted-foreground">Verifique permissoes e organizacao ativa.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <section className="space-y-4 rounded-xl border bg-card p-4">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportWorkspaceTab)} className="space-y-4">
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 md:grid-cols-2">
+            <TabsTrigger value="customizado" className="rounded-lg border px-4 py-3 data-[state=active]:border-primary">
+              Relatorio customizado
+            </TabsTrigger>
+            <TabsTrigger value="gerencial" className="rounded-lg border px-4 py-3 data-[state=active]:border-primary">
+              Relatorio gerencial
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="customizado" className="space-y-4">
+            {catalogQuery.isLoading ? (
+              <div className="flex min-h-52 items-center justify-center rounded-lg border bg-card">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : datasets.length === 0 ? (
+              <div className="rounded-lg border bg-card p-8 text-center">
+                <AlertCircle className="mx-auto h-8 w-8 text-muted-foreground" />
+                <p className="mt-3 text-sm font-medium">Nenhuma base de relatorio disponivel para seu perfil.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Verifique permissoes e organizacao ativa.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <section className="space-y-4 rounded-xl border bg-card p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="font-heading font-semibold">Gerar relatorio</h2>
@@ -339,9 +356,9 @@ export default function RelatoriosPage() {
                   />
                 )}
               </div>
-            </section>
+                </section>
 
-            <section className="rounded-xl border bg-card">
+                <section className="rounded-xl border bg-card">
               <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -378,9 +395,15 @@ export default function RelatoriosPage() {
               ) : (
                 <div className="p-8 text-center text-sm text-muted-foreground">Selecione colunas para carregar o preview.</div>
               )}
-            </section>
-          </div>
-        )}
+                </section>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="gerencial">
+            <ManagerialReportPanel organizationId={currentOrganizationId} />
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );

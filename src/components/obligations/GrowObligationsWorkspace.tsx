@@ -1400,7 +1400,7 @@ export function GrowObligationsWorkspace({
               </div>
               <div className="space-y-1">
                 <DialogTitle className="text-xl">{templateForm.id ? "Editar obrigação" : "Nova obrigação"}</DialogTitle>
-                <DialogDescription>Configure prazos, automações, clientes e documentos esperados do template.</DialogDescription>
+                <DialogDescription>Configure prazos, automacoes, clientes e documentos esperados em secoes recolhiveis.</DialogDescription>
               </div>
             </div>
           </DialogHeader>
@@ -1453,7 +1453,7 @@ export function GrowObligationsWorkspace({
             </div>
           </details>
 
-          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <details className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
@@ -1496,7 +1496,7 @@ export function GrowObligationsWorkspace({
             </div>
           </details>
 
-          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <details className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
@@ -1550,7 +1550,7 @@ export function GrowObligationsWorkspace({
             </div>
           </details>
 
-          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <details className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <summary className="flex cursor-pointer list-none flex-col gap-3 lg:flex-row lg:items-center lg:justify-between [&::-webkit-details-marker]:hidden">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
@@ -1559,7 +1559,7 @@ export function GrowObligationsWorkspace({
                 <div>
                   <Label>Clientes vinculados</Label>
                   <p className="text-xs text-muted-foreground">
-                    Selecione aqui os clientes que já devem receber esta obrigação assim que o template for salvo.
+                    Selecione apenas clientes ativos. Use os atalhos por tributacao para marcar grupos em massa.
                   </p>
                 </div>
               </div>
@@ -1577,7 +1577,7 @@ export function GrowObligationsWorkspace({
             </summary>
             <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">
-                {templateForm.linked_client_ids.length} cliente(s) selecionado(s) para vinculo automatico.
+                {templateForm.linked_client_ids.length} cliente(s) ativo(s) selecionado(s) para vinculo automatico.
               </p>
             </div>
             {templateClientsByRegime.length > 0 ? (
@@ -1592,7 +1592,7 @@ export function GrowObligationsWorkspace({
                     </div>
                     <div className="grid gap-2">
                       <Button type="button" variant="outline" size="sm" className="justify-start rounded-lg" onClick={() => setTemplateRegimeClients(regime.code, true)}>
-                        Selecionar {regime.label}
+                        Selecionar todos: {regime.label}
                       </Button>
                       <Button type="button" variant="ghost" size="sm" className="justify-start rounded-lg text-muted-foreground" onClick={() => setTemplateRegimeClients(regime.code, false)}>
                         Limpar {regime.label}
@@ -1642,7 +1642,7 @@ export function GrowObligationsWorkspace({
             ) : null}
           </details>
 
-          <details open className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <details className="group mx-6 mt-4 space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
@@ -1705,7 +1705,7 @@ export function GrowObligationsWorkspace({
             ))}
           </details>
 
-          <details open className="group mx-6 my-4 rounded-xl border border-border/70 bg-muted/20 p-4">
+          <details className="group mx-6 my-4 rounded-xl border border-border/70 bg-muted/20 p-4">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
               <p className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-primary" />Regras fixas da obrigação</p>
               <span className="text-xs text-muted-foreground group-open:hidden">Expandir</span>
