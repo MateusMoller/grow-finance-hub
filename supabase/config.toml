@@ -1,5 +1,21 @@
 project_id = "vgkmcerjlwnzbiukinhd"
 
+[api]
+port = 55431
+
+[db]
+port = 55432
+shadow_port = 55433
+
+[studio]
+port = 55434
+
+[inbucket]
+port = 55435
+
+[analytics]
+port = 55437
+
 [functions.conecta-chat-webhook]
 verify_jwt = false
 
@@ -20,6 +36,9 @@ verify_jwt = true
 
 [functions.send-newsletter-broadcast]
 verify_jwt = true
+
+[functions.send-site-contact-email]
+verify_jwt = false
 
 [functions.email-inbox-webhook]
 verify_jwt = false

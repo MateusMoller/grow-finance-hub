@@ -134,13 +134,20 @@ async function sendEmailViaResend(params: {
   subject: string;
   html: string;
   text: string;
+  idempotencyKey?: string;
 }) {
+  const headers = new Headers({
+    Authorization: `Bearer ${params.apiKey}`,
+    "Content-Type": "application/json",
+  });
+
+  if (params.idempotencyKey) {
+    headers.set("Idempotency-Key", params.idempotencyKey);
+  }
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       from: params.from,
       to: [params.to],
@@ -151,7 +158,8 @@ async function sendEmailViaResend(params: {
   });
 
   if (response.ok) {
-    return { ok: true as const };
+    const data = await response.json().catch(() => null);
+    return { ok: true as const, id: asRecord(data)?.id || null };
   }
 
   const responseText = await response.text();
@@ -175,16 +183,9 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const senderEmail =
-      Deno.env.get("NEWSLETTER_FROM_EMAIL") || "Grow Contabilidade <contato@contabilidadegrow.com.br>";
 
     if (!supabaseUrl || !serviceRoleKey || !anonKey) {
       return jsonResponse({ error: "Missing Supabase environment configuration" }, 500);
-    }
-
-    if (!resendApiKey) {
-      return jsonResponse({ error: "Missing RESEND_API_KEY environment variable" }, 500);
     }
 
     const token = extractBearerToken(req);
@@ -304,6 +305,14 @@ Deno.serve(async (req) => {
     const htmlBody = buildNewsletterHtml(newsletter.title, newsletter.excerpt, newsletter.content);
     const textBody = buildNewsletterText(newsletter.title, newsletter.excerpt, newsletter.content);
 
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const senderEmail =
+      Deno.env.get("NEWSLETTER_FROM_EMAIL") || "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+
+    if (!resendApiKey) {
+      return jsonResponse({ error: "Missing RESEND_API_KEY environment variable" }, 500);
+    }
+
     let sentCount = 0;
     const failures: string[] = [];
 
@@ -315,6 +324,7 @@ Deno.serve(async (req) => {
         subject,
         html: htmlBody,
         text: textBody,
+        idempotencyKey: `newsletter:${newsletter.id}:${recipient}`,
       });
 
       if (!sendResult.ok) {

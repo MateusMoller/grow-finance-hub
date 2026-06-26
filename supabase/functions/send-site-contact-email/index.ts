@@ -46,24 +46,34 @@ async function sendEmailViaResend(params: {
   subject: string;
   html: string;
   text: string;
+  replyTo?: string;
+  idempotencyKey?: string;
 }) {
+  const headers = new Headers({
+    Authorization: `Bearer ${params.apiKey}`,
+    "Content-Type": "application/json",
+  });
+
+  if (params.idempotencyKey) {
+    headers.set("Idempotency-Key", params.idempotencyKey);
+  }
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       from: params.from,
       to: [params.to],
       subject: params.subject,
       html: params.html,
       text: params.text,
+      reply_to: params.replyTo ? [params.replyTo] : undefined,
     }),
   });
 
   if (response.ok) {
-    return { ok: true as const };
+    const data = await response.json().catch(() => null);
+    return { ok: true as const, id: asRecord(data)?.id || null };
   }
 
   const responseText = await response.text();
@@ -132,19 +142,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const senderEmail =
-      asTrimmedString(Deno.env.get("SITE_CONTACT_FROM_EMAIL")) ||
-      asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
-      "Grow Contabilidade <contato@contabilidadegrow.com.br>";
-    const recipientEmail =
-      asTrimmedString(Deno.env.get("SITE_CONTACT_TO_EMAIL")) ||
-      "contato@contabilidadegrow.com.br";
-
-    if (!resendApiKey) {
-      return jsonResponse({ error: "Missing RESEND_API_KEY environment variable" }, 500);
-    }
-
     const body = await req.json();
     const payload = asRecord(body);
     if (!payload) {
@@ -170,6 +167,19 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "message is required" }, 400);
     }
 
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const senderEmail =
+      asTrimmedString(Deno.env.get("SITE_CONTACT_FROM_EMAIL")) ||
+      asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
+      "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+    const recipientEmail =
+      asTrimmedString(Deno.env.get("SITE_CONTACT_TO_EMAIL")) ||
+      "contato@contabilidadegrow.com.br";
+
+    if (!resendApiKey) {
+      return jsonResponse({ error: "Missing RESEND_API_KEY environment variable" }, 500);
+    }
+
     const subject = `Novo contato do site | ${fullName}`;
     const htmlBody = buildEmailHtml({ fullName, companyName, email, phone, message, originPage });
     const textBody = buildEmailText({ fullName, companyName, email, phone, message, originPage });
@@ -181,6 +191,8 @@ Deno.serve(async (req) => {
       subject,
       html: htmlBody,
       text: textBody,
+      replyTo: email,
+      idempotencyKey: `site-contact:${email}:${Date.now()}`,
     });
 
     if (!sendResult.ok) {
@@ -194,7 +206,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    return jsonResponse({ ok: true });
+    return jsonResponse({ ok: true, email_id: sendResult.id });
   } catch (error: unknown) {
     const message =
       typeof error === "object" &&
