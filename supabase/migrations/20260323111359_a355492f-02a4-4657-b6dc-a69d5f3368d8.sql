@@ -1,5 +1,5 @@
 -- Calendar events table
-CREATE TABLE public.calendar_events (
+CREATE TABLE IF NOT EXISTS public.calendar_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   description text,
@@ -16,21 +16,26 @@ CREATE TABLE public.calendar_events (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Team can view calendar_events" ON public.calendar_events;
 CREATE POLICY "Team can view calendar_events" ON public.calendar_events
   FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Team can insert calendar_events" ON public.calendar_events;
 CREATE POLICY "Team can insert calendar_events" ON public.calendar_events
   FOR INSERT TO authenticated
   WITH CHECK (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager') OR has_role(auth.uid(), 'employee') OR has_role(auth.uid(), 'director'));
+DROP POLICY IF EXISTS "Team can update calendar_events" ON public.calendar_events;
 CREATE POLICY "Team can update calendar_events" ON public.calendar_events
   FOR UPDATE TO authenticated
   USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager') OR has_role(auth.uid(), 'employee') OR has_role(auth.uid(), 'director'));
+DROP POLICY IF EXISTS "Admins can delete calendar_events" ON public.calendar_events;
 CREATE POLICY "Admins can delete calendar_events" ON public.calendar_events
   FOR DELETE TO authenticated
   USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager'));
+DROP TRIGGER IF EXISTS update_calendar_events_updated_at ON public.calendar_events;
 CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON public.calendar_events
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- User settings table
-CREATE TABLE public.user_settings (
+CREATE TABLE IF NOT EXISTS public.user_settings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL UNIQUE,
   phone text,
@@ -57,16 +62,20 @@ CREATE TABLE public.user_settings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own settings" ON public.user_settings;
 CREATE POLICY "Users can view own settings" ON public.user_settings
   FOR SELECT TO authenticated USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Users can insert own settings" ON public.user_settings;
 CREATE POLICY "Users can insert own settings" ON public.user_settings
   FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "Users can update own settings" ON public.user_settings;
 CREATE POLICY "Users can update own settings" ON public.user_settings
   FOR UPDATE TO authenticated USING (user_id = auth.uid());
+DROP TRIGGER IF EXISTS update_user_settings_updated_at ON public.user_settings;
 CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON public.user_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- Form templates table
-CREATE TABLE public.form_templates (
+CREATE TABLE IF NOT EXISTS public.form_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   description text,
@@ -78,21 +87,26 @@ CREATE TABLE public.form_templates (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.form_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Team can view form_templates" ON public.form_templates;
 CREATE POLICY "Team can view form_templates" ON public.form_templates
   FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Team can insert form_templates" ON public.form_templates;
 CREATE POLICY "Team can insert form_templates" ON public.form_templates
   FOR INSERT TO authenticated
   WITH CHECK (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager') OR has_role(auth.uid(), 'employee'));
+DROP POLICY IF EXISTS "Team can update form_templates" ON public.form_templates;
 CREATE POLICY "Team can update form_templates" ON public.form_templates
   FOR UPDATE TO authenticated
   USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager') OR has_role(auth.uid(), 'employee'));
+DROP POLICY IF EXISTS "Admins can delete form_templates" ON public.form_templates;
 CREATE POLICY "Admins can delete form_templates" ON public.form_templates
   FOR DELETE TO authenticated
   USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager'));
+DROP TRIGGER IF EXISTS update_form_templates_updated_at ON public.form_templates;
 CREATE TRIGGER update_form_templates_updated_at BEFORE UPDATE ON public.form_templates
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- Form submissions table
-CREATE TABLE public.form_submissions (
+CREATE TABLE IF NOT EXISTS public.form_submissions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   template_id uuid REFERENCES public.form_templates(id) ON DELETE SET NULL,
   template_title text NOT NULL,
@@ -105,15 +119,20 @@ CREATE TABLE public.form_submissions (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.form_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Team can view form_submissions" ON public.form_submissions;
 CREATE POLICY "Team can view form_submissions" ON public.form_submissions
   FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Users can insert form_submissions" ON public.form_submissions;
 CREATE POLICY "Users can insert form_submissions" ON public.form_submissions
   FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Team can update form_submissions" ON public.form_submissions;
 CREATE POLICY "Team can update form_submissions" ON public.form_submissions
   FOR UPDATE TO authenticated
   USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager') OR has_role(auth.uid(), 'employee'));
+DROP POLICY IF EXISTS "Admins can delete form_submissions" ON public.form_submissions;
 CREATE POLICY "Admins can delete form_submissions" ON public.form_submissions
   FOR DELETE TO authenticated
   USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'manager'));
+DROP TRIGGER IF EXISTS update_form_submissions_updated_at ON public.form_submissions;
 CREATE TRIGGER update_form_submissions_updated_at BEFORE UPDATE ON public.form_submissions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

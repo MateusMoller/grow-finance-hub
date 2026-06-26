@@ -18,6 +18,10 @@ DROP POLICY IF EXISTS "Internal can view client acessorias links" ON public.clie
 DROP POLICY IF EXISTS "Internal can insert client acessorias links" ON public.client_acessorias_links;
 DROP POLICY IF EXISTS "Internal can update client acessorias links" ON public.client_acessorias_links;
 DROP POLICY IF EXISTS "Internal can delete client acessorias links" ON public.client_acessorias_links;
+DROP POLICY IF EXISTS "Tenant internal can view client acessorias links" ON public.client_acessorias_links;
+DROP POLICY IF EXISTS "Tenant internal can insert client acessorias links" ON public.client_acessorias_links;
+DROP POLICY IF EXISTS "Tenant internal can update client acessorias links" ON public.client_acessorias_links;
+DROP POLICY IF EXISTS "Tenant internal can delete client acessorias links" ON public.client_acessorias_links;
 CREATE POLICY "Tenant internal can view client acessorias links"
   ON public.client_acessorias_links FOR SELECT TO authenticated
   USING (EXISTS (
@@ -56,6 +60,10 @@ DROP POLICY IF EXISTS "Internal can view client acessorias obligations" ON publi
 DROP POLICY IF EXISTS "Internal can insert client acessorias obligations" ON public.client_acessorias_obligations;
 DROP POLICY IF EXISTS "Internal can update client acessorias obligations" ON public.client_acessorias_obligations;
 DROP POLICY IF EXISTS "Internal can delete client acessorias obligations" ON public.client_acessorias_obligations;
+DROP POLICY IF EXISTS "Tenant internal can view client acessorias obligations" ON public.client_acessorias_obligations;
+DROP POLICY IF EXISTS "Tenant internal can insert client acessorias obligations" ON public.client_acessorias_obligations;
+DROP POLICY IF EXISTS "Tenant internal can update client acessorias obligations" ON public.client_acessorias_obligations;
+DROP POLICY IF EXISTS "Tenant internal can delete client acessorias obligations" ON public.client_acessorias_obligations;
 CREATE POLICY "Tenant internal can view client acessorias obligations"
   ON public.client_acessorias_obligations FOR SELECT TO authenticated
   USING (EXISTS (
@@ -93,6 +101,9 @@ CREATE POLICY "Tenant internal can delete client acessorias obligations"
 DROP POLICY IF EXISTS "Internal can view client acessorias uploads" ON public.client_acessorias_uploads;
 DROP POLICY IF EXISTS "Internal can insert client acessorias uploads" ON public.client_acessorias_uploads;
 DROP POLICY IF EXISTS "Internal can update client acessorias uploads" ON public.client_acessorias_uploads;
+DROP POLICY IF EXISTS "Tenant internal can view client acessorias uploads" ON public.client_acessorias_uploads;
+DROP POLICY IF EXISTS "Tenant internal can insert client acessorias uploads" ON public.client_acessorias_uploads;
+DROP POLICY IF EXISTS "Tenant internal can update client acessorias uploads" ON public.client_acessorias_uploads;
 CREATE POLICY "Tenant internal can view client acessorias uploads"
   ON public.client_acessorias_uploads FOR SELECT TO authenticated
   USING (EXISTS (
@@ -180,6 +191,10 @@ DROP POLICY IF EXISTS "Clients and internal can view portal tasks" ON public.cli
 DROP POLICY IF EXISTS "Internal can insert portal tasks" ON public.client_portal_tasks;
 DROP POLICY IF EXISTS "Internal team can update portal tasks" ON public.client_portal_tasks;
 DROP POLICY IF EXISTS "Internal can delete portal tasks" ON public.client_portal_tasks;
+DROP POLICY IF EXISTS "Tenant can view portal tasks" ON public.client_portal_tasks;
+DROP POLICY IF EXISTS "Tenant internal can insert portal tasks" ON public.client_portal_tasks;
+DROP POLICY IF EXISTS "Tenant internal can update portal tasks" ON public.client_portal_tasks;
+DROP POLICY IF EXISTS "Tenant internal can delete portal tasks" ON public.client_portal_tasks;
 CREATE POLICY "Tenant can view portal tasks"
   ON public.client_portal_tasks FOR SELECT TO authenticated
   USING (

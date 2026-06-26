@@ -37,7 +37,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
-import { canAccessTaskSector, getTaskSectorAccess, normalizeTaskSectorLabel } from "@/lib/taskSectorAccess";
+import {
+  canCreateTaskInSector,
+  getCanonicalTaskSectorAccess,
+  normalizeTaskSectorLabel,
+} from "@/lib/taskSectorAccess";
 import type { Tables } from "@/integrations/supabase/types";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
@@ -53,6 +57,7 @@ interface Task {
   client: string;
   sector: string;
   assignee: string;
+  assignedToUserId: string | null;
   priority: "Alta" | "Media" | "Baixa" | "Urgente";
   dueDate: string;
   status: "Pendente" | "Em andamento" | "Em revisão" | "Concluído" | "Atrasado";
@@ -72,6 +77,7 @@ interface KanbanTaskRow {
   client_name: string | null;
   sector: string;
   assignee: string | null;
+  assigned_to_user_id?: string | null;
   priority: string;
   due_date: string | null;
   status: string;
@@ -171,6 +177,7 @@ const mapRowToTask = (row: KanbanTaskRow): Task => ({
   client: row.client_name || "",
   sector: normalizeSector(row.sector || ""),
   assignee: row.assignee || "",
+  assignedToUserId: row.assigned_to_user_id || null,
   priority: normalizePriority(row.priority || ""),
   dueDate: row.due_date || "",
   status: deriveStatus(row.status || "todo", row.due_date),
@@ -194,12 +201,13 @@ interface TaskListViewProps {
 }
 
 export function TaskListView({ embedded = false }: TaskListViewProps) {
-  const { user, role, roles } = useAuth();
+  const { user, effectiveAccess, currentOrganizationId } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const location = useLocation();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [subtasksAvailable, setSubtasksAvailable] = useState(true);
@@ -219,14 +227,14 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     client: "",
     sector: "Contabil",
     assignee: "",
+    assignedToUserId: "",
     priority: "Media" as Task["priority"],
     dueDate: "",
     subtasks: [] as TaskSubtask[],
   });
 
   const actorLabel = user?.email || "Usuário";
-  const activeRoles = useMemo(() => (roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
-  const taskSectorAccess = useMemo(() => getTaskSectorAccess(activeRoles), [activeRoles]);
+  const taskSectorAccess = useMemo(() => getCanonicalTaskSectorAccess(effectiveAccess), [effectiveAccess]);
   const availableSectors = useMemo(() => {
     if (taskSectorAccess.canAccessAllTaskSectors) return sectors.filter((sector) => sector !== "Todos");
     return taskSectorAccess.allowedTaskSectors;
@@ -282,13 +290,12 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     const subtasksColumnReturned = rows.some((row) => Object.prototype.hasOwnProperty.call(row, "subtasks"));
     const mapped = rows
       .filter((row) => row.status !== "archived")
-      .map(mapRowToTask)
-      .filter((task) => canAccessTaskSector(task.sector, activeRoles));
+      .map(mapRowToTask);
 
     setSubtasksAvailable((prev) => (rows.length === 0 ? prev : subtasksColumnReturned));
     setTasks(mapped);
     setLoading(false);
-  }, [activeRoles]);
+  }, []);
 
   const loadClients = useCallback(async () => {
     setLoadingClients(true);
@@ -309,10 +316,40 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     setLoadingClients(false);
   }, []);
 
+  const loadAssignees = useCallback(async () => {
+    if (effectiveAccess?.primaryRole !== "admin" || !currentOrganizationId) {
+      setAssigneeOptions([]);
+      return;
+    }
+    const { data: accessRows } = await supabase
+      .from("organization_user_access")
+      .select("user_id")
+      .eq("organization_id", currentOrganizationId)
+      .eq("primary_role", "colaborador")
+      .eq("status", "active")
+      .eq("requires_access_review", false);
+    const ids = (accessRows || []).map((row) => String(row.user_id));
+    if (ids.length === 0) {
+      setAssigneeOptions([]);
+      return;
+    }
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, display_name")
+      .in("user_id", ids);
+    setAssigneeOptions(
+      (profiles || []).map((profile) => ({
+        id: String(profile.user_id),
+        name: profile.display_name || "Colaborador",
+      })),
+    );
+  }, [currentOrganizationId, effectiveAccess?.primaryRole]);
+
   useEffect(() => {
     void loadTasks();
     void loadClients();
-  }, [loadClients, loadTasks]);
+    void loadAssignees();
+  }, [loadAssignees, loadClients, loadTasks]);
 
   useEffect(() => {
     if (sectorFilter === "Todos") return;
@@ -410,7 +447,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
-    if (!canAccessTaskSector(newTask.sector, activeRoles)) {
+    if (!canCreateTaskInSector(newTask.sector, effectiveAccess)) {
       toast.error("Voce nao tem permissao para criar tarefas neste setor");
       return;
     }
@@ -429,6 +466,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       client_name: selectedClient?.name || null,
       sector: newTask.sector,
       assignee: newTask.assignee.trim() || null,
+      assigned_to_user_id: newTask.assignedToUserId || null,
       priority: newTask.priority,
       due_date: newTask.dueDate || null,
       status: "todo",
@@ -473,6 +511,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       client: "",
       sector: availableSectors[0] || "Geral",
       assignee: "",
+      assignedToUserId: "",
       priority: "Media",
       dueDate: "",
       subtasks: [],
@@ -853,7 +892,24 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               </div>
               <div className="space-y-2">
                 <Label>Responsavel</Label>
-                <Input placeholder="Nome" value={newTask.assignee} onChange={(event) => setNewTask((prev) => ({ ...prev, assignee: event.target.value }))} />
+                <select
+                  className="w-full rounded-lg border bg-card px-3 py-2 text-sm outline-none"
+                  disabled={effectiveAccess?.primaryRole !== "admin"}
+                  value={newTask.assignedToUserId || "unassigned"}
+                  onChange={(event) => {
+                    const selected = assigneeOptions.find((option) => option.id === event.target.value);
+                    setNewTask((prev) => ({
+                      ...prev,
+                      assignedToUserId: event.target.value === "unassigned" ? "" : event.target.value,
+                      assignee: selected?.name || "",
+                    }));
+                  }}
+                >
+                  <option value="unassigned">Sem responsável</option>
+                  {assigneeOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -887,6 +943,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   client: "",
                   sector: availableSectors[0] || "Geral",
                   assignee: "",
+                  assignedToUserId: "",
                   priority: "Media",
                   dueDate: "",
                   subtasks: [],

@@ -1,371 +1,210 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FunctionsHttpError } from "@supabase/supabase-js";
-import { motion } from "framer-motion";
-import { Loader2, Pencil, Plus, Search, ShieldAlert, Trash2, UserCog, Users } from "lucide-react";
-
-import { AppLayout } from "@/components/app/AppLayout";
+import { useDeferredValue, useMemo, useState } from "react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  ShieldAlert,
+  UserX,
+} from "lucide-react";
 import { toast } from "sonner";
 
-type AdminUserRow = {
-  user_id: string;
-  email: string | null;
-  display_name: string | null;
-  role: string | null;
-  created_at: string;
+import { AppLayout } from "@/components/app/AppLayout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  type ManagedUser,
+  type UserAccessInput,
+  type UserFilters,
+  useUserManagement,
+} from "@/hooks/useUserManagement";
+import { formatPermissionAuditValue, usePermissionAudit } from "@/hooks/usePermissionAudit";
+import {
+  DEFAULT_COLLABORATOR_MODULES,
+  MODULE_KEYS,
+  MODULE_LABELS,
+  PRIMARY_ROLES,
+  SECTOR_CODES,
+  SECTOR_LABELS,
+  USER_STATUSES,
+  type ModuleKey,
+  type PrimaryRole,
+  type SectorCode,
+  type UserStatus,
+} from "@/lib/userPermissions";
+
+const roleLabels: Record<PrimaryRole, string> = {
+  admin: "Admin",
+  colaborador: "Colaborador",
+  cliente: "Cliente",
 };
 
-const roleOptions = [
-  { value: "admin", label: "Admin" },
-  { value: "director", label: "Diretor" },
-  { value: "manager", label: "Gerente" },
-  { value: "employee", label: "Colaborador" },
-  { value: "commercial", label: "Comercial" },
-  { value: "departamento_pessoal", label: "Departamento Pessoal" },
-  { value: "fiscal", label: "Fiscal" },
-  { value: "contabil", label: "Contabil" },
-  { value: "partner", label: "Parceiro" },
-] as const;
-
-const roleLabelMap = new Map(roleOptions.map((option) => [option.value, option.label]));
-
-const roleColorMap: Record<string, string> = {
-  admin: "bg-primary/10 text-primary",
-  director: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20",
-  manager: "bg-blue-100 text-blue-700 dark:bg-blue-900/20",
-  commercial: "bg-amber-100 text-amber-700 dark:bg-amber-900/20",
-  employee: "bg-muted text-foreground",
-  departamento_pessoal: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20",
-  fiscal: "bg-violet-100 text-violet-700 dark:bg-violet-900/20",
-  contabil: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20",
-  partner: "bg-orange-100 text-orange-700 dark:bg-orange-900/20",
+const statusLabels: Record<UserStatus, string> = {
+  pending: "Pendente",
+  active: "Ativo",
+  suspended: "Suspenso",
+  inactive: "Inativo",
 };
 
-const emptyCreateForm = {
+const collaboratorModules = MODULE_KEYS.filter((moduleKey) => moduleKey !== "usuarios");
+
+const emptyForm = (): UserAccessInput => ({
   displayName: "",
   email: "",
   password: "",
-  role: "employee",
-};
+  primaryRole: "colaborador",
+  status: "active",
+  sectorCode: "geral",
+  enabledModules: [...DEFAULT_COLLABORATOR_MODULES],
+  linkedClientIds: [],
+  changeReason: "",
+});
 
-const emptyEditForm = {
-  displayName: "",
-  role: "employee",
-};
-
-async function readFunctionError(error: unknown) {
-  if (error instanceof FunctionsHttpError) {
-    try {
-      const errorResponse = await error.context.json();
-      if (errorResponse && typeof errorResponse === "object" && "error" in errorResponse) {
-        return String(errorResponse.error);
-      }
-    } catch {
-      // ignore parsing errors and fallback to generic message
-    }
-  }
-
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    return typeof message === "string" ? message : null;
-  }
-
-  return null;
-}
+const userToForm = (user: ManagedUser): UserAccessInput => ({
+  userId: user.user_id,
+  displayName: user.display_name || "",
+  email: user.email || "",
+  primaryRole: user.primary_role,
+  status: user.status,
+  sectorCode: user.sector_code,
+  enabledModules: user.enabled_modules,
+  linkedClientIds: user.linked_clients.map((client) => client.client_id),
+  changeReason: "",
+});
 
 export default function UsuariosPage() {
-  const { role, currentOrganizationId, user } = useAuth();
-  const [users, setUsers] = useState<AdminUserRow[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editingUser, setEditingUser] = useState<AdminUserRow | null>(null);
-  const [editForm, setEditForm] = useState(emptyEditForm);
-  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const { effectiveAccess, currentOrganizationId, refreshAccess } = useAuth();
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState(emptyCreateForm);
+  const deferredSearch = useDeferredValue(search);
+  const [filters, setFilters] = useState<Omit<UserFilters, "search">>({
+    role: "all",
+    sectorCode: "all",
+    status: "all",
+    moduleKey: "all",
+    page: 1,
+    pageSize: 25,
+  });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [auditAction, setAuditAction] = useState("all");
+  const [form, setForm] = useState<UserAccessInput>(emptyForm);
 
-  const isAdmin = role === "admin";
+  const queryFilters = useMemo<UserFilters>(
+    () => ({ ...filters, search: deferredSearch }),
+    [deferredSearch, filters],
+  );
+  const { usersQuery, clientsQuery, saveMutation, deactivateMutation } =
+    useUserManagement(currentOrganizationId, queryFilters);
+  const auditQuery = usePermissionAudit(currentOrganizationId, {
+    action: auditAction,
+    page: 1,
+    pageSize: 20,
+  });
 
-  const resetCreateForm = () => {
-    setForm(emptyCreateForm);
+  const isAdmin = effectiveAccess?.primaryRole === "admin";
+  const totalPages = Math.max(1, Math.ceil((usersQuery.data?.total || 0) / filters.pageSize));
+
+  const openCreate = () => {
+    setForm(emptyForm());
+    setDialogOpen(true);
   };
 
-  const loadUsers = useCallback(async () => {
-    if (!isAdmin) {
-      setUsers([]);
-      setLoadingUsers(false);
-      return;
-    }
-
-    setLoadingUsers(true);
-
-    const { data, error } = await supabase.rpc("list_admin_users");
-    setLoadingUsers(false);
-
-    if (error) {
-      toast.error(`Não foi possível carregar usuários: ${error.message}`);
-      return;
-    }
-
-    setUsers((data || []) as AdminUserRow[]);
-  }, [isAdmin]);
-
-  useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
-
-  const tryPromoteExistingPortalUser = async (email: string, nextRole: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) return false;
-
-    const { data: clientRow, error: clientError } = await supabase
-      .from("clients")
-      .select("portal_user_id")
-      .ilike("email", normalizedEmail)
-      .maybeSingle();
-
-    if (clientError) {
-      toast.error("Não foi possível validar o usuário existente para promocao de perfil.");
-      return false;
-    }
-
-    const portalUserId = clientRow?.portal_user_id;
-    if (!portalUserId) return false;
-
-    const rolePayload = {
-      user_id: portalUserId,
-      role: nextRole as "admin" | "director" | "manager" | "employee" | "commercial" | "partner" | "departamento_pessoal" | "fiscal" | "contabil" | "client",
-      ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
-    };
-
-    const { error: upsertRoleError } = await supabase.from("user_roles").upsert(
-      rolePayload,
-      { onConflict: currentOrganizationId ? "user_id,organization_id,role" : "user_id,role" },
-    );
-
-    if (upsertRoleError) {
-      toast.error("Não foi possível aplicar o novo perfil no usuário existente.");
-      return false;
-    }
-
-    const { error: removeClientRoleError } = await supabase
-      .from("user_roles")
-      .delete()
-      .eq("user_id", portalUserId)
-      .eq("role", "client");
-
-    if (removeClientRoleError) {
-      toast.error("Não foi possível remover o perfil de cliente do usuário promovido.");
-      return false;
-    }
-
-    const { error: removeClientRecordError } = await supabase
-      .from("clients")
-      .delete()
-      .eq("portal_user_id", portalUserId);
-
-    if (removeClientRecordError) {
-      toast.error("Não foi possível remover o vinculo de cliente do usuário promovido.");
-      return false;
-    }
-
-    return true;
+  const openEdit = (user: ManagedUser) => {
+    setForm(userToForm(user));
+    setDialogOpen(true);
   };
 
-  const filteredUsers = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    if (!normalizedSearch) return users;
-
-    return users.filter((user) => {
-      const name = (user.display_name || "").toLowerCase();
-      const email = (user.email || "").toLowerCase();
-      const roleLabel = roleLabelMap.get(user.role || "")?.toLowerCase() || "";
-      return (
-        name.includes(normalizedSearch) ||
-        email.includes(normalizedSearch) ||
-        roleLabel.includes(normalizedSearch)
-      );
-    });
-  }, [search, users]);
-
-  const handleCreateUser = async () => {
-    if (!isAdmin) {
-      toast.error("Apenas admin pode cadastrar usuários.");
-      return;
-    }
-
-    if (!form.displayName.trim()) {
-      toast.error("Informe o nome do usuário.");
-      return;
-    }
-
-    if (!form.email.trim()) {
-      toast.error("Informe o e-mail do usuário.");
-      return;
-    }
-
-    const password = form.password.trim();
-    const isValidPassword = password.length >= 6;
-    if (!isValidPassword) {
-      toast.error("A senha precisa ter no mínimo 6 caracteres.");
-      return;
-    }
-
-    setCreating(true);
-    const { error } = await supabase.functions.invoke("create-team-user", {
-      body: {
-        displayName: form.displayName,
-        email: form.email,
-        password,
-        role: form.role,
-        organizationId: currentOrganizationId,
-      },
-    });
-    setCreating(false);
-
-    if (error) {
-      const detailedErrorMessage = await readFunctionError(error);
-
-      const normalizedMessage = (detailedErrorMessage || error.message || "").toLowerCase();
-      const shouldTryPromotion =
-        normalizedMessage.includes("already linked to another profile") ||
-        normalizedMessage.includes("linked to an internal profile");
-
-      if (shouldTryPromotion) {
-        setCreating(true);
-        const promoted = await tryPromoteExistingPortalUser(form.email, form.role);
-        setCreating(false);
-
-        if (promoted) {
-          toast.success("Usuário existente encontrado. Perfil interno aplicado com sucesso.");
-          setCreateOpen(false);
-          resetCreateForm();
-          void loadUsers();
-          return;
-        }
-      }
-
-      if (detailedErrorMessage) {
-        toast.error(detailedErrorMessage);
-        return;
-      }
-
-      toast.error(error.message || "Não foi possível cadastrar usuário.");
-      return;
-    }
-
-    toast.success("Usuário cadastrado com sucesso.");
-    setCreateOpen(false);
-    resetCreateForm();
-    void loadUsers();
+  const setRole = (primaryRole: PrimaryRole) => {
+    setForm((current) => ({
+      ...current,
+      primaryRole,
+      sectorCode: primaryRole === "colaborador" ? current.sectorCode || "geral" : null,
+      enabledModules: primaryRole === "colaborador"
+        ? Array.from(new Set<ModuleKey>(["tarefas", ...current.enabledModules]))
+        : [],
+      linkedClientIds: primaryRole === "cliente" ? current.linkedClientIds : [],
+    }));
   };
 
-  const openEditDialog = (userRow: AdminUserRow) => {
-    setEditingUser(userRow);
-    setEditForm({
-      displayName: userRow.display_name?.trim() || "",
-      role: userRow.role || "employee",
-    });
-    setEditOpen(true);
+  const toggleModule = (moduleKey: ModuleKey, enabled: boolean) => {
+    if (moduleKey === "tarefas") return;
+    setForm((current) => ({
+      ...current,
+      enabledModules: enabled
+        ? Array.from(new Set([...current.enabledModules, moduleKey]))
+        : current.enabledModules.filter((item) => item !== moduleKey),
+    }));
   };
 
-  const handleUpdateUser = async () => {
-    if (!editingUser) return;
-
-    if (!editForm.displayName.trim()) {
-      toast.error("Informe o nome do usuário.");
-      return;
-    }
-
-    setEditing(true);
-    const { error } = await supabase.functions.invoke("manage-team-user", {
-      body: {
-        action: "update",
-        userId: editingUser.user_id,
-        displayName: editForm.displayName,
-        role: editForm.role,
-        organizationId: currentOrganizationId,
-      },
-    });
-    setEditing(false);
-
-    if (error) {
-      const message = await readFunctionError(error);
-      toast.error(message || "Não foi possível atualizar o usuário.");
-      return;
-    }
-
-    toast.success("Usuário atualizado com sucesso.");
-    setEditOpen(false);
-    setEditingUser(null);
-    setEditForm(emptyEditForm);
-    void loadUsers();
+  const toggleClient = (clientId: string, enabled: boolean) => {
+    setForm((current) => ({
+      ...current,
+      linkedClientIds: enabled
+        ? Array.from(new Set([...current.linkedClientIds, clientId]))
+        : current.linkedClientIds.filter((item) => item !== clientId),
+    }));
   };
 
-  const handleDeleteUser = async () => {
-    if (!deleteTarget) return;
-
-    if (deleteTarget.user_id === user?.id) {
-      toast.error("Você não pode excluir o próprio usuário.");
-      setDeleteTarget(null);
+  const save = async () => {
+    if (!form.displayName.trim() || (!form.userId && (!form.email?.trim() || !form.password))) {
+      toast.error("Preencha nome, e-mail e senha.");
+      return;
+    }
+    if (form.primaryRole === "colaborador" && form.status === "active" && !form.sectorCode) {
+      toast.error("Selecione o setor do colaborador.");
       return;
     }
 
-    setDeleting(true);
-    const { error } = await supabase.functions.invoke("manage-team-user", {
-      body: {
-        action: "delete",
-        userId: deleteTarget.user_id,
-        organizationId: currentOrganizationId,
-      },
-    });
-    setDeleting(false);
-
-    if (error) {
-      const message = await readFunctionError(error);
-      toast.error(message || "Não foi possível excluir o usuário.");
-      return;
+    try {
+      await saveMutation.mutateAsync(form);
+      await refreshAccess();
+      toast.success(form.userId ? "Usuário atualizado." : "Usuário criado.");
+      setDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar o usuário.");
     }
+  };
 
-    toast.success("Usuário excluído com sucesso.");
-    setDeleteTarget(null);
-    void loadUsers();
+  const deactivate = async (user: ManagedUser) => {
+    try {
+      await deactivateMutation.mutateAsync(user.user_id);
+      toast.success("Usuário desativado.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível desativar.");
+    }
   };
 
   if (!isAdmin) {
     return (
       <AppLayout>
-        <div className="max-w-4xl space-y-4">
-          <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
-          <div className="rounded-xl border bg-card p-6">
-            <div className="flex items-center gap-2 text-destructive mb-2">
-              <ShieldAlert className="h-4 w-4" />
-              <p className="text-sm font-semibold">Acesso restrito</p>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Apenas administradores podem acessar o controle de usuários.
-            </p>
+        <div className="max-w-3xl rounded-lg border bg-card p-6">
+          <div className="flex items-center gap-2 text-destructive">
+            <ShieldAlert className="h-4 w-4" />
+            <h1 className="font-semibold">Acesso restrito</h1>
           </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Apenas administradores podem gerenciar usuários e permissões.
+          </p>
         </div>
       </AppLayout>
     );
@@ -373,288 +212,263 @@ export default function UsuariosPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-5 max-w-7xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="max-w-7xl space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Controle de Usuários</h1>
+            <h1 className="font-heading text-2xl font-bold">Usuários e permissões</h1>
             <p className="text-sm text-muted-foreground">
-              Cadastre novos usuários internos e gerencie permissoes da equipe.
+              Papéis, setores, módulos e empresas vinculadas.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar Usuário
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo usuário
           </Button>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground mb-1">Usuários internos</p>
-            <p className="font-heading text-2xl font-bold">{users.length}</p>
-          </div>
-          <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground mb-1">Administradores</p>
-            <p className="font-heading text-2xl font-bold">
-              {users.filter((user) => user.role === "admin").length}
-            </p>
-          </div>
-          <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground mb-1">Perfis diferentes</p>
-            <p className="font-heading text-2xl font-bold">
-              {new Set(users.map((user) => user.role || "sem_perfil")).size}
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border bg-card p-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="grid gap-3 border-y py-4 md:grid-cols-6">
+          <div className="relative md:col-span-2">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-9"
-              placeholder="Buscar por nome, e-mail ou perfil..."
+              placeholder="Buscar por nome ou e-mail"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setFilters((current) => ({ ...current, page: 1 }));
+              }}
             />
           </div>
+          <Select value={filters.role} onValueChange={(role) => setFilters((current) => ({ ...current, role: role as UserFilters["role"], page: 1 }))}>
+            <SelectTrigger><SelectValue placeholder="Papel" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os papéis</SelectItem>
+              {PRIMARY_ROLES.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filters.status} onValueChange={(status) => setFilters((current) => ({ ...current, status: status as UserFilters["status"], page: 1 }))}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              {USER_STATUSES.map((status) => <SelectItem key={status} value={status}>{statusLabels[status]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filters.sectorCode} onValueChange={(sectorCode) => setFilters((current) => ({ ...current, sectorCode: sectorCode as UserFilters["sectorCode"], page: 1 }))}>
+            <SelectTrigger><SelectValue placeholder="Setor" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os setores</SelectItem>
+              {SECTOR_CODES.map((sector) => <SelectItem key={sector} value={sector}>{SECTOR_LABELS[sector]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filters.moduleKey} onValueChange={(moduleKey) => setFilters((current) => ({ ...current, moduleKey: moduleKey as UserFilters["moduleKey"], page: 1 }))}>
+            <SelectTrigger><SelectValue placeholder="Módulo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os módulos</SelectItem>
+              {MODULE_KEYS.map((moduleKey) => (
+                <SelectItem key={moduleKey} value={moduleKey}>{MODULE_LABELS[moduleKey]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        <div className="rounded-xl border bg-card overflow-hidden">
-          {loadingUsers ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
+        <div className="overflow-hidden rounded-lg border">
+          <div className="grid grid-cols-[minmax(220px,1.4fr)_150px_160px_minmax(220px,1fr)_92px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">
+            <span>Usuário</span><span>Papel</span><span>Setor / status</span><span>Acesso</span><span className="text-right">Ações</span>
+          </div>
+          {usersQuery.isLoading ? (
+            <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : usersQuery.isError ? (
+            <div className="p-8 text-sm text-destructive">Não foi possível carregar os usuários.</div>
+          ) : (usersQuery.data?.items || []).length === 0 ? (
+            <div className="p-8 text-sm text-muted-foreground">Nenhum usuário encontrado.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Usuário</th>
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden md:table-cell">E-mail</th>
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Perfil</th>
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground hidden lg:table-cell">Criado em</th>
-                    <th className="p-4 text-right text-xs font-semibold text-muted-foreground">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredUsers.map((userRow, index) => {
-                    const label = roleLabelMap.get(userRow.role || "") || "Sem perfil";
-                    const badgeClass = roleColorMap[userRow.role || ""] || "bg-muted text-foreground";
-
-                    return (
-                      <motion.tr
-                        key={userRow.user_id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: index * 0.02 }}
-                        className="hover:bg-muted/20 transition-colors"
-                      >
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                              <UserCog className="h-4 w-4 text-primary" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">
-                                {userRow.display_name?.trim() || "Sem nome definido"}
-                              </p>
-                              <p className="text-xs text-muted-foreground md:hidden">
-                                {userRow.email || "Sem e-mail"}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4 text-sm hidden md:table-cell">{userRow.email || "-"}</td>
-                        <td className="p-4">
-                          <Badge variant="outline" className={`border-0 ${badgeClass}`}>
-                            {label}
-                          </Badge>
-                        </td>
-                        <td className="p-4 text-sm text-muted-foreground hidden lg:table-cell">
-                          {new Date(userRow.created_at).toLocaleDateString("pt-BR")}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEditDialog(userRow)}
-                              aria-label={`Editar ${userRow.display_name || userRow.email || "usuário"}`}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => setDeleteTarget(userRow)}
-                              disabled={userRow.user_id === user?.id}
-                              aria-label={`Excluir ${userRow.display_name || userRow.email || "usuário"}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-14 text-center text-sm text-muted-foreground">
-                        <div className="inline-flex flex-col items-center gap-2">
-                          <Users className="h-6 w-6" />
-                          Nenhum usuário encontrado para esse filtro.
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            usersQuery.data?.items.map((managedUser) => (
+              <div key={managedUser.user_id} className="grid grid-cols-[minmax(220px,1.4fr)_150px_160px_minmax(220px,1fr)_92px] gap-4 border-b px-4 py-4 text-sm last:border-b-0">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{managedUser.display_name || "Sem nome"}</p>
+                  <p className="truncate text-xs text-muted-foreground">{managedUser.email}</p>
+                </div>
+                <div><Badge variant="outline">{roleLabels[managedUser.primary_role]}</Badge></div>
+                <div>
+                  <p>{managedUser.sector_code ? SECTOR_LABELS[managedUser.sector_code] : "-"}</p>
+                  <p className="text-xs text-muted-foreground">{statusLabels[managedUser.status]}</p>
+                  {managedUser.requires_access_review && <Badge variant="destructive" className="mt-1">Revisar</Badge>}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {managedUser.primary_role === "admin" && <Badge>Todos os módulos</Badge>}
+                  {managedUser.enabled_modules.slice(0, 4).map((moduleKey) => (
+                    <Badge key={moduleKey} variant="secondary">{MODULE_LABELS[moduleKey]}</Badge>
+                  ))}
+                  {managedUser.linked_clients.slice(0, 3).map((client) => (
+                    <Badge key={client.client_id} variant="secondary">{client.name}</Badge>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(managedUser)}><Pencil className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" title="Desativar" disabled={managedUser.status === "inactive"} onClick={() => void deactivate(managedUser)}><UserX className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            ))
           )}
         </div>
+
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">{usersQuery.data?.total || 0} usuários</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" disabled={filters.page <= 1} onClick={() => setFilters((current) => ({ ...current, page: current.page - 1 }))}><ChevronLeft className="h-4 w-4" /></Button>
+            <span>{filters.page} de {totalPages}</span>
+            <Button variant="outline" size="icon" disabled={filters.page >= totalPages} onClick={() => setFilters((current) => ({ ...current, page: current.page + 1 }))}><ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
+
+        <section className="space-y-3 border-t pt-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Histórico de permissões</h2>
+              <p className="text-sm text-muted-foreground">Alterações recentes de acesso nesta organização.</p>
+            </div>
+            <Select value={auditAction} onValueChange={setAuditAction}>
+              <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as alterações</SelectItem>
+                <SelectItem value="role_changed">Papel</SelectItem>
+                <SelectItem value="status_changed">Status</SelectItem>
+                <SelectItem value="sector_changed">Setor</SelectItem>
+                <SelectItem value="modules_changed">Módulos</SelectItem>
+                <SelectItem value="client_links_changed">Empresas</SelectItem>
+                <SelectItem value="migration_review_required">Revisão de migração</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="overflow-hidden rounded-lg border">
+            {auditQuery.isLoading ? (
+              <div className="flex justify-center p-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            ) : auditQuery.isError ? (
+              <div className="p-6 text-sm text-destructive">Não foi possível carregar o histórico.</div>
+            ) : (auditQuery.data?.items || []).length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">Nenhuma alteração registrada.</div>
+            ) : (
+              auditQuery.data?.items.map((entry) => (
+                <div key={entry.id} className="grid gap-2 border-b px-4 py-3 text-sm last:border-b-0 md:grid-cols-[180px_1fr_1.4fr_150px]">
+                  <div>
+                    <p className="font-medium">{entry.action}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(entry.created_at).toLocaleString("pt-BR")}</p>
+                  </div>
+                  <div>
+                    <p>{entry.target_name || entry.target_user_id}</p>
+                    <p className="text-xs text-muted-foreground">por {entry.actor_name || "Sistema"}</p>
+                  </div>
+                  <div className="min-w-0 text-xs text-muted-foreground">
+                    <p className="truncate">Antes: {formatPermissionAuditValue(entry.previous_value)}</p>
+                    <p className="truncate">Depois: {formatPermissionAuditValue(entry.new_value)}</p>
+                  </div>
+                  <div className="text-right">
+                    <Badge variant={entry.result === "denied" ? "destructive" : "outline"}>
+                      {entry.result === "denied" ? "Negado" : "Concluído"}
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Adicionar usuário</DialogTitle>
-            <DialogDescription>
-              Crie um acesso interno para a organização atual.
-            </DialogDescription>
+            <DialogTitle>{form.userId ? "Editar usuário" : "Novo usuário"}</DialogTitle>
+            <DialogDescription>Configure o papel e somente os acessos necessários.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome completo *</Label>
-              <Input
-                placeholder="Nome do colaborador"
-                value={form.displayName}
-                onChange={(event) => setForm((prev) => ({ ...prev, displayName: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>E-mail *</Label>
-              <Input
-                type="email"
-                placeholder="usuário@empresa.com"
-                value={form.email}
-                onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Senha temporaria *</Label>
-              <Input
-                type="password"
-                placeholder="Mínimo 6 caracteres"
-                value={form.password}
-                onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Permissão *</Label>
-              <select
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
-                value={form.role}
-                onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
-              >
-                {roleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreateUser} disabled={creating}>
-              {creating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {creating ? "Cadastrando..." : "Cadastrar usuário"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar usuário</DialogTitle>
-            <DialogDescription>
-              Atualize o nome e o perfil interno deste usuário.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} />
+            </div>
             <div className="space-y-2">
               <Label>E-mail</Label>
-              <Input value={editingUser?.email || "Sem e-mail"} disabled />
+              <Input disabled={Boolean(form.userId)} value={form.email || ""} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
+            </div>
+            {!form.userId && (
+              <div className="space-y-2">
+                <Label>Senha inicial</Label>
+                <Input type="password" value={form.password || ""} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Papel</Label>
+              <Select value={form.primaryRole} onValueChange={(value) => setRole(value as PrimaryRole)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{PRIMARY_ROLES.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label>Nome completo *</Label>
-              <Input
-                placeholder="Nome do colaborador"
-                value={editForm.displayName}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, displayName: event.target.value }))}
-              />
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value as UserStatus }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{USER_STATUSES.map((status) => <SelectItem key={status} value={status}>{statusLabels[status]}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Permissão *</Label>
-              <select
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none"
-                value={editForm.role}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value }))}
-              >
-                {roleOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {form.primaryRole === "colaborador" && (
+              <div className="space-y-2">
+                <Label>Setor</Label>
+                <Select value={form.sectorCode || "geral"} onValueChange={(value) => setForm((current) => ({ ...current, sectorCode: value as SectorCode }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{SECTOR_CODES.map((sector) => <SelectItem key={sector} value={sector}>{SECTOR_LABELS[sector]}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
+
+          {form.primaryRole === "colaborador" && (
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <Label>Módulos</Label>
+                <p className="text-xs text-muted-foreground">Tarefas é obrigatório. Os demais acessos são explícitos.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                {collaboratorModules.map((moduleKey) => (
+                  <label key={moduleKey} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <Checkbox checked={form.enabledModules.includes(moduleKey)} disabled={moduleKey === "tarefas"} onCheckedChange={(checked) => toggleModule(moduleKey, checked === true)} />
+                    {MODULE_LABELS[moduleKey]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {form.primaryRole === "cliente" && (
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <Label>Empresas vinculadas</Label>
+                <p className="text-xs text-muted-foreground">Sem vínculo ativo, o usuário verá o estado de acesso pendente.</p>
+              </div>
+              <div className="grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
+                {(clientsQuery.data || []).map((client) => (
+                  <label key={client.id} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                    <Checkbox checked={form.linkedClientIds.includes(client.id)} onCheckedChange={(checked) => toggleClient(client.id, checked === true)} />
+                    <span className="truncate">{client.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Motivo da alteração</Label>
+            <Input value={form.changeReason || ""} onChange={(event) => setForm((current) => ({ ...current, changeReason: event.target.value }))} placeholder="Opcional" />
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editing}>
-              Cancelar
-            </Button>
-            <Button onClick={handleUpdateUser} disabled={editing}>
-              {editing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {editing ? "Salvando..." : "Salvar alterações"}
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void save()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação remove o acesso do usuário à organização atual e revoga vínculos ativos do portal. Se ele não
-              tiver outros acessos, a conta de autenticação também será removida.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-            <p className="font-medium">{deleteTarget?.display_name || "Sem nome definido"}</p>
-            <p className="text-muted-foreground">{deleteTarget?.email || "Sem e-mail"}</p>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={(event) => {
-                event.preventDefault();
-                void handleDeleteUser();
-              }}
-              disabled={deleting}
-            >
-              {deleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              {deleting ? "Excluindo..." : "Excluir usuário"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppLayout>
   );
 }

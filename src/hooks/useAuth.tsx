@@ -6,8 +6,17 @@ import {
   hasAnyDepartmentRole,
   hasAnyInternalRole,
   hasClientRole,
+  mapLegacyRoleToCanonical,
   normalizeRoles,
 } from "@/lib/accessControl";
+import {
+  MODULE_KEYS,
+  type EffectiveAccess,
+  type ModuleKey,
+  type PrimaryRole,
+  type SectorCode,
+  type UserStatus,
+} from "@/lib/userPermissions";
 
 interface AuthContextType {
   user: User | null;
@@ -24,6 +33,13 @@ interface AuthContextType {
   isInternalUser: boolean;
   isClientUser: boolean;
   isDepartmentUser: boolean;
+  effectiveAccess: EffectiveAccess | null;
+  enabledModules: ModuleKey[];
+  sectorCode: SectorCode | null;
+  accessStatus: UserStatus | null;
+  requiresAccessReview: boolean;
+  activeClientIds: string[];
+  refreshAccess: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -38,6 +54,15 @@ type OrganizationSummary = {
 type RoleRow = {
   role: string | null;
   organization_id?: string | null;
+};
+
+type AccessRow = {
+  organization_id: string;
+  user_id: string;
+  primary_role: PrimaryRole;
+  status: UserStatus;
+  sector_code: SectorCode | null;
+  requires_access_review: boolean;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [currentOrganizationId, setCurrentOrganizationIdState] = useState<string | null>(null);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [effectiveAccess, setEffectiveAccess] = useState<EffectiveAccess | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -72,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOrganizations([]);
       setCurrentOrganizationIdState(null);
       setRoleLoaded(true);
+      setEffectiveAccess(null);
       setLoading(false);
       return;
     }
@@ -105,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setOrganizations([]);
         setCurrentOrganizationIdState(null);
         setRoleLoaded(true);
+        setEffectiveAccess(null);
       }
     });
 
@@ -127,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setOrganizations([]);
           setCurrentOrganizationIdState(null);
           setRoleLoaded(true);
+          setEffectiveAccess(null);
         }
       } catch {
         currentUserIdRef.current = null;
@@ -149,11 +178,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchRole = async (userId: string) => {
-    let { data, error } = await supabase
-      .from("user_roles")
-      .select("role, organization_id")
-      .eq("user_id", userId);
+  const fetchRole = async (userId: string, requestedOrganizationId?: string | null) => {
+    const [canonicalResult, legacyResult] = await Promise.all([
+      supabase
+        .from("organization_user_access")
+        .select("organization_id, user_id, primary_role, status, sector_code, requires_access_review")
+        .eq("user_id", userId),
+      supabase
+        .from("user_roles")
+        .select("role, organization_id")
+        .eq("user_id", userId),
+    ]);
+
+    const canonicalRows = ((canonicalResult.data || []) as AccessRow[])
+      .filter((item) => item.organization_id && item.primary_role);
+
+    if (!canonicalResult.error && canonicalRows.length > 0) {
+      const organizationIds = Array.from(new Set(canonicalRows.map((item) => item.organization_id)));
+      const { data: orgData } = await supabase
+        .from("organizations")
+        .select("id, slug, name, is_active")
+        .in("id", organizationIds);
+
+      const organizationRows = ((orgData || []) as OrganizationSummary[])
+        .filter((organization) => organizationIds.includes(organization.id));
+      const storedOrganizationId = requestedOrganizationId || localStorage.getItem(buildOrganizationStorageKey(userId));
+      const preferredOrganization =
+        organizationRows.find((organization) => organization.id === storedOrganizationId) ||
+        organizationRows.find((organization) => organization.slug === "grow") ||
+        organizationRows[0] ||
+        null;
+      const activeOrganizationId = preferredOrganization?.id ?? organizationIds[0] ?? null;
+      const activeAccess = canonicalRows.find((item) => item.organization_id === activeOrganizationId) || canonicalRows[0];
+
+      const [grantResult, linkResult] = await Promise.all([
+        activeAccess.primary_role === "colaborador"
+          ? supabase
+              .from("user_module_grants")
+              .select("module_key")
+              .eq("organization_id", activeAccess.organization_id)
+              .eq("user_id", userId)
+          : Promise.resolve({ data: [], error: null }),
+        activeAccess.primary_role === "cliente"
+          ? supabase
+              .from("client_users")
+              .select("client_id")
+              .eq("organization_id", activeAccess.organization_id)
+              .eq("user_id", userId)
+              .eq("status", "active")
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      const enabledModules = activeAccess.primary_role === "admin"
+        ? [...MODULE_KEYS]
+        : Array.from(
+            new Set(
+              ((grantResult.data || []) as { module_key?: string | null }[])
+                .map((item) => item.module_key)
+                .filter((item): item is ModuleKey => MODULE_KEYS.includes(item as ModuleKey)),
+            ),
+          );
+      const activeClientIds = ((linkResult.data || []) as { client_id?: string | null }[])
+        .map((item) => item.client_id)
+        .filter((item): item is string => Boolean(item));
+      const resolvedAccess: EffectiveAccess = {
+        organizationId: activeAccess.organization_id,
+        userId,
+        status: activeAccess.status,
+        primaryRole: activeAccess.primary_role,
+        sectorCode: activeAccess.sector_code,
+        enabledModules,
+        activeClientIds,
+        requiresAccessReview: activeAccess.requires_access_review,
+      };
+
+      setOrganizationRoles(
+        canonicalRows.map((item) => ({
+          organization_id: item.organization_id,
+          role: item.primary_role,
+        })),
+      );
+      setOrganizations(organizationRows);
+      setCurrentOrganizationIdState(activeAccess.organization_id);
+      setAllRoles(Array.from(new Set(canonicalRows.map((item) => item.primary_role))));
+      setRoles([activeAccess.primary_role]);
+      setRole(activeAccess.primary_role);
+      setEffectiveAccess(resolvedAccess);
+      setRoleLoaded(true);
+      return;
+    }
+
+    let { data, error } = legacyResult;
 
     if (error && isMissingOrganizationColumnError(error)) {
       const fallback = await supabase
@@ -173,6 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOrganizations([]);
       setCurrentOrganizationIdState(null);
       setRoleLoaded(true);
+      setEffectiveAccess(null);
       return;
     }
 
@@ -223,7 +339,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentOrganizationIdState(activeOrganizationId);
     setAllRoles(normalizedAllRoles);
     setRoles(activeRoles);
-    setRole(getPrimaryRole(activeRoles.length > 0 ? activeRoles : normalizedAllRoles));
+    const legacyRoles = activeRoles.length > 0 ? activeRoles : normalizedAllRoles;
+    const canonicalRole = mapLegacyRoleToCanonical(legacyRoles);
+    setRole(canonicalRole || getPrimaryRole(legacyRoles));
+    setEffectiveAccess(
+      activeOrganizationId && canonicalRole
+        ? {
+            organizationId: activeOrganizationId,
+            userId,
+            status: "active",
+            primaryRole: canonicalRole,
+            sectorCode: null,
+            enabledModules: canonicalRole === "admin" ? [...MODULE_KEYS] : [],
+            activeClientIds: [],
+            requiresAccessReview: false,
+          }
+        : null,
+    );
     setRoleLoaded(true);
   };
 
@@ -241,6 +373,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setRoles(activeRoles);
     setRole(getPrimaryRole(activeRoles.length > 0 ? activeRoles : allRoles));
+    void fetchRole(user.id, organizationId);
+  };
+
+  const refreshAccess = async () => {
+    if (!user?.id) return;
+    setRoleLoaded(false);
+    await fetchRole(user.id, currentOrganizationId);
   };
 
   const signIn = async (email: string, password: string) => {
@@ -266,12 +405,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setOrganizations([]);
     setCurrentOrganizationIdState(null);
     setRoleLoaded(true);
+    setEffectiveAccess(null);
   };
 
   const currentOrganization = organizations.find((organization) => organization.id === currentOrganizationId) || null;
-  const isInternalUser = hasAnyInternalRole(roles);
-  const isClientUser = hasClientRole(roles);
-  const isDepartmentUser = hasAnyDepartmentRole(roles);
+  const isInternalUser =
+    effectiveAccess?.primaryRole === "admin" ||
+    effectiveAccess?.primaryRole === "colaborador" ||
+    hasAnyInternalRole(roles);
+  const isClientUser = effectiveAccess?.primaryRole === "cliente" || hasClientRole(roles);
+  const isDepartmentUser = Boolean(effectiveAccess?.sectorCode) || hasAnyDepartmentRole(roles);
 
   return (
     <AuthContext.Provider
@@ -290,6 +433,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isInternalUser,
         isClientUser,
         isDepartmentUser,
+        effectiveAccess,
+        enabledModules: effectiveAccess?.enabledModules || [],
+        sectorCode: effectiveAccess?.sectorCode || null,
+        accessStatus: effectiveAccess?.status || null,
+        requiresAccessReview: effectiveAccess?.requiresAccessReview || false,
+        activeClientIds: effectiveAccess?.activeClientIds || [],
+        refreshAccess,
         signIn,
         signOut,
       }}

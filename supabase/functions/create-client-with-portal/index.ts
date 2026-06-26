@@ -470,13 +470,6 @@ Deno.serve(async (req) => {
       throw existingClientByPortalUserError;
     }
 
-    if ((existingClientByPortalUser || []).length > 0 && !isBranchClient) {
-      return jsonResponse(
-        { error: "Portal user is already linked to another client" },
-        409,
-      );
-    }
-
     if (portalUserId && normalizedPortalPassword && !portalUserCreatedNow) {
       const { error: passwordUpdateError } = await supabaseAdmin.auth.admin.updateUserById(portalUserId, {
         password: normalizedPortalPassword,
@@ -502,6 +495,25 @@ Deno.serve(async (req) => {
 
     if (roleUpsertError) {
       throw roleUpsertError;
+    }
+
+    const { error: canonicalAccessError } = await supabaseAdmin
+      .from("organization_user_access")
+      .upsert(
+        {
+          user_id: portalUserId,
+          organization_id: organizationId,
+          primary_role: "cliente",
+          status: "active",
+          sector_code: null,
+          requires_access_review: false,
+          updated_by: callerUser.id,
+        },
+        { onConflict: "organization_id,user_id" },
+      );
+
+    if (canonicalAccessError) {
+      throw canonicalAccessError;
     }
 
     const { error: profileUpsertError } = await supabaseAdmin.from("profiles").upsert(

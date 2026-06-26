@@ -29,6 +29,7 @@ export interface KanbanTaskItem {
   description: string | null;
   client_name: string | null;
   assignee: string | null;
+  assigned_to_user_id?: string | null;
   priority: string;
   sector: string;
   status: KanbanStatus;
@@ -45,6 +46,7 @@ type SavePayload = {
   description: string | null;
   client_name: string | null;
   assignee: string | null;
+  assigned_to_user_id: string | null;
   priority: string;
   sector: string;
   status: KanbanStatus;
@@ -114,11 +116,12 @@ export function KanbanTaskDetailSheet({
   onSubtaskToggle,
   historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
-  const { user, currentOrganizationId } = useAuth();
+  const { user, currentOrganizationId, effectiveAccess } = useAuth();
   const [form, setForm] = useState({
     description: "",
     client_name: "",
     assignee: "",
+    assigned_to_user_id: "",
     priority: "Média",
     sectors: [] as string[],
     status: "backlog" as KanbanStatus,
@@ -131,6 +134,7 @@ export function KanbanTaskDetailSheet({
   const [loadingComments, setLoadingComments] = useState(false);
   const [sendingComment, setSendingComment] = useState(false);
   const [newComment, setNewComment] = useState("");
+  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; name: string }>>([]);
   const commentsBottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -141,12 +145,52 @@ export function KanbanTaskDetailSheet({
       description: task.description || "",
       client_name: task.client_name || "",
       assignee: task.assignee || "",
+      assigned_to_user_id: task.assigned_to_user_id || "",
       priority: task.priority || "Média",
       sectors,
       status: task.status,
       due_date: task.due_date || "",
     });
   }, [task]);
+
+  useEffect(() => {
+    if (!open || effectiveAccess?.primaryRole !== "admin" || !currentOrganizationId) {
+      setAssigneeOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadAssignees = async () => {
+      const { data: accessRows } = await supabase
+        .from("organization_user_access")
+        .select("user_id")
+        .eq("organization_id", currentOrganizationId)
+        .eq("primary_role", "colaborador")
+        .eq("status", "active")
+        .eq("requires_access_review", false);
+      const ids = (accessRows || []).map((row) => String(row.user_id));
+      if (ids.length === 0) {
+        if (!cancelled) setAssigneeOptions([]);
+        return;
+      }
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name")
+        .in("user_id", ids);
+      if (!cancelled) {
+        setAssigneeOptions(
+          (profiles || []).map((profile) => ({
+            id: String(profile.user_id),
+            name: profile.display_name || "Colaborador",
+          })),
+        );
+      }
+    };
+    void loadAssignees();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganizationId, effectiveAccess?.primaryRole, open]);
 
   useEffect(() => {
     if (!open || !task?.request_id) {
@@ -286,6 +330,7 @@ export function KanbanTaskDetailSheet({
       description: form.description.trim() || null,
       client_name: form.client_name.trim() || null,
       assignee: form.assignee.trim() || null,
+      assigned_to_user_id: form.assigned_to_user_id || null,
       priority: form.priority,
       sector: form.sectors[0],
       status: form.status,
@@ -429,7 +474,29 @@ export function KanbanTaskDetailSheet({
                 </div>
                 <div className="space-y-2">
                   <Label>Responsavel</Label>
-                  <Input value={form.assignee} onChange={(event) => setForm((prev) => ({ ...prev, assignee: event.target.value }))} />
+                  {effectiveAccess?.primaryRole === "admin" ? (
+                    <Select
+                      value={form.assigned_to_user_id || "unassigned"}
+                      onValueChange={(value) => {
+                        const selected = assigneeOptions.find((option) => option.id === value);
+                        setForm((prev) => ({
+                          ...prev,
+                          assigned_to_user_id: value === "unassigned" ? "" : value,
+                          assignee: selected?.name || "",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Sem responsável" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Sem responsável</SelectItem>
+                        {assigneeOptions.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={form.assignee} readOnly />
+                  )}
                 </div>
               </div>
 

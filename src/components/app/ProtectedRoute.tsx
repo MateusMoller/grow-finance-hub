@@ -1,10 +1,11 @@
-import { useAuth } from "@/hooks/useAuth";
-import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { useLocation } from "react-router-dom";
-import { hasAnyInternalRole, hasClientRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
+import { Navigate, useLocation } from "react-router-dom";
+
+import { useAuth } from "@/hooks/useAuth";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
+import { hasAnyInternalRole, hasClientRole, normalizeRoles } from "@/lib/accessControl";
 import type { OrganizationFeatureKey } from "@/lib/organizationFeatures";
+import { canAccessModule, resolveRouteModule } from "@/lib/userPermissions";
 
 type RouteScope = "authenticated" | "internal" | "portal";
 
@@ -15,8 +16,20 @@ interface ProtectedRouteProps {
   adminOnly?: boolean;
 }
 
-export function ProtectedRoute({ children, scope = "authenticated", feature, adminOnly = false }: ProtectedRouteProps) {
-  const { user, loading, role, roles, roleLoaded } = useAuth();
+export function ProtectedRoute({
+  children,
+  scope = "authenticated",
+  feature,
+  adminOnly = false,
+}: ProtectedRouteProps) {
+  const {
+    user,
+    loading,
+    role,
+    roles,
+    roleLoaded,
+    effectiveAccess,
+  } = useAuth();
   const { isFeatureEnabled, isLoading: settingsLoading } = useOrganizationSettings();
   const location = useLocation();
 
@@ -34,16 +47,37 @@ export function ProtectedRoute({ children, scope = "authenticated", feature, adm
   }
 
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
-  const hasInternalAccess = hasAnyInternalRole(normalizedRoleList);
-  const hasClientAccess = hasClientRole(normalizedRoleList);
-  const isDepartmentUser = isDepartmentOnlyUser(normalizedRoleList);
-  const isAdmin = normalizedRoleList.includes("admin");
+  const hasInternalAccess =
+    effectiveAccess?.primaryRole === "admin" ||
+    effectiveAccess?.primaryRole === "colaborador" ||
+    hasAnyInternalRole(normalizedRoleList);
+  const hasClientAccess =
+    effectiveAccess?.primaryRole === "cliente" ||
+    hasClientRole(normalizedRoleList);
+  const isAdmin =
+    effectiveAccess?.primaryRole === "admin" ||
+    normalizedRoleList.includes("admin");
+
+  if (
+    effectiveAccess &&
+    (effectiveAccess.status !== "active" || effectiveAccess.requiresAccessReview)
+  ) {
+    return (
+      <div className="min-h-screen bg-background px-4 py-10">
+        <div className="mx-auto max-w-lg rounded-lg border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold">
+            {effectiveAccess.requiresAccessReview ? "Acesso em revisão" : "Acesso indisponível"}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Procure um administrador para revisar a configuração deste usuário.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (scope === "internal" && !hasInternalAccess) {
-    if (hasClientAccess) {
-      return <Navigate to="/app/portal" replace />;
-    }
-    return <Navigate to="/app/login" replace />;
+    return <Navigate to={hasClientAccess ? "/app/portal" : "/app/login"} replace />;
   }
 
   if (scope === "portal" && !hasInternalAccess && !hasClientAccess) {
@@ -51,28 +85,17 @@ export function ProtectedRoute({ children, scope = "authenticated", feature, adm
   }
 
   if (adminOnly && !isAdmin) {
-    return <Navigate to={hasInternalAccess ? "/app" : "/app/login"} replace />;
+    return <Navigate to={hasInternalAccess ? "/app/tarefas" : "/app/login"} replace />;
   }
 
-  if (scope === "internal" && isDepartmentUser && location.pathname.startsWith("/app")) {
-    const pathname = location.pathname;
-    const allowedPaths = [
-      "/app/kanban",
-      "/app/calendario",
-      "/app/tarefas",
-      "/app/clientes",
-      "/app/formulários",
-      "/app/relatorios",
-      "/app/obrigacoes",
-      "/app/econtinuo",
-      "/app/acessorias",
-      "/app/sugestoes",
-      "/app/manual",
-    ];
-    const isAllowed = allowedPaths.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
-    if (!isAllowed) {
-      return <Navigate to="/app/tarefas" replace />;
-    }
+  const routeModule = resolveRouteModule(location.pathname);
+  if (
+    scope === "internal" &&
+    effectiveAccess &&
+    routeModule &&
+    !canAccessModule(effectiveAccess, routeModule)
+  ) {
+    return <Navigate to="/app/tarefas" replace />;
   }
 
   if (feature && !isFeatureEnabled(feature)) {

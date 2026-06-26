@@ -4,6 +4,10 @@ DROP POLICY IF EXISTS "Role-based view client_data" ON public.client_data;
 DROP POLICY IF EXISTS "Role-based insert client_data" ON public.client_data;
 DROP POLICY IF EXISTS "Role-based update client_data" ON public.client_data;
 DROP POLICY IF EXISTS "Role-based delete client_data" ON public.client_data;
+DROP POLICY IF EXISTS "Tenant role-based view client_data" ON public.client_data;
+DROP POLICY IF EXISTS "Tenant role-based insert client_data" ON public.client_data;
+DROP POLICY IF EXISTS "Tenant role-based update client_data" ON public.client_data;
+DROP POLICY IF EXISTS "Tenant role-based delete client_data" ON public.client_data;
 
 CREATE POLICY "Tenant role-based view client_data"
   ON public.client_data FOR SELECT TO authenticated
@@ -61,6 +65,9 @@ CREATE POLICY "Tenant role-based delete client_data"
 DROP POLICY IF EXISTS "Role-based view client_files" ON public.client_files;
 DROP POLICY IF EXISTS "Role-based insert client_files" ON public.client_files;
 DROP POLICY IF EXISTS "Admins can delete client_files" ON public.client_files;
+DROP POLICY IF EXISTS "Tenant role-based view client_files" ON public.client_files;
+DROP POLICY IF EXISTS "Tenant role-based insert client_files" ON public.client_files;
+DROP POLICY IF EXISTS "Tenant managers can delete client_files" ON public.client_files;
 
 CREATE POLICY "Tenant role-based view client_files"
   ON public.client_files FOR SELECT TO authenticated
@@ -92,38 +99,48 @@ CREATE POLICY "Tenant managers can delete client_files"
     OR public.has_org_role((select auth.uid()), organization_id, 'manager')
   );
 
-DROP POLICY IF EXISTS "Profiles: select own or admin" ON public.user_profiles;
-DROP POLICY IF EXISTS "Profiles: insert own or admin" ON public.user_profiles;
-DROP POLICY IF EXISTS "Profiles: update own or admin" ON public.user_profiles;
-CREATE POLICY "Profiles: select own or admin" ON public.user_profiles FOR SELECT TO public USING ((select auth.uid()) = user_id OR public.is_grow_admin());
-CREATE POLICY "Profiles: insert own or admin" ON public.user_profiles FOR INSERT TO public WITH CHECK ((select auth.uid()) = user_id OR public.is_grow_admin());
-CREATE POLICY "Profiles: update own or admin" ON public.user_profiles FOR UPDATE TO public USING ((select auth.uid()) = user_id OR public.is_grow_admin()) WITH CHECK ((select auth.uid()) = user_id OR public.is_grow_admin());
+DO $$
+BEGIN
+  IF to_regclass('public.user_profiles') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "Profiles: select own or admin" ON public.user_profiles;
+    DROP POLICY IF EXISTS "Profiles: insert own or admin" ON public.user_profiles;
+    DROP POLICY IF EXISTS "Profiles: update own or admin" ON public.user_profiles;
+    CREATE POLICY "Profiles: select own or admin" ON public.user_profiles FOR SELECT TO public USING ((select auth.uid()) = user_id OR public.is_grow_admin());
+    CREATE POLICY "Profiles: insert own or admin" ON public.user_profiles FOR INSERT TO public WITH CHECK ((select auth.uid()) = user_id OR public.is_grow_admin());
+    CREATE POLICY "Profiles: update own or admin" ON public.user_profiles FOR UPDATE TO public USING ((select auth.uid()) = user_id OR public.is_grow_admin()) WITH CHECK ((select auth.uid()) = user_id OR public.is_grow_admin());
+  END IF;
 
-DROP POLICY IF EXISTS "Access: select own or admin" ON public.user_access_control;
-DROP POLICY IF EXISTS "Access: insert own pending or admin" ON public.user_access_control;
-CREATE POLICY "Access: select own or admin" ON public.user_access_control FOR SELECT TO public USING ((select auth.uid()) = user_id OR public.is_grow_admin());
-CREATE POLICY "Access: insert own pending or admin"
-  ON public.user_access_control FOR INSERT TO public
-  WITH CHECK (
-    public.is_grow_admin()
-    OR ((select auth.uid()) = user_id AND approved = false AND approved_by_email IS NULL AND approved_at IS NULL)
-  );
+  IF to_regclass('public.user_access_control') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "Access: select own or admin" ON public.user_access_control;
+    DROP POLICY IF EXISTS "Access: insert own pending or admin" ON public.user_access_control;
+    CREATE POLICY "Access: select own or admin" ON public.user_access_control FOR SELECT TO public USING ((select auth.uid()) = user_id OR public.is_grow_admin());
+    CREATE POLICY "Access: insert own pending or admin"
+      ON public.user_access_control FOR INSERT TO public
+      WITH CHECK (
+        public.is_grow_admin()
+        OR ((select auth.uid()) = user_id AND approved = false AND approved_by_email IS NULL AND approved_at IS NULL)
+      );
+  END IF;
 
-DROP POLICY IF EXISTS "Users can view own push subscriptions" ON public.push_subscriptions;
-DROP POLICY IF EXISTS "Users can insert own push subscriptions" ON public.push_subscriptions;
-DROP POLICY IF EXISTS "Users can update own push subscriptions" ON public.push_subscriptions;
-DROP POLICY IF EXISTS "Users can delete own push subscriptions" ON public.push_subscriptions;
-CREATE POLICY "Users can view own push subscriptions"
-  ON public.push_subscriptions FOR SELECT TO authenticated
-  USING (
-    (select auth.uid()) = user_id
-    OR public.has_role((select auth.uid()), 'admin')
-    OR public.has_role((select auth.uid()), 'director')
-    OR public.has_role((select auth.uid()), 'manager')
-  );
-CREATE POLICY "Users can insert own push subscriptions" ON public.push_subscriptions FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id);
-CREATE POLICY "Users can update own push subscriptions" ON public.push_subscriptions FOR UPDATE TO authenticated USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
-CREATE POLICY "Users can delete own push subscriptions" ON public.push_subscriptions FOR DELETE TO authenticated USING ((select auth.uid()) = user_id);
+  IF to_regclass('public.push_subscriptions') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "Users can view own push subscriptions" ON public.push_subscriptions;
+    DROP POLICY IF EXISTS "Users can insert own push subscriptions" ON public.push_subscriptions;
+    DROP POLICY IF EXISTS "Users can update own push subscriptions" ON public.push_subscriptions;
+    DROP POLICY IF EXISTS "Users can delete own push subscriptions" ON public.push_subscriptions;
+    CREATE POLICY "Users can view own push subscriptions"
+      ON public.push_subscriptions FOR SELECT TO authenticated
+      USING (
+        (select auth.uid()) = user_id
+        OR public.has_role((select auth.uid()), 'admin')
+        OR public.has_role((select auth.uid()), 'director')
+        OR public.has_role((select auth.uid()), 'manager')
+      );
+    CREATE POLICY "Users can insert own push subscriptions" ON public.push_subscriptions FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = user_id);
+    CREATE POLICY "Users can update own push subscriptions" ON public.push_subscriptions FOR UPDATE TO authenticated USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+    CREATE POLICY "Users can delete own push subscriptions" ON public.push_subscriptions FOR DELETE TO authenticated USING ((select auth.uid()) = user_id);
+  END IF;
+END
+$$;
 
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
@@ -143,17 +160,33 @@ CREATE POLICY "Users can view own roles" ON public.user_roles FOR SELECT TO auth
 CREATE POLICY "Admins can insert roles" ON public.user_roles FOR INSERT TO authenticated WITH CHECK (public.has_org_role((select auth.uid()), organization_id, 'admin'));
 CREATE POLICY "Admins can delete roles" ON public.user_roles FOR DELETE TO authenticated USING (public.has_org_role((select auth.uid()), organization_id, 'admin'));
 
-DROP POLICY IF EXISTS "kb_documents_write_service" ON public.kb_documents;
-DROP POLICY IF EXISTS "kb_chunks_write_service" ON public.kb_chunks;
-CREATE POLICY "kb_documents_insert_service" ON public.kb_documents FOR INSERT TO public WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
-CREATE POLICY "kb_documents_update_service" ON public.kb_documents FOR UPDATE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role') WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
-CREATE POLICY "kb_documents_delete_service" ON public.kb_documents FOR DELETE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role');
-CREATE POLICY "kb_chunks_insert_service" ON public.kb_chunks FOR INSERT TO public WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
-CREATE POLICY "kb_chunks_update_service" ON public.kb_chunks FOR UPDATE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role') WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
-CREATE POLICY "kb_chunks_delete_service" ON public.kb_chunks FOR DELETE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role');
+DO $$
+BEGIN
+  IF to_regclass('public.kb_documents') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "kb_documents_write_service" ON public.kb_documents;
+    DROP POLICY IF EXISTS "kb_documents_insert_service" ON public.kb_documents;
+    DROP POLICY IF EXISTS "kb_documents_update_service" ON public.kb_documents;
+    DROP POLICY IF EXISTS "kb_documents_delete_service" ON public.kb_documents;
+    CREATE POLICY "kb_documents_insert_service" ON public.kb_documents FOR INSERT TO public WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
+    CREATE POLICY "kb_documents_update_service" ON public.kb_documents FOR UPDATE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role') WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
+    CREATE POLICY "kb_documents_delete_service" ON public.kb_documents FOR DELETE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role');
+  END IF;
+
+  IF to_regclass('public.kb_chunks') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "kb_chunks_write_service" ON public.kb_chunks;
+    DROP POLICY IF EXISTS "kb_chunks_insert_service" ON public.kb_chunks;
+    DROP POLICY IF EXISTS "kb_chunks_update_service" ON public.kb_chunks;
+    DROP POLICY IF EXISTS "kb_chunks_delete_service" ON public.kb_chunks;
+    CREATE POLICY "kb_chunks_insert_service" ON public.kb_chunks FOR INSERT TO public WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
+    CREATE POLICY "kb_chunks_update_service" ON public.kb_chunks FOR UPDATE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role') WITH CHECK (((select auth.jwt()) ->> 'role') = 'service_role');
+    CREATE POLICY "kb_chunks_delete_service" ON public.kb_chunks FOR DELETE TO public USING (((select auth.jwt()) ->> 'role') = 'service_role');
+  END IF;
+END
+$$;
 
 DROP POLICY IF EXISTS "Public can read published newsletters" ON public.newsletters;
 DROP POLICY IF EXISTS "Team can read all newsletters" ON public.newsletters;
+DROP POLICY IF EXISTS "Team can read newsletters" ON public.newsletters;
 DROP POLICY IF EXISTS "Admins can insert newsletters" ON public.newsletters;
 DROP POLICY IF EXISTS "Admins can update newsletters" ON public.newsletters;
 DROP POLICY IF EXISTS "Admins can delete newsletters" ON public.newsletters;

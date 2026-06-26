@@ -46,7 +46,7 @@ export function usePriorityNotifications() {
     setLoading(true);
     const { data } = await supabase
       .from("kanban_tasks")
-      .select("id, title, due_date, status, assignee, client_name, created_at")
+      .select("id, title, due_date, status, assignee, assigned_to_user_id, client_name, created_at")
       .order("created_at", { ascending: false })
       .limit(3000);
 

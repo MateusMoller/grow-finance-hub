@@ -57,6 +57,34 @@ Functions relacionadas:
 
 Antes do envio real, valide o dominio/remetente na Resend e aplique os registros DNS solicitados por ela.
 
+Exemplo de configuracao:
+
+```bash
+supabase secrets set RESEND_API_KEY="re_xxxxx"
+supabase secrets set SITE_CONTACT_FROM_EMAIL="Grow Contabilidade <contato@seudominio.com>"
+supabase secrets set SITE_CONTACT_TO_EMAIL="contato@seudominio.com"
+supabase secrets set NEWSLETTER_FROM_EMAIL="Grow Contabilidade <contato@seudominio.com>"
+supabase secrets set OBLIGATION_FROM_EMAIL="Grow Contabilidade <contato@seudominio.com>"
+```
+
+Depois publique as Edge Functions:
+
+```bash
+supabase functions deploy send-site-contact-email
+supabase functions deploy send-newsletter-broadcast
+supabase functions deploy grow-obligations-module
+```
+
+Teste seguro sem disparar e-mail real:
+
+```bash
+curl -i -X POST "$VITE_SUPABASE_URL/functions/v1/send-site-contact-email" \
+  -H "Content-Type: application/json" \
+  -d '{"fullName":"","email":"invalido","message":""}'
+```
+
+O retorno esperado e `400`, confirmando que a function esta publicada e validando payload antes de chamar a Resend.
+
 ## Comandos principais
 
 ```bash

@@ -17,6 +17,8 @@ export const DEPARTMENT_ROLE_LIST = [
 ] as const;
 
 export const CLIENT_ROLE = "client" as const;
+export const CANONICAL_CLIENT_ROLE = "cliente" as const;
+export const CANONICAL_COLLABORATOR_ROLE = "colaborador" as const;
 
 const internalRoleSet = new Set<string>(INTERNAL_ROLE_LIST);
 const departmentRoleSet = new Set<string>(DEPARTMENT_ROLE_LIST);
@@ -48,7 +50,10 @@ export const hasAnyDepartmentRole = (roles: RoleListLike) =>
   safeRoleList(roles).some((role) => departmentRoleSet.has(normalizeRole(role)));
 
 export const hasClientRole = (roles: RoleListLike) =>
-  safeRoleList(roles).some((role) => normalizeRole(role) === CLIENT_ROLE);
+  safeRoleList(roles).some((role) => {
+    const normalized = normalizeRole(role);
+    return normalized === CLIENT_ROLE || normalized === CANONICAL_CLIENT_ROLE;
+  });
 
 export const isDepartmentOnlyUser = (roles: RoleListLike) => {
   const normalized = normalizeRoles(roles);
@@ -58,6 +63,16 @@ export const isDepartmentOnlyUser = (roles: RoleListLike) => {
 };
 
 export const hasPortalAccessRole = (roles: RoleListLike) => hasClientRole(roles) || hasAnyInternalRole(roles);
+
+export const mapLegacyRoleToCanonical = (roles: RoleListLike) => {
+  const normalized = normalizeRoles(roles);
+  if (normalized.includes("admin")) return "admin";
+  if (normalized.some((role) => internalRoleSet.has(role))) return CANONICAL_COLLABORATOR_ROLE;
+  if (normalized.includes(CLIENT_ROLE) || normalized.includes(CANONICAL_CLIENT_ROLE)) {
+    return CANONICAL_CLIENT_ROLE;
+  }
+  return null;
+};
 
 export const getPrimaryRole = (roles: RoleListLike) => {
   const normalized = normalizeRoles(roles);

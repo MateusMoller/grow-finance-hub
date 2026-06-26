@@ -77,6 +77,22 @@ function extractBearerToken(req: Request): string | null {
 }
 
 async function isInternalUser(supabaseAdmin: ReturnType<typeof createClient>, userId: string) {
+  const { data: canonicalAccess, error: canonicalError } = await supabaseAdmin
+    .from("organization_user_access")
+    .select("primary_role, status, requires_access_review")
+    .eq("user_id", userId);
+  if (canonicalError) throw canonicalError;
+  if (
+    (canonicalAccess || []).some(
+      (row) =>
+        ["admin", "colaborador"].includes(String(row.primary_role)) &&
+        row.status === "active" &&
+        !row.requires_access_review,
+    )
+  ) {
+    return true;
+  }
+
   const { data, error } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw error;
   return (data || []).some((row) => internalRoles.has(String(row.role)));

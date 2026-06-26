@@ -28,7 +28,12 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
+import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
+import {
+  canAccessModule,
+  resolveRouteModule,
+  type EffectiveAccess,
+} from "@/lib/userPermissions";
 
 interface QuickLink {
   title: string;
@@ -59,7 +64,10 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInternalAccess: boolean): QuickLink[] => {
+const buildQuickLinks = (
+  effectiveAccess: EffectiveAccess | null,
+  hasInternalAccess: boolean,
+): QuickLink[] => {
   if (!hasInternalAccess) return [];
 
   const base = [
@@ -78,37 +86,14 @@ const buildQuickLinks = (isDepartmentRole: boolean, isAdmin: boolean, hasInterna
     { title: "Manual de uso", url: "/app/manual" },
   ];
 
-  if (!isAdmin) {
-    const withoutUsers = base.filter((item) => item.url !== "/app/usuarios");
-    if (!isDepartmentRole) return withoutUsers;
-
-    return withoutUsers.filter((item) =>
-      item.url === "/app/calendario" ||
-      item.url === "/app/tarefas" ||
-      item.url === "/app/clientes" ||
-      item.url === "/app/chat-interno" ||
-      item.url === "/app/relatorios" ||
-      item.url === "/app/obrigacoes" ||
-      item.url === "/app/sugestoes" ||
-      item.url === "/app/manual",
-  );
-  }
-
-  if (!isDepartmentRole) return base;
-
-  return base.filter((item) =>
-    item.url === "/app/calendario" ||
-    item.url === "/app/tarefas" ||
-    item.url === "/app/clientes" ||
-    item.url === "/app/chat-interno" ||
-    item.url === "/app/relatorios" ||
-    item.url === "/app/obrigacoes" ||
-    item.url === "/app/sugestoes" ||
-    item.url === "/app/manual",
-  );
+  if (!effectiveAccess) return base;
+  return base.filter((item) => {
+    const moduleKey = resolveRouteModule(item.url);
+    return !moduleKey || canAccessModule(effectiveAccess, moduleKey);
+  });
 };
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, role, roles, signOut } = useAuth();
+  const { user, role, roles, signOut, effectiveAccess } = useAuth();
   const {
     selectedCompany,
     selectedCompetence,
@@ -130,12 +115,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const navigate = useNavigate();
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
-  const hasInternalAccess = hasAnyInternalRole(normalizedRoleList);
-  const isDepartmentRole = isDepartmentOnlyUser(normalizedRoleList);
-  const isAdmin = normalizedRoleList.includes("admin");
+  const hasInternalAccess =
+    effectiveAccess?.primaryRole === "admin" ||
+    effectiveAccess?.primaryRole === "colaborador" ||
+    hasAnyInternalRole(normalizedRoleList);
   const quickLinks = useMemo(
-    () => buildQuickLinks(isDepartmentRole, isAdmin, hasInternalAccess),
-    [isDepartmentRole, isAdmin, hasInternalAccess],
+    () => buildQuickLinks(effectiveAccess, hasInternalAccess),
+    [effectiveAccess, hasInternalAccess],
   );
 
   const [searchTerm, setSearchTerm] = useState("");

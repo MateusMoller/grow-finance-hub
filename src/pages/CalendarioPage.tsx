@@ -35,6 +35,11 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  SECTOR_CODES,
+  SECTOR_LABELS,
+  normalizeSectorCode,
+} from "@/lib/userPermissions";
+import {
   addDays,
   endOfDay,
   endOfMonth,
@@ -77,15 +82,10 @@ interface CalendarFormState {
   status: EntryStatus;
 }
 
-const sectorOptions = [
-  "Contábil",
-  "Fiscal",
-  "Departamento Pessoal",
-  "Financeiro",
-  "Comercial",
-  "Societário",
-  "Geral",
-];
+const sectorOptions = SECTOR_CODES.map((code) => ({
+  code,
+  label: SECTOR_LABELS[code],
+}));
 
 const priorityLabels: Record<EntryPriority, string> = {
   baixa: "Baixa",
@@ -131,7 +131,13 @@ const makeFormState = (date: Date): CalendarFormState => ({
 });
 
 export default function CalendarioPage() {
-  const { user } = useAuth();
+  const { user, effectiveAccess } = useAuth();
+  const collaboratorSector =
+    effectiveAccess?.primaryRole === "colaborador" ? effectiveAccess.sectorCode : null;
+  const availableSectorOptions = collaboratorSector
+    ? sectorOptions.filter(({ code }) => code === collaboratorSector)
+    : sectorOptions;
+  const canDeleteEvents = effectiveAccess?.primaryRole === "admin";
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [events, setEvents] = useState<CalendarEntry[]>([]);
@@ -215,19 +221,23 @@ export default function CalendarioPage() {
 
   const openNewDialog = () => {
     setEditingEvent(null);
-    setForm(makeFormState(selectedDate));
+    setForm({
+      ...makeFormState(selectedDate),
+      sector: collaboratorSector ? SECTOR_LABELS[collaboratorSector] : SECTOR_LABELS.geral,
+    });
     setDialogOpen(true);
   };
 
   const openEditDialog = (event: CalendarEntry) => {
     const date = parseISO(event.due_at);
+    const normalizedSector = normalizeSectorCode(event.sector);
     setEditingEvent(event);
     setForm({
       title: event.title,
       description: event.description || "",
       entry_type: event.entry_type,
       priority: event.priority,
-      sector: event.sector,
+      sector: normalizedSector ? SECTOR_LABELS[normalizedSector] : event.sector,
       date: format(date, "yyyy-MM-dd"),
       time: format(date, "HH:mm"),
       all_day: event.all_day,
@@ -487,15 +497,17 @@ export default function CalendarioPage() {
                           )}
                           {event.status === "completed" ? "Reabrir" : "Concluir"}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive gap-1.5"
-                          onClick={() => deleteEvent(event.id)}
-                          disabled={updatingId === event.id}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Excluir
-                        </Button>
+                        {canDeleteEvents && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive gap-1.5"
+                            onClick={() => deleteEvent(event.id)}
+                            disabled={updatingId === event.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Excluir
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -600,11 +612,12 @@ export default function CalendarioPage() {
                 <Select
                   value={form.sector}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, sector: value }))}
+                  disabled={Boolean(collaboratorSector)}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {sectorOptions.map((sector) => (
-                      <SelectItem key={sector} value={sector}>{sector}</SelectItem>
+                    {availableSectorOptions.map(({ code, label }) => (
+                      <SelectItem key={code} value={label}>{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -15,6 +15,10 @@ export const organizationFeatureDefaults = {
   newsletter: true,
 } as const;
 
+export const permissionRolloutDefaults = {
+  canonical_user_permissions: false,
+} as const;
+
 export type OrganizationFeatureKey = keyof typeof organizationFeatureDefaults;
 
 export const routeFeatureMap: Record<string, OrganizationFeatureKey> = {

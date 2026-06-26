@@ -7,6 +7,10 @@ DROP POLICY IF EXISTS "Internal roles can view clients" ON public.clients;
 DROP POLICY IF EXISTS "Admins can insert clients" ON public.clients;
 DROP POLICY IF EXISTS "Team can update clients" ON public.clients;
 DROP POLICY IF EXISTS "Admins can delete clients" ON public.clients;
+DROP POLICY IF EXISTS "Tenant can view clients" ON public.clients;
+DROP POLICY IF EXISTS "Tenant internal can insert clients" ON public.clients;
+DROP POLICY IF EXISTS "Tenant internal can update clients" ON public.clients;
+DROP POLICY IF EXISTS "Tenant managers can delete clients" ON public.clients;
 
 CREATE POLICY "Tenant can view clients"
   ON public.clients
@@ -65,6 +69,7 @@ DROP POLICY IF EXISTS "Clients can delete unprocessed documents and internal can
 DROP POLICY IF EXISTS "Clients can insert own documents" ON public.client_documents;
 DROP POLICY IF EXISTS "Internal team can update document processing" ON public.client_documents;
 DROP POLICY IF EXISTS "Tenant can delete client documents by client link" ON public.client_documents;
+DROP POLICY IF EXISTS "Tenant internal can update client documents" ON public.client_documents;
 
 CREATE POLICY "Tenant internal can update client documents"
   ON public.client_documents
@@ -93,6 +98,10 @@ DROP POLICY IF EXISTS "Internal can manage client links" ON public.client_users;
 DROP POLICY IF EXISTS "Users can view own client links" ON public.client_users;
 DROP POLICY IF EXISTS "Clients and internal can view client users" ON public.client_users;
 DROP POLICY IF EXISTS "Internal can manage client users" ON public.client_users;
+DROP POLICY IF EXISTS "Tenant can view client links" ON public.client_users;
+DROP POLICY IF EXISTS "Tenant internal can insert client links" ON public.client_users;
+DROP POLICY IF EXISTS "Tenant internal can update client links" ON public.client_users;
+DROP POLICY IF EXISTS "Tenant internal can delete client links" ON public.client_users;
 
 CREATE POLICY "Tenant can view client links"
   ON public.client_users
@@ -125,6 +134,7 @@ CREATE POLICY "Tenant internal can delete client links"
 -- Sensitive configuration/cache tables
 DROP POLICY IF EXISTS "Internal can view org cnpj lookup cache" ON public.cnpj_lookup_cache;
 DROP POLICY IF EXISTS "Internal can manage org cnpj lookup cache" ON public.cnpj_lookup_cache;
+DROP POLICY IF EXISTS "Tenant internal can manage org cnpj lookup cache" ON public.cnpj_lookup_cache;
 CREATE POLICY "Tenant internal can manage org cnpj lookup cache"
   ON public.cnpj_lookup_cache
   FOR ALL
@@ -134,6 +144,7 @@ CREATE POLICY "Tenant internal can manage org cnpj lookup cache"
 
 DROP POLICY IF EXISTS "Org managers can view integration credentials" ON public.integration_api_credentials;
 DROP POLICY IF EXISTS "Org managers can manage integration credentials" ON public.integration_api_credentials;
+DROP POLICY IF EXISTS "Tenant managers can manage integration credentials" ON public.integration_api_credentials;
 CREATE POLICY "Tenant managers can manage integration credentials"
   ON public.integration_api_credentials
   FOR ALL
@@ -152,6 +163,7 @@ CREATE POLICY "Tenant managers can manage integration credentials"
 -- CRM
 DROP POLICY IF EXISTS "Internal can view crm leads" ON public.crm_leads;
 DROP POLICY IF EXISTS "Internal can manage crm leads" ON public.crm_leads;
+DROP POLICY IF EXISTS "Tenant internal can manage crm leads" ON public.crm_leads;
 CREATE POLICY "Tenant internal can manage crm leads"
   ON public.crm_leads
   FOR ALL
@@ -161,6 +173,7 @@ CREATE POLICY "Tenant internal can manage crm leads"
 
 DROP POLICY IF EXISTS "Internal can view crm goals" ON public.crm_goals;
 DROP POLICY IF EXISTS "Internal can manage crm goals" ON public.crm_goals;
+DROP POLICY IF EXISTS "Tenant internal can manage crm goals" ON public.crm_goals;
 CREATE POLICY "Tenant internal can manage crm goals"
   ON public.crm_goals
   FOR ALL

@@ -1,342 +1,140 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Max-Age": "86400",
-};
+import {
+  applyUserAccessTransaction,
+  asPrimaryRole,
+  asRecord,
+  asSectorCode,
+  asTrimmedString,
+  asUserStatus,
+  asUuid,
+  extractBearerToken,
+  jsonResponse,
+  normalizeModulesForRole,
+} from "../_shared/user-permissions.ts";
 
-const manageableRoles = new Set([
-  "admin",
-  "director",
-  "manager",
-  "employee",
-  "commercial",
-  "partner",
-  "departamento_pessoal",
-  "fiscal",
-  "contabil",
-]);
-
-type JsonRecord = Record<string, unknown>;
-type ManageAction = "update" | "delete";
-type RoleRow = {
-  role: string;
-  organization_id: string | null;
-};
-
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function asRecord(value: unknown): JsonRecord | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as JsonRecord;
-}
-
-function asTrimmedString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function asAction(value: unknown): ManageAction | null {
-  const normalized = asTrimmedString(value)?.toLowerCase();
-  if (normalized === "update" || normalized === "delete") return normalized;
-  return null;
-}
-
-function asUuid(value: unknown): string | null {
-  const maybeUuid = asTrimmedString(value);
-  if (!maybeUuid) return null;
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(maybeUuid) ? maybeUuid : null;
-}
-
-function asRole(value: unknown): string | null {
-  const role = asTrimmedString(value)?.toLowerCase();
-  if (!role) return null;
-  return manageableRoles.has(role) ? role : null;
-}
-
-function extractBearerToken(req: Request): string | null {
-  const authorization = req.headers.get("authorization");
-  if (!authorization) return null;
-  if (!authorization.toLowerCase().startsWith("bearer ")) return null;
-  const token = authorization.slice(7).trim();
-  return token.length > 0 ? token : null;
-}
-
-async function insertAuditLog(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  params: {
-    organizationId: string;
-    actorUserId: string;
-    targetUserId: string;
-    action: string;
-    result?: string;
-    metadata?: JsonRecord;
-  },
-) {
-  await supabaseAdmin.from("operational_audit_logs").insert({
-    organization_id: params.organizationId,
-    actor_user_id: params.actorUserId,
-    action: params.action,
-    entity_type: "user",
-    entity_id: params.targetUserId,
-    result: params.result || "success",
-    metadata: params.metadata || {},
-  });
-}
-
-async function ensureOrganizationFeatureEnabled(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  organizationId: string,
-  featureKey: string,
-) {
-  const { data, error } = await supabaseAdmin
-    .from("organization_settings")
-    .select("feature_flags")
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  const flags = asRecord(data?.feature_flags);
-  if (flags && flags[featureKey] === false) {
-    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") {
+    return jsonResponse(null);
   }
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed", code: "method_not_allowed" }, 405);
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
     if (!supabaseUrl || !serviceRoleKey || !anonKey) {
-      return jsonResponse({ error: "Missing Supabase environment configuration" }, 500);
+      return jsonResponse({ error: "Missing Supabase configuration", code: "server_config" }, 500);
     }
 
-    const token = extractBearerToken(req);
+    const token = extractBearerToken(request);
     if (!token) {
-      return jsonResponse({ error: "Authorization token is required" }, 401);
+      return jsonResponse({ error: "Authorization token is required", code: "unauthenticated" }, 401);
     }
 
     const supabaseUser = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-
-    const {
-      data: { user: callerUser },
-      error: callerError,
-    } = await supabaseUser.auth.getUser();
-
-    if (callerError || !callerUser) {
-      return jsonResponse({ error: "Invalid or expired session" }, 401);
+    const { data: callerData, error: callerError } = await supabaseUser.auth.getUser();
+    if (callerError || !callerData.user) {
+      return jsonResponse({ error: "Invalid or expired session", code: "unauthenticated" }, 401);
     }
 
-    const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role, organization_id")
-      .eq("user_id", callerUser.id);
-
-    if (callerRolesError) {
-      throw callerRolesError;
-    }
-
-    const body = await req.json();
-    const payload = asRecord(body);
+    const payload = asRecord(await request.json());
     if (!payload) {
-      return jsonResponse({ error: "Invalid payload" }, 400);
+      return jsonResponse({ error: "Invalid payload", code: "invalid_payload" }, 400);
     }
 
-    const requestedOrganizationId = asUuid(payload.organizationId);
-    const callerAdminRole = ((callerRoles || []) as RoleRow[]).find(
-      (row) =>
-        row.role === "admin" &&
-        row.organization_id &&
-        (!requestedOrganizationId || row.organization_id === requestedOrganizationId),
-    );
-    if (!callerAdminRole?.organization_id) {
-      return jsonResponse({ error: "Only admins can manage users" }, 403);
-    }
-    const organizationId = callerAdminRole.organization_id;
-    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
-
-    const action = asAction(payload.action);
-    const userId = asUuid(payload.userId);
-
-    if (!action) {
-      return jsonResponse({ error: "Action must be update or delete" }, 400);
+    const organizationId = asUuid(payload.organizationId);
+    const targetUserId = asUuid(payload.userId ?? payload.targetUserId);
+    const action = asTrimmedString(payload.action)?.toLowerCase() || "update";
+    if (!organizationId || !targetUserId || !["update", "deactivate", "delete"].includes(action)) {
+      return jsonResponse({ error: "Invalid management request", code: "invalid_payload" }, 400);
     }
 
-    if (!userId) {
-      return jsonResponse({ error: "A valid userId is required" }, 400);
-    }
-
-    if (action === "delete" && userId === callerUser.id) {
-      return jsonResponse({ error: "You cannot delete your own account" }, 400);
-    }
-
-    const { data: targetUserData, error: targetUserError } = await supabaseAdmin.auth.admin.getUserById(
-      userId,
-    );
-
-    if (targetUserError || !targetUserData.user) {
-      return jsonResponse({ error: "User not found" }, 404);
-    }
-
-    if (action === "delete") {
-      const { error: roleDeleteError } = await supabaseAdmin
-        .from("user_roles")
-        .delete()
-        .eq("user_id", userId)
-        .eq("organization_id", organizationId);
-
-      if (roleDeleteError) throw roleDeleteError;
-
-      const { error: clientLinksRevokeError } = await supabaseAdmin
-        .from("client_users")
-        .update({ status: "revoked" })
-        .eq("user_id", userId)
-        .eq("organization_id", organizationId);
-
-      if (clientLinksRevokeError) throw clientLinksRevokeError;
-
-      const { data: remainingRoles, error: remainingRolesError } = await supabaseAdmin
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", userId)
-        .limit(1);
-
-      if (remainingRolesError) throw remainingRolesError;
-
-      const { data: remainingClientLinks, error: remainingClientLinksError } = await supabaseAdmin
-        .from("client_users")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .limit(1);
-
-      if (remainingClientLinksError) throw remainingClientLinksError;
-
-      if ((remainingRoles || []).length === 0 && (remainingClientLinks || []).length === 0) {
-        const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-        if (deleteUserError) throw deleteUserError;
-      }
-
-      await insertAuditLog(supabaseAdmin, {
-        organizationId,
-        actorUserId: callerUser.id,
-        targetUserId: userId,
-        action: "team_user_deleted_or_revoked",
-        metadata: {
-          deletedAuthUser: (remainingRoles || []).length === 0 && (remainingClientLinks || []).length === 0,
-        },
-      }).catch(console.error);
-
-      return jsonResponse({ ok: true, action: "delete", user_id: userId });
-    }
-
-    const displayName = asTrimmedString(payload.displayName);
-    const role = asRole(payload.role);
-
-    if (!displayName) {
-      return jsonResponse({ error: "Display name is required" }, 400);
-    }
-
-    if (!role) {
-      return jsonResponse({ error: "Role is required and must be valid" }, 400);
-    }
-
-    const mergedMetadata = {
-      ...(targetUserData.user.user_metadata || {}),
-      display_name: displayName,
-    };
-
-    const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      user_metadata: mergedMetadata,
+    const { data: adminAllowed, error: adminError } = await supabaseUser.rpc("is_permission_admin", {
+      _organization_id: organizationId,
     });
-
-    if (updateAuthError) {
-      throw updateAuthError;
+    if (adminError || !adminAllowed) {
+      return jsonResponse({ error: "Only admins can manage users", code: "admin_required" }, 403);
     }
 
-    const { error: profileUpsertError } = await supabaseAdmin.from("profiles").upsert(
-      {
-        user_id: userId,
-        display_name: displayName,
-      },
-      { onConflict: "user_id" },
-    );
-
-    if (profileUpsertError) {
-      throw profileUpsertError;
-    }
-
-    const { error: roleUpsertError } = await supabaseAdmin.from("user_roles").upsert(
-      { user_id: userId, organization_id: organizationId, role },
-      { onConflict: "user_id,organization_id,role" },
-    );
-
-    if (roleUpsertError) {
-      throw roleUpsertError;
-    }
-
-    const { error: removeOtherRolesError } = await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("user_id", userId)
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("organization_user_access")
+      .select("primary_role, status, sector_code")
       .eq("organization_id", organizationId)
-      .neq("role", role);
-
-    if (removeOtherRolesError) {
-      throw removeOtherRolesError;
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+    if (existingError || !existing) {
+      return jsonResponse({ error: "User access was not found", code: "not_found" }, 404);
     }
 
-    await insertAuditLog(supabaseAdmin, {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("display_name")
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+    const { data: existingGrants } = await supabaseAdmin
+      .from("user_module_grants")
+      .select("module_key")
+      .eq("organization_id", organizationId)
+      .eq("user_id", targetUserId);
+    const { data: existingLinks } = await supabaseAdmin
+      .from("client_users")
+      .select("client_id")
+      .eq("organization_id", organizationId)
+      .eq("user_id", targetUserId)
+      .eq("status", "active");
+
+    const primaryRole = asPrimaryRole(payload.primaryRole ?? payload.role) || existing.primary_role;
+    const status = action === "update"
+      ? asUserStatus(payload.status) || existing.status
+      : "inactive";
+    const sectorCode = primaryRole === "colaborador"
+      ? asSectorCode(payload.sectorCode) || existing.sector_code
+      : null;
+    const enabledModules = normalizeModulesForRole(
+      primaryRole,
+      Array.isArray(payload.enabledModules)
+        ? payload.enabledModules
+        : (existingGrants || []).map((item) => item.module_key),
+    );
+    const linkedClientIds = Array.isArray(payload.linkedClientIds)
+      ? payload.linkedClientIds.map(asUuid).filter((value): value is string => Boolean(value))
+      : (existingLinks || []).map((item) => String(item.client_id));
+    const displayName = asTrimmedString(payload.displayName) || profile?.display_name || "Usuário";
+
+    const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+      user_metadata: { display_name: displayName },
+    });
+    if (authUpdateError) throw authUpdateError;
+
+    const appliedAccess = await applyUserAccessTransaction(supabaseUser, {
       organizationId,
-      actorUserId: callerUser.id,
-      targetUserId: userId,
-      action: "team_user_role_updated",
-      metadata: { role, displayName },
-    }).catch(console.error);
+      targetUserId,
+      displayName,
+      primaryRole,
+      status,
+      sectorCode,
+      enabledModules,
+      linkedClientIds,
+      changeReason: asTrimmedString(payload.changeReason) || (
+        action === "update" ? "User access updated" : "User deactivated"
+      ),
+    });
 
     return jsonResponse({
       ok: true,
-      action: "update",
-      user: {
-        user_id: userId,
-        display_name: displayName,
-        email: targetUserData.user.email || null,
-        role,
-        organization_id: organizationId,
-      },
+      action: action === "delete" ? "deactivate" : action,
+      target_user_id: targetUserId,
+      access: appliedAccess,
     });
-  } catch (error: unknown) {
-    const message =
-      typeof error === "object" &&
-      error !== null &&
-      "message" in error &&
-      typeof (error as { message?: unknown }).message === "string"
-        ? (error as { message: string }).message
-        : "Unknown error";
-
-    return jsonResponse({ error: message }, 400);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const status = message.includes("last_admin_blocked") ? 409 : 400;
+    return jsonResponse({ error: message, code: message }, status);
   }
 });

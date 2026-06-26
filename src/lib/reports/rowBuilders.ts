@@ -59,6 +59,9 @@ export interface ProfileSourceRow {
 export interface RoleSourceRow {
   user_id: string;
   role?: string | null;
+  sector_code?: string | null;
+  status?: string | null;
+  enabled_modules?: string[];
   created_at?: string | null;
 }
 
@@ -239,6 +242,9 @@ export function buildTeamReportRows(
         id: userId,
         colaborador: profile?.display_name || `Usuario ${userId.slice(0, 6)}`,
         papel: formatReportRole(firstRole?.role || ""),
+        setor: firstRole?.sector_code || "",
+        status: firstRole?.status || "",
+        modulos: (firstRole?.enabled_modules || []).join(", "),
         usuario_id: userId,
         criado_em: profile?.created_at || firstRole?.created_at || "",
         atualizado_em: profile?.updated_at || profile?.created_at || firstRole?.created_at || "",

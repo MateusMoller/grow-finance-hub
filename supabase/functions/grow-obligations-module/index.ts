@@ -290,6 +290,13 @@ function asTrimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function asUuid(value: unknown): string | null {
+  const text = asTrimmedString(value);
+  return text && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+    ? text
+    : null;
+}
+
 function normalizeEmail(value: unknown): string | null {
   const email = asTrimmedString(value)?.toLowerCase();
   if (!email) return null;
@@ -1406,13 +1413,20 @@ async function sendEmailViaResend(params: {
   subject: string;
   html: string;
   text: string;
+  idempotencyKey?: string;
 }) {
+  const headers = new Headers({
+    Authorization: `Bearer ${params.apiKey}`,
+    "Content-Type": "application/json",
+  });
+
+  if (params.idempotencyKey) {
+    headers.set("Idempotency-Key", params.idempotencyKey);
+  }
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       from: params.from,
       to: [params.to],
@@ -1423,7 +1437,8 @@ async function sendEmailViaResend(params: {
   });
 
   if (response.ok) {
-    return { ok: true as const };
+    const data = await response.json().catch(() => null);
+    return { ok: true as const, id: asRecord(data)?.id || null };
   }
 
   const responseText = await response.text();
@@ -1558,6 +1573,7 @@ async function maybeSendCompletionEmail(
     subject,
     html: htmlBody,
     text: textBody,
+    idempotencyKey: `obligation-completion:${instance.id}:${inboxItem.id}:${recipientEmail}`,
   });
 
   if (!sendResult.ok) {
@@ -1590,6 +1606,7 @@ async function maybeSendCompletionEmail(
     {
       inbox_item_id: inboxItem.id,
       recipient_email: recipientEmail,
+      resend_email_id: sendResult.id,
       subject,
     },
   );
@@ -2346,6 +2363,7 @@ async function syncInstanceArtifacts(
     sector: template.sector,
     client_name: clientName,
     assignee: instance.current_assignee,
+    assigned_to_user_id: asUuid(instance.current_assignee),
     priority: instance.priority,
     status: taskStatus,
     due_date: instance.technical_due_date,

@@ -72,11 +72,14 @@ const taskFields: ReportFieldDefinition[] = [
 
 const teamFields: ReportFieldDefinition[] = [
   field({ key: "colaborador", label: "Colaborador", sourcePath: "profiles.display_name", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Equipe", group: "Identificacao", minimumRoles: [...internalManagementRoles] }),
-  field({ key: "papel", label: "Papel", sourcePath: "user_roles.role", dataType: "text", formatter: "role", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
+  field({ key: "papel", label: "Papel", sourcePath: "organization_user_access.primary_role", dataType: "text", formatter: "role", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
+  field({ key: "setor", label: "Setor", sourcePath: "organization_user_access.sector_code", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
+  field({ key: "status", label: "Status", sourcePath: "organization_user_access.status", dataType: "enum", classification: "internal", exportable: true, previewable: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
+  field({ key: "modulos", label: "Modulos", sourcePath: "user_module_grants.module_key", dataType: "text", classification: "sensitive", exportable: true, previewable: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
   field({ key: "usuario_id", label: "Usuario ID", sourcePath: "profiles.user_id", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Equipe", group: "Identificacao", minimumRoles: [...internalManagementRoles] }),
   field({ key: "criado_em", label: "Criado em", sourcePath: "profiles.created_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Equipe", group: "Controle", minimumRoles: [...internalManagementRoles] }),
   field({ key: "atualizado_em", label: "Atualizado em", sourcePath: "profiles.updated_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Equipe", group: "Controle", minimumRoles: [...internalManagementRoles] }),
-  field({ key: "papel_definido_em", label: "Papel definido em", sourcePath: "user_roles.created_at", dataType: "datetime", formatter: "datetime", classification: "sensitive", exportable: true, previewable: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
+  field({ key: "papel_definido_em", label: "Papel definido em", sourcePath: "organization_user_access.created_at", dataType: "datetime", formatter: "datetime", classification: "sensitive", exportable: true, previewable: true, module: "Equipe", group: "Permissoes", minimumRoles: [...internalManagementRoles] }),
 ];
 
 function dataset(definition: Omit<ReportDatasetDefinition, "classification">): ReportDatasetDefinition {
@@ -140,7 +143,7 @@ export const reportCatalog = [
     name: "Equipe",
     description: "Usuarios internos, papeis e datas de controle.",
     sourceOwner: "Administracao",
-    sourceTablesOrViews: ["profiles", "user_roles"],
+    sourceTablesOrViews: ["profiles", "organization_user_access", "user_module_grants"],
     defaultFilters: ["organization_id", "competence"],
     requiredFilters: ["organization_id"],
     defaultSort: "display_name",

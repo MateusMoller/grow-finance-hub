@@ -27,6 +27,18 @@ Protected surface records include `surface_id`, `surface_type`, `owner_layer`, `
 
 Read-only live project evidence is recorded in `docs/security/supabase-live-read-validation.md`. The generated local inventory must be reconciled against deployed Supabase settings before a protected surface is treated as hardened.
 
+## Canonical User Permission Controls
+
+| surface_id | surface_type | owner_layer | risk_level | access_rule | review_owner | review_due_date | evidence_path | validation_status | remediation_required |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| identity:organization-user-access | identity_access | rls+database | critical | Every organization user has one canonical role (`admin`, `colaborador`, or `cliente`), status, optional fixed sector, and review state. | security/backend | 2026-07-10 | supabase/migrations/20260625125112_user_permissions_foundation.sql | implemented_pending_local_rls | Run pgTAP, database lint, advisors, and cross-organization tests before rollout. |
+| identity:user-module-grants | identity_access | rls+database | high | Admins receive all modules; active colaboradores receive only explicit grants and always retain `tarefas`; clientes receive no internal modules. | security/backend | 2026-07-10 | supabase/migrations/20260625125125_user_permissions_access_helpers.sql | implemented_pending_local_rls | Validate module denial through direct API requests, not only route visibility. |
+| identity:admin-user-api | identity_access | edge_function+database | critical | Only an active canonical Admin may list or mutate organization users; mutations are transactional and the final active Admin cannot be removed. | security/backend | 2026-07-10 | supabase/migrations/20260625130016_user_permissions_admin_api.sql | implemented_pending_edge_contract | Validate JWT deployment settings, cross-organization denial, final-Admin protection, and rollback behavior. |
+| identity:permission-audit | audit | rls+database | high | Permission history is append-only for clients and readable only by organization Admins through the filtered RPC. | security/backend | 2026-07-10 | supabase/migrations/20260625131633_user_permissions_audit_api.sql | implemented_pending_local_rls | Run append-only, non-Admin denial, pagination, and completeness scenarios. |
+| task:canonical-sector-assignment | task_access | rls+database | critical | Admins see all tasks; active colaboradores with `tarefas` see matching fixed-sector tasks or tasks directly assigned by UUID. | security/backend | 2026-07-10 | supabase/migrations/20260625130753_user_permissions_task_rls.sql | implemented_pending_scale_and_rls | Run pgTAP and the 2,000-task query-plan scenario, including reassignment and direct URL denial. |
+| calendar:canonical-sector-scope | calendar_access | rls+frontend | high | Admins see all calendar events; active colaboradores with `calendario` are limited to their fixed sector. | security/backend | 2026-07-10 | supabase/migrations/20260625130753_user_permissions_task_rls.sql | implemented_pending_local_rls | Validate all CRUD operations for each role and legacy compatibility during rollout. |
+| portal:canonical-client-links | client_portal | rls+frontend | critical | Cliente access is derived only from active `client_users` links and every portal request is scoped to the selected linked client. | security/backend | 2026-07-10 | src/pages/PortalClientePage.tsx | implemented_pending_staging | Run multi-company switching, revoked-link, unlinked-client, and zero-link scenarios in staging. |
+
 ## Route Inventory
 
 | surface_id | surface_type | owner_layer | risk_level | access_rule | review_owner | review_due_date | evidence_path | validation_status | remediation_required |

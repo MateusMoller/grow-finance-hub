@@ -20,7 +20,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
-import { canAccessTaskSector, getTaskSectorAccess, normalizeTaskSectorLabel } from "@/lib/taskSectorAccess";
+import {
+  canCreateTaskInSector,
+  getCanonicalTaskSectorAccess,
+  normalizeTaskSectorLabel,
+} from "@/lib/taskSectorAccess";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -121,13 +125,14 @@ interface TaskKanbanViewProps {
 }
 
 export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
-  const { user, role, roles } = useAuth();
+  const { user, effectiveAccess, currentOrganizationId } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
   const location = useLocation();
   const navigate = useNavigate();
-  const isAdmin = role === "admin";
+  const isAdmin = effectiveAccess?.primaryRole === "admin";
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
@@ -145,14 +150,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     title: "",
     client_name: "",
     assignee: "",
+    assigned_to_user_id: "",
     priority: "Média",
     sector: "Contábil",
     subtasks: [] as TaskSubtask[],
   });
 
   const actorLabel = user?.email || "Usuário";
-  const activeRoles = useMemo(() => (roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
-  const taskSectorAccess = useMemo(() => getTaskSectorAccess(activeRoles), [activeRoles]);
+  const taskSectorAccess = useMemo(() => getCanonicalTaskSectorAccess(effectiveAccess), [effectiveAccess]);
   const availableSectors = useMemo(() => {
     if (taskSectorAccess.canAccessAllTaskSectors) return taskSectorOptions;
     return taskSectorAccess.allowedTaskSectors;
@@ -216,9 +221,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
           typeof taskRecord.integration_task_id === "string" ? taskRecord.integration_task_id : null,
       };
     });
-    setTasks(normalized.filter((task) => canAccessTaskSector(task.sector, activeRoles)) as KanbanTaskItem[]);
+    setTasks(normalized as KanbanTaskItem[]);
     setLoading(false);
-  }, [activeRoles]);
+  }, []);
 
   const fetchClients = useCallback(async () => {
     setLoadingClients(true);
@@ -238,10 +243,40 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     setLoadingClients(false);
   }, []);
 
+  const fetchAssignees = useCallback(async () => {
+    if (!isAdmin || !currentOrganizationId) {
+      setAssigneeOptions([]);
+      return;
+    }
+    const { data: accessRows } = await supabase
+      .from("organization_user_access")
+      .select("user_id")
+      .eq("organization_id", currentOrganizationId)
+      .eq("primary_role", "colaborador")
+      .eq("status", "active")
+      .eq("requires_access_review", false);
+    const ids = (accessRows || []).map((row) => String(row.user_id));
+    if (ids.length === 0) {
+      setAssigneeOptions([]);
+      return;
+    }
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, display_name")
+      .in("user_id", ids);
+    setAssigneeOptions(
+      (profiles || []).map((profile) => ({
+        id: String(profile.user_id),
+        name: profile.display_name || "Colaborador",
+      })),
+    );
+  }, [currentOrganizationId, isAdmin]);
+
   useEffect(() => {
     void fetchTasks();
     void fetchClients();
-  }, [fetchClients, fetchTasks, user?.id]);
+    void fetchAssignees();
+  }, [fetchAssignees, fetchClients, fetchTasks, user?.id]);
 
   const filteredTasks = tasks.filter((task) => {
     if (!isAdmin && task.status === "archived") return false;
@@ -325,6 +360,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       description: string | null;
       client_name: string | null;
       assignee: string | null;
+      assigned_to_user_id: string | null;
       priority: string;
       sector: string;
       status: KanbanStatus;
@@ -411,7 +447,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    if (!canAccessTaskSector(newTask.sector, activeRoles)) {
+    if (!canCreateTaskInSector(newTask.sector, effectiveAccess)) {
       toast.error("Voce nao tem permissao para criar tarefas neste setor");
       return;
     }
@@ -430,6 +466,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         title: newTask.title,
         client_name: selectedClient?.name || null,
         assignee: newTask.assignee || null,
+        assigned_to_user_id: newTask.assigned_to_user_id || null,
         priority: newTask.priority,
         sector: newTask.sector,
         status: "todo",
@@ -450,7 +487,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
     setNewSubtaskTitle("");
-    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
+    setNewTask({ title: "", client_name: "", assignee: "", assigned_to_user_id: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
     void fetchTasks();
   };
 
@@ -726,7 +763,26 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               </div>
               <div className="space-y-2">
                 <Label>Responsavel</Label>
-                <Input placeholder="Nome" value={newTask.assignee} onChange={(e) => setNewTask((prev) => ({ ...prev, assignee: e.target.value }))} />
+                <Select
+                  disabled={!isAdmin}
+                  value={newTask.assigned_to_user_id || "unassigned"}
+                  onValueChange={(value) => {
+                    const selected = assigneeOptions.find((option) => option.id === value);
+                    setNewTask((prev) => ({
+                      ...prev,
+                      assigned_to_user_id: value === "unassigned" ? "" : value,
+                      assignee: selected?.name || "",
+                    }));
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Sem responsável" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Sem responsável</SelectItem>
+                    {assigneeOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -752,7 +808,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               onClick={() => {
                 setCreateOpen(false);
                 setNewSubtaskTitle("");
-                setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
+                setNewTask({ title: "", client_name: "", assignee: "", assigned_to_user_id: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
               }}
             >
               Cancelar

@@ -1,363 +1,164 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import {
+  applyUserAccessTransaction,
+  asPrimaryRole,
+  asRecord,
+  asSectorCode,
+  asTrimmedString,
+  asUserStatus,
+  asUuid,
+  extractBearerToken,
+  jsonResponse,
+  normalizeModulesForRole,
+} from "../_shared/user-permissions.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
 
-const manageableRoles = new Set([
-  "admin",
-  "director",
-  "manager",
-  "employee",
-  "commercial",
-  "partner",
-  "departamento_pessoal",
-  "fiscal",
-  "contabil",
-]);
-
-type JsonRecord = Record<string, unknown>;
-type CreateTeamUserPayload = {
-  displayName: string;
-  email: string;
-  password: string;
-  role: string;
-};
-
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function asRecord(value: unknown): JsonRecord | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as JsonRecord;
-}
-
-function asTrimmedString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeEmail(value: unknown): string | null {
+const normalizeEmail = (value: unknown) => {
   const email = asTrimmedString(value)?.toLowerCase();
-  if (!email) return null;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  return email;
-}
-
-function normalizeRole(value: unknown): string | null {
-  const role = asTrimmedString(value)?.toLowerCase();
-  if (!role) return null;
-  return manageableRoles.has(role) ? role : null;
-}
-
-function isValidPassword(value: string) {
-  return value.length >= 6;
-}
-
-function extractBearerToken(req: Request): string | null {
-  const authorization = req.headers.get("authorization");
-  if (!authorization) return null;
-  if (!authorization.toLowerCase().startsWith("bearer ")) return null;
-  const token = authorization.slice(7).trim();
-  return token.length > 0 ? token : null;
-}
-
-function isUserAlreadyRegisteredError(message?: string) {
-  if (!message) return false;
-  const lowered = message.toLowerCase();
-  return lowered.includes("already been registered") || lowered.includes("already registered");
-}
-
-async function resolveDefaultOrganizationId(supabaseAdmin: ReturnType<typeof createClient>) {
-  const { data, error } = await supabaseAdmin
-    .from("organizations")
-    .select("id")
-    .eq("slug", "grow")
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data?.id) throw new Error("Default Grow organization was not found.");
-  return String(data.id);
-}
+  return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+};
 
 async function findAuthUserByEmail(
   supabaseAdmin: ReturnType<typeof createClient>,
   email: string,
 ) {
   let page = 1;
-  const perPage = 200;
-
   while (true) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
     if (error) throw error;
-
-    const foundUser = data.users.find((user) => user.email?.toLowerCase() === email);
-    if (foundUser) return foundUser;
-
+    const match = data.users.find((user) => user.email?.toLowerCase() === email);
+    if (match) return match;
     if (!data.nextPage) return null;
     page = data.nextPage;
   }
 }
 
-async function ensureOrganizationFeatureEnabled(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  organizationId: string,
-  featureKey: string,
-) {
-  const { data, error } = await supabaseAdmin
-    .from("organization_settings")
-    .select("feature_flags")
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  const flags = asRecord(data?.feature_flags);
-  if (flags && flags[featureKey] === false) {
-    throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
-  }
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed", code: "method_not_allowed" }, 405);
   }
+
+  let createdUserId: string | null = null;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
     if (!supabaseUrl || !serviceRoleKey || !anonKey) {
-      return jsonResponse({ error: "Missing Supabase environment configuration" }, 500);
+      return jsonResponse({ error: "Missing Supabase configuration", code: "server_config" }, 500);
     }
 
-    const token = extractBearerToken(req);
+    const token = extractBearerToken(request);
     if (!token) {
-      return jsonResponse({ error: "Authorization token is required" }, 401);
+      return jsonResponse({ error: "Authorization token is required", code: "unauthenticated" }, 401);
     }
 
     const supabaseUser = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-
-    const {
-      data: { user: callerUser },
-      error: callerError,
-    } = await supabaseUser.auth.getUser();
-
-    if (callerError || !callerUser) {
-      return jsonResponse({ error: "Invalid or expired session" }, 401);
+    const { data: callerData, error: callerError } = await supabaseUser.auth.getUser();
+    if (callerError || !callerData.user) {
+      return jsonResponse({ error: "Invalid or expired session", code: "unauthenticated" }, 401);
     }
 
-    const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role, organization_id")
-      .eq("user_id", callerUser.id);
-
-    if (callerRolesError) {
-      throw callerRolesError;
-    }
-
-    const body = await req.json();
-    const payload = asRecord(body);
+    const payload = asRecord(await request.json());
     if (!payload) {
-      return jsonResponse({ error: "Invalid payload" }, 400);
+      return jsonResponse({ error: "Invalid payload", code: "invalid_payload" }, 400);
     }
 
-    const requestedOrganizationId = asTrimmedString(payload.organizationId);
-    const callerAdminRole = (callerRoles || []).find(
-      (row) =>
-        row.role === "admin" &&
-        row.organization_id &&
-        (!requestedOrganizationId || row.organization_id === requestedOrganizationId),
-    );
-    const hasLegacyAdminRole = !requestedOrganizationId && (callerRoles || []).some((row) => row.role === "admin");
-    if (!callerAdminRole && !hasLegacyAdminRole) {
-      return jsonResponse({ error: "Only admins can create users" }, 403);
+    const organizationId = asUuid(payload.organizationId);
+    const displayName = asTrimmedString(payload.displayName);
+    const email = normalizeEmail(payload.email);
+    const password = asTrimmedString(payload.password);
+    const primaryRole = asPrimaryRole(payload.primaryRole ?? payload.role);
+    const status = asUserStatus(payload.status) || "active";
+    const sectorCode = asSectorCode(payload.sectorCode);
+    const enabledModules = primaryRole
+      ? normalizeModulesForRole(primaryRole, payload.enabledModules)
+      : [];
+    const linkedClientIds = Array.isArray(payload.linkedClientIds)
+      ? payload.linkedClientIds.map(asUuid).filter((value): value is string => Boolean(value))
+      : [];
+
+    if (!organizationId || !displayName || !email || !password || password.length < 6 || !primaryRole) {
+      return jsonResponse({ error: "Required user fields are invalid", code: "invalid_payload" }, 400);
+    }
+    if (primaryRole === "colaborador" && status === "active" && !sectorCode) {
+      return jsonResponse({ error: "Sector is required", code: "sector_required" }, 400);
     }
 
-    const organizationId = callerAdminRole?.organization_id
-      ? String(callerAdminRole.organization_id)
-      : await resolveDefaultOrganizationId(supabaseAdmin);
-    await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "usuarios");
-
-    const parsedPayload: CreateTeamUserPayload = {
-      displayName: asTrimmedString(payload.displayName) || "",
-      email: normalizeEmail(payload.email) || "",
-      password: asTrimmedString(payload.password) || "",
-      role: normalizeRole(payload.role) || "",
-    };
-
-    if (!parsedPayload.displayName) {
-      return jsonResponse({ error: "Display name is required" }, 400);
-    }
-
-    if (!parsedPayload.email) {
-      return jsonResponse({ error: "Valid email is required" }, 400);
-    }
-
-    if (!isValidPassword(parsedPayload.password)) {
-      return jsonResponse(
-        { error: "Password must have at least 6 characters" },
-        400,
-      );
-    }
-
-    if (!parsedPayload.role) {
-      return jsonResponse({ error: "Role is required and must be valid" }, 400);
-    }
-
-    let userId: string | null = null;
-    let createdNow = false;
-
-    const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-      email: parsedPayload.email,
-      password: parsedPayload.password,
-      email_confirm: true,
-      user_metadata: { display_name: parsedPayload.displayName },
+    const { data: adminAllowed, error: adminError } = await supabaseUser.rpc("is_permission_admin", {
+      _organization_id: organizationId,
     });
+    if (adminError || !adminAllowed) {
+      return jsonResponse({ error: "Only admins can create users", code: "admin_required" }, 403);
+    }
 
-    if (createUserError) {
-      if (!isUserAlreadyRegisteredError(createUserError.message)) {
-        throw createUserError;
-      }
-
-      const existingUser = await findAuthUserByEmail(supabaseAdmin, parsedPayload.email);
-      if (!existingUser) {
-        return jsonResponse({ error: "User already exists but was not found" }, 409);
-      }
-
-      userId = existingUser.id;
-
-      const { data: existingRoles, error: existingRolesError } = await supabaseAdmin
-        .from("user_roles")
-        .select("role, organization_id")
-        .eq("user_id", userId);
-
-      if (existingRolesError) {
-        throw existingRolesError;
-      }
-
-      const existingRoleValues = (existingRoles || [])
-        .filter((row) => row.organization_id === organizationId)
-        .map((row) => String(row.role || "").trim().toLowerCase())
-        .filter(Boolean);
-
-      const hasInternalRole = existingRoleValues.some((role) => role !== "client");
-      if (hasInternalRole) {
-        return jsonResponse(
-          { error: "This email is already linked to an internal profile in the system" },
-          409,
-        );
-      }
-
-      const { error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-        password: parsedPayload.password,
+    let authUser = await findAuthUserByEmail(supabaseAdmin, email);
+    if (!authUser) {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
         email_confirm: true,
-        user_metadata: { display_name: parsedPayload.displayName },
+        user_metadata: { display_name: displayName },
       });
-
-      if (updateUserError) {
-        throw updateUserError;
-      }
+      if (error || !data.user) throw error || new Error("Unable to create user");
+      authUser = data.user;
+      createdUserId = authUser.id;
     } else {
-      userId = createdUser.user?.id || null;
-      createdNow = Boolean(userId);
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+        password,
+        email_confirm: true,
+        user_metadata: {
+          ...(authUser.user_metadata || {}),
+          display_name: displayName,
+        },
+      });
+      if (error) throw error;
     }
 
-    if (!userId) {
-      return jsonResponse({ error: "Unable to resolve user id" }, 400);
-    }
-
-    const { error: roleInsertError } = await supabaseAdmin.from("user_roles").upsert(
-      {
-        user_id: userId,
-        organization_id: organizationId,
-        role: parsedPayload.role,
-      },
-      { onConflict: "user_id,organization_id,role" },
-    );
-
-    if (roleInsertError) {
-      throw roleInsertError;
-    }
-
-    const { error: profileUpsertError } = await supabaseAdmin.from("profiles").upsert(
-      {
-        user_id: userId,
-        display_name: parsedPayload.displayName,
-      },
-      { onConflict: "user_id" },
-    );
-
-    if (profileUpsertError) {
-      throw profileUpsertError;
-    }
-
-    // Internal users must not remain linked to client records.
-    const { error: removeClientRoleError } = await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("user_id", userId)
-      .eq("organization_id", organizationId)
-      .eq("role", "client");
-
-    if (removeClientRoleError) {
-      throw removeClientRoleError;
-    }
-
-    const { error: revokeClientLinksError } = await supabaseAdmin
-      .from("client_users")
-      .update({ status: "revoked" })
-      .eq("user_id", userId)
-      .eq("organization_id", organizationId);
-
-    if (revokeClientLinksError) {
-      throw revokeClientLinksError;
-    }
-
-    const { error: removeClientRecordError } = await supabaseAdmin
-      .from("clients")
-      .update({ portal_user_id: null })
-      .eq("portal_user_id", userId)
-      .eq("organization_id", organizationId);
-
-    if (removeClientRecordError) {
-      throw removeClientRecordError;
-    }
+    const appliedAccess = await applyUserAccessTransaction(supabaseUser, {
+      organizationId,
+      targetUserId: authUser.id,
+      displayName,
+      primaryRole,
+      status,
+      sectorCode,
+      enabledModules,
+      linkedClientIds,
+      changeReason: asTrimmedString(payload.changeReason) || "User created",
+    });
 
     return jsonResponse({
       ok: true,
       user: {
-        user_id: userId,
-        email: parsedPayload.email,
-        display_name: parsedPayload.displayName,
-        role: parsedPayload.role,
-        organization_id: organizationId,
+        user_id: authUser.id,
+        email,
+        display_name: displayName,
       },
-      created_now: createdNow,
+      access: appliedAccess,
+      created_now: Boolean(createdUserId),
     });
-  } catch (error: unknown) {
-    const message =
-      typeof error === "object" &&
-      error !== null &&
-      "message" in error &&
-      typeof (error as { message?: unknown }).message === "string"
-        ? (error as { message: string }).message
-        : "Unknown error";
-
-    return jsonResponse({ error: message }, 400);
+  } catch (error) {
+    if (createdUserId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && serviceRoleKey) {
+        await createClient(supabaseUrl, serviceRoleKey).auth.admin.deleteUser(createdUserId).catch(() => undefined);
+      }
+    }
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return jsonResponse({ error: message, code: message }, 400);
   }
 });

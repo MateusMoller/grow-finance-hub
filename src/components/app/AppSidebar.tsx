@@ -30,8 +30,9 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
-import { hasAnyInternalRole, isDepartmentOnlyUser, normalizeRoles } from "@/lib/accessControl";
+import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { routeFeatureMap } from "@/lib/organizationFeatures";
+import { canAccessModule, resolveRouteModule } from "@/lib/userPermissions";
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
@@ -92,13 +93,14 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { role, roles } = useAuth();
+  const { role, roles, effectiveAccess } = useAuth();
   const { isFeatureEnabled } = useOrganizationSettings();
   const collapsed = state === "collapsed";
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
-  const isDepartmentRole = isDepartmentOnlyUser(normalizedRoleList);
-  const hasInternalAccess = hasAnyInternalRole(normalizedRoleList);
-  const isAdmin = normalizedRoleList.includes("admin");
+  const hasInternalAccess =
+    effectiveAccess?.primaryRole === "admin" ||
+    effectiveAccess?.primaryRole === "colaborador" ||
+    hasAnyInternalRole(normalizedRoleList);
 
   if (!hasInternalAccess) {
     return (
@@ -108,48 +110,30 @@ export function AppSidebar() {
     );
   }
 
+  const hasItemAccess = (url: string) => {
+    if (!effectiveAccess) return true;
+    const moduleKey = resolveRouteModule(url);
+    return !moduleKey || canAccessModule(effectiveAccess, moduleKey);
+  };
+
   const featureFilteredMainItems = mainItems.filter((item) => {
     const feature = routeFeatureMap[item.url];
-    return !feature || isFeatureEnabled(feature);
+    return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
   });
 
   const featureFilteredOperationalItems = operationalItems.filter((item) => {
     const feature = routeFeatureMap[item.url];
-    return !feature || isFeatureEnabled(feature);
+    return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
   });
 
-  const visibleMainItems = isDepartmentRole
-    ? featureFilteredMainItems.filter((item) =>
-        item.url === "/app/calendario" ||
-        item.url === "/app/tarefas" ||
-        item.url === "/app/clientes",
-      )
-    : featureFilteredMainItems;
+  const visibleMainItems = featureFilteredMainItems;
 
-  const visibleOperationalItems = isDepartmentRole
-    ? featureFilteredOperationalItems.filter(
-        (item) =>
-          item.url === "/app/chat-interno" ||
-          item.url === "/app/relatorios" ||
-          item.url === "/app/obrigacoes",
-      )
-    : isAdmin
-      ? featureFilteredOperationalItems
-      : featureFilteredOperationalItems.filter(
-          (item) => item.url !== "/app/newsletter" && item.url !== "/app/financeiro",
-        );
+  const visibleOperationalItems = featureFilteredOperationalItems;
 
-  const visibleSystemItems = isDepartmentRole
-    ? systemItems.filter((item) => item.url === "/app/manual" || item.url === "/app/sugestoes")
-    : isAdmin
-      ? systemItems.filter((item) => {
-          const feature = routeFeatureMap[item.url];
-          return !feature || isFeatureEnabled(feature);
-        })
-      : systemItems.filter((item) => {
-          const feature = routeFeatureMap[item.url];
-          return item.url !== "/app/usuarios" && (!feature || isFeatureEnabled(feature));
-        });
+  const visibleSystemItems = systemItems.filter((item) => {
+    const feature = routeFeatureMap[item.url];
+    return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
+  });
 
   const mainItemOrder: Record<string, number> = {
     "/app": 0,

@@ -105,6 +105,8 @@ CREATE POLICY "Tenant can delete client documents by client link"
 
 DROP POLICY IF EXISTS "Clients and internal can view request messages" ON public.request_messages;
 DROP POLICY IF EXISTS "Clients and internal can insert request messages" ON public.request_messages;
+DROP POLICY IF EXISTS "Tenant can view request messages" ON public.request_messages;
+DROP POLICY IF EXISTS "Tenant can insert request messages" ON public.request_messages;
 CREATE POLICY "Tenant can view request messages"
   ON public.request_messages FOR SELECT TO authenticated
   USING (
@@ -140,6 +142,10 @@ DROP POLICY IF EXISTS "Internal can view kanban tasks" ON public.kanban_tasks;
 DROP POLICY IF EXISTS "Internal can insert kanban tasks" ON public.kanban_tasks;
 DROP POLICY IF EXISTS "Internal can update kanban tasks" ON public.kanban_tasks;
 DROP POLICY IF EXISTS "Managers can delete kanban tasks" ON public.kanban_tasks;
+DROP POLICY IF EXISTS "Tenant internal can view kanban tasks" ON public.kanban_tasks;
+DROP POLICY IF EXISTS "Tenant internal can insert kanban tasks" ON public.kanban_tasks;
+DROP POLICY IF EXISTS "Tenant internal can update kanban tasks" ON public.kanban_tasks;
+DROP POLICY IF EXISTS "Tenant managers can delete kanban tasks" ON public.kanban_tasks;
 CREATE POLICY "Tenant internal can view kanban tasks"
   ON public.kanban_tasks FOR SELECT TO authenticated
   USING (public.is_internal_user((select auth.uid()), organization_id));
@@ -162,6 +168,10 @@ DROP POLICY IF EXISTS "Internal can view calendar events" ON public.calendar_eve
 DROP POLICY IF EXISTS "Internal can insert calendar events" ON public.calendar_events;
 DROP POLICY IF EXISTS "Internal can update calendar events" ON public.calendar_events;
 DROP POLICY IF EXISTS "Managers can delete calendar events" ON public.calendar_events;
+DROP POLICY IF EXISTS "Tenant internal can view calendar events" ON public.calendar_events;
+DROP POLICY IF EXISTS "Tenant internal can insert calendar events" ON public.calendar_events;
+DROP POLICY IF EXISTS "Tenant internal can update calendar events" ON public.calendar_events;
+DROP POLICY IF EXISTS "Tenant managers can delete calendar events" ON public.calendar_events;
 CREATE POLICY "Tenant internal can view calendar events"
   ON public.calendar_events FOR SELECT TO authenticated
   USING (public.is_internal_user((select auth.uid()), organization_id));

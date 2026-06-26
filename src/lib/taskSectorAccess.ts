@@ -1,4 +1,9 @@
 import { normalizeRoles } from "@/lib/accessControl";
+import {
+  SECTOR_LABELS,
+  normalizeSectorCode,
+  type EffectiveAccess,
+} from "@/lib/userPermissions";
 
 const ALL_TASK_SECTOR_ROLES = new Set(["admin"]);
 
@@ -71,4 +76,51 @@ export const canAccessTaskSector = (
 
   const sectorToken = normalizeTaskSectorToken(sector);
   return access.allowedTaskSectors.some((allowedSector) => normalizeTaskSectorToken(allowedSector) === sectorToken);
+};
+
+export const getCanonicalTaskSectorAccess = (access: EffectiveAccess | null) => {
+  if (!access) {
+    return {
+      canAccessAllTaskSectors: false,
+      allowedTaskSectors: [] as string[],
+    };
+  }
+  if (access.primaryRole === "admin") {
+    return {
+      canAccessAllTaskSectors: true,
+      allowedTaskSectors: [] as string[],
+    };
+  }
+  if (access.primaryRole !== "colaborador" || !access.sectorCode) {
+    return {
+      canAccessAllTaskSectors: false,
+      allowedTaskSectors: [] as string[],
+    };
+  }
+  return {
+    canAccessAllTaskSectors: false,
+    allowedTaskSectors: [SECTOR_LABELS[access.sectorCode]],
+  };
+};
+
+export const canCreateTaskInSector = (sector: string, access: EffectiveAccess | null) => {
+  if (!access || access.status !== "active" || access.requiresAccessReview) return false;
+  if (access.primaryRole === "admin") return true;
+  return access.primaryRole === "colaborador" &&
+    Boolean(access.sectorCode) &&
+    normalizeSectorCode(sector) === access.sectorCode;
+};
+
+export const canViewTaskByCanonicalScope = (
+  task: { sector: string | null; assignedToUserId?: string | null },
+  access: EffectiveAccess | null,
+) => {
+  if (!access || access.status !== "active" || access.requiresAccessReview) return false;
+  if (access.primaryRole === "admin") return true;
+  if (access.primaryRole !== "colaborador" || !access.enabledModules.includes("tarefas")) return false;
+
+  return (
+    (Boolean(access.sectorCode) && normalizeSectorCode(task.sector) === access.sectorCode) ||
+    task.assignedToUserId === access.userId
+  );
 };

@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowRight,
@@ -68,6 +69,7 @@ import {
   SECURE_DOCUMENT_ACCEPT,
 } from "@/lib/fileUploadSecurity";
 import { recordOperationalAuditLog } from "@/lib/operationalAudit";
+import { buildPortalDataQueryKey, resolveSelectedPortalClient } from "@/lib/portalClientScope";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
@@ -538,8 +540,9 @@ const portalRequestShortcuts = [
 ] as const;
 
 export default function PortalClientePage() {
-  const { user, session, loading: authLoading, signOut } = useAuth();
+  const { user, session, loading: authLoading, signOut, effectiveAccess } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
   const [loadingData, setLoadingData] = useState(true);
@@ -726,14 +729,18 @@ export default function PortalClientePage() {
     let ensureStatus: number | null = null;
     let ensureMessage = DEFAULT_PORTAL_ACCESS_MESSAGE;
 
-    const fetchClientRole = async () =>
-      supabase
+    const fetchClientRole = async () => {
+      if (effectiveAccess?.primaryRole === "cliente") {
+        return { data: { user_id: user.id }, error: null };
+      }
+      return supabase
         .from("user_roles")
         .select("user_id")
         .eq("user_id", user.id)
         .eq("role", "client")
         .limit(1)
         .maybeSingle();
+    };
 
     const fetchLinkedClients = async () => {
       const { data: linkRows, error: linkError } = await supabase
@@ -771,22 +778,7 @@ export default function PortalClientePage() {
           .filter((client): client is PortalClientProfile => Boolean(client));
       }
 
-      const { data: legacyClients, error: legacyError } = await supabase
-        .from("clients")
-        .select("id, organization_id, name, contact, email, portal_user_id, portal_cashflow_enabled")
-        .eq("portal_user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (legacyError) {
-        return { data: null, error: legacyError };
-      }
-
-      const mergedClientMap = new Map<string, PortalClientProfile>();
-      [...linkedClients, ...asArray<PortalClientProfile>(legacyClients)].forEach((client) => {
-        mergedClientMap.set(client.id, client);
-      });
-
-      return { data: Array.from(mergedClientMap.values()), error: null };
+      return { data: linkedClients, error: null };
     };
 
     let [{ data: roleData, error: roleError }, clientRes] = await Promise.all([
@@ -847,15 +839,19 @@ export default function PortalClientePage() {
 
     const linkedClients = asArray<PortalClientProfile>(clientRes.data);
     const storedClientId = localStorage.getItem(buildPortalClientStorageKey(user.id));
-    const client =
-      linkedClients.find((item) => item.id === selectedPortalClientId) ||
-      linkedClients.find((item) => item.id === storedClientId) ||
-      linkedClients[0] ||
-      null;
+    const client = resolveSelectedPortalClient(linkedClients, selectedPortalClientId, storedClientId);
 
     if (client?.id && selectedPortalClientId !== client.id) {
       setSelectedPortalClientId(client.id);
       localStorage.setItem(buildPortalClientStorageKey(user.id), client.id);
+    }
+
+    if (!client?.id) {
+      setPortalAccessMessage(DEFAULT_PORTAL_ACCESS_MESSAGE);
+      resetPortalCollections();
+      setLoadingData(false);
+      setPortalAccessDenied(true);
+      return;
     }
 
     const [requestRes, docRes] = await Promise.all([
@@ -863,13 +859,13 @@ export default function PortalClientePage() {
         .from("client_requests")
         .select("id, user_id, client_id, title, description, category, sector, status, admin_notes, created_at, updated_at")
         .eq("user_id", user.id)
-        .or(client?.id ? `client_id.eq.${client.id},client_id.is.null` : "client_id.is.null")
+        .eq("client_id", client.id)
         .order("created_at", { ascending: false }),
       supabase
         .from("client_documents")
         .select("id, user_id, client_id, request_id, file_name, file_path, file_size, category, created_at, processed_at, processed_by")
         .eq("user_id", user.id)
-        .or(client?.id ? `client_id.eq.${client.id},client_id.is.null` : "client_id.is.null")
+        .eq("client_id", client.id)
         .order("created_at", { ascending: false }),
     ]);
 
@@ -1076,15 +1072,34 @@ export default function PortalClientePage() {
     }
 
     setLoadingData(false);
-  }, [fetchCashflowAccounts, fetchOpenFinanceData, resetPortalCollections, selectedPortalClientId, session, user]);
+  }, [effectiveAccess?.primaryRole, fetchCashflowAccounts, fetchOpenFinanceData, resetPortalCollections, selectedPortalClientId, session, user]);
+
+  const portalQueryKey = useMemo(
+    () => buildPortalDataQueryKey(user?.id, selectedPortalClientId, effectiveAccess?.primaryRole),
+    [effectiveAccess?.primaryRole, selectedPortalClientId, user?.id],
+  );
+
+  const portalDataQuery = useQuery({
+    queryKey: portalQueryKey,
+    queryFn: fetchPortalData,
+    enabled: Boolean(user && session?.access_token),
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const refetchPortalData = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: portalQueryKey });
+    await portalDataQuery.refetch();
+  }, [portalDataQuery, portalQueryKey, queryClient]);
 
   useEffect(() => {
-    if (user && session?.access_token) void fetchPortalData();
-  }, [fetchPortalData, session?.access_token, user]);
+    setLoadingData(portalDataQuery.isPending || portalDataQuery.isFetching);
+  }, [portalDataQuery.isFetching, portalDataQuery.isPending]);
 
   const handlePortalClientChange = (clientId: string) => {
     if (!user?.id) return;
     localStorage.setItem(buildPortalClientStorageKey(user.id), clientId);
+    resetPortalCollections();
     setSelectedPortalClientId(clientId);
     setLoadingData(true);
   };
@@ -1121,7 +1136,7 @@ export default function PortalClientePage() {
             }
           }
 
-          void fetchPortalData();
+          void refetchPortalData();
         },
       )
       .subscribe();
@@ -1129,7 +1144,7 @@ export default function PortalClientePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [clientProfile?.id, fetchPortalData]);
+  }, [clientProfile?.id, refetchPortalData]);
 
   const latestMessageByRequest = useMemo(() => {
     const map = new Map<string, PortalRequestMessage>();
@@ -1515,7 +1530,7 @@ export default function PortalClientePage() {
 
     setActiveTab("requests");
     setRequestEntryMode("freeform");
-    await fetchPortalData();
+    await refetchPortalData();
   };
 
   const handleUploadFilesSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1591,7 +1606,7 @@ export default function PortalClientePage() {
       setUploadDialogOpen(false);
       setUploadFiles([]);
       if (uploadFilesInputRef.current) uploadFilesInputRef.current.value = "";
-      await fetchPortalData();
+      await refetchPortalData();
     }
     if (failed > 0) toast.error(`${failed} arquivo(s) não puderam ser enviados.`);
   };
@@ -1619,7 +1634,7 @@ export default function PortalClientePage() {
     }
 
     toast.success("Documento excluído com sucesso.");
-    await fetchPortalData();
+    await refetchPortalData();
   };
 
   const handleDownloadStoredFile = async (bucket: string, filePath: string) => {
@@ -1688,7 +1703,7 @@ export default function PortalClientePage() {
     }
 
     toast.success("Lançamento registrado no controle de caixa.");
-    await fetchPortalData();
+    await refetchPortalData();
     return true;
   };
 
@@ -1745,7 +1760,7 @@ export default function PortalClientePage() {
       return { success: false, inserted: 0 };
     }
 
-    await fetchPortalData();
+    await refetchPortalData();
     return { success: true, inserted: payloads.length };
   };
 
@@ -1791,7 +1806,7 @@ export default function PortalClientePage() {
         connectionId,
         clientId: clientProfile.id,
       });
-      await fetchPortalData();
+      await refetchPortalData();
       return data;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao sincronizar extratos.");

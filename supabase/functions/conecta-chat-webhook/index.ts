@@ -299,6 +299,40 @@ async function resolveIntegrationUser(
   return credential.data.user_id as string;
 }
 
+async function resolveUniqueAssigneeId(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  assigneeName: string | null,
+) {
+  if (!assigneeName) return null;
+
+  const { data: organization } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("slug", "grow")
+    .maybeSingle();
+  if (!organization?.id) return null;
+
+  const { data: profiles } = await supabaseAdmin
+    .from("profiles")
+    .select("user_id, display_name")
+    .ilike("display_name", assigneeName);
+  const candidateIds = (profiles || [])
+    .filter((profile) => profile.display_name?.trim().toLowerCase() === assigneeName.trim().toLowerCase())
+    .map((profile) => String(profile.user_id));
+  if (candidateIds.length === 0) return null;
+
+  const { data: accessRows } = await supabaseAdmin
+    .from("organization_user_access")
+    .select("user_id")
+    .eq("organization_id", organization.id)
+    .eq("primary_role", "colaborador")
+    .eq("status", "active")
+    .eq("requires_access_review", false)
+    .in("user_id", candidateIds);
+
+  return accessRows?.length === 1 ? String(accessRows[0].user_id) : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -402,6 +436,7 @@ Deno.serve(async (req) => {
       "responsible_name",
       "responsible",
     ]);
+    const assignedToUserId = await resolveUniqueAssigneeId(supabaseAdmin, assignee);
 
     const priority = normalizePriority(
       pickFirstString(task, ["priority", "priority_name", "severity", "importance"]),
@@ -434,6 +469,7 @@ Deno.serve(async (req) => {
           description,
           client_name: clientName,
           assignee,
+          assigned_to_user_id: assignedToUserId,
           priority,
           sector,
           status,

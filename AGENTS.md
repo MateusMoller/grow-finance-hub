@@ -62,5 +62,5 @@ Adaptacao ao Grow Finance Hub:
 
 <!-- SPECKIT START -->
 Current Spec Kit feature plan:
-`specs/003-obligation-regime-loads/plan.md`
+`specs/004-user-permissions/plan.md`
 <!-- SPECKIT END -->

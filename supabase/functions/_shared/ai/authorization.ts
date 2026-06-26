@@ -57,7 +57,15 @@ export async function buildAssistantRequestContext(
     return { error: jsonResponse({ error: "Invalid or expired session." }, 401) };
   }
 
-  const [{ data: rolesData, error: rolesError }, { data: profileData }] = await Promise.all([
+  const [
+    { data: canonicalData, error: canonicalError },
+    { data: rolesData, error: rolesError },
+    { data: profileData },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from("organization_user_access")
+      .select("primary_role, organization_id, status, requires_access_review")
+      .eq("user_id", user.id),
     supabaseAdmin
       .from("user_roles")
       .select("role, organization_id")
@@ -69,20 +77,26 @@ export async function buildAssistantRequestContext(
       .maybeSingle(),
   ]);
 
-  if (rolesError) {
+  if (canonicalError || rolesError) {
     return { error: jsonResponse({ error: "Failed to resolve requester roles." }, 500) };
   }
 
-  const roles = normalizeRoles((rolesData || []).map((row) => String(row.role || "")));
+  const canonicalRoles = (canonicalData || [])
+    .filter((row) => row.status === "active" && !row.requires_access_review)
+    .map((row) => String(row.primary_role || ""));
+  const roles = normalizeRoles([
+    ...canonicalRoles,
+    ...(rolesData || []).map((row) => String(row.role || "")),
+  ]);
   const organizationIds = Array.from(
     new Set(
-      (rolesData || [])
+      [...(canonicalData || []), ...(rolesData || [])]
         .map((row) => asTrimmedString((row as { organization_id?: unknown }).organization_id))
         .filter((organizationId): organizationId is string => Boolean(organizationId)),
     ),
   );
-  const isInternalUser = roles.some((role) => internalRoleSet.has(role));
-  const isClientUser = roles.some((role) => role === CLIENT_ROLE);
+  const isInternalUser = roles.some((role) => internalRoleSet.has(role) || role === "colaborador");
+  const isClientUser = roles.some((role) => role === CLIENT_ROLE || role === "cliente");
 
   return {
     supabaseAdmin,
@@ -167,8 +181,8 @@ export async function getAuthorizedClientContext(params: {
   requesterIdentityVerified?: boolean;
 }): Promise<AuthorizedClientContext> {
   const requesterRoles = normalizeRoles(params.requesterRoles || []);
-  const isInternalUser = requesterRoles.some((role) => internalRoleSet.has(role));
-  const isClientUser = requesterRoles.some((role) => role === CLIENT_ROLE);
+  const isInternalUser = requesterRoles.some((role) => internalRoleSet.has(role) || role === "colaborador");
+  const isClientUser = requesterRoles.some((role) => role === CLIENT_ROLE || role === "cliente");
 
   if (!isInternalUser && !isClientUser) {
     throw new Error("Requester has no permission to use the Grow assistant.");

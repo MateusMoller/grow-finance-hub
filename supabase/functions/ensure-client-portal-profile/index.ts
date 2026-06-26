@@ -50,6 +50,21 @@ async function ensureClientRole(
   userId: string,
   organizationId: string,
 ) {
+  const { error: canonicalError } = await supabaseAdmin
+    .from("organization_user_access")
+    .upsert(
+      {
+        user_id: userId,
+        organization_id: organizationId,
+        primary_role: "cliente",
+        status: "active",
+        sector_code: null,
+        requires_access_review: false,
+      },
+      { onConflict: "organization_id,user_id" },
+    );
+  if (canonicalError) throw canonicalError;
+
   const { error } = await supabaseAdmin.from("user_roles").upsert(
     { user_id: userId, organization_id: organizationId, role: "client" },
     { onConflict: "user_id,organization_id,role" },
@@ -127,16 +142,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Invalid or expired session" }, 401);
     }
 
-    const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role, organization_id")
-      .eq("user_id", callerUser.id);
+    const [{ data: canonicalAccess, error: canonicalError }, { data: callerRoles, error: callerRolesError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("organization_user_access")
+          .select("primary_role, organization_id, status")
+          .eq("user_id", callerUser.id),
+        supabaseAdmin
+          .from("user_roles")
+          .select("role, organization_id")
+          .eq("user_id", callerUser.id),
+      ]);
 
-    if (callerRolesError) throw callerRolesError;
+    if (canonicalError || callerRolesError) throw canonicalError || callerRolesError;
 
     const roleRows = (callerRoles || []) as RoleRow[];
     const roles = roleRows.map((row) => String(row.role || "").toLowerCase());
-    const hasInternalRole = roles.some((role) => internalRoles.has(role));
+    const hasInternalRole =
+      (canonicalAccess || []).some(
+        (row) => ["admin", "colaborador"].includes(String(row.primary_role)) && row.status === "active",
+      ) ||
+      roles.some((role) => internalRoles.has(role));
     if (hasInternalRole) {
       return jsonResponse({ error: "Internal users cannot access the client portal profile flow" }, 403);
     }
