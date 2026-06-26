@@ -1,4 +1,3 @@
-import { requiresAuditForClassification } from "./classification";
 import type { ReportDatasetDefinition, ReportExportResult, ReportFieldDefinition } from "./types";
 
 export function getHighestFieldClassification(fields: readonly ReportFieldDefinition[]) {
@@ -62,6 +61,5 @@ export function requiresBackendReportExport(input: {
   fields: readonly ReportFieldDefinition[];
   rowCount: number;
 }) {
-  const classification = getHighestFieldClassification(input.fields);
-  return requiresAuditForClassification(classification) || input.rowCount > input.dataset.exportLimit;
+  return input.rowCount > input.dataset.exportLimit;
 }

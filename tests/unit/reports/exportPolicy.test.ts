@@ -12,10 +12,17 @@ describe("report export policy", () => {
     expect(result.reason).toBe("prohibited_field");
   });
 
-  it("requires backend export for sensitive fields", () => {
+  it("allows direct export for sensitive fields after policy validation", () => {
     const dataset = reportCatalogById.get("clientes")!;
     const field = dataset.fields.find((item) => item.classification === "sensitive")!;
 
-    expect(requiresBackendReportExport({ dataset, fields: [field], rowCount: 1 })).toBe(true);
+    expect(requiresBackendReportExport({ dataset, fields: [field], rowCount: 1 })).toBe(false);
+  });
+
+  it("keeps backend-only path reserved for rows above dataset limit", () => {
+    const dataset = reportCatalogById.get("clientes")!;
+    const field = dataset.fields.find((item) => item.exportable)!;
+
+    expect(requiresBackendReportExport({ dataset, fields: [field], rowCount: dataset.exportLimit + 1 })).toBe(true);
   });
 });
