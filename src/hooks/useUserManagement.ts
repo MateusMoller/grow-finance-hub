@@ -54,6 +54,14 @@ const readFunctionError = async (error: unknown) => {
   return error instanceof Error ? error.message : "Não foi possível concluir a operação.";
 };
 
+const readAccessResult = (data: unknown) => {
+  const payload = data as { ok?: boolean; code?: string } | null;
+  if (payload?.ok === false) {
+    throw new Error(payload.code || "Não foi possível salvar as permissões.");
+  }
+  return data;
+};
+
 export function useUserManagement(organizationId: string | null, filters: UserFilters) {
   const queryClient = useQueryClient();
   const queryKey = ["user-management", organizationId, filters] as const;
@@ -100,12 +108,29 @@ export function useUserManagement(organizationId: string | null, filters: UserFi
 
   const saveMutation = useMutation({
     mutationFn: async (input: UserAccessInput) => {
-      const functionName = input.userId ? "manage-team-user" : "create-team-user";
-      const { data, error } = await supabase.functions.invoke(functionName, {
+      if (!organizationId) {
+        throw new Error("Organização não encontrada.");
+      }
+
+      if (input.userId) {
+        const { data, error } = await supabase.rpc("admin_apply_user_access", {
+          _organization_id: organizationId,
+          _target_user_id: input.userId,
+          _display_name: input.displayName,
+          _primary_role: input.primaryRole,
+          _status: input.status,
+          _sector_code: input.sectorCode,
+          _enabled_modules: input.enabledModules,
+          _linked_client_ids: input.linkedClientIds,
+          _change_reason: input.changeReason,
+        });
+        if (error) throw error;
+        return readAccessResult(data);
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-team-user", {
         body: {
-          action: input.userId ? "update" : undefined,
           organizationId,
-          userId: input.userId,
           displayName: input.displayName,
           email: input.email,
           password: input.password,
