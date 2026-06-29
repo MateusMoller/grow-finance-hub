@@ -302,20 +302,25 @@ export async function invokeGrowObligations<T>(body: Record<string, unknown>) {
     const errorWithContext = error as Error & { context?: Response };
     const response = errorWithContext.context;
     if (response) {
+      let parsedErrorMessage: string | null = null;
       try {
         const payload = await response.clone().json() as { error?: string };
-        if (payload?.error) {
-          throw new Error(payload.error);
-        }
+        parsedErrorMessage = payload?.error || null;
       } catch {
-        try {
-          const text = await response.clone().text();
-          if (text) {
-            throw new Error(text);
-          }
-        } catch {
-          // fall through to original error
-        }
+        // Response is not JSON; try text below.
+      }
+      if (parsedErrorMessage) {
+        throw new Error(parsedErrorMessage);
+      }
+      let textErrorMessage: string | null = null;
+      try {
+        const text = await response.clone().text();
+        textErrorMessage = text || null;
+      } catch {
+        // fall through to original error
+      }
+      if (textErrorMessage) {
+        throw new Error(textErrorMessage);
       }
     }
     throw errorWithContext;
