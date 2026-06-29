@@ -21,32 +21,48 @@ import type { ReportDatasetDefinition, ReportDatasetId, ReportFilters, ReportRow
 import { reportQueryKeys } from "./reportQueryKeys";
 
 const REPORT_PAGE_SIZE = 1000;
+const CLIENT_DATA_CLIENT_CHUNK_SIZE = 100;
+const CLIENT_DATA_CATEGORIES = [
+  "cadastro_clientes",
+  "cadastro_fiscal",
+  "cadastro_departamento_pessoal",
+  "cadastro_contabil",
+  "cadastro_obrigacoes",
+  "cadastro_honorarios",
+  "cadastro_documentos",
+];
 
-async function fetchClientDataRows(organizationId: string, maxRows: number) {
+function chunkClientIds(clientIds: readonly string[]) {
+  const chunks: string[][] = [];
+  for (let index = 0; index < clientIds.length; index += CLIENT_DATA_CLIENT_CHUNK_SIZE) {
+    chunks.push(clientIds.slice(index, index + CLIENT_DATA_CLIENT_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+async function fetchClientDataRows(organizationId: string, clientIds: readonly string[]) {
   const rows: ClientDataSourceRow[] = [];
-  const categories = [
-    "cadastro_clientes",
-    "cadastro_fiscal",
-    "cadastro_departamento_pessoal",
-    "cadastro_contabil",
-    "cadastro_obrigacoes",
-    "cadastro_honorarios",
-    "cadastro_documentos",
-  ];
+  const uniqueClientIds = Array.from(new Set(clientIds.filter(Boolean)));
+  if (uniqueClientIds.length === 0) return rows;
 
-  for (let from = 0; rows.length < maxRows; from += REPORT_PAGE_SIZE) {
-    const to = Math.min(from + REPORT_PAGE_SIZE - 1, maxRows - 1);
-    const { data, error } = await supabase
-      .from("client_data")
-      .select("client_id, category, field_name, field_value, updated_at, created_at")
-      .eq("organization_id", organizationId)
-      .in("category", categories)
-      .range(from, to);
+  for (const clientIdChunk of chunkClientIds(uniqueClientIds)) {
+    for (let from = 0; ; from += REPORT_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("client_data")
+        .select("client_id, category, field_name, field_value, updated_at, created_at")
+        .eq("organization_id", organizationId)
+        .in("client_id", clientIdChunk)
+        .in("category", CLIENT_DATA_CATEGORIES)
+        .order("client_id", { ascending: true })
+        .order("category", { ascending: true })
+        .order("field_name", { ascending: true })
+        .range(from, from + REPORT_PAGE_SIZE - 1);
 
-    if (error) throw error;
-    const page = (data || []) as ClientDataSourceRow[];
-    rows.push(...page);
-    if (page.length < REPORT_PAGE_SIZE) break;
+      if (error) throw error;
+      const page = (data || []) as ClientDataSourceRow[];
+      rows.push(...page);
+      if (page.length < REPORT_PAGE_SIZE) break;
+    }
   }
 
   return rows;
@@ -57,19 +73,21 @@ export async function fetchRowsForDataset(dataset: ReportDatasetDefinition, orga
   const maxRows = dataset.exportLimit + 1;
 
   if (dataset.id === "clientes") {
-    const [clientsRes, clientDataRes] = await Promise.all([
-      supabase
-        .from("clients")
-        .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
-        .eq("organization_id", organizationId)
-        .order("name")
-        .range(0, maxRows - 1),
-      fetchClientDataRows(organizationId, Math.max(maxRows * 50, 50000)),
-    ]);
+    const clientsRes = await supabase
+      .from("clients")
+      .select("id, name, cnpj, regime, sector, status, contact, email, phone, created_at, updated_at")
+      .eq("organization_id", organizationId)
+      .order("name")
+      .range(0, maxRows - 1);
     if (clientsRes.error) throw clientsRes.error;
+    const clients = (clientsRes.data || []) as ClientSourceRow[];
+    const clientDataRows = await fetchClientDataRows(
+      organizationId,
+      clients.map((client) => client.id),
+    );
     return buildClientReportRows(
-      (clientsRes.data || []) as ClientSourceRow[],
-      clientDataRes,
+      clients,
+      clientDataRows,
       normalizeReportFilters({ organizationId }),
     );
   }
