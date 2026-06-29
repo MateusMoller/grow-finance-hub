@@ -486,10 +486,49 @@ async function registerDocumentUploadDirectly({
   const linkedInstanceId = item.instance_id || match.resolvedInstanceId || null;
   const isLinked = Boolean(linkedInstanceId && !match.reviewRequired);
 
+  const { data: ingestionJob, error: ingestionJobError } = await supabase
+    .from("document_ingestion_jobs")
+    .upsert(
+      {
+        organization_id: organizationId,
+        source_kind: "web_manual",
+        file_name: item.file.name,
+        storage_bucket: "obligation-files",
+        storage_path: storagePath,
+        file_hash: null,
+        file_size: item.file.size,
+        client_id: match.detectedClientId || item.client_id || null,
+        detected_client_id: match.detectedClientId || null,
+        template_id: match.suggestedTemplateId || item.template_id || null,
+        instance_id: isLinked ? linkedInstanceId : null,
+        status: isLinked ? "ingested" : "review_required",
+        classification_status: isLinked ? "classified" : "review_required",
+        application_status: "pending",
+        communication_status: "pending",
+        publication_status: "pending",
+        review_required: !isLinked,
+        metadata: {
+          detected_cnpj: match.detectedCnpj || item.analysis.detected_cnpj,
+          competence_detected: match.competenceDetected || item.analysis.competence_detected,
+          match_strategy: match.strategy,
+          match_score: match.score,
+        },
+        created_by: user.id,
+      },
+      { onConflict: "storage_bucket,storage_path" },
+    )
+    .select("*")
+    .single();
+
+  if (ingestionJobError || !ingestionJob) {
+    throw ingestionJobError || new Error("Falha ao registrar job de ingestao do documento.");
+  }
+
   const { data: inboxItem, error: inboxError } = await supabase
     .from("document_inbox_items")
     .insert({
       organization_id: organizationId,
+      ingestion_job_id: ingestionJob.id,
       client_id: match.detectedClientId || item.client_id || null,
       suggested_client_id: item.client_id || null,
       detected_client_id: match.detectedClientId || null,
@@ -541,22 +580,34 @@ async function registerDocumentUploadDirectly({
 
   if (inboxError || !inboxItem) throw inboxError || new Error("Falha ao registrar documento.");
 
+  const { error: ingestionJobUpdateError } = await supabase
+    .from("document_ingestion_jobs")
+    .update({ inbox_item_id: inboxItem.id })
+    .eq("id", ingestionJob.id)
+    .eq("organization_id", organizationId);
+  if (ingestionJobUpdateError) throw ingestionJobUpdateError;
+
   if (isLinked && linkedInstanceId) {
-    const { error: instanceFileError } = await supabase.from("obligation_instance_files").insert({
-      organization_id: organizationId,
-      instance_id: linkedInstanceId,
-      inbox_item_id: inboxItem.id,
-      file_name: item.file.name,
-      storage_bucket: "obligation-files",
-      storage_path: storagePath,
-      content_type: item.file.type || "application/pdf",
-      file_size: item.file.size,
-      triage_status: "reviewed",
-      source: "manual_upload",
-      source_kind: "web_manual",
-      uploaded_by: user.id,
-      identification_confidence: match.score,
-    });
+    const { error: instanceFileError } = await supabase
+      .from("obligation_instance_files")
+      .upsert(
+        {
+          organization_id: organizationId,
+          instance_id: linkedInstanceId,
+          inbox_item_id: inboxItem.id,
+          file_name: item.file.name,
+          storage_bucket: "obligation-files",
+          storage_path: storagePath,
+          content_type: item.file.type || "application/pdf",
+          file_size: item.file.size,
+          triage_status: "reviewed",
+          source: "manual_upload",
+          source_kind: "web_manual",
+          uploaded_by: user.id,
+          identification_confidence: match.score,
+        },
+        { onConflict: "storage_bucket,storage_path" },
+      );
     if (instanceFileError) throw instanceFileError;
   }
 
@@ -940,32 +991,10 @@ export function GrowObligationsWorkspace({
 
         let response: { ok: true; match: ReferenceMatchPreview["match"] };
         try {
-          response = await invokeGrowObligations<{
-            ok: true;
-            match: ReferenceMatchPreview["match"];
-          }>({
-            action: "register_document_upload",
-            client_id: item.client_id || null,
-            template_id: item.template_id || null,
-            document_type_key: item.document_type_key || null,
-            instance_id: item.instance_id || null,
-            suggested_competence_label: item.suggested_competence_label || null,
-            notes: item.notes || null,
-            file_name: item.file.name,
-            storage_bucket: "obligation-files",
-            storage_path: path,
-            content_type: item.file.type || "application/pdf",
-            file_size: item.file.size,
-            analysis: item.analysis,
-          });
+          response = await registerDocumentUploadDirectly({ item, storagePath: path });
         } catch (error) {
-          console.warn("grow-obligations-module register_document_upload failed, using RLS fallback", error);
-          try {
-            response = await registerDocumentUploadDirectly({ item, storagePath: path });
-          } catch (fallbackError) {
-            await supabase.storage.from("obligation-files").remove([path]);
-            throw fallbackError;
-          }
+          await supabase.storage.from("obligation-files").remove([path]);
+          throw error;
         }
         results.push(response);
       }
