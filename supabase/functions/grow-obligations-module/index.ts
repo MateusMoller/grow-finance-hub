@@ -574,19 +574,43 @@ async function buildAuthContext(req: Request) {
     return { error: jsonResponse({ error: "Invalid or expired session" }, 401) };
   }
 
-  const { data: roleRows, error: roleError } = await supabaseAdmin
-    .from("user_roles")
-    .select("role, organization_id")
-    .eq("user_id", user.id);
+  const [legacyRolesResult, accessRowsResult] = await Promise.all([
+    supabaseAdmin
+      .from("user_roles")
+      .select("role, organization_id")
+      .eq("user_id", user.id),
+    supabaseAdmin
+      .from("organization_user_access")
+      .select("primary_role, organization_id, status")
+      .eq("user_id", user.id),
+  ]);
 
-  if (roleError) throw roleError;
+  if (legacyRolesResult.error) throw legacyRolesResult.error;
+  if (accessRowsResult.error) throw accessRowsResult.error;
 
-  const roles = (roleRows || [])
-    .map((row) => asTrimmedString((row as JsonRecord).role))
+  const legacyRoleRows = legacyRolesResult.data || [];
+  const accessRows = (accessRowsResult.data || []).filter(
+    (row) => asTrimmedString((row as JsonRecord).status) !== "inactive",
+  );
+  const accessRoles = accessRows
+    .map((row) => {
+      const primaryRole = asTrimmedString((row as JsonRecord).primary_role);
+      if (primaryRole === "colaborador") return "employee";
+      if (primaryRole === "cliente") return "client";
+      return primaryRole;
+    })
     .filter((role): role is string => Boolean(role));
+  const roles = Array.from(
+    new Set([
+      ...legacyRoleRows
+        .map((row) => asTrimmedString((row as JsonRecord).role))
+        .filter((role): role is string => Boolean(role)),
+      ...accessRoles,
+    ]),
+  );
   const organizationIds = Array.from(
     new Set(
-      (roleRows || [])
+      [...legacyRoleRows, ...accessRows]
         .map((row) => asTrimmedString((row as JsonRecord).organization_id))
         .filter((organizationId): organizationId is string => Boolean(organizationId)),
     ),
@@ -2718,6 +2742,7 @@ async function handleUpsertTemplate(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
   roles: string[],
+  organizationId: string,
   payload: JsonRecord,
 ) {
   if (!roles.some((role) => templateManagerRoles.has(role))) {
@@ -2732,6 +2757,7 @@ async function handleUpsertTemplate(
   }
 
   const row = {
+    organization_id: organizationId,
     code: normalizeTemplateCode(codeSource),
     name,
     sector: asTrimmedString(payload.sector) || "Geral",
@@ -2757,7 +2783,7 @@ async function handleUpsertTemplate(
   };
 
   const query = id
-    ? supabaseAdmin.from("obligation_templates").update(row).eq("id", id).select("*").single()
+    ? supabaseAdmin.from("obligation_templates").update(row).eq("organization_id", organizationId).eq("id", id).select("*").single()
     : supabaseAdmin.from("obligation_templates").insert(row).select("*").single();
 
   const { data, error } = await query;
@@ -2770,6 +2796,7 @@ async function handleUpsertTemplate(
     const { data: existingProfilesData, error: existingProfilesError } = await supabaseAdmin
       .from("client_obligation_profiles")
       .select("*")
+      .eq("organization_id", organizationId)
       .eq("template_id", template.id);
 
     if (existingProfilesError) return jsonResponse({ error: existingProfilesError.message }, 400);
@@ -2783,6 +2810,7 @@ async function handleUpsertTemplate(
     for (const clientId of linkedClientIds) {
       const existingProfile = existingProfilesByClientId.get(clientId);
       const profileRow = {
+        organization_id: organizationId,
         client_id: clientId,
         template_id: template.id,
         assigned_to: existingProfile?.assigned_to || null,
@@ -3942,7 +3970,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "upsert_template") {
-      return await handleUpsertTemplate(supabaseAdmin, user.id, roles, payload);
+      return await handleUpsertTemplate(supabaseAdmin, user.id, roles, organizationId, payload);
     }
 
     if (action === "list_regime_loads") {

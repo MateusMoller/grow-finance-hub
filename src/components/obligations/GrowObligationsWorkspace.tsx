@@ -51,6 +51,7 @@ import {
   growObligationStatusLabel,
   growPeriodicityLabel,
   growPriorityLabel,
+  getStoredCurrentOrganizationId,
   invokeGrowObligations,
   type GrowDocumentInboxItem,
   type GrowDocumentIngestionJob,
@@ -163,6 +164,10 @@ function slugifyDocumentKey(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function normalizeTemplateCode(value: string) {
+  return slugifyDocumentKey(value).replace(/_+/g, "-");
 }
 
 function makeDocumentDraft(document?: GrowExpectedDocument): TemplateExpectedDocumentDraft {
@@ -284,6 +289,109 @@ function validateTemplateForm(form: TemplateFormState) {
     return "Informe o corpo padrao do WhatsApp automatico.";
   }
   return null;
+}
+
+async function upsertTemplateDirectly(payload: TemplateFormState) {
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error("Sessao invalida ou expirada.");
+
+  const row = {
+    organization_id: organizationId,
+    code: normalizeTemplateCode(payload.name),
+    name: payload.name.trim(),
+    sector: payload.sector || "Geral",
+    periodicity: payload.periodicity,
+    competence_reference: payload.competence_reference,
+    technical_due_month_reference: payload.technical_due_month_reference,
+    due_day: Number(payload.due_day || 10),
+    yearly_due_month: null,
+    legal_due_day: payload.legal_due_day ? Number(payload.legal_due_day) : null,
+    priority: payload.priority,
+    expected_documents: sanitizeExpectedDocuments(payload.expected_documents),
+    is_active: payload.is_active,
+    generates_calendar: true,
+    generates_kanban: true,
+    requires_document: true,
+    operational_notes: payload.operational_notes.trim() || null,
+    completion_email_enabled: payload.completion_email_enabled,
+    completion_email_subject: payload.completion_email_subject.trim() || null,
+    completion_email_body: payload.completion_email_body.trim() || null,
+    completion_whatsapp_enabled: payload.completion_whatsapp_enabled,
+    completion_whatsapp_body: payload.completion_whatsapp_body.trim() || null,
+    created_by: user.id,
+  };
+
+  const templateQuery = payload.id
+    ? supabase
+        .from("obligation_templates")
+        .update(row)
+        .eq("organization_id", organizationId)
+        .eq("id", payload.id)
+        .select("*")
+        .single()
+    : supabase.from("obligation_templates").insert(row).select("*").single();
+  const { data: template, error: templateError } = await templateQuery;
+  if (templateError) throw templateError;
+
+  if ("linked_client_ids" in payload) {
+    const templateId = String(template.id);
+    const linkedClientIds = Array.from(new Set(payload.linked_client_ids));
+    const { data: existingProfilesData, error: existingProfilesError } = await supabase
+      .from("client_obligation_profiles")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("template_id", templateId);
+    if (existingProfilesError) throw existingProfilesError;
+
+    const existingProfiles = existingProfilesData || [];
+    const existingProfilesByClientId = new Map(existingProfiles.map((profile) => [String(profile.client_id), profile]));
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (linkedClientIds.length > 0) {
+      const profileRows = linkedClientIds.map((clientId) => {
+        const existingProfile = existingProfilesByClientId.get(clientId);
+        return {
+          organization_id: organizationId,
+          client_id: clientId,
+          template_id: templateId,
+          assigned_to: existingProfile?.assigned_to || null,
+          start_date: existingProfile?.start_date || today,
+          end_date: null,
+          is_active: true,
+          due_day_override: existingProfile?.due_day_override ?? null,
+          yearly_due_month_override: existingProfile?.yearly_due_month_override ?? null,
+          legal_due_day_override: existingProfile?.legal_due_day_override ?? null,
+          expected_documents_override: existingProfile?.expected_documents_override ?? null,
+          notes: existingProfile?.notes || null,
+          parameters: existingProfile?.parameters || {},
+          created_by: user.id,
+        };
+      });
+      const { error: profileUpsertError } = await supabase
+        .from("client_obligation_profiles")
+        .upsert(profileRows, { onConflict: "client_id,template_id" });
+      if (profileUpsertError) throw profileUpsertError;
+    }
+
+    const profilesToDeactivate = existingProfiles.filter(
+      (profile) => profile.is_active && !linkedClientIds.includes(String(profile.client_id)),
+    );
+    if (profilesToDeactivate.length > 0) {
+      const { error: deactivateError } = await supabase
+        .from("client_obligation_profiles")
+        .update({ is_active: false, end_date: today })
+        .in("id", profilesToDeactivate.map((profile) => profile.id));
+      if (deactivateError) throw deactivateError;
+    }
+  }
+
+  return { ok: true, template, fallback: "direct_rls" };
 }
 
 function validateUploadQueueItem(item: UploadQueueItem) {
@@ -449,10 +557,10 @@ export function GrowObligationsWorkspace({
   const overview = overviewQuery.data;
 
   const templateMutation = useMutation({
-    mutationFn: (payload: TemplateFormState) => {
+    mutationFn: async (payload: TemplateFormState) => {
       const validationError = validateTemplateForm(payload);
       if (validationError) throw new Error(validationError);
-      return invokeGrowObligations({
+      const requestPayload = {
         action: "upsert_template",
         id: payload.id,
         name: payload.name,
@@ -475,7 +583,13 @@ export function GrowObligationsWorkspace({
         completion_email_body: payload.completion_email_body || null,
         completion_whatsapp_enabled: payload.completion_whatsapp_enabled,
         completion_whatsapp_body: payload.completion_whatsapp_body || null,
-      });
+      };
+      try {
+        return await invokeGrowObligations(requestPayload);
+      } catch (error) {
+        console.warn("grow-obligations-module upsert_template failed, using RLS fallback", error);
+        return await upsertTemplateDirectly(payload);
+      }
     },
     onSuccess: async () => {
       toast.success("Obrigacao mestre salva.");

@@ -282,7 +282,7 @@ export type GrowClientSnapshotPayload = {
   templates: GrowObligationTemplate[];
 };
 
-async function getStoredCurrentOrganizationId() {
+export async function getStoredCurrentOrganizationId() {
   const { data } = await supabase.auth.getSession();
   const userId = data.session?.user?.id;
   if (!userId) return null;
