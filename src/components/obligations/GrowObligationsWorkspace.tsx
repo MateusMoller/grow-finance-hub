@@ -744,6 +744,60 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
   };
 }
 
+function buildLocalDocumentPreview(
+  item: UploadQueueItem,
+  overview: GrowObligationsOverviewPayload | undefined,
+): ReferenceMatchPreview {
+  const clients = overview?.clients || [];
+  const templates = overview?.templates || [];
+  const instances = overview?.instances || [];
+  const detectedClient = item.analysis.detected_cnpj
+    ? clients.find((client) => client.cnpj?.replace(/\D/g, "") === item.analysis.detected_cnpj)
+    : null;
+  const effectiveClientId = item.client_id || detectedClient?.id || null;
+  const effectiveTemplate = templates.find((template) => template.id === item.template_id) || null;
+  const documentDefinition =
+    effectiveTemplate?.expected_documents.find((document) => document.document_type_key === item.document_type_key) || null;
+  const effectiveCompetence = item.suggested_competence_label || item.analysis.competence_detected || null;
+  const manuallySelectedInstance = item.instance_id
+    ? instances.find((instance) => instance.id === item.instance_id) || null
+    : null;
+  const matchingInstance =
+    manuallySelectedInstance ||
+    instances.find((instance) => {
+      if (!effectiveClientId || instance.client_id !== effectiveClientId) return false;
+      if (item.template_id && instance.template_id !== item.template_id) return false;
+      if (effectiveCompetence && instance.competence_label !== effectiveCompetence) return false;
+      return !["concluida", "cancelada"].includes(instance.status);
+    }) ||
+    null;
+  const hasManualDefinition = Boolean(item.client_id || item.template_id || item.document_type_key || item.instance_id);
+  const reviewRequired = !matchingInstance || !documentDefinition;
+
+  return {
+    ok: true,
+    match: {
+      resolvedInstanceId: matchingInstance?.id || null,
+      suggestedTemplateId: item.template_id || matchingInstance?.template_id || null,
+      documentTypeKey: item.document_type_key || null,
+      strategy: matchingInstance ? "manual_instance" : "manual_review",
+      score: matchingInstance && documentDefinition ? 1 : hasManualDefinition ? 0.65 : 0.35,
+      reasons: reviewRequired
+        ? ["Preview local: revise cliente, obrigacao, competencia e documento antes de enviar."]
+        : ["Preview local: arquivo sera vinculado com base na selecao informada."],
+      reviewRequired,
+      candidateInstanceIds: matchingInstance ? [matchingInstance.id] : [],
+      detectedClientId: effectiveClientId,
+      detectedCnpj: item.analysis.detected_cnpj,
+      competenceDetected: effectiveCompetence,
+      referenceFileId: null,
+      referenceMatchScore: 0,
+      referenceMatchReasons: [],
+      autoLinkBlockReason: reviewRequired ? "Selecao insuficiente para vinculo automatico." : null,
+    },
+  };
+}
+
 const overviewQueryKey = ["grow-obligations-overview"];
 
 export function GrowObligationsWorkspace({
@@ -1155,16 +1209,7 @@ export function GrowObligationsWorkspace({
       return;
     }
     try {
-      const preview = await invokeGrowObligations<ReferenceMatchPreview>({
-        action: "preview_reference_match",
-        client_id: item.client_id || null,
-        template_id: item.template_id || null,
-        document_type_key: item.document_type_key || null,
-        instance_id: item.instance_id || null,
-        suggested_competence_label: item.suggested_competence_label || null,
-        file_name: item.file.name,
-        analysis: item.analysis,
-      });
+      const preview = buildLocalDocumentPreview(item, overview);
       setUploadQueue((prev) =>
         prev.map((current) => (current.id === item.id ? applyPreviewAutofill(current, preview) : current)),
       );
