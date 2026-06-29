@@ -1064,15 +1064,22 @@ export function GrowObligationsWorkspace({
   });
 
   const processQueueMutation = useMutation({
-    mutationFn: () =>
-      invokeGrowObligations<{
+    mutationFn: async () => {
+      const organizationId = await getStoredCurrentOrganizationId();
+      if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+      const { data, error } = await supabase.functions.invoke<{
         ok: true;
         processed: number;
         total: number;
-      }>({
-        action: "process_document_queue",
-        limit: 50,
-      }),
+      }>("obligation-document-processor", {
+        body: {
+          organization_id: organizationId,
+          limit: 50,
+        },
+      });
+      if (error) throw error;
+      return data as { ok: true; processed: number; total: number };
+    },
     onSuccess: async (result) => {
       toast.success(`${result.processed} documento(s) processados automaticamente.`);
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });

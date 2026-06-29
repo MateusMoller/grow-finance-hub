@@ -219,6 +219,7 @@ type InboxRow = {
   id: string;
   organization_id?: string;
   ingestion_job_id: string | null;
+  created_by?: string | null;
   client_id: string | null;
   suggested_client_id: string | null;
   detected_client_id: string | null;
@@ -305,6 +306,18 @@ function normalizeEmail(value: unknown): string | null {
   if (!email) return null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
   return email;
+}
+
+function formatEmailAddress(email: string, name?: string | null) {
+  const safeEmail = normalizeEmail(email);
+  if (!safeEmail) return null;
+  const safeName = asTrimmedString(name)?.replace(/[<>"\r\n]/g, " ").replace(/\s+/g, " ").trim();
+  return safeName ? `${safeName} <${safeEmail}>` : safeEmail;
+}
+
+function getEmailDomain(email: string | null) {
+  const normalized = normalizeEmail(email);
+  return normalized?.split("@")[1] || null;
 }
 
 function normalizeSourceKind(value: unknown, fallback = "web_manual") {
@@ -1425,6 +1438,47 @@ function renderCompletionEmailTemplate(
     .replaceAll("{{prazo_tecnico}}", payload.technicalDueDate);
 }
 
+async function resolveActorEmailSender(supabaseAdmin: SupabaseAdmin, actorId: string) {
+  const fallbackFrom =
+    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
+    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
+    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+  const allowedDomains = asStringArray(
+    (Deno.env.get("OBLIGATION_ALLOWED_FROM_DOMAINS") || "")
+      .split(",")
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(actorId);
+  if (error || !data?.user) {
+    return {
+      from: fallbackFrom,
+      replyTo: null,
+      actorEmail: null,
+      usedActorAsFrom: false,
+    };
+  }
+
+  const actorEmail = normalizeEmail(data.user.email);
+  const actorName =
+    asTrimmedString(data.user.user_metadata?.display_name) ||
+    asTrimmedString(data.user.user_metadata?.full_name) ||
+    asTrimmedString(data.user.user_metadata?.name) ||
+    actorEmail?.split("@")[0] ||
+    "Grow Contabilidade";
+  const actorFrom = actorEmail ? formatEmailAddress(actorEmail, actorName) : null;
+  const actorDomain = getEmailDomain(actorEmail);
+  const canUseActorAsFrom = Boolean(actorFrom && actorDomain) && allowedDomains.includes(actorDomain as string);
+
+  return {
+    from: canUseActorAsFrom && actorFrom ? actorFrom : fallbackFrom,
+    replyTo: actorEmail,
+    actorEmail,
+    usedActorAsFrom: canUseActorAsFrom,
+  };
+}
+
 function buildCompletionEmailBodyHtml(body: string) {
   return `
     <div style="background:#f8fafc;padding:24px 12px;font-family:Arial,sans-serif;color:#0f172a;">
@@ -1438,6 +1492,7 @@ function buildCompletionEmailBodyHtml(body: string) {
 async function sendEmailViaResend(params: {
   apiKey: string;
   from: string;
+  replyTo?: string | null;
   to: string;
   subject: string;
   html: string;
@@ -1459,6 +1514,7 @@ async function sendEmailViaResend(params: {
     body: JSON.stringify({
       from: params.from,
       to: [params.to],
+      reply_to: params.replyTo || undefined,
       subject: params.subject,
       html: params.html,
       text: params.text,
@@ -1557,10 +1613,7 @@ async function maybeSendCompletionEmail(
   }
 
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
-  const senderEmail =
-    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
-    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
-    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+  const sender = await resolveActorEmailSender(supabaseAdmin, actorId);
 
   if (!resendApiKey) {
     await createInstanceEvent(
@@ -1597,7 +1650,8 @@ async function maybeSendCompletionEmail(
 
   const sendResult = await sendEmailViaResend({
     apiKey: resendApiKey,
-    from: senderEmail,
+    from: sender.from,
+    replyTo: sender.replyTo,
     to: recipientEmail,
     subject,
     html: htmlBody,
@@ -1619,6 +1673,9 @@ async function maybeSendCompletionEmail(
         provider_status: sendResult.status,
         provider_message: sendResult.message,
         recipient_email: recipientEmail,
+        sender_email: sender.actorEmail,
+        sender_from: sender.from,
+        used_actor_as_from: sender.usedActorAsFrom,
       },
     );
     return { attempted: true as const, sent: false as const, reason: "provider_error" };
@@ -1635,6 +1692,9 @@ async function maybeSendCompletionEmail(
     {
       inbox_item_id: inboxItem.id,
       recipient_email: recipientEmail,
+      sender_email: sender.actorEmail,
+      sender_from: sender.from,
+      used_actor_as_from: sender.usedActorAsFrom,
       resend_email_id: sendResult.id,
       subject,
     },
@@ -1969,9 +2029,10 @@ async function applyDocumentOperationalFlow(
 
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
+  const emailSenderActorId = inboxItem.created_by || actorId;
   const [emailResult, whatsappResult] = justCompleted
     ? await Promise.all([
-      maybeSendCompletionEmail(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+      maybeSendCompletionEmail(supabaseAdmin, emailSenderActorId, template, updatedInstance, client, inboxItem),
       maybeSendCompletionWhatsApp(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
     ])
     : [
@@ -2243,9 +2304,10 @@ async function applyDocumentOperationalFlowV2(
 
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
+  const emailSenderActorId = inboxItem.created_by || actorId;
   const [emailResult, whatsappResult] = justCompleted
     ? await Promise.all([
-      maybeSendCompletionEmail(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+      maybeSendCompletionEmail(supabaseAdmin, emailSenderActorId, template, updatedInstance, client, inboxItem),
       maybeSendCompletionWhatsApp(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
     ])
     : [
