@@ -158,6 +158,7 @@ type ProfileRow = {
 
 type InstanceRow = {
   id: string;
+  organization_id?: string;
   client_id: string;
   profile_id: string;
   template_id: string;
@@ -182,6 +183,7 @@ type InstanceRow = {
 
 type IngestionJobRow = {
   id: string;
+  organization_id?: string;
   source_kind: string;
   status: string;
   classification_status: string;
@@ -215,6 +217,7 @@ type IngestionJobRow = {
 
 type InboxRow = {
   id: string;
+  organization_id?: string;
   ingestion_job_id: string | null;
   client_id: string | null;
   suggested_client_id: string | null;
@@ -1346,6 +1349,7 @@ async function findDuplicateIngestionJob(
 async function upsertIngestionJob(
   supabaseAdmin: SupabaseAdmin,
   payload: {
+    organizationId: string;
     sourceKind: string;
     fileName: string;
     storageBucket: string;
@@ -1363,6 +1367,7 @@ async function upsertIngestionJob(
   },
 ) {
   const row = {
+    organization_id: payload.organizationId,
     source_kind: payload.sourceKind,
     file_name: payload.fileName,
     storage_bucket: payload.storageBucket,
@@ -1879,6 +1884,7 @@ async function applyDocumentOperationalFlow(
   const { error: fileError } = await supabaseAdmin
     .from("obligation_instance_files")
     .upsert({
+      organization_id: inboxItem.organization_id || instance.organization_id,
       instance_id: instance.id,
       inbox_item_id: inboxItem.id,
       file_name: inboxItem.file_name,
@@ -2112,6 +2118,7 @@ async function applyDocumentOperationalFlowV2(
   const { error: fileError } = await supabaseAdmin
     .from("obligation_instance_files")
     .upsert({
+      organization_id: inboxItem.organization_id || instance.organization_id,
       instance_id: instance.id,
       inbox_item_id: inboxItem.id,
       file_name: inboxItem.file_name,
@@ -3193,6 +3200,7 @@ async function handleResolveDocument(
 async function handleRegisterDocumentUploadNative(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const fileName = asTrimmedString(payload.file_name);
@@ -3235,6 +3243,7 @@ async function handleRegisterDocumentUploadNative(
   });
   const autoLinked = Boolean(match.resolvedInstanceId && !match.reviewRequired && match.score >= 0.9);
   const ingestionJob = await upsertIngestionJob(supabaseAdmin, {
+    organizationId,
     sourceKind,
     fileName,
     storageBucket,
@@ -3257,6 +3266,7 @@ async function handleRegisterDocumentUploadNative(
   });
 
   const inboxRow = {
+    organization_id: organizationId,
     ingestion_job_id: ingestionJob.id,
     client_id: match.detectedClientId || clientId,
     suggested_client_id: clientId,
@@ -3353,6 +3363,7 @@ async function handleRegisterDocumentUploadNative(
 async function handleResolveDocumentNative(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const inboxItemId = asTrimmedString(payload.inbox_item_id);
@@ -3365,6 +3376,7 @@ async function handleResolveDocumentNative(
     .from("document_inbox_items")
     .select("*")
     .eq("id", inboxItemId)
+    .eq("organization_id", organizationId)
     .single();
 
   if (inboxError || !inboxItem) {
@@ -3392,7 +3404,8 @@ async function handleResolveDocumentNative(
         reviewed_by: actorId,
         reviewed_at: new Date().toISOString(),
       })
-      .eq("id", inboxItemId);
+      .eq("id", inboxItemId)
+      .eq("organization_id", organizationId);
 
     if (error) throw error;
     await updateIngestionJob(supabaseAdmin, asTrimmedString((inboxItem as JsonRecord).ingestion_job_id), {
@@ -3430,7 +3443,8 @@ async function handleResolveDocumentNative(
       reviewed_by: actorId,
       reviewed_at: new Date().toISOString(),
     })
-    .eq("id", inboxItemId);
+    .eq("id", inboxItemId)
+    .eq("organization_id", organizationId);
 
   if (inboxUpdateError) throw inboxUpdateError;
 
@@ -3493,6 +3507,7 @@ async function handlePreviewDocumentMatch(
 async function handleUploadReferenceDocument(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const templateId = asTrimmedString(payload.template_id);
@@ -3505,6 +3520,7 @@ async function handleUploadReferenceDocument(
 
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
   const row = {
+    organization_id: organizationId,
     template_id: templateId,
     profile_id: asTrimmedString(payload.profile_id),
     document_type_key: documentTypeKey,
@@ -3541,11 +3557,16 @@ async function handleUploadReferenceDocument(
 
 async function handleListReferenceDocuments(
   supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const templateId = asTrimmedString(payload.template_id);
   const documentTypeKey = asTrimmedString(payload.document_type_key);
-  let query = supabaseAdmin.from("expected_document_reference_files").select("*").order("created_at", { ascending: false });
+  let query = supabaseAdmin
+    .from("expected_document_reference_files")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
   if (templateId) query = query.eq("template_id", templateId);
   if (documentTypeKey) query = query.eq("document_type_key", documentTypeKey);
   const { data, error } = await query;
@@ -3555,17 +3576,23 @@ async function handleListReferenceDocuments(
 
 async function handleDeleteReferenceDocument(
   supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const referenceId = asTrimmedString(payload.reference_file_id);
   if (!referenceId) return jsonResponse({ error: "reference_file_id e obrigatorio." }, 400);
-  const { error } = await supabaseAdmin.from("expected_document_reference_files").delete().eq("id", referenceId);
+  const { error } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .delete()
+    .eq("id", referenceId)
+    .eq("organization_id", organizationId);
   if (error) return jsonResponse({ error: error.message }, 400);
   return jsonResponse({ ok: true });
 }
 
 async function handleReprocessReferenceDocument(
   supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const referenceId = asTrimmedString(payload.reference_file_id);
@@ -3584,6 +3611,7 @@ async function handleReprocessReferenceDocument(
     .from("expected_document_reference_files")
     .update(updates)
     .eq("id", referenceId)
+    .eq("organization_id", organizationId)
     .select("*")
     .single();
   if (error || !data) return jsonResponse({ error: error?.message || "Falha ao reprocessar documento modelo." }, 400);
@@ -4002,11 +4030,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === "register_document_upload" || action === "register_robot_document_upload") {
-      return await handleRegisterDocumentUploadNative(supabaseAdmin, user.id, payload);
+      return await handleRegisterDocumentUploadNative(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "resolve_document") {
-      return await handleResolveDocumentNative(supabaseAdmin, user.id, payload);
+      return await handleResolveDocumentNative(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "preview_document_match") {
@@ -4018,19 +4046,19 @@ Deno.serve(async (req) => {
     }
 
     if (action === "upload_reference_document") {
-      return await handleUploadReferenceDocument(supabaseAdmin, user.id, payload);
+      return await handleUploadReferenceDocument(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "list_reference_documents") {
-      return await handleListReferenceDocuments(supabaseAdmin, payload);
+      return await handleListReferenceDocuments(supabaseAdmin, organizationId, payload);
     }
 
     if (action === "delete_reference_document") {
-      return await handleDeleteReferenceDocument(supabaseAdmin, payload);
+      return await handleDeleteReferenceDocument(supabaseAdmin, organizationId, payload);
     }
 
     if (action === "reprocess_reference_document") {
-      return await handleReprocessReferenceDocument(supabaseAdmin, payload);
+      return await handleReprocessReferenceDocument(supabaseAdmin, organizationId, payload);
     }
 
     if (action === "process_document_queue") {

@@ -394,6 +394,175 @@ async function upsertTemplateDirectly(payload: TemplateFormState) {
   return { ok: true, template, fallback: "direct_rls" };
 }
 
+async function registerReferenceDocumentDirectly({
+  templateId,
+  documentTypeKey,
+  file,
+  storagePath,
+  analysis,
+}: {
+  templateId: string;
+  documentTypeKey: string;
+  file: File;
+  storagePath: string;
+  analysis: AnalyzedDocument;
+}) {
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error("Sessao invalida ou expirada.");
+
+  const { data, error } = await supabase
+    .from("expected_document_reference_files")
+    .insert({
+      organization_id: organizationId,
+      template_id: templateId,
+      profile_id: null,
+      document_type_key: documentTypeKey,
+      file_name: file.name,
+      storage_bucket: "obligation-files",
+      storage_path: storagePath,
+      content_type: file.type || "application/pdf",
+      file_size: file.size,
+      is_active: true,
+      source_kind: "template_reference",
+      extracted_text: analysis.extracted_text,
+      extracted_text_preview: analysis.extracted_text_preview,
+      text_extraction_status: analysis.text_extraction_status,
+      ocr_status: analysis.ocr_status,
+      fingerprint_version: 1,
+      fingerprint_payload: analysis.fingerprint_payload,
+      keywords: analysis.keywords,
+      primary_cues: analysis.primary_cues,
+      created_by: user.id,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) throw error || new Error("Falha ao registrar documento modelo.");
+  return { ok: true as const, reference_file: data as GrowExpectedDocumentReferenceFile, fallback: "direct_rls" };
+}
+
+async function registerDocumentUploadDirectly({
+  item,
+  storagePath,
+}: {
+  item: UploadQueueItem;
+  storagePath: string;
+}) {
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error("Sessao invalida ou expirada.");
+
+  const previewMatch = item.preview?.match;
+  const match: ReferenceMatchPreview["match"] = previewMatch || {
+    resolvedInstanceId: item.instance_id || null,
+    suggestedTemplateId: item.template_id || null,
+    documentTypeKey: item.document_type_key || null,
+    strategy: item.instance_id ? "manual_instance" : "manual_review",
+    score: item.instance_id ? 1 : 0.35,
+    reasons: item.instance_id
+      ? ["Instancia definida manualmente pelo usuario."]
+      : ["Aguardando validacao humana para vincular o arquivo."],
+    reviewRequired: !item.instance_id,
+    candidateInstanceIds: item.instance_id ? [item.instance_id] : [],
+    detectedClientId: item.client_id || null,
+    detectedCnpj: item.analysis.detected_cnpj,
+    competenceDetected: item.analysis.competence_detected,
+    referenceFileId: null,
+    referenceMatchScore: 0,
+    referenceMatchReasons: [],
+    autoLinkBlockReason: item.instance_id ? null : "Candidato insuficiente para auto-vinculo.",
+  };
+  const linkedInstanceId = item.instance_id || match.resolvedInstanceId || null;
+  const isLinked = Boolean(linkedInstanceId && !match.reviewRequired);
+
+  const { data: inboxItem, error: inboxError } = await supabase
+    .from("document_inbox_items")
+    .insert({
+      organization_id: organizationId,
+      client_id: match.detectedClientId || item.client_id || null,
+      suggested_client_id: item.client_id || null,
+      detected_client_id: match.detectedClientId || null,
+      suggested_template_id: match.suggestedTemplateId || item.template_id || null,
+      suggested_instance_id: match.resolvedInstanceId || item.instance_id || null,
+      linked_instance_id: isLinked ? linkedInstanceId : null,
+      document_type_key: match.documentTypeKey || item.document_type_key || null,
+      file_name: item.file.name,
+      storage_bucket: "obligation-files",
+      storage_path: storagePath,
+      source_kind: "web_manual",
+      content_type: item.file.type || "application/pdf",
+      file_size: item.file.size,
+      suggested_competence_label: item.suggested_competence_label || null,
+      detected_cnpj: match.detectedCnpj || item.analysis.detected_cnpj,
+      competence_detected: match.competenceDetected || item.analysis.competence_detected,
+      identification_confidence: match.score,
+      matched_by: match.strategy,
+      match_score: match.score,
+      match_reasons: match.reasons,
+      reference_file_id: match.referenceFileId || null,
+      reference_match_score: match.referenceMatchScore || 0,
+      reference_match_reasons: match.referenceMatchReasons || [],
+      review_required: !isLinked,
+      classification_status: isLinked ? "classified" : "review_required",
+      status: isLinked ? "linked" : "pending_review",
+      blocking_reason: isLinked ? null : "Aguardando validacao humana para vincular o arquivo.",
+      text_extraction_status: item.analysis.text_extraction_status,
+      ocr_status: item.analysis.ocr_status,
+      extracted_text_preview: item.analysis.extracted_text_preview,
+      fingerprint_payload: item.analysis.fingerprint_payload,
+      auto_link_block_reason: match.autoLinkBlockReason || null,
+      processing_status: "queued",
+      processing_attempts: 0,
+      execution_status: "pending",
+      application_status: "pending",
+      communication_status: "pending",
+      publication_status: "pending",
+      execution_notes: isLinked
+        ? "Documento aguardando aplicacao operacional na obrigacao."
+        : "Documento aguardando revisao humana para vinculacao.",
+      notes: item.notes || null,
+      created_by: user.id,
+      reviewed_by: isLinked ? user.id : null,
+      reviewed_at: isLinked ? new Date().toISOString() : null,
+    })
+    .select("*")
+    .single();
+
+  if (inboxError || !inboxItem) throw inboxError || new Error("Falha ao registrar documento.");
+
+  if (isLinked && linkedInstanceId) {
+    const { error: instanceFileError } = await supabase.from("obligation_instance_files").insert({
+      organization_id: organizationId,
+      instance_id: linkedInstanceId,
+      inbox_item_id: inboxItem.id,
+      file_name: item.file.name,
+      storage_bucket: "obligation-files",
+      storage_path: storagePath,
+      content_type: item.file.type || "application/pdf",
+      file_size: item.file.size,
+      triage_status: "reviewed",
+      source: "manual_upload",
+      source_kind: "web_manual",
+      uploaded_by: user.id,
+      identification_confidence: match.score,
+    });
+    if (instanceFileError) throw instanceFileError;
+  }
+
+  return { ok: true as const, inbox_item: inboxItem, match, fallback: "direct_rls" };
+}
+
 function validateUploadQueueItem(item: UploadQueueItem) {
   const validationError = validateSecureDocument(item.file);
   if (validationError) return validationError;
@@ -674,17 +843,33 @@ export function GrowObligationsWorkspace({
         upsert: false,
       });
       if (uploadError) throw uploadError;
-      return invokeGrowObligations<{ ok: true; reference_file: GrowExpectedDocumentReferenceFile }>({
-        action: "upload_reference_document",
-        template_id: templateId,
-        document_type_key: documentTypeKey,
-        file_name: file.name,
-        storage_bucket: "obligation-files",
-        storage_path: path,
-        content_type: file.type || "application/pdf",
-        file_size: file.size,
-        analysis,
-      });
+      try {
+        return await invokeGrowObligations<{ ok: true; reference_file: GrowExpectedDocumentReferenceFile }>({
+          action: "upload_reference_document",
+          template_id: templateId,
+          document_type_key: documentTypeKey,
+          file_name: file.name,
+          storage_bucket: "obligation-files",
+          storage_path: path,
+          content_type: file.type || "application/pdf",
+          file_size: file.size,
+          analysis,
+        });
+      } catch (error) {
+        console.warn("grow-obligations-module upload_reference_document failed, using RLS fallback", error);
+        try {
+          return await registerReferenceDocumentDirectly({
+            templateId,
+            documentTypeKey,
+            file,
+            storagePath: path,
+            analysis,
+          });
+        } catch (fallbackError) {
+          await supabase.storage.from("obligation-files").remove([path]);
+          throw fallbackError;
+        }
+      }
     },
     onSuccess: async (response, variables) => {
       toast.success("Documento modelo anexado.");
@@ -753,24 +938,35 @@ export function GrowObligationsWorkspace({
         });
         if (uploadError) throw uploadError;
 
-        const response = await invokeGrowObligations<{
-          ok: true;
-          match: ReferenceMatchPreview["match"];
-        }>({
-          action: "register_document_upload",
-          client_id: item.client_id || null,
-          template_id: item.template_id || null,
-          document_type_key: item.document_type_key || null,
-          instance_id: item.instance_id || null,
-          suggested_competence_label: item.suggested_competence_label || null,
-          notes: item.notes || null,
-          file_name: item.file.name,
-          storage_bucket: "obligation-files",
-          storage_path: path,
-          content_type: item.file.type || "application/pdf",
-          file_size: item.file.size,
-          analysis: item.analysis,
-        });
+        let response: { ok: true; match: ReferenceMatchPreview["match"] };
+        try {
+          response = await invokeGrowObligations<{
+            ok: true;
+            match: ReferenceMatchPreview["match"];
+          }>({
+            action: "register_document_upload",
+            client_id: item.client_id || null,
+            template_id: item.template_id || null,
+            document_type_key: item.document_type_key || null,
+            instance_id: item.instance_id || null,
+            suggested_competence_label: item.suggested_competence_label || null,
+            notes: item.notes || null,
+            file_name: item.file.name,
+            storage_bucket: "obligation-files",
+            storage_path: path,
+            content_type: item.file.type || "application/pdf",
+            file_size: item.file.size,
+            analysis: item.analysis,
+          });
+        } catch (error) {
+          console.warn("grow-obligations-module register_document_upload failed, using RLS fallback", error);
+          try {
+            response = await registerDocumentUploadDirectly({ item, storagePath: path });
+          } catch (fallbackError) {
+            await supabase.storage.from("obligation-files").remove([path]);
+            throw fallbackError;
+          }
+        }
         results.push(response);
       }
       return results;
