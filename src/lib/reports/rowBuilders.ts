@@ -86,6 +86,17 @@ function repairCommonEncodingIssues(value: string) {
     .replace(/Ãº/g, "u");
 }
 
+function isUsefulReportText(value: unknown) {
+  if (value === null || value === undefined) return false;
+  const normalized = String(value).trim().toLowerCase();
+  return Boolean(normalized) && !["-", "--", "n/a", "na", "null", "undefined"].includes(normalized);
+}
+
+function firstUsefulReportText(...values: unknown[]) {
+  const value = values.find(isUsefulReportText);
+  return value === undefined ? "" : String(value).trim();
+}
+
 function readPartnerText(partner: Record<string, unknown>, ...keys: string[]) {
   const value = keys.map((key) => partner[key]).find((candidate) => typeof candidate === "string");
   return typeof value === "string" ? value.trim() : "";
@@ -161,21 +172,34 @@ export function buildClientReportRows(
   const clientDataByClientId = buildClientDataByClientId(clientDataEntries);
 
   return clients
-    .filter((client) => matchesSelectedCompany(client.name, filters.company || null))
-    .map((client) => ({
-      id: client.id,
-      nome: client.name,
-      cnpj: client.cnpj || "",
-      regime: client.regime || "",
-      segmento: client.sector || "",
-      status: client.status || "",
-      contato: client.contact || "",
-      email: (client.email || "").toLowerCase(),
-      telefone: client.phone || "",
-      criado_em: client.created_at || "",
-      atualizado_em: client.updated_at || "",
-      ...(clientDataByClientId.get(client.id) || {}),
-    }));
+    .map((client) => {
+      const clientData = clientDataByClientId.get(client.id) || {};
+      const fantasyName = firstUsefulReportText(clientData.cadastral_cadastro_clientes_nome_fantasia, client.name);
+      return {
+        id: client.id,
+        nome: firstUsefulReportText(client.name, fantasyName),
+        cnpj: client.cnpj || "",
+        regime: client.regime || "",
+        segmento: client.sector || "",
+        status: client.status || "",
+        contato: client.contact || "",
+        email: (client.email || "").toLowerCase(),
+        telefone: client.phone || "",
+        criado_em: client.created_at || "",
+        atualizado_em: client.updated_at || "",
+        ...clientData,
+        cadastral_cadastro_clientes_nome_fantasia: fantasyName,
+      };
+    })
+    .filter((row) => matchesSelectedCompany(String(row.nome || ""), filters.company || null))
+    .filter((row) =>
+      [
+        row.nome,
+        row.cnpj,
+        row.cadastral_cadastro_clientes_codigo,
+        row.cadastral_cadastro_clientes_nome_fantasia,
+      ].some(isUsefulReportText),
+    );
 }
 
 export function buildLeadReportRows(leads: readonly LeadSourceRow[], filters: ReportFilters): ReportRow[] {
