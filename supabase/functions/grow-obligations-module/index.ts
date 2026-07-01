@@ -4493,6 +4493,18 @@ async function handleClientSnapshot(
   });
 }
 
+async function handleListClients(supabaseAdmin: SupabaseAdmin, organizationId: string) {
+  const clients = filterByOrganization(
+    Array.from((await loadClientsMap(supabaseAdmin)).values()) as unknown as JsonRecord[],
+    organizationId,
+  );
+
+  return jsonResponse({
+    ok: true,
+    clients,
+  });
+}
+
 function hasTemplateManagerRole(roles: string[]) {
   return roles.some((role) => templateManagerRoles.has(role));
 }
@@ -4823,6 +4835,10 @@ Deno.serve(async (req) => {
         console.error("grow-obligations overview failed", { message, organizationId });
         return jsonResponse(buildEmptyOverview([`Falha ao carregar dados de obrigacoes: ${message}`]));
       }
+    }
+
+    if (action === "list_clients") {
+      return await handleListClients(supabaseAdmin, organizationId);
     }
 
     if (action === "upsert_template") {

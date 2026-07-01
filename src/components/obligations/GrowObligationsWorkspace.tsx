@@ -106,6 +106,11 @@ interface TemplateSaveResult {
   template?: GrowObligationTemplate;
 }
 
+interface ClientListResult {
+  ok: true;
+  clients: GrowObligationsOverviewPayload["clients"];
+}
+
 interface InstanceFormState {
   instanceId: string;
   status: GrowObligationInstance["status"];
@@ -176,6 +181,10 @@ function slugifyDocumentKey(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return slugifyDocumentKey(value).replace(/_+/g, "-");
+}
+
+function fileNameWithoutExtension(fileName: string) {
+  return fileName.replace(/\.[^/.]+$/, "").trim();
 }
 
 function normalizeClientStatus(value: string | null | undefined) {
@@ -466,6 +475,55 @@ async function registerReferenceDocumentDirectly({
 
   if (error || !data) throw error || new Error("Falha ao registrar documento modelo.");
   return { ok: true as const, reference_file: data as GrowExpectedDocumentReferenceFile, fallback: "direct_rls" };
+}
+
+async function uploadTemplateReferenceFile({
+  templateId,
+  documentTypeKey,
+  file,
+}: {
+  templateId: string;
+  documentTypeKey: string;
+  file: File;
+}) {
+  if (!templateId) throw new Error("Salve o template antes de anexar documentos modelo.");
+  if (!documentTypeKey) throw new Error("Defina o documento esperado antes de anexar o modelo.");
+  const validationError = validateSecureDocument(file);
+  if (validationError) throw new Error(validationError);
+  const analysis = await analyzePdfDocument(file);
+  const path = buildSecureStoragePath(["grow-obligations", "references", templateId, documentTypeKey], file.name);
+  const { error: uploadError } = await supabase.storage.from("obligation-files").upload(path, file, {
+    contentType: file.type || undefined,
+    upsert: false,
+  });
+  if (uploadError) throw uploadError;
+  try {
+    return await invokeGrowObligations<{ ok: true; reference_file: GrowExpectedDocumentReferenceFile }>({
+      action: "upload_reference_document",
+      template_id: templateId,
+      document_type_key: documentTypeKey,
+      file_name: file.name,
+      storage_bucket: "obligation-files",
+      storage_path: path,
+      content_type: file.type || "application/pdf",
+      file_size: file.size,
+      analysis,
+    });
+  } catch (error) {
+    console.warn("grow-obligations-module upload_reference_document failed, using RLS fallback", error);
+    try {
+      return await registerReferenceDocumentDirectly({
+        templateId,
+        documentTypeKey,
+        file,
+        storagePath: path,
+        analysis,
+      });
+    } catch (fallbackError) {
+      await supabase.storage.from("obligation-files").remove([path]);
+      throw fallbackError;
+    }
+  }
 }
 
 async function registerDocumentUploadDirectly({
@@ -841,6 +899,7 @@ export function GrowObligationsWorkspace({
   const [documentResolutionNotes, setDocumentResolutionNotes] = useState("");
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [referenceUploadKey, setReferenceUploadKey] = useState<string | null>(null);
+  const [pendingReferenceFiles, setPendingReferenceFiles] = useState<Record<string, File[]>>({});
   const [isDraggingUpload, setIsDraggingUpload] = useState(false);
   const [templateClientSearch, setTemplateClientSearch] = useState("");
   const [deliveryRecipientByInstance, setDeliveryRecipientByInstance] = useState<Record<string, string>>({});
@@ -868,6 +927,12 @@ export function GrowObligationsWorkspace({
   });
 
   const overview = overviewQuery.data;
+
+  const templateClientsQuery = useQuery({
+    queryKey: ["grow-obligations", "template-clients"],
+    queryFn: () => invokeGrowObligations<ClientListResult>({ action: "list_clients" }),
+    staleTime: 60_000,
+  });
 
   const templateMutation = useMutation({
     mutationFn: async (payload: TemplateFormState) => {
@@ -906,14 +971,49 @@ export function GrowObligationsWorkspace({
     },
     onSuccess: async (response, savedPayload) => {
       const savedTemplate = (response as TemplateSaveResult | undefined)?.template;
-      toast.success(savedPayload.id ? "Obrigacao mestre salva." : "Obrigacao mestre salva. Agora anexe os PDFs modelo.");
+      const savedTemplateId = savedTemplate?.id || savedPayload.id;
+      const pendingEntries = Object.entries(pendingReferenceFiles).filter(([, files]) => files.length > 0);
+      toast.success(
+        savedPayload.id
+          ? "Obrigacao mestre salva."
+          : pendingEntries.length > 0
+            ? "Obrigacao mestre salva. Anexando PDFs modelo..."
+            : "Obrigacao mestre salva. Agora anexe os PDFs modelo.",
+      );
       if (savedTemplate) {
         setTemplateForm({
           ...makeTemplateForm(savedTemplate),
           linked_client_ids: savedPayload.linked_client_ids,
         });
       }
+      if (savedTemplateId && pendingEntries.length > 0) {
+        const uploadedReferences: Array<{ documentTypeKey: string; reference: GrowExpectedDocumentReferenceFile }> = [];
+        for (const [documentTypeKey, files] of pendingEntries) {
+          for (const file of files) {
+            const result = await uploadTemplateReferenceFile({ templateId: savedTemplateId, documentTypeKey, file });
+            uploadedReferences.push({ documentTypeKey, reference: result.reference_file });
+          }
+        }
+        setPendingReferenceFiles({});
+        setTemplateForm((prev) => ({
+          ...prev,
+          expected_documents: prev.expected_documents.map((document) => {
+            const references = uploadedReferences
+              .filter((item) => item.documentTypeKey === document.document_type_key)
+              .map((item) => item.reference);
+            if (references.length === 0) return document;
+            return {
+              ...document,
+              reference_files: [...references, ...(document.reference_files || [])],
+              reference_files_count: (document.reference_files_count || 0) + references.length,
+              has_active_reference: true,
+            };
+          }),
+        }));
+        toast.success(`${uploadedReferences.length} PDF(s) modelo anexado(s).`);
+      }
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "template-clients"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigação."),
   });
@@ -971,54 +1071,7 @@ export function GrowObligationsWorkspace({
   });
 
   const uploadReferenceMutation = useMutation({
-    mutationFn: async ({
-      templateId,
-      documentTypeKey,
-      file,
-    }: {
-      templateId: string;
-      documentTypeKey: string;
-      file: File;
-    }) => {
-      if (!templateId) throw new Error("Salve o template antes de anexar documentos modelo.");
-      if (!documentTypeKey) throw new Error("Defina o documento esperado antes de anexar o modelo.");
-      const validationError = validateSecureDocument(file);
-      if (validationError) throw new Error(validationError);
-      const analysis = await analyzePdfDocument(file);
-      const path = buildSecureStoragePath(["grow-obligations", "references", templateId, documentTypeKey], file.name);
-      const { error: uploadError } = await supabase.storage.from("obligation-files").upload(path, file, {
-        contentType: file.type || undefined,
-        upsert: false,
-      });
-      if (uploadError) throw uploadError;
-      try {
-        return await invokeGrowObligations<{ ok: true; reference_file: GrowExpectedDocumentReferenceFile }>({
-          action: "upload_reference_document",
-          template_id: templateId,
-          document_type_key: documentTypeKey,
-          file_name: file.name,
-          storage_bucket: "obligation-files",
-          storage_path: path,
-          content_type: file.type || "application/pdf",
-          file_size: file.size,
-          analysis,
-        });
-      } catch (error) {
-        console.warn("grow-obligations-module upload_reference_document failed, using RLS fallback", error);
-        try {
-          return await registerReferenceDocumentDirectly({
-            templateId,
-            documentTypeKey,
-            file,
-            storagePath: path,
-            analysis,
-          });
-        } catch (fallbackError) {
-          await supabase.storage.from("obligation-files").remove([path]);
-          throw fallbackError;
-        }
-      }
-    },
+    mutationFn: uploadTemplateReferenceFile,
     onSuccess: async (response, variables) => {
       toast.success("Documento modelo anexado.");
       setTemplateForm((prev) => ({
@@ -1252,8 +1305,13 @@ export function GrowObligationsWorkspace({
   );
 
   const activeTemplateClients = useMemo(
-    () => (overview?.clients || []).filter((client) => isActiveClientStatus(client.status)),
-    [overview?.clients],
+    () => {
+      const clients = templateClientsQuery.data?.clients?.length
+        ? templateClientsQuery.data.clients
+        : overview?.clients || [];
+      return clients.filter((client) => isActiveClientStatus(client.status));
+    },
+    [overview?.clients, templateClientsQuery.data?.clients],
   );
 
   const filteredTemplateClients = useMemo(() => {
@@ -1420,6 +1478,7 @@ export function GrowObligationsWorkspace({
                   onClick={() => {
                     setTemplateForm(makeTemplateForm());
                     setTemplateClientSearch("");
+                    setPendingReferenceFiles({});
                     setTemplateDialogOpen(true);
                   }}
                 ><Plus className="mr-2 h-4 w-4" />Nova obrigação</Button>
@@ -1453,6 +1512,7 @@ export function GrowObligationsWorkspace({
                           linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
                         });
                         setTemplateClientSearch("");
+                        setPendingReferenceFiles({});
                         setTemplateDialogOpen(true);
                       }}
                     >Editar</Button>
@@ -2299,19 +2359,76 @@ export function GrowObligationsWorkspace({
                     <Input
                       type="file"
                       accept="application/pdf"
-                      disabled={!templateForm.id || !document.document_type_key || referenceUploadKey === `${index}`}
+                      disabled={referenceUploadKey === `${index}`}
                       onChange={(event) => {
                         const file = event.target.files?.[0];
-                        if (!file || !templateForm.id || !document.document_type_key) return;
+                        if (!file) return;
+                        const validationError = validateSecureDocument(file);
+                        if (validationError) {
+                          toast.error(validationError);
+                          event.target.value = "";
+                          return;
+                        }
+                        const inferredLabel = document.label.trim() || fileNameWithoutExtension(file.name);
+                        const documentTypeKey = document.document_type_key || slugifyDocumentKey(inferredLabel);
+                        if (!document.document_type_key || !document.label.trim()) {
+                          setTemplateForm((prev) => ({
+                            ...prev,
+                            expected_documents: prev.expected_documents.map((current, currentIndex) =>
+                              currentIndex === index
+                                ? {
+                                    ...current,
+                                    label: current.label.trim() || inferredLabel,
+                                    document_type_key: current.document_type_key || documentTypeKey,
+                                  }
+                                : current,
+                            ),
+                          }));
+                        }
+                        if (!templateForm.id || !document.document_type_key) {
+                          setPendingReferenceFiles((prev) => ({
+                            ...prev,
+                            [documentTypeKey]: [file],
+                          }));
+                          toast.success("PDF modelo selecionado. Ele sera anexado ao salvar a obrigacao.");
+                          event.target.value = "";
+                          return;
+                        }
                         setReferenceUploadKey(`${index}`);
                         uploadReferenceMutation.mutate({
                           templateId: templateForm.id,
-                          documentTypeKey: document.document_type_key,
+                          documentTypeKey,
                           file,
                         });
                       }}
                     />
                   </div>
+                  {(pendingReferenceFiles[document.document_type_key] || []).length > 0 ? (
+                    <div className="space-y-2">
+                      {(pendingReferenceFiles[document.document_type_key] || []).map((file) => (
+                        <div key={`${document.document_type_key}-${file.name}`} className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 p-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">Pendente para anexar ao salvar a obrigacao.</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-xl text-destructive"
+                            onClick={() =>
+                              setPendingReferenceFiles((prev) => {
+                                const next = { ...prev };
+                                delete next[document.document_type_key];
+                                return next;
+                              })
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {(document.reference_files || []).length > 0 ? (
                     <div className="space-y-2">
                       {(document.reference_files || []).map((reference) => (
@@ -2324,9 +2441,13 @@ export function GrowObligationsWorkspace({
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">{templateForm.id ? "Anexe pelo menos um PDF modelo para habilitar o matching automatico." : "Salve o template para anexar PDFs modelo."}</p>
-                  )}
+                  ) : (pendingReferenceFiles[document.document_type_key] || []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {templateForm.id
+                        ? "Anexe pelo menos um PDF modelo para habilitar o matching automatico."
+                        : "Escolha o PDF modelo agora; ele sera anexado automaticamente ao salvar a obrigacao."}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -2367,6 +2488,7 @@ export function GrowObligationsWorkspace({
               onClick={() => {
                 setTemplateDialogOpen(false);
                 setTemplateClientSearch("");
+                setPendingReferenceFiles({});
               }}
             >Cancelar</Button>
             {templateValidationError && <p className="mr-auto text-sm text-orange-600">{templateValidationError}</p>}
