@@ -105,6 +105,7 @@ type DocumentAnalysisPayload = {
 
 type TemplateRow = {
   id: string;
+  organization_id?: string;
   code: string;
   name: string;
   sector: string;
@@ -142,6 +143,7 @@ type ClientDeliveryContext = {
 
 type ProfileRow = {
   id: string;
+  organization_id?: string;
   client_id: string;
   template_id: string;
   assigned_to: string | null;
@@ -437,8 +439,10 @@ function normalizeCnpj(value: string | null | undefined) {
   return digits.length === 14 ? digits : null;
 }
 
-function normalizeToken(value: string) {
-  return value
+function normalizeToken(value: unknown) {
+  const normalized = asTrimmedString(value);
+  if (!normalized) return "";
+  return normalized
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -720,6 +724,7 @@ async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
       String((row as JsonRecord).id),
       {
         id: String((row as JsonRecord).id),
+        organization_id: asTrimmedString((row as JsonRecord).organization_id),
         name: String((row as JsonRecord).name || ""),
         cnpj: normalizeCnpj(asTrimmedString((row as JsonRecord).cnpj)),
         regime: asTrimmedString((row as JsonRecord).regime),
@@ -736,6 +741,41 @@ async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
       },
     ]),
   );
+}
+
+function filterByOrganization<T extends JsonRecord>(rows: T[], organizationId: string) {
+  return rows.filter((row) => !row.organization_id || String(row.organization_id) === organizationId);
+}
+
+function buildEmptyOverview(warnings: string[] = []) {
+  return {
+    ok: true,
+    summary: {
+      templates_total: 0,
+      templates_active: 0,
+      active_profiles: 0,
+      pending_instances: 0,
+      overdue_instances: 0,
+      waiting_documents: 0,
+      done_instances: 0,
+      inbox_pending: 0,
+      inbox_processing: 0,
+      inbox_failed: 0,
+      inbox_applied: 0,
+      robot_received_today: 0,
+      robot_completed_today: 0,
+      robot_review_required: 0,
+      robot_failed_total: 0,
+    },
+    clients: [],
+    templates: [],
+    profiles: [],
+    instances: [],
+    documents: [],
+    ingestion_jobs: [],
+    delivery_attempts: [],
+    warnings,
+  };
 }
 
 async function loadTemplatesMap(supabaseAdmin: SupabaseAdmin) {
@@ -1194,11 +1234,48 @@ async function resolveDocumentReferenceMatch(
     .filter((candidate) => (!templateId || candidate.template.id === templateId) && (!documentTypeKey || candidate.document.document_type_key === documentTypeKey));
 
   if (candidates.length === 0) {
+    const fallbackMatch = await resolveDocumentMatch(supabaseAdmin, {
+      clientId: effectiveClientId,
+      instanceId,
+      templateId,
+      documentTypeKey,
+      suggestedCompetenceLabel: effectiveCompetence,
+      fileName,
+    });
+    if (fallbackMatch.resolvedInstanceId || fallbackMatch.candidateInstanceIds.length > 0 || fallbackMatch.documentDefinition) {
+      return {
+        ...emptyResult,
+        ...fallbackMatch,
+        score: Math.max(fallbackMatch.score, fallbackMatch.reviewRequired ? 0.65 : 0.85),
+        reasons: [
+          detectedClientByCnpj
+            ? `Cliente identificado por CNPJ: ${detectedClientByCnpj.name}.`
+            : "Cliente selecionado manualmente.",
+          ...fallbackMatch.reasons,
+        ],
+        detectedClientId: effectiveClientId,
+        detectedCnpj: analysis.detected_cnpj,
+        competenceDetected: effectiveCompetence,
+        textExtractionStatus: analysis.text_extraction_status,
+        ocrStatus: analysis.ocr_status,
+        extractedTextPreview: analysis.extracted_text_preview,
+        fingerprintPayload: analysis.fingerprint_payload,
+        autoLinkBlockReason: fallbackMatch.reviewRequired
+          ? "Roteamento por CNPJ/competencia encontrado, mas exige revisao manual por falta de documento modelo ativo."
+          : null,
+      };
+    }
+
     return {
       ...emptyResult,
       detectedClientId: effectiveClientId,
-      reasons: ["Cliente identificado, mas nenhuma obrigacao ativa com documento modelo correspondente foi encontrada."],
-      autoLinkBlockReason: "Nao existe documento modelo ativo para as obrigacoes vinculadas.",
+      reasons: [
+        detectedClientByCnpj
+          ? `Cliente identificado por CNPJ: ${detectedClientByCnpj.name}.`
+          : "Cliente selecionado manualmente.",
+        "Nenhuma obrigacao ativa elegivel foi encontrada para este arquivo e competencia.",
+      ],
+      autoLinkBlockReason: "Cadastre/vincule a obrigacao ao cliente ou selecione a instancia manualmente.",
     };
   }
 
@@ -3234,11 +3311,26 @@ async function markOverdueInstances(supabaseAdmin: SupabaseAdmin, actorId: strin
   return rows.length;
 }
 
-async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string, filters: JsonRecord = {}) {
-  const templatesMap = await loadTemplatesMap(supabaseAdmin);
-  const profilesMap = await loadProfilesMap(supabaseAdmin);
-  const clientsMap = await loadClientsMap(supabaseAdmin);
+async function buildOverview(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  filters: JsonRecord = {},
+) {
+  const templatesMap = new Map(
+    filterByOrganization(Array.from((await loadTemplatesMap(supabaseAdmin)).values()) as unknown as JsonRecord[], organizationId)
+      .map((template) => [String(template.id), template as unknown as TemplateRow]),
+  );
+  const profilesMap = new Map(
+    filterByOrganization(Array.from((await loadProfilesMap(supabaseAdmin)).values()) as unknown as JsonRecord[], organizationId)
+      .map((profile) => [String(profile.id), profile as unknown as ProfileRow]),
+  );
+  const clientsMap = new Map(
+    filterByOrganization(Array.from((await loadClientsMap(supabaseAdmin)).values()) as unknown as JsonRecord[], organizationId)
+      .map((client) => [String(client.id), client]),
+  );
   const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
+  const overviewWarnings: string[] = [];
 
   const windowStart = new Date();
   windowStart.setUTCMonth(windowStart.getUTCMonth() - 1);
@@ -3247,19 +3339,33 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string, filt
   windowEnd.setUTCMonth(windowEnd.getUTCMonth() + 2);
   windowEnd.setUTCDate(1);
 
-  await ensureInstancesForProfiles(
-    supabaseAdmin,
-    Array.from(profilesMap.values()),
-    templatesMap,
-    actorId,
-    windowStart,
-    windowEnd,
-  );
-  await markOverdueInstances(supabaseAdmin, actorId);
+  try {
+    await ensureInstancesForProfiles(
+      supabaseAdmin,
+      Array.from(profilesMap.values()),
+      templatesMap,
+      actorId,
+      windowStart,
+      windowEnd,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao sincronizar competencias.";
+    overviewWarnings.push(`Sincronizacao de competencias nao concluida: ${message}`);
+    console.error("grow-obligations overview ensureInstancesForProfiles failed", { message });
+  }
+
+  try {
+    await markOverdueInstances(supabaseAdmin, actorId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao atualizar atrasos.";
+    overviewWarnings.push(`Atualizacao de atrasos nao concluida: ${message}`);
+    console.error("grow-obligations overview markOverdueInstances failed", { message });
+  }
 
   let documentsQuery = supabaseAdmin
     .from("document_inbox_items")
     .select("*")
+    .eq("organization_id", organizationId)
     .order("created_at", { ascending: false })
     .limit(120);
   const documentStatus = asTrimmedString(filters.document_status);
@@ -3282,12 +3388,14 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string, filt
     supabaseAdmin
       .from("obligation_instances")
       .select("*")
+      .eq("organization_id", organizationId)
       .order("technical_due_date", { ascending: true })
       .limit(240),
     documentsQuery,
     supabaseAdmin
       .from("obligation_delivery_attempts")
       .select("*")
+      .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
       .limit(200),
     loadIngestionJobs(supabaseAdmin),
@@ -3382,7 +3490,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string, filt
     };
   });
 
-  const jobs = ingestionJobs.map((job) => ({
+  const jobs = ingestionJobs.filter((job) => !job.organization_id || job.organization_id === organizationId).map((job) => ({
     ...job,
     source_kind: normalizeSourceKind(job.source_kind),
     metadata: asJsonRecord(job.metadata),
@@ -3420,6 +3528,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string, filt
     documents,
     ingestion_jobs: jobs,
     delivery_attempts: deliveryAttempts,
+    warnings: overviewWarnings,
   };
 }
 
@@ -4169,17 +4278,48 @@ async function handlePreviewDocumentMatch(
     return jsonResponse({ error: "Nome do arquivo Ã© obrigatÃ³rio para o preview." }, 400);
   }
 
-  const match = await resolveDocumentReferenceMatch(supabaseAdmin, {
-    clientId: asTrimmedString(payload.client_id),
-    instanceId: asTrimmedString(payload.instance_id),
-    templateId: asTrimmedString(payload.template_id),
-    documentTypeKey: asTrimmedString(payload.document_type_key),
-    suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
-    fileName,
-    analysis: parseDocumentAnalysisPayload(payload.analysis),
-  });
+  const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  try {
+    const match = await resolveDocumentReferenceMatch(supabaseAdmin, {
+      clientId: asTrimmedString(payload.client_id),
+      instanceId: asTrimmedString(payload.instance_id),
+      templateId: asTrimmedString(payload.template_id),
+      documentTypeKey: asTrimmedString(payload.document_type_key),
+      suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
+      fileName,
+      analysis,
+    });
 
-  return jsonResponse({ ok: true, match });
+    return jsonResponse({ ok: true, match });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao calcular preview.";
+    console.error("grow-obligations preview_document_match failed", { message, fileName });
+    return jsonResponse({
+      ok: true,
+      match: {
+        resolvedInstanceId: null,
+        suggestedTemplateId: asTrimmedString(payload.template_id),
+        documentTypeKey: asTrimmedString(payload.document_type_key),
+        strategy: "manual_review",
+        score: 0.1,
+        reasons: ["Nao foi possivel calcular o roteamento automatico. Selecione cliente, obrigacao e instancia manualmente."],
+        reviewRequired: true,
+        documentDefinition: null,
+        candidateInstanceIds: [],
+        detectedClientId: asTrimmedString(payload.client_id),
+        detectedCnpj: analysis.detected_cnpj,
+        competenceDetected: analysis.competence_detected || asTrimmedString(payload.suggested_competence_label),
+        referenceFileId: null,
+        referenceMatchScore: 0,
+        referenceMatchReasons: [],
+        textExtractionStatus: analysis.text_extraction_status,
+        ocrStatus: analysis.ocr_status,
+        extractedTextPreview: analysis.extracted_text_preview,
+        fingerprintPayload: analysis.fingerprint_payload,
+        autoLinkBlockReason: "Roteamento automatico indisponivel para este arquivo. Use a selecao manual.",
+      },
+    });
+  }
 }
 
 async function handleUploadReferenceDocument(
@@ -4337,8 +4477,13 @@ async function handleProcessDocumentQueue(
   });
 }
 
-async function handleClientSnapshot(supabaseAdmin: SupabaseAdmin, actorId: string, clientId: string) {
-  const overview = await buildOverview(supabaseAdmin, actorId);
+async function handleClientSnapshot(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  clientId: string,
+) {
+  const overview = await buildOverview(supabaseAdmin, actorId, organizationId);
   return jsonResponse({
     ok: true,
     client_id: clientId,
@@ -4663,7 +4808,6 @@ Deno.serve(async (req) => {
       action === "register_robot_document_upload" ||
       action === "process_document_queue" ||
       action === "resolve_document" ||
-      action === "preview_document_match" ||
       action === "preview_reference_match" ||
       action === "upload_reference_document" ||
       action === "reprocess_reference_document"
@@ -4672,7 +4816,13 @@ Deno.serve(async (req) => {
     }
 
     if (action === "overview") {
-      return jsonResponse(await buildOverview(supabaseAdmin, user.id, payload));
+      try {
+        return jsonResponse(await buildOverview(supabaseAdmin, user.id, organizationId, payload));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Falha ao carregar o modulo de obrigacoes.";
+        console.error("grow-obligations overview failed", { message, organizationId });
+        return jsonResponse(buildEmptyOverview([`Falha ao carregar dados de obrigacoes: ${message}`]));
+      }
     }
 
     if (action === "upsert_template") {
@@ -4758,12 +4908,13 @@ Deno.serve(async (req) => {
     if (action === "list_client_snapshot") {
       const clientId = asTrimmedString(payload.client_id);
       if (!clientId) return jsonResponse({ error: "Client id is required" }, 400);
-      return await handleClientSnapshot(supabaseAdmin, user.id, clientId);
+      return await handleClientSnapshot(supabaseAdmin, user.id, organizationId, clientId);
     }
 
     return jsonResponse({ error: "Unknown action" }, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
+    console.error("grow-obligations-module request failed", { message });
     return jsonResponse({ error: message }, 500);
   }
 });
