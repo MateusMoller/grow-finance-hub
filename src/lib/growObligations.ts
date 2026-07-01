@@ -128,12 +128,25 @@ export type GrowObligationInstance = {
   competence_key: string;
   technical_due_date: string;
   legal_due_date: string | null;
-  status: "pendente" | "em_andamento" | "aguardando_documento" | "em_revisao" | "concluida" | "atrasada" | "cancelada";
+  status:
+    | "pendente"
+    | "em_andamento"
+    | "aguardando_documento"
+    | "em_revisao"
+    | "pronto_para_envio"
+    | "enviando"
+    | "falha_envio"
+    | "concluida"
+    | "atrasada"
+    | "cancelada";
   priority: "baixa" | "media" | "alta" | "urgente";
   current_assignee: string | null;
   protocol: string | null;
   protocol_issued_at: string | null;
   processed_automatically: boolean;
+  ready_for_delivery_at?: string | null;
+  delivery_review_required?: boolean;
+  delivery_review_reason?: string | null;
   completion_notes: string | null;
   document_required: boolean;
   completed_at: string | null;
@@ -142,6 +155,37 @@ export type GrowObligationInstance = {
   template: GrowObligationTemplate | null;
   client: GrowClientSummary | null;
   profile: GrowObligationProfile | null;
+  delivery_attempts?: GrowObligationDeliveryAttempt[];
+  latest_delivery_attempt?: GrowObligationDeliveryAttempt | null;
+};
+
+export type GrowObligationDeliveryAttemptStatus = "queued" | "sending" | "sent" | "failed" | "cancelled";
+
+export type GrowObligationDeliveryAttempt = {
+  id: string;
+  organization_id: string;
+  client_id: string | null;
+  instance_id: string;
+  inbox_item_id: string | null;
+  sender_user_id: string;
+  sender_email: string;
+  verified_from_email: string;
+  display_sender_context: string | null;
+  reply_to: string | null;
+  recipient_email: string;
+  subject: string;
+  message_body: string;
+  attachment_file_ids: string[];
+  status: GrowObligationDeliveryAttemptStatus;
+  provider_message_id: string | null;
+  provider_status: number | null;
+  failure_reason: string | null;
+  human_confirmed_at: string | null;
+  sent_at: string | null;
+  failed_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type GrowDocumentInboxItem = {
@@ -269,6 +313,7 @@ export type GrowObligationsOverviewPayload = {
   instances: GrowObligationInstance[];
   documents: GrowDocumentInboxItem[];
   ingestion_jobs: GrowDocumentIngestionJob[];
+  delivery_attempts?: GrowObligationDeliveryAttempt[];
   regime_loads?: unknown[];
   regime_load_items?: unknown[];
   obligation_load_sync_runs?: unknown[];
@@ -330,6 +375,9 @@ export async function invokeGrowObligations<T>(body: Record<string, unknown>) {
 }
 
 export const growObligationStatusLabel: Record<GrowObligationInstance["status"], string> = {
+  pronto_para_envio: "Pronta para envio",
+  enviando: "Enviando",
+  falha_envio: "Falha no envio",
   pendente: "Pendente",
   em_andamento: "Em andamento",
   aguardando_documento: "Aguardando documento",
@@ -340,6 +388,9 @@ export const growObligationStatusLabel: Record<GrowObligationInstance["status"],
 };
 
 export const growObligationStatusClass: Record<GrowObligationInstance["status"], string> = {
+  pronto_para_envio: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300",
+  enviando: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
+  falha_envio: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300",
   pendente: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
   em_andamento: "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
   aguardando_documento: "bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300",

@@ -159,3 +159,36 @@ export interface ObligationDuplicateMatch {
   match_type: DuplicateMatchType;
   severity: DuplicateSeverity;
 }
+
+export type ObligationDeliveryAttemptStatus = "queued" | "sending" | "sent" | "failed" | "cancelled";
+
+export interface ObligationDeliveryAttachmentPreview {
+  id: string;
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+  file_size: number | null;
+}
+
+export interface ObligationDeliveryPreparation {
+  instance_id: string;
+  client_id: string;
+  client_name: string;
+  inbox_item_id: string | null;
+  recipient_email: string;
+  verified_from_email: string;
+  reply_to: string;
+  display_sender_context: string;
+  subject: string;
+  message_body: string;
+  attachments: ObligationDeliveryAttachmentPreview[];
+  warnings: string[];
+}
+
+export interface ObligationDeliveryAttemptResponse {
+  id: string;
+  status: Extract<ObligationDeliveryAttemptStatus, "sent" | "failed" | "cancelled">;
+  provider_message_id: string | null;
+  sent_at: string | null;
+}

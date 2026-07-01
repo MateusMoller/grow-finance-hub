@@ -276,6 +276,35 @@ type InboxRow = {
   updated_at: string;
 };
 
+type DeliveryAttachment = {
+  id: string;
+  filename: string;
+  content: string;
+  content_type?: string | null;
+  storage_bucket: string;
+  storage_path: string;
+};
+
+type DeliveryPreparation = {
+  organizationId: string;
+  instance: InstanceRow;
+  template: TemplateRow;
+  client: ClientDeliveryContext;
+  inboxItem: InboxRow | null;
+  files: Array<JsonRecord>;
+  sender: {
+    verifiedFrom: string;
+    replyTo: string;
+    actorEmail: string;
+    displaySenderContext: string;
+  };
+  recipientEmail: string;
+  subject: string;
+  textBody: string;
+  htmlBody: string;
+  warnings: string[];
+};
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1379,6 +1408,21 @@ async function upsertIngestionJob(
     metadata?: JsonRecord;
   },
 ) {
+  const expectedDocuments = asExpectedDocuments(payload.expected_documents);
+  const activeDocumentKeys = expectedDocuments
+    .filter((document) => document.active)
+    .map((document) => document.document_type_key);
+  if (new Set(activeDocumentKeys).size !== activeDocumentKeys.length) {
+    return jsonResponse({ error: "Documentos esperados ativos nao podem ter chaves duplicadas." }, 400);
+  }
+
+  const emailEnabled = asBoolean(payload.completion_email_enabled, false);
+  const emailSubject = asTrimmedString(payload.completion_email_subject);
+  const emailBody = asTrimmedString(payload.completion_email_body);
+  if (emailEnabled && (!emailSubject || !emailBody)) {
+    return jsonResponse({ error: "Envio por e-mail exige assunto e mensagem padrao." }, 400);
+  }
+
   const row = {
     organization_id: payload.organizationId,
     source_kind: payload.sourceKind,
@@ -1479,6 +1523,557 @@ async function resolveActorEmailSender(supabaseAdmin: SupabaseAdmin, actorId: st
   };
 }
 
+async function resolveDeliverySender(supabaseAdmin: SupabaseAdmin, actorId: string) {
+  const verifiedFrom =
+    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
+    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
+    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(actorId);
+  if (error || !data?.user) {
+    throw new Error("Nao foi possivel carregar o usuario responsavel pelo envio.");
+  }
+
+  const actorEmail = normalizeEmail(data.user.email);
+  if (!actorEmail) {
+    throw new Error("O usuario responsavel pelo envio precisa ter um e-mail valido cadastrado.");
+  }
+
+  const actorName =
+    asTrimmedString(data.user.user_metadata?.display_name) ||
+    asTrimmedString(data.user.user_metadata?.full_name) ||
+    asTrimmedString(data.user.user_metadata?.name) ||
+    actorEmail.split("@")[0] ||
+    "Grow";
+
+  return {
+    verifiedFrom,
+    replyTo: actorEmail,
+    actorEmail,
+    displaySenderContext: formatEmailAddress(actorEmail, actorName) || actorEmail,
+  };
+}
+
+function sanitizeProviderMessage(value: unknown) {
+  const message = asTrimmedString(value);
+  if (!message) return "Falha no provedor de e-mail.";
+  return message.slice(0, 700);
+}
+
+function buildDeliveryIdempotencyKey(instanceId: string, recipientEmail: string, attachmentIds: string[]) {
+  const attachments = attachmentIds.slice().sort().join(",");
+  return `obligation-delivery:${instanceId}:${recipientEmail}:${attachments}`;
+}
+
+async function downloadDeliveryAttachments(
+  supabaseAdmin: SupabaseAdmin,
+  files: Array<JsonRecord>,
+): Promise<DeliveryAttachment[]> {
+  const attachments: DeliveryAttachment[] = [];
+
+  for (const file of files) {
+    const id = asTrimmedString(file.id);
+    const storageBucket = asTrimmedString(file.storage_bucket) || "obligation-files";
+    const storagePath = asTrimmedString(file.storage_path);
+    const filename = asTrimmedString(file.file_name) || storagePath?.split("/").pop() || "guia.pdf";
+    if (!id || !storagePath) continue;
+
+    const { data, error } = await supabaseAdmin.storage.from(storageBucket).download(storagePath);
+    if (error || !data) {
+      throw new Error(`Nao foi possivel carregar o anexo ${filename}.`);
+    }
+
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+
+    attachments.push({
+      id,
+      filename,
+      content: btoa(binary),
+      content_type: asTrimmedString(file.content_type),
+      storage_bucket: storageBucket,
+      storage_path: storagePath,
+    });
+  }
+
+  return attachments;
+}
+
+async function prepareObligationDelivery(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+): Promise<DeliveryPreparation> {
+  const instanceId = asTrimmedString(payload.instance_id);
+  if (!instanceId) throw new Error("Instancia da obrigacao e obrigatoria.");
+
+  const { data: instanceData, error: instanceError } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("id", instanceId)
+    .single();
+  if (instanceError || !instanceData) throw new Error("Instancia da obrigacao nao encontrada.");
+
+  const instance = instanceData as InstanceRow;
+  const [{ data: templateData, error: templateError }, { data: clientData, error: clientError }] = await Promise.all([
+    supabaseAdmin
+      .from("obligation_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", instance.template_id)
+      .single(),
+    supabaseAdmin
+      .from("clients")
+      .select("id, name, cnpj, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
+      .eq("organization_id", organizationId)
+      .eq("id", instance.client_id)
+      .single(),
+  ]);
+  if (templateError || !templateData) throw new Error("Template da obrigacao nao encontrado.");
+  if (clientError || !clientData) throw new Error("Cliente da obrigacao nao encontrado.");
+
+  const template = templateData as TemplateRow;
+  const clientRecord = clientData as JsonRecord;
+  const client: ClientDeliveryContext = {
+    id: String(clientRecord.id),
+    name: String(clientRecord.name || "Cliente"),
+    cnpj: normalizeCnpj(asTrimmedString(clientRecord.cnpj)),
+    sector: asTrimmedString(clientRecord.sector) || "Geral",
+    status: asTrimmedString(clientRecord.status) || "Ativo",
+    email: normalizeEmail(clientRecord.email),
+    phone: asTrimmedString(clientRecord.phone),
+    contact: asTrimmedString(clientRecord.contact),
+    obligation_completion_whatsapp_enabled: asBoolean(clientRecord.obligation_completion_whatsapp_enabled, false),
+  };
+
+  if (!template.completion_email_enabled) {
+    throw new Error("Esta obrigacao nao esta configurada para envio por e-mail.");
+  }
+
+  const requiredStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
+  if (requiredStatus !== "concluida") {
+    throw new Error("A obrigacao ainda nao possui todos os documentos obrigatorios anexados.");
+  }
+
+  const { data: filesData, error: filesError } = await supabaseAdmin
+    .from("obligation_instance_files")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("instance_id", instance.id)
+    .in("triage_status", ["accepted", "reviewed"])
+    .order("created_at", { ascending: true });
+  if (filesError) throw filesError;
+  const files = ((filesData || []) as Array<JsonRecord>).filter((file) => asTrimmedString(file.storage_path));
+  if (files.length === 0) {
+    throw new Error("Nao ha guia anexada para enviar ao cliente.");
+  }
+
+  const inboxItemId =
+    asTrimmedString(payload.inbox_item_id) ||
+    asTrimmedString(files[files.length - 1]?.inbox_item_id) ||
+    instance.completed_by_inbox_item_id;
+  let inboxItem: InboxRow | null = null;
+  if (inboxItemId) {
+    const { data: inboxData, error: inboxError } = await supabaseAdmin
+      .from("document_inbox_items")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", inboxItemId)
+      .maybeSingle();
+    if (inboxError) throw inboxError;
+    inboxItem = (inboxData || null) as InboxRow | null;
+  }
+
+  const recipientEmail = normalizeEmail(payload.recipient_email) || normalizeEmail(client.email);
+  if (!recipientEmail) {
+    throw new Error("O cliente nao possui e-mail valido cadastrado. Informe um destinatario revisado.");
+  }
+
+  const sender = await resolveDeliverySender(supabaseAdmin, actorId);
+  const renderPayload = {
+    clientName: client.name,
+    obligationName: template.name,
+    competence: instance.competence_label,
+    sector: template.sector,
+    technicalDueDate: instance.technical_due_date,
+  };
+  const subject = renderCompletionEmailTemplate(
+    template.completion_email_subject || "{{obrigacao_nome}} - {{competencia}}",
+    renderPayload,
+  );
+  const textBody = renderCompletionEmailTemplate(
+    template.completion_email_body ||
+      "Ola, {{cliente_nome}}.\n\nSegue anexa a guia da obrigacao {{obrigacao_nome}} referente a competencia {{competencia}}.\n\nSetor responsavel: {{setor}}.",
+    renderPayload,
+  );
+
+  const warnings = [];
+  if (recipientEmail !== normalizeEmail(client.email)) {
+    warnings.push("Destinatario alterado manualmente em relacao ao e-mail principal do cliente.");
+  }
+  if (instance.status === "concluida") {
+    warnings.push("Esta obrigacao ja esta concluida; confirme duplicidade antes de reenviar.");
+  }
+
+  return {
+    organizationId,
+    instance,
+    template,
+    client,
+    inboxItem,
+    files,
+    sender,
+    recipientEmail,
+    subject,
+    textBody,
+    htmlBody: buildCompletionEmailBodyHtml(textBody),
+    warnings,
+  };
+}
+
+async function handlePrepareDelivery(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  try {
+    const prepared = await prepareObligationDelivery(supabaseAdmin, actorId, organizationId, payload);
+    return jsonResponse({
+      ok: true,
+      delivery: {
+        instance_id: prepared.instance.id,
+        client_id: prepared.client.id,
+        client_name: prepared.client.name,
+        inbox_item_id: prepared.inboxItem?.id || null,
+        recipient_email: prepared.recipientEmail,
+        verified_from_email: prepared.sender.verifiedFrom,
+        reply_to: prepared.sender.replyTo,
+        display_sender_context: prepared.sender.displaySenderContext,
+        subject: prepared.subject,
+        message_body: prepared.textBody,
+        attachments: prepared.files.map((file) => ({
+          id: file.id,
+          file_name: file.file_name,
+          storage_bucket: file.storage_bucket,
+          storage_path: file.storage_path,
+          content_type: file.content_type,
+          file_size: file.file_size,
+        })),
+        warnings: prepared.warnings,
+      },
+    });
+  } catch (error) {
+    return jsonResponse({ error: error instanceof Error ? error.message : "Falha ao preparar envio." }, 400);
+  }
+}
+
+async function handleSendDelivery(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const humanConfirmed = asBoolean(payload.human_confirmed, false);
+  if (!humanConfirmed) {
+    return jsonResponse({ error: "Confirme manualmente o destinatario, mensagem e anexos antes de enviar." }, 400);
+  }
+
+  const prepared = await prepareObligationDelivery(supabaseAdmin, actorId, organizationId, payload);
+  const duplicateConfirmed = asBoolean(payload.confirm_duplicate, false);
+  const attachmentIds = prepared.files
+    .map((file) => asTrimmedString(file.id))
+    .filter((value): value is string => Boolean(value));
+  const deliveryAttemptToken = new Date().toISOString();
+  const idempotencyKey =
+    asTrimmedString(payload.idempotency_key) ||
+    `${buildDeliveryIdempotencyKey(prepared.instance.id, prepared.recipientEmail, attachmentIds)}:${deliveryAttemptToken}`;
+
+  const { data: existingSent, error: existingError } = await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .select("id, sent_at, recipient_email")
+    .eq("organization_id", organizationId)
+    .eq("instance_id", prepared.instance.id)
+    .eq("status", "sent")
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existingSent && !duplicateConfirmed) {
+    return jsonResponse({
+      error: "Ja existe um envio bem-sucedido para esta obrigacao. Confirme o reenvio para continuar.",
+      duplicate_delivery: existingSent,
+    }, 409);
+  }
+
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) {
+    return jsonResponse({ error: "RESEND_API_KEY nao configurada." }, 500);
+  }
+
+  const now = new Date().toISOString();
+  const { data: attemptData, error: attemptError } = await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .insert({
+      organization_id: organizationId,
+      client_id: prepared.client.id,
+      instance_id: prepared.instance.id,
+      inbox_item_id: prepared.inboxItem?.id || null,
+      sender_user_id: actorId,
+      sender_email: prepared.sender.actorEmail,
+      verified_from_email: prepared.sender.verifiedFrom,
+      display_sender_context: prepared.sender.displaySenderContext,
+      reply_to: prepared.sender.replyTo,
+      recipient_email: prepared.recipientEmail,
+      subject: prepared.subject,
+      message_body: prepared.textBody,
+      attachment_file_ids: attachmentIds,
+      status: "sending",
+      idempotency_key: idempotencyKey,
+      human_confirmed_at: now,
+      metadata: {
+        duplicate_confirmed: duplicateConfirmed,
+        attachment_count: attachmentIds.length,
+      },
+    })
+    .select("*")
+    .single();
+  if (attemptError || !attemptData) {
+    return jsonResponse({ error: attemptError?.message || "Falha ao registrar tentativa de envio." }, 400);
+  }
+
+  await supabaseAdmin
+    .from("obligation_instances")
+    .update({ status: "enviando", last_status_at: now })
+    .eq("organization_id", organizationId)
+    .eq("id", prepared.instance.id);
+
+  let attachments: DeliveryAttachment[];
+  try {
+    attachments = await downloadDeliveryAttachments(supabaseAdmin, prepared.files);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao preparar anexos.";
+    await supabaseAdmin
+      .from("obligation_delivery_attempts")
+      .update({ status: "failed", failure_reason: message, failed_at: new Date().toISOString() })
+      .eq("id", String((attemptData as JsonRecord).id));
+    await supabaseAdmin
+      .from("obligation_instances")
+      .update({ status: "falha_envio", last_status_at: new Date().toISOString() })
+      .eq("organization_id", organizationId)
+      .eq("id", prepared.instance.id);
+    return jsonResponse({ error: message }, 400);
+  }
+
+  const sendResult = await sendEmailViaResend({
+    apiKey,
+    from: prepared.sender.verifiedFrom,
+    replyTo: prepared.sender.replyTo,
+    to: prepared.recipientEmail,
+    subject: prepared.subject,
+    html: prepared.htmlBody,
+    text: prepared.textBody,
+    idempotencyKey,
+    attachments: attachments.map((attachment) => ({
+      filename: attachment.filename,
+      content: attachment.content,
+      content_type: attachment.content_type || undefined,
+    })),
+  });
+
+  if (!sendResult.ok) {
+    const failureReason = sanitizeProviderMessage(sendResult.message);
+    await supabaseAdmin
+      .from("obligation_delivery_attempts")
+      .update({
+        status: "failed",
+        provider_status: sendResult.status,
+        failure_reason: failureReason,
+        failed_at: new Date().toISOString(),
+      })
+      .eq("id", String((attemptData as JsonRecord).id));
+    await supabaseAdmin
+      .from("obligation_instances")
+      .update({ status: "falha_envio", last_status_at: new Date().toISOString() })
+      .eq("organization_id", organizationId)
+      .eq("id", prepared.instance.id);
+    await createInstanceEvent(
+      supabaseAdmin,
+      prepared.instance.id,
+      actorId,
+      "delivery_failed",
+      prepared.instance.status,
+      "falha_envio",
+      "Falha no envio da guia por e-mail.",
+      {
+        attempt_id: String((attemptData as JsonRecord).id),
+        provider_status: sendResult.status,
+        failure_reason: failureReason,
+      },
+    );
+    return jsonResponse({ error: "Falha ao enviar e-mail ao cliente.", detail: failureReason }, 502);
+  }
+
+  const sentAt = new Date().toISOString();
+  await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .update({
+      status: "sent",
+      provider_message_id: sendResult.id,
+      provider_status: 202,
+      sent_at: sentAt,
+    })
+    .eq("id", String((attemptData as JsonRecord).id));
+
+  const { data: updatedInstanceData, error: instanceUpdateError } = await supabaseAdmin
+    .from("obligation_instances")
+    .update({
+      status: "concluida",
+      completed_at: sentAt,
+      completed_by_inbox_item_id: prepared.inboxItem?.id || prepared.instance.completed_by_inbox_item_id,
+      delivery_review_required: false,
+      delivery_review_reason: null,
+      last_status_at: sentAt,
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", prepared.instance.id)
+    .select("*")
+    .single();
+  if (instanceUpdateError || !updatedInstanceData) {
+    throw instanceUpdateError || new Error("Falha ao concluir instancia apos envio.");
+  }
+
+  await Promise.all([
+    prepared.inboxItem
+      ? markInboxProcessingState(supabaseAdmin, prepared.inboxItem.id, {
+        communication_status: "sent",
+        publication_status: "published",
+        execution_notes: "Guia enviada ao cliente por e-mail com confirmacao humana.",
+        processed_automatically: true,
+      })
+      : Promise.resolve(),
+    prepared.inboxItem?.ingestion_job_id
+      ? updateIngestionJob(supabaseAdmin, prepared.inboxItem.ingestion_job_id, {
+        communication_status: "sent",
+        publication_status: "published",
+        status: "completed",
+        completed_at: sentAt,
+      })
+      : Promise.resolve(),
+    supabaseAdmin
+      .from("obligation_instance_files")
+      .update({ publication_status: "published" })
+      .eq("organization_id", organizationId)
+      .eq("instance_id", prepared.instance.id),
+  ]);
+
+  await createInstanceEvent(
+    supabaseAdmin,
+    prepared.instance.id,
+    actorId,
+    "delivery_sent",
+    prepared.instance.status,
+    "concluida",
+    `Guia enviada por e-mail para ${prepared.recipientEmail}.`,
+    {
+      attempt_id: String((attemptData as JsonRecord).id),
+      recipient_email: prepared.recipientEmail,
+      sender_email: prepared.sender.actorEmail,
+      verified_from_email: prepared.sender.verifiedFrom,
+      reply_to: prepared.sender.replyTo,
+      resend_email_id: sendResult.id,
+    },
+  );
+
+  await syncInstanceArtifacts(supabaseAdmin, updatedInstanceData as InstanceRow, prepared.template, prepared.client.name);
+
+  return jsonResponse({
+    ok: true,
+    delivery_attempt: {
+      id: String((attemptData as JsonRecord).id),
+      status: "sent",
+      provider_message_id: sendResult.id,
+      sent_at: sentAt,
+    },
+    instance: updatedInstanceData,
+  });
+}
+
+async function handleCancelDelivery(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const instanceId = asTrimmedString(payload.instance_id);
+  const attemptId = asTrimmedString(payload.attempt_id);
+  const reason = asTrimmedString(payload.reason) || "Envio cancelado manualmente.";
+  if (!instanceId && !attemptId) {
+    return jsonResponse({ error: "Informe a instancia ou tentativa de envio para cancelar." }, 400);
+  }
+
+  let query = supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .neq("status", "sent")
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (attemptId) query = query.eq("id", attemptId);
+  if (instanceId) query = query.eq("instance_id", instanceId);
+
+  const { data: attempt, error: attemptError } = await query.maybeSingle();
+  if (attemptError) return jsonResponse({ error: attemptError.message }, 400);
+  if (!attempt) return jsonResponse({ error: "Nenhuma tentativa cancelavel encontrada." }, 404);
+
+  const attemptRecord = attempt as JsonRecord;
+  const targetInstanceId = String(attemptRecord.instance_id);
+  const now = new Date().toISOString();
+  const { error: cancelError } = await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .update({
+      status: "cancelled",
+      failure_reason: reason,
+      cancelled_at: now,
+      cancelled_by: actorId,
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", String(attemptRecord.id));
+  if (cancelError) return jsonResponse({ error: cancelError.message }, 400);
+
+  const { data: instanceData } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("id", targetInstanceId)
+    .maybeSingle();
+  const previousStatus = asTrimmedString((instanceData as JsonRecord | null)?.status);
+
+  if (instanceData && !["concluida", "cancelada"].includes(previousStatus || "")) {
+    await supabaseAdmin
+      .from("obligation_instances")
+      .update({ status: "pronto_para_envio", last_status_at: now })
+      .eq("organization_id", organizationId)
+      .eq("id", targetInstanceId);
+  }
+
+  await createInstanceEvent(
+    supabaseAdmin,
+    targetInstanceId,
+    actorId,
+    "delivery_cancelled",
+    previousStatus,
+    previousStatus && ["concluida", "cancelada"].includes(previousStatus) ? previousStatus : "pronto_para_envio",
+    reason,
+    { attempt_id: String(attemptRecord.id) },
+  );
+
+  return jsonResponse({ ok: true, delivery_attempt: { id: String(attemptRecord.id), status: "cancelled" } });
+}
+
 function buildCompletionEmailBodyHtml(body: string) {
   return `
     <div style="background:#f8fafc;padding:24px 12px;font-family:Arial,sans-serif;color:#0f172a;">
@@ -1498,6 +2093,7 @@ async function sendEmailViaResend(params: {
   html: string;
   text: string;
   idempotencyKey?: string;
+  attachments?: Array<{ filename: string; content: string; content_type?: string }>;
 }) {
   const headers = new Headers({
     Authorization: `Bearer ${params.apiKey}`,
@@ -1518,6 +2114,7 @@ async function sendEmailViaResend(params: {
       subject: params.subject,
       html: params.html,
       text: params.text,
+      attachments: params.attachments?.length ? params.attachments : undefined,
     }),
   });
 
@@ -2029,11 +2626,10 @@ async function applyDocumentOperationalFlow(
 
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
-  const emailSenderActorId = inboxItem.created_by || actorId;
   const [emailResult, whatsappResult] = justCompleted
     ? await Promise.all([
-      maybeSendCompletionEmail(supabaseAdmin, emailSenderActorId, template, updatedInstance, client, inboxItem),
-      maybeSendCompletionWhatsApp(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
+      Promise.resolve({ attempted: false as const, sent: false as const, reason: "manual_delivery_required" }),
+      Promise.resolve({ attempted: false as const, sent: false as const, reason: "manual_delivery_required" }),
     ])
     : [
       { attempted: false as const, sent: false as const, reason: "not_completed" },
@@ -2230,15 +2826,18 @@ async function applyDocumentOperationalFlowV2(
     },
   );
 
-  const nextStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
+  const documentStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
+  const deliveryRequired = documentStatus === "concluida" && template.completion_email_enabled;
+  const nextStatus = deliveryRequired ? "pronto_para_envio" : documentStatus;
   let updatedInstance = instance;
   const justCompleted = nextStatus === "concluida" && instance.status !== "concluida";
+  const justReadyForDelivery = nextStatus === "pronto_para_envio" && instance.status !== "pronto_para_envio";
   const protocolNumber = justCompleted
     ? (instance.protocol || buildProtocolNumber(instance, inboxItem.id))
     : (instance.protocol || inboxItem.protocol_number || null);
   const protocolIssuedAt = justCompleted ? now : instance.protocol_issued_at;
 
-  if (nextStatus !== instance.status || (justCompleted && !instance.protocol)) {
+  if (nextStatus !== instance.status || (justCompleted && !instance.protocol) || justReadyForDelivery) {
     const { data: updatedInstanceData, error: updateError } = await supabaseAdmin
       .from("obligation_instances")
       .update({
@@ -2248,6 +2847,7 @@ async function applyDocumentOperationalFlowV2(
         protocol_issued_at: nextStatus === "concluida" ? protocolIssuedAt : instance.protocol_issued_at,
         completed_by_inbox_item_id: nextStatus === "concluida" ? inboxItem.id : instance.completed_by_inbox_item_id,
         processed_automatically: nextStatus === "concluida" ? true : instance.processed_automatically,
+        ready_for_delivery_at: nextStatus === "pronto_para_envio" ? now : null,
         last_status_at: now,
       })
       .eq("id", instance.id)
@@ -2280,8 +2880,10 @@ async function applyDocumentOperationalFlowV2(
       "status_change",
       instance.status,
       nextStatus,
-      "Status ajustado automaticamente apos recebimento do documento.",
-      { inbox_item_id: inboxItem.id, protocol_number: protocolNumber },
+      deliveryRequired
+        ? "Documentos obrigatorios anexados. Aguardando confirmacao humana para envio ao cliente."
+        : "Status ajustado automaticamente apos recebimento do documento.",
+      { inbox_item_id: inboxItem.id, protocol_number: protocolNumber, delivery_required: deliveryRequired },
     );
   }
 
@@ -2304,37 +2906,12 @@ async function applyDocumentOperationalFlowV2(
 
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
-  const emailSenderActorId = inboxItem.created_by || actorId;
-  const [emailResult, whatsappResult] = justCompleted
-    ? await Promise.all([
-      maybeSendCompletionEmail(supabaseAdmin, emailSenderActorId, template, updatedInstance, client, inboxItem),
-      maybeSendCompletionWhatsApp(supabaseAdmin, actorId, template, updatedInstance, client, inboxItem),
-    ])
-    : [
-      { attempted: false as const, sent: false as const, reason: "not_completed" },
-      { attempted: false as const, sent: false as const, reason: "not_completed" },
-    ];
-
-  const failedAutomaticDeliveries = [
-    emailResult.attempted && !emailResult.sent ? "o e-mail automatico" : null,
-    whatsappResult.attempted && !whatsappResult.sent ? "o WhatsApp automatico" : null,
-  ].filter((value): value is string => Boolean(value));
-
-  const communicationStatus = !justCompleted
-    ? "not_applicable"
-    : failedAutomaticDeliveries.length === 0
-      ? (emailResult.attempted || whatsappResult.attempted ? "sent" : "not_applicable")
-      : (emailResult.sent || whatsappResult.sent ? "partial" : "failed");
-
+  const communicationStatus = deliveryRequired ? "pending" : "not_applicable";
   let executionNotes = nextStatus === "aguardando_documento"
     ? "Documento anexado. A obrigacao ainda aguarda outros documentos obrigatorios."
-    : emailResult.attempted && !emailResult.sent
-      ? "Documento anexado e obrigacao concluida automaticamente. O e-mail automatico nao pode ser enviado."
+    : deliveryRequired
+      ? "Documento anexado. Obrigacao pronta para revisao e envio manual ao cliente."
       : "Documento anexado e obrigacao concluida automaticamente.";
-
-  if (nextStatus !== "aguardando_documento" && failedAutomaticDeliveries.length > 0) {
-    executionNotes = `Documento anexado e obrigacao concluida automaticamente. ${failedAutomaticDeliveries.join(" e ")} nao pode ser enviado.`;
-  }
   if (protocolNumber && nextStatus === "concluida") {
     executionNotes = `${executionNotes} Protocolo ${protocolNumber}.`;
   }
@@ -2346,7 +2923,7 @@ async function applyDocumentOperationalFlowV2(
     classification_status: "classified",
     application_status: "applied",
     communication_status: communicationStatus,
-    publication_status: "published",
+    publication_status: deliveryRequired ? "pending" : "published",
     execution_notes: executionNotes,
     archive_path: archivePath,
     last_processing_error: null,
@@ -2359,7 +2936,7 @@ async function applyDocumentOperationalFlowV2(
     .from("obligation_instance_files")
     .update({
       protocol_number: protocolNumber,
-      publication_status: "published",
+      publication_status: deliveryRequired ? "pending" : "published",
     })
     .eq("storage_bucket", inboxItem.storage_bucket)
     .eq("storage_path", inboxItem.storage_path);
@@ -2371,7 +2948,7 @@ async function applyDocumentOperationalFlowV2(
     classification_status: "classified",
     application_status: "applied",
     communication_status: communicationStatus,
-    publication_status: "published",
+    publication_status: deliveryRequired ? "pending" : "published",
     protocol_number: protocolNumber,
     protocol_issued_at: protocolIssuedAt,
     review_required: false,
@@ -2381,7 +2958,7 @@ async function applyDocumentOperationalFlowV2(
     completed_at: now,
   });
 
-  return { processed: true, nextStatus, archivePath, protocolNumber, communicationStatus };
+  return { processed: true, nextStatus, archivePath, protocolNumber, communicationStatus, deliveryRequired };
 }
 
 async function syncInstanceArtifacts(
@@ -2657,7 +3234,7 @@ async function markOverdueInstances(supabaseAdmin: SupabaseAdmin, actorId: strin
   return rows.length;
 }
 
-async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
+async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string, filters: JsonRecord = {}) {
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
   const profilesMap = await loadProfilesMap(supabaseAdmin);
   const clientsMap = await loadClientsMap(supabaseAdmin);
@@ -2680,22 +3257,45 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
   );
   await markOverdueInstances(supabaseAdmin, actorId);
 
-  const [{ data: instancesData, error: instancesError }, { data: docsData, error: docsError }, ingestionJobs] = await Promise.all([
+  let documentsQuery = supabaseAdmin
+    .from("document_inbox_items")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(120);
+  const documentStatus = asTrimmedString(filters.document_status);
+  const documentClientId = asTrimmedString(filters.document_client_id);
+  const documentTemplateId = asTrimmedString(filters.document_template_id);
+  const documentCompetence = asTrimmedString(filters.document_competence);
+  const documentSenderUserId = asTrimmedString(filters.document_sender_user_id);
+  if (documentStatus && documentStatus !== "all") documentsQuery = documentsQuery.eq("status", documentStatus);
+  if (documentClientId && documentClientId !== "all") documentsQuery = documentsQuery.eq("client_id", documentClientId);
+  if (documentTemplateId && documentTemplateId !== "all") documentsQuery = documentsQuery.eq("suggested_template_id", documentTemplateId);
+  if (documentCompetence) documentsQuery = documentsQuery.ilike("suggested_competence_label", `%${documentCompetence}%`);
+  if (documentSenderUserId && documentSenderUserId !== "all") documentsQuery = documentsQuery.eq("created_by", documentSenderUserId);
+
+  const [
+    { data: instancesData, error: instancesError },
+    { data: docsData, error: docsError },
+    { data: attemptsData, error: attemptsError },
+    ingestionJobs,
+  ] = await Promise.all([
     supabaseAdmin
       .from("obligation_instances")
       .select("*")
       .order("technical_due_date", { ascending: true })
       .limit(240),
+    documentsQuery,
     supabaseAdmin
-      .from("document_inbox_items")
+      .from("obligation_delivery_attempts")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(120),
+      .limit(200),
     loadIngestionJobs(supabaseAdmin),
   ]);
 
   if (instancesError) throw instancesError;
   if (docsError) throw docsError;
+  if (attemptsError) throw attemptsError;
 
   const templates = Array.from(templatesMap.values()).map((template) => ({
     ...template,
@@ -2711,11 +3311,26 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
     client: clientsMap.get(profile.client_id) || null,
   }));
 
+  const deliveryAttempts = ((attemptsData || []) as Array<JsonRecord>).map((attempt) => ({
+    ...attempt,
+    metadata: asJsonRecord(attempt.metadata),
+  }));
+  const attemptsByInstance = new Map<string, Array<JsonRecord>>();
+  for (const attempt of deliveryAttempts) {
+    const instanceId = String(attempt.instance_id || "");
+    if (!instanceId) continue;
+    const list = attemptsByInstance.get(instanceId) || [];
+    list.push(attempt);
+    attemptsByInstance.set(instanceId, list);
+  }
+
   const instances = ((instancesData || []) as InstanceRow[]).map((instance) => ({
     ...instance,
     template: templatesMap.get(instance.template_id) || null,
     client: clientsMap.get(instance.client_id) || null,
     profile: profilesMap.get(instance.profile_id) || null,
+    delivery_attempts: attemptsByInstance.get(instance.id) || [],
+    latest_delivery_attempt: attemptsByInstance.get(instance.id)?.[0] || null,
   }));
 
   const documents = (docsData || []).map((item) => {
@@ -2804,6 +3419,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
     instances,
     documents,
     ingestion_jobs: jobs,
+    delivery_attempts: deliveryAttempts,
   };
 }
 
@@ -2837,15 +3453,15 @@ async function handleUpsertTemplate(
     yearly_due_month: asInteger(payload.yearly_due_month, null),
     legal_due_day: asInteger(payload.legal_due_day, null),
     priority: asTrimmedString(payload.priority) || "media",
-    expected_documents: asExpectedDocuments(payload.expected_documents),
+    expected_documents: expectedDocuments,
     is_active: asBoolean(payload.is_active, true),
     generates_calendar: true,
     generates_kanban: true,
     requires_document: true,
     operational_notes: asTrimmedString(payload.operational_notes),
-    completion_email_enabled: asBoolean(payload.completion_email_enabled, false),
-    completion_email_subject: asTrimmedString(payload.completion_email_subject),
-    completion_email_body: asTrimmedString(payload.completion_email_body),
+    completion_email_enabled: emailEnabled,
+    completion_email_subject: emailSubject,
+    completion_email_body: emailBody,
     completion_whatsapp_enabled: asBoolean(payload.completion_whatsapp_enabled, false),
     completion_whatsapp_body: asTrimmedString(payload.completion_whatsapp_body),
     created_by: actorId,
@@ -4056,7 +4672,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "overview") {
-      return jsonResponse(await buildOverview(supabaseAdmin, user.id));
+      return jsonResponse(await buildOverview(supabaseAdmin, user.id, payload));
     }
 
     if (action === "upsert_template") {
@@ -4097,6 +4713,18 @@ Deno.serve(async (req) => {
 
     if (action === "resolve_document") {
       return await handleResolveDocumentNative(supabaseAdmin, user.id, organizationId, payload);
+    }
+
+    if (action === "prepare_delivery") {
+      return await handlePrepareDelivery(supabaseAdmin, user.id, organizationId, payload);
+    }
+
+    if (action === "send_delivery" || action === "retry_delivery") {
+      return await handleSendDelivery(supabaseAdmin, user.id, organizationId, payload);
+    }
+
+    if (action === "cancel_delivery") {
+      return await handleCancelDelivery(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "preview_document_match") {

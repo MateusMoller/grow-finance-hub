@@ -113,18 +113,21 @@ export function useUserManagement(organizationId: string | null, filters: UserFi
       }
 
       if (input.userId) {
-        const { data, error } = await supabase.rpc("admin_apply_user_access", {
-          _organization_id: organizationId,
-          _target_user_id: input.userId,
-          _display_name: input.displayName,
-          _primary_role: input.primaryRole,
-          _status: input.status,
-          _sector_code: input.sectorCode,
-          _enabled_modules: input.enabledModules,
-          _linked_client_ids: input.linkedClientIds,
-          _change_reason: input.changeReason,
+        const { data, error } = await supabase.functions.invoke("manage-team-user", {
+          body: {
+            action: "update",
+            organizationId,
+            userId: input.userId,
+            displayName: input.displayName,
+            primaryRole: input.primaryRole,
+            status: input.status,
+            sectorCode: input.sectorCode,
+            enabledModules: input.enabledModules,
+            linkedClientIds: input.linkedClientIds,
+            changeReason: input.changeReason,
+          },
         });
-        if (error) throw error;
+        if (error) throw new Error(await readFunctionError(error));
         return readAccessResult(data);
       }
 

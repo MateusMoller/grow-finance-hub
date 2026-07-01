@@ -153,6 +153,9 @@ const statusOptions: GrowObligationInstance["status"][] = [
   "em_andamento",
   "aguardando_documento",
   "em_revisao",
+  "pronto_para_envio",
+  "enviando",
+  "falha_envio",
   "atrasada",
   "cancelada",
 ];
@@ -822,10 +825,28 @@ export function GrowObligationsWorkspace({
   const [referenceUploadKey, setReferenceUploadKey] = useState<string | null>(null);
   const [isDraggingUpload, setIsDraggingUpload] = useState(false);
   const [templateClientSearch, setTemplateClientSearch] = useState("");
+  const [deliveryRecipientByInstance, setDeliveryRecipientByInstance] = useState<Record<string, string>>({});
+  const [documentStatusFilter, setDocumentStatusFilter] = useState("all");
+  const [documentClientFilter, setDocumentClientFilter] = useState(initialClientId || "all");
+  const [documentTemplateFilter, setDocumentTemplateFilter] = useState("all");
+  const [documentCompetenceFilter, setDocumentCompetenceFilter] = useState("");
 
   const overviewQuery = useQuery({
-    queryKey: overviewQueryKey,
-    queryFn: () => invokeGrowObligations<GrowObligationsOverviewPayload>({ action: "overview" }),
+    queryKey: [
+      ...overviewQueryKey,
+      documentStatusFilter,
+      documentClientFilter,
+      documentTemplateFilter,
+      documentCompetenceFilter,
+    ],
+    queryFn: () =>
+      invokeGrowObligations<GrowObligationsOverviewPayload>({
+        action: "overview",
+        document_status: documentStatusFilter,
+        document_client_id: documentClientFilter,
+        document_template_id: documentTemplateFilter,
+        document_competence: documentCompetenceFilter || null,
+      }),
   });
 
   const overview = overviewQuery.data;
@@ -882,7 +903,7 @@ export function GrowObligationsWorkspace({
         client_id: instanceClientFilter !== "all" ? instanceClientFilter : null,
       }),
     onSuccess: async () => {
-      toast.success("Competencias sincronizadas.");
+      toast.success("Competencias sincronizadas sem duplicar tarefas existentes.");
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao gerar competências."),
@@ -1087,6 +1108,37 @@ export function GrowObligationsWorkspace({
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao processar documentos vinculados."),
   });
 
+  const sendDeliveryMutation = useMutation({
+    mutationFn: (payload: { instanceId: string; recipientEmail?: string; retry?: boolean; confirmDuplicate?: boolean }) =>
+      invokeGrowObligations({
+        action: payload.retry ? "retry_delivery" : "send_delivery",
+        instance_id: payload.instanceId,
+        recipient_email: payload.recipientEmail || null,
+        human_confirmed: true,
+        confirm_duplicate: payload.confirmDuplicate || false,
+      }),
+    onSuccess: async () => {
+      toast.success("Guia enviada ao cliente e obrigacao concluida.");
+      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao enviar guia ao cliente."),
+  });
+
+  const cancelDeliveryMutation = useMutation({
+    mutationFn: (payload: { instanceId: string; attemptId?: string; reason?: string }) =>
+      invokeGrowObligations({
+        action: "cancel_delivery",
+        instance_id: payload.instanceId,
+        attempt_id: payload.attemptId || null,
+        reason: payload.reason || "Envio cancelado pela Central de Documentos.",
+      }),
+    onSuccess: async () => {
+      toast.success("Envio cancelado.");
+      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao cancelar envio."),
+  });
+
   const templateValidationError = useMemo(() => validateTemplateForm(templateForm), [templateForm]);
   const uploadQueueValidationError = useMemo(
     () => uploadQueue.map((item) => validateUploadQueueItem(item)).find(Boolean) || null,
@@ -1132,6 +1184,19 @@ export function GrowObligationsWorkspace({
         (item) => item.status === "linked" && (item.processing_status === "queued" || item.processing_status === "failed"),
       ),
     [overview?.documents],
+  );
+
+  const readyDeliveryInstances = useMemo(
+    () =>
+      (overview?.instances || []).filter((instance) =>
+        instance.status === "pronto_para_envio" || instance.status === "falha_envio",
+      ),
+    [overview?.instances],
+  );
+
+  const deliveryAttempts = useMemo(
+    () => overview?.delivery_attempts || [],
+    [overview?.delivery_attempts],
   );
 
   const documentInResolution = useMemo(
@@ -1325,7 +1390,7 @@ export function GrowObligationsWorkspace({
         <TabsContent value="catalogo" className="space-y-4">
           <Card className="rounded-3xl">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div><CardTitle>Catalogo mestre</CardTitle><CardDescription>Cadastre os documentos esperados e anexe PDFs modelo para habilitar o envio inteligente.</CardDescription></div>
+              <div><CardTitle>Catalogo mestre</CardTitle><CardDescription>Cadastre documentos esperados e PDFs modelo apenas para extracao; as guias enviadas ao cliente entram pela Central de Documentos.</CardDescription></div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Buscar por nome ou setor" className="w-full sm:w-72" />
                 <Button
@@ -1454,6 +1519,125 @@ export function GrowObligationsWorkspace({
                     </p>
                   </div>
                 </div>
+                <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 md:grid-cols-4">
+                  <Select value={documentStatusFilter} onValueChange={setDocumentStatusFilter}>
+                    <SelectTrigger><SelectValue placeholder="Status do documento" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os documentos</SelectItem>
+                      <SelectItem value="pending_review">Em revisao</SelectItem>
+                      <SelectItem value="linked">Vinculados</SelectItem>
+                      <SelectItem value="rejected">Rejeitados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={documentClientFilter} onValueChange={setDocumentClientFilter}>
+                    <SelectTrigger><SelectValue placeholder="Cliente" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os clientes</SelectItem>
+                      {overview.clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={documentTemplateFilter} onValueChange={setDocumentTemplateFilter}>
+                    <SelectTrigger><SelectValue placeholder="Obrigacao" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as obrigacoes</SelectItem>
+                      {overview.templates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={documentCompetenceFilter}
+                    onChange={(event) => setDocumentCompetenceFilter(event.target.value)}
+                    placeholder="Competencia"
+                  />
+                </div>
+                {readyDeliveryInstances.length > 0 && (
+                  <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Guias prontas para envio</p>
+                        <p className="text-xs text-muted-foreground">
+                          {readyDeliveryInstances.length} obrigacao(oes) aguardando revisao do destinatario e confirmacao.
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{readyDeliveryInstances.length}</Badge>
+                    </div>
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {readyDeliveryInstances.map((instance) => {
+                        const recipient = deliveryRecipientByInstance[instance.id] ?? instance.client?.email ?? "";
+                        const latestAttempt = instance.latest_delivery_attempt;
+                        return (
+                          <div key={instance.id} className="rounded-xl border bg-background/90 p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="truncate text-sm font-medium">{instance.template?.name || "Obrigacao"}</p>
+                                  <Badge className={`border-0 ${growObligationStatusClass[instance.status]}`}>
+                                    {growObligationStatusLabel[instance.status]}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {instance.client?.name || "Cliente"} · competencia {instance.competence_label}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                              <Input
+                                value={recipient}
+                                onChange={(event) =>
+                                  setDeliveryRecipientByInstance((prev) => ({
+                                    ...prev,
+                                    [instance.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="email@cliente.com"
+                                type="email"
+                              />
+                              <Button
+                                className="rounded-xl"
+                                disabled={sendDeliveryMutation.isPending}
+                                onClick={() => {
+                                  const reviewedRecipient = deliveryRecipientByInstance[instance.id] ?? instance.client?.email ?? "";
+                                  if (!window.confirm(`Enviar guia para ${reviewedRecipient}?`)) return;
+                                  sendDeliveryMutation.mutate({
+                                    instanceId: instance.id,
+                                    recipientEmail: reviewedRecipient,
+                                    retry: instance.status === "falha_envio",
+                                  });
+                                }}
+                              >
+                                {sendDeliveryMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                                {instance.status === "falha_envio" ? "Tentar novamente" : "Enviar"}
+                              </Button>
+                            </div>
+                            {latestAttempt ? (
+                              <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span>Ultima tentativa: {latestAttempt.status}</span>
+                                  {latestAttempt.sent_at ? <span>{formatDateTime(latestAttempt.sent_at)}</span> : null}
+                                </div>
+                                {latestAttempt.failure_reason ? <p className="mt-1 text-destructive">{latestAttempt.failure_reason}</p> : null}
+                                {latestAttempt.status !== "sent" && latestAttempt.status !== "cancelled" ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="mt-2 h-8 rounded-lg px-2 text-destructive"
+                                    disabled={cancelDeliveryMutation.isPending}
+                                    onClick={() => cancelDeliveryMutation.mutate({
+                                      instanceId: instance.id,
+                                      attemptId: latestAttempt.id,
+                                    })}
+                                  >
+                                    Cancelar tentativa
+                                  </Button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div
                   className={`min-h-[280px] rounded-3xl border border-dashed p-8 transition-colors ${
                     isDraggingUpload
@@ -1712,7 +1896,7 @@ export function GrowObligationsWorkspace({
                 </Button>
               </div>
 
-              <div className="hidden">
+              <div className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-3xl border p-5">
                   <div className="mb-4 flex items-center justify-between">
                     <div><p className="text-sm font-medium">Triagem pendente</p><p className="text-xs text-muted-foreground">{pendingDocuments.length} documentos aguardando analise</p></div>
@@ -1774,6 +1958,36 @@ export function GrowObligationsWorkspace({
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border p-5 xl:col-span-2">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Historico de envios</p>
+                      <p className="text-xs text-muted-foreground">Tentativas recentes preservadas para auditoria.</p>
+                    </div>
+                    <Badge variant="secondary">{deliveryAttempts.length}</Badge>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {deliveryAttempts.slice(0, 12).map((attempt) => (
+                      <div key={attempt.id} className="rounded-2xl border border-border/60 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{attempt.recipient_email}</p>
+                          <Badge variant={attempt.status === "sent" ? "default" : attempt.status === "failed" ? "destructive" : "outline"}>
+                            {attempt.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{attempt.subject}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          De: {attempt.verified_from_email} · Reply-to: {attempt.reply_to || "-"} · {formatDateTime(attempt.created_at)}
+                        </p>
+                        {attempt.failure_reason ? <p className="mt-2 text-xs text-destructive">{attempt.failure_reason}</p> : null}
+                      </div>
+                    ))}
+                    {deliveryAttempts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhuma tentativa registrada ainda.</p>
+                    ) : null}
                   </div>
                 </div>
               </div>

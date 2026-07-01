@@ -26,28 +26,6 @@ function asTrimmedString(value: unknown) {
   return trimmed || null;
 }
 
-function normalizeEmail(value: unknown) {
-  const email = asTrimmedString(value)?.toLowerCase();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  return email;
-}
-
-function formatEmailAddress(email: string, name?: string | null) {
-  const normalized = normalizeEmail(email);
-  if (!normalized) return null;
-  const safeName = asTrimmedString(name)?.replace(/[<>"\r\n]/g, " ").replace(/\s+/g, " ").trim();
-  return safeName ? `${safeName} <${normalized}>` : normalized;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function asExpectedDocuments(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
@@ -63,70 +41,6 @@ function asExpectedDocuments(value: unknown) {
     });
 }
 
-function renderTemplate(templateText: string, payload: {
-  clientName: string;
-  obligationName: string;
-  competence: string;
-  sector: string;
-  technicalDueDate: string;
-}) {
-  return templateText
-    .replaceAll("{{cliente_nome}}", payload.clientName)
-    .replaceAll("{{obrigacao_nome}}", payload.obligationName)
-    .replaceAll("{{competencia}}", payload.competence)
-    .replaceAll("{{setor}}", payload.sector)
-    .replaceAll("{{prazo_tecnico}}", payload.technicalDueDate);
-}
-
-function buildEmailHtml(body: string) {
-  return `
-    <div style="background:#f8fafc;padding:24px 12px;font-family:Arial,sans-serif;color:#0f172a;">
-      <div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e2e8f0;">
-        <div style="white-space:pre-line;font-size:14px;line-height:1.6;">${escapeHtml(body)}</div>
-      </div>
-    </div>
-  `;
-}
-
-async function sendEmailViaResend(params: {
-  apiKey: string;
-  from: string;
-  replyTo?: string | null;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  idempotencyKey: string;
-}) {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
-      "Idempotency-Key": params.idempotencyKey,
-    },
-    body: JSON.stringify({
-      from: params.from,
-      to: [params.to],
-      reply_to: params.replyTo || undefined,
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-    }),
-  });
-
-  if (response.ok) {
-    const data = await response.json().catch(() => null);
-    return { ok: true as const, id: asRecord(data)?.id || null };
-  }
-
-  return {
-    ok: false as const,
-    status: response.status,
-    message: await response.text(),
-  };
-}
-
 async function createInstanceEvent(
   supabaseAdmin: SupabaseAdmin,
   instanceId: string,
@@ -139,170 +53,13 @@ async function createInstanceEvent(
 ) {
   await supabaseAdmin.from("obligation_instance_events").insert({
     instance_id: instanceId,
-    actor_id: actorId,
+    created_by: actorId,
     event_type: eventType,
     from_status: fromStatus,
     to_status: toStatus,
     comment,
     metadata,
   });
-}
-
-async function resolveUserSender(supabaseAdmin: SupabaseAdmin, userId: string) {
-  const fallbackFrom =
-    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
-    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
-    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
-  const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
-  const user = data?.user;
-  const email = normalizeEmail(user?.email);
-  const name =
-    asTrimmedString(user?.user_metadata?.display_name) ||
-    asTrimmedString(user?.user_metadata?.full_name) ||
-    asTrimmedString(user?.user_metadata?.name) ||
-    email?.split("@")[0] ||
-    "Grow Contabilidade";
-
-  return {
-    preferredFrom: email ? formatEmailAddress(email, name) : null,
-    fallbackFrom,
-    replyTo: email,
-    userEmail: email,
-  };
-}
-
-async function maybeSendCompletionEmail(params: {
-  supabaseAdmin: SupabaseAdmin;
-  senderUserId: string;
-  instance: JsonRecord;
-  template: JsonRecord;
-  client: JsonRecord;
-  inboxItem: JsonRecord;
-}) {
-  const { supabaseAdmin, senderUserId, instance, template, client, inboxItem } = params;
-  if (template.completion_email_enabled !== true) {
-    return { attempted: false, sent: false, reason: "disabled" };
-  }
-
-  const recipientEmail = normalizeEmail(client.email);
-  if (!recipientEmail) {
-    await createInstanceEvent(
-      supabaseAdmin,
-      String(instance.id),
-      senderUserId,
-      "completion_email_failed",
-      null,
-      null,
-      "Obrigacao concluida, mas o cliente nao possui e-mail valido cadastrado.",
-      { inbox_item_id: inboxItem.id },
-    );
-    return { attempted: true, sent: false, reason: "missing_recipient" };
-  }
-
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  if (!apiKey) {
-    await createInstanceEvent(
-      supabaseAdmin,
-      String(instance.id),
-      senderUserId,
-      "completion_email_failed",
-      null,
-      null,
-      "Obrigacao concluida, mas a chave de envio de e-mail nao esta configurada.",
-      { inbox_item_id: inboxItem.id, recipient_email: recipientEmail },
-    );
-    return { attempted: true, sent: false, reason: "missing_api_key" };
-  }
-
-  const sender = await resolveUserSender(supabaseAdmin, senderUserId);
-  const renderPayload = {
-    clientName: String(client.name || "Cliente"),
-    obligationName: String(template.name || "Obrigacao"),
-    competence: String(instance.competence_label || ""),
-    sector: String(template.sector || "Geral"),
-    technicalDueDate: String(instance.technical_due_date || ""),
-  };
-  const subject = renderTemplate(
-    asTrimmedString(template.completion_email_subject) || "{{obrigacao_nome}} concluida - {{competencia}}",
-    renderPayload,
-  );
-  const text = renderTemplate(
-    asTrimmedString(template.completion_email_body) ||
-      "Ola, {{cliente_nome}}.\n\nA obrigacao {{obrigacao_nome}} referente a competencia {{competencia}} foi concluida.\n\nSetor responsavel: {{setor}}.\nPrazo tecnico: {{prazo_tecnico}}.",
-    renderPayload,
-  );
-  const html = buildEmailHtml(text);
-  const idempotencyKey = `obligation-completion:${instance.id}:${inboxItem.id}:${recipientEmail}`;
-
-  let sendResult = sender.preferredFrom
-    ? await sendEmailViaResend({
-      apiKey,
-      from: sender.preferredFrom,
-      replyTo: sender.replyTo,
-      to: recipientEmail,
-      subject,
-      html,
-      text,
-      idempotencyKey,
-    })
-    : { ok: false as const, status: 400, message: "missing_user_sender" };
-  let usedFallback = false;
-
-  if (!sendResult.ok) {
-    usedFallback = true;
-    sendResult = await sendEmailViaResend({
-      apiKey,
-      from: sender.fallbackFrom,
-      replyTo: sender.replyTo,
-      to: recipientEmail,
-      subject,
-      html,
-      text,
-      idempotencyKey: `${idempotencyKey}:fallback`,
-    });
-  }
-
-  if (!sendResult.ok) {
-    await createInstanceEvent(
-      supabaseAdmin,
-      String(instance.id),
-      senderUserId,
-      "completion_email_failed",
-      null,
-      null,
-      "Obrigacao concluida, mas houve falha no disparo do e-mail automatico.",
-      {
-        inbox_item_id: inboxItem.id,
-        recipient_email: recipientEmail,
-        sender_email: sender.userEmail,
-        provider_status: sendResult.status,
-        provider_message: sendResult.message,
-      },
-    );
-    return { attempted: true, sent: false, reason: "provider_error" };
-  }
-
-  await createInstanceEvent(
-    supabaseAdmin,
-    String(instance.id),
-    senderUserId,
-    "completion_email_sent",
-    null,
-    null,
-    `E-mail automatico enviado para ${recipientEmail}.`,
-    {
-      inbox_item_id: inboxItem.id,
-      recipient_email: recipientEmail,
-      sender_email: sender.userEmail,
-      sender_from: usedFallback ? sender.fallbackFrom : sender.preferredFrom,
-      reply_to: sender.replyTo,
-      used_fallback_sender: usedFallback,
-      resend_email_id: sendResult.id,
-      subject,
-    },
-  );
-
-  return { attempted: true, sent: true, usedFallback };
 }
 
 async function determineNextStatus(supabaseAdmin: SupabaseAdmin, instance: JsonRecord, template: JsonRecord) {
@@ -372,13 +129,15 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
     publication_status: "pending",
   }, { onConflict: "storage_bucket,storage_path" });
 
-  const nextStatus = await determineNextStatus(supabaseAdmin, instanceRecord, template as JsonRecord);
+  const documentStatus = await determineNextStatus(supabaseAdmin, instanceRecord, template as JsonRecord);
+  const deliveryRequired = documentStatus === "concluida" && template.completion_email_enabled === true;
+  const nextStatus = deliveryRequired ? "pronto_para_envio" : documentStatus;
   const justCompleted = nextStatus === "concluida" && instanceRecord.status !== "concluida";
+  const justReadyForDelivery = nextStatus === "pronto_para_envio" && instanceRecord.status !== "pronto_para_envio";
   const protocolNumber = justCompleted ? (instanceRecord.protocol || `GROW-${String(inboxItem.id).slice(0, 8).toUpperCase()}`) : instanceRecord.protocol;
   const protocolIssuedAt = justCompleted ? now : instanceRecord.protocol_issued_at;
-  const senderUserId = asTrimmedString(inboxItem.created_by) || processorUserId;
 
-  if (nextStatus !== instanceRecord.status || (justCompleted && !instanceRecord.protocol)) {
+  if (nextStatus !== instanceRecord.status || (justCompleted && !instanceRecord.protocol) || justReadyForDelivery) {
     await supabaseAdmin
       .from("obligation_instances")
       .update({
@@ -388,6 +147,7 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
         protocol_issued_at: nextStatus === "concluida" ? protocolIssuedAt : instanceRecord.protocol_issued_at,
         completed_by_inbox_item_id: nextStatus === "concluida" ? inboxItem.id : instanceRecord.completed_by_inbox_item_id,
         processed_automatically: nextStatus === "concluida" ? true : instanceRecord.processed_automatically,
+        ready_for_delivery_at: nextStatus === "pronto_para_envio" ? now : null,
         last_status_at: now,
       })
       .eq("id", instanceId);
@@ -399,27 +159,14 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
       "status_change",
       asTrimmedString(instanceRecord.status),
       nextStatus,
-      "Status ajustado apos recebimento do documento.",
-      { inbox_item_id: inboxItem.id, protocol_number: protocolNumber },
+      deliveryRequired
+        ? "Documentos obrigatorios anexados. Aguardando confirmacao humana para envio ao cliente."
+        : "Status ajustado apos recebimento do documento.",
+      { inbox_item_id: inboxItem.id, protocol_number: protocolNumber, delivery_required: deliveryRequired },
     );
   }
 
-  const emailResult = justCompleted
-    ? await maybeSendCompletionEmail({
-      supabaseAdmin,
-      senderUserId,
-      instance: { ...instanceRecord, status: nextStatus, protocol: protocolNumber, protocol_issued_at: protocolIssuedAt },
-      template: template as JsonRecord,
-      client: client as JsonRecord,
-      inboxItem,
-    })
-    : { attempted: false, sent: false, reason: "not_completed" };
-
-  const communicationStatus = !justCompleted
-    ? "not_applicable"
-    : emailResult.attempted
-      ? emailResult.sent ? "sent" : "failed"
-      : "not_applicable";
+  const communicationStatus = deliveryRequired ? "pending" : "not_applicable";
 
   await supabaseAdmin
     .from("document_inbox_items")
@@ -429,11 +176,11 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
       execution_status: "applied",
       application_status: "applied",
       communication_status: communicationStatus,
-      publication_status: "published",
-      execution_notes: justCompleted
-        ? emailResult.sent
-          ? "Documento anexado, obrigacao concluida e e-mail enviado ao cliente."
-          : "Documento anexado e obrigacao concluida. O e-mail automatico nao pode ser enviado."
+      publication_status: deliveryRequired ? "pending" : "published",
+      execution_notes: deliveryRequired
+        ? "Documento anexado. Obrigacao pronta para revisao e envio manual ao cliente."
+        : justCompleted
+          ? "Documento anexado e obrigacao concluida automaticamente."
         : "Documento anexado. A obrigacao ainda aguarda outros documentos obrigatorios.",
       last_processing_error: null,
       processed_automatically: true,
@@ -448,7 +195,7 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
       status: "completed",
       application_status: "applied",
       communication_status: communicationStatus,
-      publication_status: "published",
+      publication_status: deliveryRequired ? "pending" : "published",
       completed_at: now,
       last_error: null,
       protocol_number: protocolNumber,
@@ -457,7 +204,7 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
     })
     .eq("id", inboxItem.ingestion_job_id);
 
-  return { processed: true, nextStatus, email: emailResult };
+  return { processed: true, nextStatus, deliveryRequired };
 }
 
 Deno.serve(async (req) => {

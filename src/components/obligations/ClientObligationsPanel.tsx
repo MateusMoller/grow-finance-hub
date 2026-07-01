@@ -93,7 +93,7 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
   const generateMutation = useMutation({
     mutationFn: () => invokeGrowObligations({ action: "generate_instances", client_id: clientId }),
     onSuccess: async () => {
-      toast.success("Competências do cliente geradas.");
+      toast.success("Competencias sincronizadas sem duplicar tarefas existentes.");
       await queryClient.invalidateQueries({ queryKey: snapshotKey(clientId) });
       await queryClient.invalidateQueries({ queryKey: ["grow-obligations-overview"] });
     },
