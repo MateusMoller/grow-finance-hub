@@ -714,7 +714,7 @@ async function assertOrganizationFeatureEnabled(
 async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
   const { data, error } = await supabaseAdmin
     .from("clients")
-    .select("id, name, cnpj, regime, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
+    .select("id, organization_id, name, cnpj, regime, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
     .order("name");
 
   if (error) throw error;

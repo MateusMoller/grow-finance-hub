@@ -101,6 +101,11 @@ interface TemplateFormState {
   completion_whatsapp_body: string;
 }
 
+interface TemplateSaveResult {
+  ok: true;
+  template?: GrowObligationTemplate;
+}
+
 interface InstanceFormState {
   instanceId: string;
   status: GrowObligationInstance["status"];
@@ -171,6 +176,19 @@ function slugifyDocumentKey(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return slugifyDocumentKey(value).replace(/_+/g, "-");
+}
+
+function normalizeClientStatus(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isActiveClientStatus(value: string | null | undefined) {
+  const normalized = normalizeClientStatus(value);
+  return normalized === "ativo" || normalized === "active";
 }
 
 function makeDocumentDraft(document?: GrowExpectedDocument): TemplateExpectedDocumentDraft {
@@ -886,11 +904,15 @@ export function GrowObligationsWorkspace({
         return await upsertTemplateDirectly(payload);
       }
     },
-    onSuccess: async () => {
-      toast.success("Obrigacao mestre salva.");
-      setTemplateDialogOpen(false);
-      setTemplateForm(makeTemplateForm());
-      setTemplateClientSearch("");
+    onSuccess: async (response, savedPayload) => {
+      const savedTemplate = (response as TemplateSaveResult | undefined)?.template;
+      toast.success(savedPayload.id ? "Obrigacao mestre salva." : "Obrigacao mestre salva. Agora anexe os PDFs modelo.");
+      if (savedTemplate) {
+        setTemplateForm({
+          ...makeTemplateForm(savedTemplate),
+          linked_client_ids: savedPayload.linked_client_ids,
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigação."),
@@ -1230,7 +1252,7 @@ export function GrowObligationsWorkspace({
   );
 
   const activeTemplateClients = useMemo(
-    () => (overview?.clients || []).filter((client) => client.status.toLowerCase() === "ativo"),
+    () => (overview?.clients || []).filter((client) => isActiveClientStatus(client.status)),
     [overview?.clients],
   );
 
