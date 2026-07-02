@@ -183,6 +183,14 @@ type InstanceRow = {
   created_at: string;
 };
 
+function resolveRowOrganizationId(...rows: Array<{ organization_id?: string | null } | null | undefined>) {
+  for (const row of rows) {
+    const organizationId = asTrimmedString(row?.organization_id);
+    if (organizationId) return organizationId;
+  }
+  return "";
+}
+
 type IngestionJobRow = {
   id: string;
   organization_id?: string;
@@ -3049,17 +3057,21 @@ async function syncInstanceArtifacts(
   const taskIntegrationKey = `instance:${instance.id}`;
   const instanceDone = instance.status === "concluida" || instance.status === "cancelada";
   const dueDate = `${instance.technical_due_date}T09:00:00.000Z`;
+  const organizationId = resolveRowOrganizationId(instance, template);
+  if (!organizationId) {
+    throw new Error("Organizacao da instancia de obrigacao nao encontrada para sincronizar calendario e tarefas.");
+  }
 
   const payload = {
+    organization_id: organizationId,
     title: `${template.name} · ${instance.competence_label}`,
     description: `${clientName}\nCompetência: ${instance.competence_label}`,
-    entry_type: "obrigação",
+    entry_type: "obrigacao",
     priority: instance.priority,
     sector: template.sector,
     due_at: dueDate,
     all_day: true,
     status: instanceDone ? "completed" : "pending",
-    client_name: clientName,
     integration_source: "grow_obligation",
     integration_key: integrationKey,
   };
@@ -3067,6 +3079,7 @@ async function syncInstanceArtifacts(
   const { data: existingEvent, error: eventLookupError } = await supabaseAdmin
     .from("calendar_events")
     .select("id")
+    .eq("organization_id", organizationId)
     .eq("integration_source", "grow_obligation")
     .eq("integration_key", integrationKey)
     .maybeSingle();
@@ -3087,6 +3100,7 @@ async function syncInstanceArtifacts(
   const { data: existingTask, error: taskLookupError } = await supabaseAdmin
     .from("kanban_tasks")
     .select("id")
+    .eq("organization_id", organizationId)
     .eq("integration_source", "grow_obligation_task")
     .eq("integration_task_id", taskIntegrationKey)
     .maybeSingle();
@@ -3105,6 +3119,7 @@ async function syncInstanceArtifacts(
             : "backlog";
 
   const taskPayload = {
+    organization_id: organizationId,
     title: obligationTitle,
     description: `Obrigação Grow\nCompetência: ${instance.competence_label}`,
     sector: template.sector,
@@ -3212,6 +3227,7 @@ async function ensureInstancesForProfiles(
           : null;
 
         inserts.push({
+          organization_id: profile.organization_id || template.organization_id,
           client_id: profile.client_id,
           profile_id: profile.id,
           template_id: profile.template_id,
@@ -3441,6 +3457,19 @@ async function buildOverview(
     latest_delivery_attempt: attemptsByInstance.get(instance.id)?.[0] || null,
   }));
 
+  try {
+    for (const instance of instances) {
+      const template = templatesMap.get(instance.template_id);
+      const client = clientsMap.get(instance.client_id);
+      if (!template || !client) continue;
+      await syncInstanceArtifacts(supabaseAdmin, instance as InstanceRow, template, String((client as JsonRecord).name || "Cliente"));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao sincronizar calendario e tarefas.";
+    overviewWarnings.push(`Sincronizacao de calendario/tarefas nao concluida: ${message}`);
+    console.error("grow-obligations overview syncInstanceArtifacts failed", { message });
+  }
+
   const documents = (docsData || []).map((item) => {
     const row = item as JsonRecord;
     return {
@@ -3664,6 +3693,7 @@ async function handleUpsertTemplate(
 async function handleUpsertProfile(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const id = asTrimmedString(payload.id);
@@ -3674,6 +3704,7 @@ async function handleUpsertProfile(
   }
 
   const row = {
+    organization_id: organizationId,
     client_id: clientId,
     template_id: templateId,
     assigned_to: asTrimmedString(payload.assigned_to),
@@ -3692,7 +3723,7 @@ async function handleUpsertProfile(
   };
 
   const query = id
-    ? supabaseAdmin.from("client_obligation_profiles").update(row).eq("id", id).select("*").single()
+    ? supabaseAdmin.from("client_obligation_profiles").update(row).eq("organization_id", organizationId).eq("id", id).select("*").single()
     : supabaseAdmin.from("client_obligation_profiles").upsert(row, { onConflict: "client_id,template_id" }).select("*").single();
 
   const { data, error } = await query;
@@ -3715,13 +3746,18 @@ async function handleUpsertProfile(
 async function handleGenerateInstances(
   supabaseAdmin: SupabaseAdmin,
   actorId: string,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const clientId = asTrimmedString(payload.client_id);
   const monthsBack = Math.max(0, asInteger(payload.months_back, 1) || 1);
   const monthsForward = Math.max(0, asInteger(payload.months_forward, 2) || 2);
 
-  let profilesQuery = supabaseAdmin.from("client_obligation_profiles").select("*").eq("is_active", true);
+  let profilesQuery = supabaseAdmin
+    .from("client_obligation_profiles")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("is_active", true);
   if (clientId) profilesQuery = profilesQuery.eq("client_id", clientId);
 
   const { data: profilesData, error: profilesError } = await profilesQuery;
@@ -4862,11 +4898,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === "upsert_profile") {
-      return await handleUpsertProfile(supabaseAdmin, user.id, payload);
+      return await handleUpsertProfile(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "generate_instances") {
-      return await handleGenerateInstances(supabaseAdmin, user.id, payload);
+      return await handleGenerateInstances(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "update_instance") {
