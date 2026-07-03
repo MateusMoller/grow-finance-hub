@@ -1493,21 +1493,6 @@ async function upsertIngestionJob(
     metadata?: JsonRecord;
   },
 ) {
-  const expectedDocuments = asExpectedDocuments(payload.expected_documents);
-  const activeDocumentKeys = expectedDocuments
-    .filter((document) => document.active)
-    .map((document) => document.document_type_key);
-  if (new Set(activeDocumentKeys).size !== activeDocumentKeys.length) {
-    return jsonResponse({ error: "Documentos esperados ativos nao podem ter chaves duplicadas." }, 400);
-  }
-
-  const emailEnabled = asBoolean(payload.completion_email_enabled, false);
-  const emailSubject = asTrimmedString(payload.completion_email_subject);
-  const emailBody = asTrimmedString(payload.completion_email_body);
-  if (emailEnabled && (!emailSubject || !emailBody)) {
-    return jsonResponse({ error: "Envio por e-mail exige assunto e mensagem padrao." }, 400);
-  }
-
   const row = {
     organization_id: payload.organizationId,
     source_kind: payload.sourceKind,
@@ -3579,6 +3564,21 @@ async function handleUpsertTemplate(
     return jsonResponse({ error: "Nome e código da obrigação são obrigatórios." }, 400);
   }
 
+  const expectedDocuments = asExpectedDocuments(payload.expected_documents);
+  const activeDocumentKeys = expectedDocuments
+    .filter((document) => document.active)
+    .map((document) => document.document_type_key);
+  if (new Set(activeDocumentKeys).size !== activeDocumentKeys.length) {
+    return jsonResponse({ error: "Documentos esperados ativos nao podem ter chaves duplicadas." }, 400);
+  }
+
+  const emailEnabled = asBoolean(payload.completion_email_enabled, false);
+  const emailSubject = asTrimmedString(payload.completion_email_subject);
+  const emailBody = asTrimmedString(payload.completion_email_body);
+  if (emailEnabled && (!emailSubject || !emailBody)) {
+    return jsonResponse({ error: "Envio por e-mail exige assunto e mensagem padrao." }, 400);
+  }
+
   const row = {
     organization_id: organizationId,
     code: normalizeTemplateCode(codeSource),
@@ -4546,7 +4546,7 @@ function hasTemplateManagerRole(roles: string[]) {
 }
 
 function normalizeRegimeCode(value: unknown) {
-  const normalized = asTrimmedString(value)
+  const normalized = (asTrimmedString(value) || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -4572,7 +4572,7 @@ function normalizeRegimeCode(value: unknown) {
 }
 
 function normalizeDuplicateText(value: unknown) {
-  return asTrimmedString(value)
+  return (asTrimmedString(value) || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -4584,7 +4584,7 @@ function normalizeDuplicateText(value: unknown) {
 }
 
 function normalizeDuplicateCode(value: unknown) {
-  return asTrimmedString(value)
+  return (asTrimmedString(value) || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()

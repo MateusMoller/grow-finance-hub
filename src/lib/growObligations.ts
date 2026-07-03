@@ -332,7 +332,39 @@ export async function getStoredCurrentOrganizationId() {
   const userId = data.session?.user?.id;
   if (!userId) return null;
 
-  return localStorage.getItem(`grow-current-organization-${userId}`);
+  const storageKey = `grow-current-organization-${userId}`;
+  const storedOrganizationId = localStorage.getItem(storageKey);
+  if (storedOrganizationId) return storedOrganizationId;
+
+  const { data: accessRows, error: accessError } = await supabase
+    .from("organization_user_access")
+    .select("organization_id, organizations(id, slug, is_active)")
+    .eq("user_id", userId)
+    .eq("status", "active");
+
+  if (accessError) return null;
+
+  const rows = (accessRows || [])
+    .map((row) => {
+      const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations;
+      return {
+        organizationId: row.organization_id ? String(row.organization_id) : "",
+        slug: organization?.slug ? String(organization.slug) : "",
+        isActive: organization?.is_active !== false,
+      };
+    })
+    .filter((row) => row.organizationId && row.isActive);
+
+  const resolvedOrganizationId =
+    rows.find((row) => row.slug === "grow")?.organizationId ||
+    rows[0]?.organizationId ||
+    null;
+
+  if (resolvedOrganizationId) {
+    localStorage.setItem(storageKey, resolvedOrganizationId);
+  }
+
+  return resolvedOrganizationId;
 }
 
 export async function invokeGrowObligations<T>(body: Record<string, unknown>) {

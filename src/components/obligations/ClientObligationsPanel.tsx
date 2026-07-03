@@ -18,11 +18,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
 import {
+  getStoredCurrentOrganizationId,
   growObligationStatusClass,
   growObligationStatusLabel,
   invokeGrowObligations,
   type GrowClientSnapshotPayload,
+  type GrowObligationInstance,
+  type GrowObligationProfile,
+  type GrowObligationTemplate,
 } from "@/lib/growObligations";
 
 interface ClientObligationsPanelProps {
@@ -40,6 +45,85 @@ const snapshotKey = (clientId: string) => ["grow-obligations-client", clientId];
 
 const buildToday = () => new Date().toISOString().slice(0, 10);
 
+const toTemplate = (row: unknown): GrowObligationTemplate => row as GrowObligationTemplate;
+const toProfile = (row: unknown): GrowObligationProfile => row as GrowObligationProfile;
+const toInstance = (row: unknown): GrowObligationInstance => row as GrowObligationInstance;
+
+async function loadClientSnapshotDirectly(clientId: string): Promise<GrowClientSnapshotPayload> {
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const [templatesResponse, profilesResponse, instancesResponse] = await Promise.all([
+    supabase
+      .from("obligation_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("name"),
+    supabase
+      .from("client_obligation_profiles")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .order("is_active", { ascending: false })
+      .order("start_date", { ascending: false }),
+    supabase
+      .from("obligation_instances")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .order("competence_key", { ascending: false }),
+  ]);
+
+  if (templatesResponse.error) throw templatesResponse.error;
+  if (profilesResponse.error) throw profilesResponse.error;
+  if (instancesResponse.error) throw instancesResponse.error;
+
+  const templates = (templatesResponse.data || []).map(toTemplate);
+  const templatesById = new Map(templates.map((template) => [template.id, template]));
+
+  const profiles = (profilesResponse.data || []).map((profileRow) => {
+    const profile = toProfile(profileRow);
+    return {
+      ...profile,
+      template: templatesById.get(profile.template_id) || null,
+      client: null,
+    };
+  });
+  const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+  const instances = (instancesResponse.data || []).map((instanceRow) => {
+    const instance = toInstance(instanceRow);
+    return {
+      ...instance,
+      template: templatesById.get(instance.template_id) || null,
+      profile: profilesById.get(instance.profile_id) || null,
+      client: null,
+    };
+  });
+
+  return {
+    ok: true,
+    client_id: clientId,
+    templates,
+    profiles,
+    instances,
+  };
+}
+
+async function loadClientSnapshot(clientId: string): Promise<GrowClientSnapshotPayload> {
+  try {
+    const snapshot = await invokeGrowObligations<GrowClientSnapshotPayload>({
+      action: "list_client_snapshot",
+      client_id: clientId,
+    });
+    if ((snapshot.profiles || []).length > 0 || (snapshot.instances || []).length > 0) return snapshot;
+  } catch (error) {
+    console.warn("grow-obligations-module list_client_snapshot failed, using RLS fallback", error);
+  }
+
+  return loadClientSnapshotDirectly(clientId);
+}
+
 export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps) {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -52,7 +136,7 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
 
   const snapshotQuery = useQuery({
     queryKey: snapshotKey(clientId),
-    queryFn: () => invokeGrowObligations<GrowClientSnapshotPayload>({ action: "list_client_snapshot", client_id: clientId }),
+    queryFn: () => loadClientSnapshot(clientId),
   });
 
   const snapshot = snapshotQuery.data;

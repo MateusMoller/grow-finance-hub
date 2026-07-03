@@ -1225,12 +1225,6 @@ export default function ClientDetailPage() {
     }
   }, [id, loadClientData]);
 
-  useEffect(() => {
-    if (id) {
-      void loadClientObligations();
-    }
-  }, [id, loadClientObligations]);
-
   const getFieldRule = (category: ClientCategoryKey, fieldName: string) =>
     fieldValidationRules[category]?.[fieldName];
 
@@ -2950,7 +2944,7 @@ export default function ClientDetailPage() {
 
           <TabsContent value="obrigações" className="space-y-4">
             <ClientObligationsPanel clientId={client.id} />
-            <div className="rounded-xl border bg-card p-6 space-y-5">
+            <div className="hidden">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div className="space-y-1">
                   <h3 className="font-semibold flex items-center gap-2">

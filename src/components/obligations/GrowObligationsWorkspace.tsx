@@ -42,6 +42,7 @@ import type { TaxRegimeCode } from "@/lib/obligations/regimeLoadTypes";
 import {
   buildSecureStoragePath,
   SECURE_DOCUMENT_ACCEPT,
+  sanitizeStorageFilename,
   validateSecureDocument,
 } from "@/lib/fileUploadSecurity";
 import {
@@ -155,6 +156,16 @@ interface ReferenceMatchPreview {
   };
 }
 
+interface UploadQueueResult {
+  ok: true;
+  inbox_item?: {
+    id?: string | null;
+    linked_instance_id?: string | null;
+    communication_status?: string | null;
+  } | null;
+  match: ReferenceMatchPreview["match"];
+}
+
 const sectors = ["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societario", "Geral"];
 const periodicities: GrowObligationTemplate["periodicity"][] = ["monthly", "quarterly", "yearly", "custom"];
 const priorities: GrowObligationInstance["priority"][] = ["baixa", "media", "alta", "urgente"];
@@ -185,6 +196,52 @@ function normalizeTemplateCode(value: string) {
 
 function fileNameWithoutExtension(fileName: string) {
   return fileName.replace(/\.[^/.]+$/, "").trim();
+}
+
+function buildUniqueReferenceFileName(fileName: string) {
+  const safeName = sanitizeStorageFilename(fileName);
+  const dotIndex = safeName.lastIndexOf(".");
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  if (dotIndex <= 0) return `${suffix}-${safeName}`;
+  return `${safeName.slice(0, dotIndex)}-${suffix}${safeName.slice(dotIndex)}`;
+}
+
+function parseCompetenceInput(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  const yearMonth = raw.match(/^(\d{4})[-/](\d{1,2})$/);
+  if (yearMonth) {
+    const year = Number(yearMonth[1]);
+    const monthIndex = Number(yearMonth[2]) - 1;
+    if (monthIndex >= 0 && monthIndex <= 11) return new Date(Date.UTC(year, monthIndex, 1));
+  }
+
+  const monthYear = raw.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (monthYear) {
+    const monthIndex = Number(monthYear[1]) - 1;
+    const year = Number(monthYear[2]);
+    if (monthIndex >= 0 && monthIndex <= 11) return new Date(Date.UTC(year, monthIndex, 1));
+  }
+
+  return null;
+}
+
+function formatCompetenceKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatCompetenceLabel(date: Date) {
+  return `${String(date.getUTCMonth() + 1).padStart(2, "0")}/${date.getUTCFullYear()}`;
+}
+
+function toDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function dueDateForCompetence(competenceDate: Date, day: number) {
+  const year = competenceDate.getUTCFullYear();
+  const month = competenceDate.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.max(1, Math.min(day || 10, lastDay))));
 }
 
 function normalizeClientStatus(value: string | null | undefined) {
@@ -357,12 +414,24 @@ async function upsertTemplateDirectly(payload: TemplateFormState) {
     created_by: user.id,
   };
 
-  const templateQuery = payload.id
+  let resolvedTemplateId = payload.id;
+  if (!resolvedTemplateId) {
+    const { data: existingTemplate, error: existingTemplateError } = await supabase
+      .from("obligation_templates")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("code", row.code)
+      .maybeSingle();
+    if (existingTemplateError) throw existingTemplateError;
+    resolvedTemplateId = existingTemplate?.id ? String(existingTemplate.id) : null;
+  }
+
+  const templateQuery = resolvedTemplateId
     ? supabase
         .from("obligation_templates")
         .update(row)
         .eq("organization_id", organizationId)
-        .eq("id", payload.id)
+        .eq("id", resolvedTemplateId)
         .select("*")
         .single()
     : supabase.from("obligation_templates").insert(row).select("*").single();
@@ -422,6 +491,92 @@ async function upsertTemplateDirectly(payload: TemplateFormState) {
   }
 
   return { ok: true, template, fallback: "direct_rls" };
+}
+
+async function listTemplateClientsDirectly(): Promise<ClientListResult> {
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name, cnpj, regime, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
+    .eq("organization_id", organizationId)
+    .order("name");
+
+  if (error) throw error;
+
+  return {
+    ok: true,
+    clients: (data || []).map((client) => ({
+      id: String(client.id),
+      name: String(client.name || ""),
+      cnpj: client.cnpj ? String(client.cnpj) : null,
+      regime: client.regime ? String(client.regime) : null,
+      tax_regime_code: normalizeTaxRegime(client.regime ? String(client.regime) : null),
+      sector: String(client.sector || "Geral"),
+      status: String(client.status || "Ativo"),
+      email: client.email ? String(client.email) : null,
+      contact: client.contact ? String(client.contact) : null,
+      phone: client.phone ? String(client.phone) : null,
+      obligation_completion_whatsapp_enabled: Boolean(client.obligation_completion_whatsapp_enabled),
+    })),
+  };
+}
+
+async function listTemplateClientsForSelection(): Promise<ClientListResult> {
+  try {
+    const response = await invokeGrowObligations<ClientListResult>({ action: "list_clients" });
+    if (response.clients?.length) return response;
+  } catch (error) {
+    console.warn("grow-obligations-module list_clients failed, using RLS fallback", error);
+  }
+
+  return listTemplateClientsDirectly();
+}
+
+async function listCatalogTemplatesDirectly(): Promise<GrowObligationTemplate[]> {
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const [{ data, error }, { data: referenceData, error: referenceError }] = await Promise.all([
+    supabase
+      .from("obligation_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("name"),
+    supabase
+      .from("expected_document_reference_files")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (error) throw error;
+  if (referenceError) throw referenceError;
+
+  const referencesByDocument = new Map<string, GrowExpectedDocumentReferenceFile[]>();
+  for (const reference of referenceData || []) {
+    const key = `${reference.template_id}::${reference.document_type_key}`;
+    const current = referencesByDocument.get(key) || [];
+    current.push(reference as GrowExpectedDocumentReferenceFile);
+    referencesByDocument.set(key, current);
+  }
+
+  return (data || []).map((template) => ({
+    ...template,
+    expected_documents: (Array.isArray(template.expected_documents)
+      ? template.expected_documents as GrowExpectedDocument[]
+      : []).map((document) => {
+        const references = referencesByDocument.get(`${template.id}::${document.document_type_key}`) || [];
+        return {
+          ...document,
+          reference_files: references,
+          reference_files_count: references.length,
+          has_active_reference: references.length > 0,
+        };
+      }),
+  })) as GrowObligationTemplate[];
 }
 
 async function registerReferenceDocumentDirectly({
@@ -491,7 +646,10 @@ async function uploadTemplateReferenceFile({
   const validationError = validateSecureDocument(file);
   if (validationError) throw new Error(validationError);
   const analysis = await analyzePdfDocument(file);
-  const path = buildSecureStoragePath(["grow-obligations", "references", templateId, documentTypeKey], file.name);
+  const path = buildSecureStoragePath(
+    ["grow-obligations", "references", templateId, documentTypeKey],
+    buildUniqueReferenceFileName(file.name),
+  );
   const { error: uploadError } = await supabase.storage.from("obligation-files").upload(path, file, {
     contentType: file.type || undefined,
     upsert: false,
@@ -524,6 +682,90 @@ async function uploadTemplateReferenceFile({
       throw fallbackError;
     }
   }
+}
+
+async function ensureDetectedInstanceForUpload({
+  organizationId,
+  clientId,
+  templateId,
+  competenceLabel,
+  userId,
+}: {
+  organizationId: string;
+  clientId: string | null;
+  templateId: string | null;
+  competenceLabel: string | null;
+  userId: string;
+}) {
+  if (!clientId || !templateId || !competenceLabel) return null;
+
+  const competenceDate = parseCompetenceInput(competenceLabel);
+  if (!competenceDate) return null;
+
+  const competenceKey = formatCompetenceKey(competenceDate);
+  const { data: existingInstance, error: existingError } = await supabase
+    .from("obligation_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("client_id", clientId)
+    .eq("template_id", templateId)
+    .eq("competence_key", competenceKey)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existingInstance?.id) return String(existingInstance.id);
+
+  const [{ data: profile, error: profileError }, { data: template, error: templateError }] = await Promise.all([
+    supabase
+      .from("client_obligation_profiles")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .eq("template_id", templateId)
+      .eq("is_active", true)
+      .maybeSingle(),
+    supabase
+      .from("obligation_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", templateId)
+      .eq("is_active", true)
+      .maybeSingle(),
+  ]);
+
+  if (profileError) throw profileError;
+  if (templateError) throw templateError;
+  if (!profile?.id || !template?.id) return null;
+
+  const technicalDueDate = dueDateForCompetence(competenceDate, Number(profile.due_day_override ?? template.due_day ?? 10));
+  const legalDueDate = template.legal_due_day
+    ? dueDateForCompetence(competenceDate, Number(profile.legal_due_day_override ?? template.legal_due_day))
+    : null;
+
+  const { data: createdInstance, error: createError } = await supabase
+    .from("obligation_instances")
+    .insert({
+      organization_id: organizationId,
+      client_id: clientId,
+      profile_id: profile.id,
+      template_id: templateId,
+      competence_label: formatCompetenceLabel(competenceDate),
+      competence_date: toDateOnly(competenceDate),
+      competence_key: competenceKey,
+      technical_due_date: toDateOnly(technicalDueDate),
+      legal_due_date: legalDueDate ? toDateOnly(legalDueDate) : null,
+      status: "pendente",
+      priority: template.priority || "media",
+      current_assignee: profile.assigned_to || null,
+      origin: "grow_native",
+      document_required: true,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+
+  if (createError) throw createError;
+  return createdInstance?.id ? String(createdInstance.id) : null;
 }
 
 async function registerDocumentUploadDirectly({
@@ -562,8 +804,20 @@ async function registerDocumentUploadDirectly({
     referenceMatchReasons: [],
     autoLinkBlockReason: item.instance_id ? null : "Candidato insuficiente para auto-vinculo.",
   };
-  const linkedInstanceId = item.instance_id || match.resolvedInstanceId || null;
-  const isLinked = Boolean(linkedInstanceId && !match.reviewRequired);
+  let linkedInstanceId = item.instance_id || match.resolvedInstanceId || null;
+  if (!linkedInstanceId && match.detectedClientId && (match.suggestedTemplateId || item.template_id)) {
+    linkedInstanceId = await ensureDetectedInstanceForUpload({
+      organizationId,
+      clientId: match.detectedClientId || item.client_id || null,
+      templateId: match.suggestedTemplateId || item.template_id || null,
+      competenceLabel: match.competenceDetected || item.suggested_competence_label || item.analysis.competence_detected || null,
+      userId: user.id,
+    });
+  }
+  const isLinked = Boolean(linkedInstanceId);
+  const effectiveMatch = linkedInstanceId
+    ? { ...match, resolvedInstanceId: linkedInstanceId, reviewRequired: false, autoLinkBlockReason: null }
+    : match;
 
   const { data: ingestionJob, error: ingestionJobError } = await supabase
     .from("document_ingestion_jobs")
@@ -576,9 +830,9 @@ async function registerDocumentUploadDirectly({
         storage_path: storagePath,
         file_hash: null,
         file_size: item.file.size,
-        client_id: match.detectedClientId || item.client_id || null,
-        detected_client_id: match.detectedClientId || null,
-        template_id: match.suggestedTemplateId || item.template_id || null,
+        client_id: effectiveMatch.detectedClientId || item.client_id || null,
+        detected_client_id: effectiveMatch.detectedClientId || null,
+        template_id: effectiveMatch.suggestedTemplateId || item.template_id || null,
         instance_id: isLinked ? linkedInstanceId : null,
         status: isLinked ? "ingested" : "review_required",
         classification_status: isLinked ? "classified" : "review_required",
@@ -587,10 +841,10 @@ async function registerDocumentUploadDirectly({
         publication_status: "pending",
         review_required: !isLinked,
         metadata: {
-          detected_cnpj: match.detectedCnpj || item.analysis.detected_cnpj,
-          competence_detected: match.competenceDetected || item.analysis.competence_detected,
-          match_strategy: match.strategy,
-          match_score: match.score,
+          detected_cnpj: effectiveMatch.detectedCnpj || item.analysis.detected_cnpj,
+          competence_detected: effectiveMatch.competenceDetected || item.analysis.competence_detected,
+          match_strategy: effectiveMatch.strategy,
+          match_score: effectiveMatch.score,
         },
         created_by: user.id,
       },
@@ -608,13 +862,13 @@ async function registerDocumentUploadDirectly({
     .insert({
       organization_id: organizationId,
       ingestion_job_id: ingestionJob.id,
-      client_id: match.detectedClientId || item.client_id || null,
+      client_id: effectiveMatch.detectedClientId || item.client_id || null,
       suggested_client_id: item.client_id || null,
-      detected_client_id: match.detectedClientId || null,
-      suggested_template_id: match.suggestedTemplateId || item.template_id || null,
-      suggested_instance_id: match.resolvedInstanceId || item.instance_id || null,
+      detected_client_id: effectiveMatch.detectedClientId || null,
+      suggested_template_id: effectiveMatch.suggestedTemplateId || item.template_id || null,
+      suggested_instance_id: effectiveMatch.resolvedInstanceId || item.instance_id || null,
       linked_instance_id: isLinked ? linkedInstanceId : null,
-      document_type_key: match.documentTypeKey || item.document_type_key || null,
+      document_type_key: effectiveMatch.documentTypeKey || item.document_type_key || null,
       file_name: item.file.name,
       storage_bucket: "obligation-files",
       storage_path: storagePath,
@@ -622,15 +876,15 @@ async function registerDocumentUploadDirectly({
       content_type: item.file.type || "application/pdf",
       file_size: item.file.size,
       suggested_competence_label: item.suggested_competence_label || null,
-      detected_cnpj: match.detectedCnpj || item.analysis.detected_cnpj,
-      competence_detected: match.competenceDetected || item.analysis.competence_detected,
-      identification_confidence: match.score,
-      matched_by: match.strategy,
-      match_score: match.score,
-      match_reasons: match.reasons,
-      reference_file_id: match.referenceFileId || null,
-      reference_match_score: match.referenceMatchScore || 0,
-      reference_match_reasons: match.referenceMatchReasons || [],
+      detected_cnpj: effectiveMatch.detectedCnpj || item.analysis.detected_cnpj,
+      competence_detected: effectiveMatch.competenceDetected || item.analysis.competence_detected,
+      identification_confidence: effectiveMatch.score,
+      matched_by: effectiveMatch.strategy,
+      match_score: effectiveMatch.score,
+      match_reasons: effectiveMatch.reasons,
+      reference_file_id: effectiveMatch.referenceFileId || null,
+      reference_match_score: effectiveMatch.referenceMatchScore || 0,
+      reference_match_reasons: effectiveMatch.referenceMatchReasons || [],
       review_required: !isLinked,
       classification_status: isLinked ? "classified" : "review_required",
       status: isLinked ? "linked" : "pending_review",
@@ -639,7 +893,7 @@ async function registerDocumentUploadDirectly({
       ocr_status: item.analysis.ocr_status,
       extracted_text_preview: item.analysis.extracted_text_preview,
       fingerprint_payload: item.analysis.fingerprint_payload,
-      auto_link_block_reason: match.autoLinkBlockReason || null,
+      auto_link_block_reason: effectiveMatch.autoLinkBlockReason || null,
       processing_status: "queued",
       processing_attempts: 0,
       execution_status: "pending",
@@ -683,14 +937,41 @@ async function registerDocumentUploadDirectly({
           source: "manual_upload",
           source_kind: "web_manual",
           uploaded_by: user.id,
-          identification_confidence: match.score,
+          identification_confidence: effectiveMatch.score,
         },
         { onConflict: "storage_bucket,storage_path" },
       );
     if (instanceFileError) throw instanceFileError;
   }
 
-  return { ok: true as const, inbox_item: inboxItem, match, fallback: "direct_rls" };
+  return { ok: true as const, inbox_item: inboxItem, match: effectiveMatch, fallback: "direct_rls" };
+}
+
+async function processAndSendLinkedDocument({
+  organizationId,
+  inboxItemId,
+  instanceId,
+}: {
+  organizationId: string;
+  inboxItemId: string;
+  instanceId: string;
+}) {
+  const { error: processError } = await supabase.functions.invoke("obligation-document-processor", {
+    body: {
+      organization_id: organizationId,
+      inbox_item_id: inboxItemId,
+      limit: 1,
+    },
+  });
+  if (processError) throw processError;
+
+  return invokeGrowObligations({
+    action: "send_delivery",
+    instance_id: instanceId,
+    inbox_item_id: inboxItemId,
+    human_confirmed: true,
+    confirm_duplicate: false,
+  });
 }
 
 function validateUploadQueueItem(item: UploadQueueItem) {
@@ -826,17 +1107,41 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
 function buildLocalDocumentPreview(
   item: UploadQueueItem,
   overview: GrowObligationsOverviewPayload | undefined,
+  fallback?: {
+    clients?: GrowObligationsOverviewPayload["clients"];
+    templates?: GrowObligationTemplate[];
+  },
 ): ReferenceMatchPreview {
-  const clients = overview?.clients || [];
-  const templates = overview?.templates || [];
+  const clients = overview?.clients?.length ? overview.clients : fallback?.clients || [];
+  const templates = overview?.templates?.length ? overview.templates : fallback?.templates || [];
   const instances = overview?.instances || [];
   const detectedClient = item.analysis.detected_cnpj
     ? clients.find((client) => client.cnpj?.replace(/\D/g, "") === item.analysis.detected_cnpj)
     : null;
   const effectiveClientId = item.client_id || detectedClient?.id || null;
-  const effectiveTemplate = templates.find((template) => template.id === item.template_id) || null;
+  const searchableText = `${item.file.name} ${item.analysis.extracted_text_preview || ""} ${item.analysis.extracted_text || ""}`.toLowerCase();
+  const inferredTemplate =
+    templates.find((template) => {
+      const tokens = [
+        template.code,
+        template.name,
+        ...template.expected_documents.flatMap((document) => [document.label, ...document.aliases]),
+      ]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter((value) => value.length >= 2);
+      return tokens.some((token) => searchableText.includes(token));
+    }) || null;
+  const effectiveTemplate = templates.find((template) => template.id === item.template_id) || inferredTemplate;
   const documentDefinition =
-    effectiveTemplate?.expected_documents.find((document) => document.document_type_key === item.document_type_key) || null;
+    effectiveTemplate?.expected_documents.find((document) => document.document_type_key === item.document_type_key) ||
+    effectiveTemplate?.expected_documents.find((document) => {
+      const tokens = [document.label, ...document.aliases]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter((value) => value.length >= 2);
+      return tokens.some((token) => searchableText.includes(token));
+    }) ||
+    effectiveTemplate?.expected_documents.find((document) => document.active) ||
+    null;
   const effectiveCompetence = item.suggested_competence_label || item.analysis.competence_detected || null;
   const manuallySelectedInstance = item.instance_id
     ? instances.find((instance) => instance.id === item.instance_id) || null
@@ -851,19 +1156,20 @@ function buildLocalDocumentPreview(
     }) ||
     null;
   const hasManualDefinition = Boolean(item.client_id || item.template_id || item.document_type_key || item.instance_id);
-  const reviewRequired = !matchingInstance || !documentDefinition;
+  const canCreateDetectedInstance = Boolean(effectiveClientId && effectiveTemplate && documentDefinition && effectiveCompetence);
+  const reviewRequired = !documentDefinition || (!matchingInstance && !canCreateDetectedInstance);
 
   return {
     ok: true,
     match: {
       resolvedInstanceId: matchingInstance?.id || null,
-      suggestedTemplateId: item.template_id || matchingInstance?.template_id || null,
-      documentTypeKey: item.document_type_key || null,
-      strategy: matchingInstance ? "manual_instance" : "manual_review",
-      score: matchingInstance && documentDefinition ? 1 : hasManualDefinition ? 0.65 : 0.35,
+      suggestedTemplateId: item.template_id || matchingInstance?.template_id || effectiveTemplate?.id || null,
+      documentTypeKey: item.document_type_key || documentDefinition?.document_type_key || null,
+      strategy: matchingInstance ? "manual_instance" : canCreateDetectedInstance ? "direct_expected_doc" : "manual_review",
+      score: matchingInstance && documentDefinition ? 1 : canCreateDetectedInstance ? 0.85 : effectiveClientId && effectiveTemplate && documentDefinition ? 0.75 : hasManualDefinition ? 0.65 : 0.35,
       reasons: reviewRequired
         ? ["Preview local: revise cliente, obrigacao, competencia e documento antes de enviar."]
-        : ["Preview local: arquivo sera vinculado com base na selecao informada."],
+        : [matchingInstance ? "Preview local: arquivo sera vinculado com base na selecao informada." : "Preview local: a competencia detectada sera criada e vinculada no envio."],
       reviewRequired,
       candidateInstanceIds: matchingInstance ? [matchingInstance.id] : [],
       detectedClientId: effectiveClientId,
@@ -930,8 +1236,14 @@ export function GrowObligationsWorkspace({
 
   const templateClientsQuery = useQuery({
     queryKey: ["grow-obligations", "template-clients"],
-    queryFn: () => invokeGrowObligations<ClientListResult>({ action: "list_clients" }),
+    queryFn: listTemplateClientsForSelection,
     staleTime: 60_000,
+  });
+
+  const catalogTemplatesQuery = useQuery({
+    queryKey: ["grow-obligations", "catalog-templates"],
+    queryFn: listCatalogTemplatesDirectly,
+    staleTime: 30_000,
   });
 
   const templateMutation = useMutation({
@@ -1014,6 +1326,7 @@ export function GrowObligationsWorkspace({
       }
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
       await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "template-clients"] });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigação."),
   });
@@ -1088,6 +1401,7 @@ export function GrowObligationsWorkspace({
         ),
       }));
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao anexar documento modelo."),
     onSettled: () => setReferenceUploadKey(null),
@@ -1114,6 +1428,7 @@ export function GrowObligationsWorkspace({
         }),
       }));
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao remover documento modelo."),
   });
@@ -1123,7 +1438,10 @@ export function GrowObligationsWorkspace({
       if (uploadQueue.length === 0) {
         throw new Error("Adicione pelo menos um PDF antes de enviar.");
       }
-      const results = [];
+      const organizationId = await getStoredCurrentOrganizationId();
+      if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+      const results: Array<UploadQueueResult & { deliverySent?: boolean; deliveryError?: string | null }> = [];
       for (const item of uploadQueue) {
         const validationError = validateUploadQueueItem(item);
         if (validationError) throw new Error(validationError);
@@ -1139,20 +1457,54 @@ export function GrowObligationsWorkspace({
         });
         if (uploadError) throw uploadError;
 
-        let response: { ok: true; match: ReferenceMatchPreview["match"] };
+        let response: UploadQueueResult;
         try {
           response = await registerDocumentUploadDirectly({ item, storagePath: path });
         } catch (error) {
           await supabase.storage.from("obligation-files").remove([path]);
           throw error;
         }
+
+        const inboxItemId = response.inbox_item?.id ? String(response.inbox_item.id) : "";
+        const instanceId =
+          response.inbox_item?.linked_instance_id ||
+          response.match.resolvedInstanceId ||
+          item.instance_id ||
+          "";
+        if (inboxItemId && instanceId && !response.match.reviewRequired) {
+          try {
+            await processAndSendLinkedDocument({
+              organizationId,
+              inboxItemId,
+              instanceId,
+            });
+            results.push({ ...response, deliverySent: true, deliveryError: null });
+            continue;
+          } catch (error) {
+            results.push({
+              ...response,
+              deliverySent: false,
+              deliveryError: error instanceof Error ? error.message : "Falha ao enviar e-mail ao cliente.",
+            });
+            continue;
+          }
+        }
+
         results.push(response);
       }
       return results;
     },
     onSuccess: async (results) => {
       const autoLinked = results.filter((item) => !item.match.reviewRequired).length;
-      toast.success(`${results.length} arquivo(s) enviados. ${autoLinked} com vinculo automatico.`);
+      const deliverySent = results.filter((item) => item.deliverySent).length;
+      const deliveryErrors = results
+        .map((item) => item.deliveryError)
+        .filter((message): message is string => Boolean(message));
+      if (deliveryErrors.length > 0) {
+        toast.error(`${results.length} arquivo(s) enviados. ${autoLinked} vinculado(s). ${deliverySent} e-mail(s) enviado(s). ${deliveryErrors[0]}`);
+      } else {
+        toast.success(`${results.length} arquivo(s) enviados. ${autoLinked} vinculado(s). ${deliverySent} e-mail(s) enviado(s).`);
+      }
       setUploadQueue([]);
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
@@ -1220,12 +1572,17 @@ export function GrowObligationsWorkspace({
     [uploadQueue],
   );
 
+  const catalogTemplates = useMemo(
+    () => overview?.templates?.length ? overview.templates : catalogTemplatesQuery.data || [],
+    [catalogTemplatesQuery.data, overview?.templates],
+  );
+
   const filteredTemplates = useMemo(() => {
-    const items = overview?.templates || [];
+    const items = catalogTemplates;
     const token = templateSearch.trim().toLowerCase();
     if (!token) return items;
     return items.filter((template) => `${template.name} ${template.sector}`.toLowerCase().includes(token));
-  }, [overview?.templates, templateSearch]);
+  }, [catalogTemplates, templateSearch]);
 
   const filteredInstances = useMemo(() => {
     const items = overview?.instances || [];
@@ -1291,7 +1648,7 @@ export function GrowObligationsWorkspace({
 
   const allDocumentOptions = useMemo(
     () =>
-      (overview?.templates || []).flatMap((template) =>
+      catalogTemplates.flatMap((template) =>
         template.expected_documents
           .filter((document) => document.active)
           .map((document) => ({
@@ -1301,7 +1658,7 @@ export function GrowObligationsWorkspace({
             documentTypeKey: document.document_type_key,
           })),
       ),
-    [overview?.templates],
+    [catalogTemplates],
   );
 
   const activeTemplateClients = useMemo(
@@ -1361,7 +1718,10 @@ export function GrowObligationsWorkspace({
       return;
     }
     try {
-      const preview = buildLocalDocumentPreview(item, overview);
+      const preview = buildLocalDocumentPreview(item, overview, {
+        clients: activeTemplateClients,
+        templates: catalogTemplates,
+      });
       setUploadQueue((prev) =>
         prev.map((current) => (current.id === item.id ? applyPreviewAutofill(current, preview) : current)),
       );
@@ -1485,6 +1845,12 @@ export function GrowObligationsWorkspace({
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              {overviewQuery.isFetching || catalogTemplatesQuery.isFetching ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-border/70 p-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando catalogo...
+                </div>
+              ) : null}
               {filteredTemplates.map((template) => (
                 <div key={template.id} className="rounded-2xl border border-border/70 p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1519,6 +1885,11 @@ export function GrowObligationsWorkspace({
                   </div>
                 </div>
               ))}
+              {!overviewQuery.isFetching && !catalogTemplatesQuery.isFetching && filteredTemplates.length === 0 ? (
+                <div className="rounded-2xl border border-border/70 p-4 text-sm text-muted-foreground">
+                  Nenhuma obrigacao encontrada para este filtro.
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1904,7 +2275,7 @@ export function GrowObligationsWorkspace({
                               <Label>Cliente (auxilio manual)</Label>
                               <Select value={item.client_id || "none"} onValueChange={(value) => updateQueueItem(item.id, { client_id: value === "none" ? "" : value, instance_id: "" })}>
                                 <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                                <SelectContent><SelectItem value="none">Sem cliente manual</SelectItem>{overview.clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent>
+                                <SelectContent><SelectItem value="none">Sem cliente manual</SelectItem>{activeTemplateClients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent>
                               </Select>
                             </div>
                             <div className="space-y-2">
@@ -2267,6 +2638,13 @@ export function GrowObligationsWorkspace({
                 {templateForm.linked_client_ids.length} cliente(s) ativo(s) selecionado(s) para vinculo automatico.
               </p>
             </div>
+            {templateClientsQuery.isError ? (
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                {templateClientsQuery.error instanceof Error
+                  ? templateClientsQuery.error.message
+                  : "Nao foi possivel carregar os clientes ativos."}
+              </p>
+            ) : null}
             {templateClientsByRegime.length > 0 ? (
               <div className="grid gap-2 rounded-xl border border-border/60 bg-background/70 p-3 md:grid-cols-2 xl:grid-cols-4">
                 {templateClientsByRegime.map((regime) => (
@@ -2403,10 +2781,10 @@ export function GrowObligationsWorkspace({
                       }}
                     />
                   </div>
-                  {(pendingReferenceFiles[document.document_type_key] || []).length > 0 ? (
+                  {(pendingReferenceFiles[document.document_type_key || slugifyDocumentKey(document.label)] || []).length > 0 ? (
                     <div className="space-y-2">
-                      {(pendingReferenceFiles[document.document_type_key] || []).map((file) => (
-                        <div key={`${document.document_type_key}-${file.name}`} className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 p-3">
+                      {(pendingReferenceFiles[document.document_type_key || slugifyDocumentKey(document.label)] || []).map((file) => (
+                        <div key={`${document.document_type_key || slugifyDocumentKey(document.label)}-${file.name}`} className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 p-3">
                           <div className="space-y-1">
                             <p className="text-sm font-medium">{file.name}</p>
                             <p className="text-xs text-muted-foreground">Pendente para anexar ao salvar a obrigacao.</p>
@@ -2418,7 +2796,7 @@ export function GrowObligationsWorkspace({
                             onClick={() =>
                               setPendingReferenceFiles((prev) => {
                                 const next = { ...prev };
-                                delete next[document.document_type_key];
+                                delete next[document.document_type_key || slugifyDocumentKey(document.label)];
                                 return next;
                               })
                             }
@@ -2441,7 +2819,7 @@ export function GrowObligationsWorkspace({
                         </div>
                       ))}
                     </div>
-                  ) : (pendingReferenceFiles[document.document_type_key] || []).length === 0 ? (
+                  ) : (pendingReferenceFiles[document.document_type_key || slugifyDocumentKey(document.label)] || []).length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       {templateForm.id
                         ? "Anexe pelo menos um PDF modelo para habilitar o matching automatico."
