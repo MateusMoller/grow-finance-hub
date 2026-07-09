@@ -65,6 +65,7 @@ CREATE TABLE public.user_module_grants (
         'dashboard',
         'portal',
         'clientes',
+        'cadastrar_clientes',
         'financeiro',
         'obrigacoes',
         'ia',

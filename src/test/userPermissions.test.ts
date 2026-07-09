@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAccessModule,
   ensureCollaboratorModules,
+  MODULE_LABELS,
   normalizeSectorCode,
   resolveRouteModule,
 } from "@/lib/userPermissions";
@@ -18,6 +19,21 @@ describe("user permissions", () => {
   it("always includes tasks for colaboradores", () => {
     expect(ensureCollaboratorModules(["obrigacoes"])).toEqual(["tarefas", "obrigacoes"]);
     expect(ensureCollaboratorModules(["tarefas", "tarefas"])).toEqual(["tarefas"]);
+  });
+
+  it("supports the granular client creation permission", () => {
+    expect(MODULE_LABELS.cadastrar_clientes).toBe("Cadastrar clientes");
+    expect(
+      canAccessModule(
+        {
+          primaryRole: "colaborador",
+          status: "active",
+          enabledModules: ["tarefas", "clientes", "cadastrar_clientes"],
+          requiresAccessReview: false,
+        },
+        "cadastrar_clientes",
+      ),
+    ).toBe(true);
   });
 
   it("maps legacy roles to canonical roles", () => {

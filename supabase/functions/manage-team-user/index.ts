@@ -13,6 +13,46 @@ import {
   normalizeModulesForRole,
 } from "../_shared/user-permissions.ts";
 
+const syncClientCreateGrant = async (
+  supabaseAdmin: ReturnType<typeof createClient>,
+  payload: {
+    organizationId: string;
+    targetUserId: string;
+    primaryRole: string;
+    enabledModules: string[];
+    actorId: string;
+  },
+) => {
+  const shouldGrant =
+    payload.primaryRole === "colaborador" &&
+    payload.enabledModules.includes("cadastrar_clientes");
+
+  if (!shouldGrant) {
+    const { error } = await supabaseAdmin
+      .from("user_module_grants")
+      .delete()
+      .eq("organization_id", payload.organizationId)
+      .eq("user_id", payload.targetUserId)
+      .eq("module_key", "cadastrar_clientes");
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("user_module_grants")
+    .upsert(
+      {
+        organization_id: payload.organizationId,
+        user_id: payload.targetUserId,
+        module_key: "cadastrar_clientes",
+        granted_by: payload.actorId,
+        source: "admin",
+      },
+      { onConflict: "organization_id,user_id,module_key" },
+    );
+  if (error) throw error;
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return jsonResponse(null);
@@ -124,6 +164,14 @@ Deno.serve(async (request) => {
       changeReason: asTrimmedString(payload.changeReason) || (
         action === "update" ? "User access updated" : "User deactivated"
       ),
+    });
+
+    await syncClientCreateGrant(supabaseAdmin, {
+      organizationId,
+      targetUserId,
+      primaryRole,
+      enabledModules,
+      actorId: callerData.user.id,
     });
 
     return jsonResponse({

@@ -211,7 +211,7 @@ BEGIN
   INTO invalid_module
   FROM unnest(normalized_modules) module_key
   WHERE module_key NOT IN (
-    'dashboard', 'portal', 'clientes', 'financeiro', 'obrigacoes', 'ia',
+    'dashboard', 'portal', 'clientes', 'cadastrar_clientes', 'financeiro', 'obrigacoes', 'ia',
     'whatsapp', 'open_finance', 'acessorias', 'robo_documentos', 'crm',
     'chat_interno', 'calendario', 'tarefas', 'formularios', 'relatorios',
     'notificacoes', 'usuarios', 'newsletter', 'sugestoes', 'manual',

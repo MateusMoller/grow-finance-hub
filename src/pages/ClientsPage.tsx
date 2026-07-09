@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { clientSegmentOptions } from "@/lib/clientSegments";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { canAccessModule } from "@/lib/userPermissions";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -155,7 +156,7 @@ const clientEntityBadgeClass: Record<"matriz" | "filial", string> = {
 
 export default function ClientsPage() {
   const navigate = useNavigate();
-  const { role, currentOrganizationId } = useAuth();
+  const { role, currentOrganizationId, effectiveAccess } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -178,7 +179,11 @@ export default function ClientsPage() {
   });
 
   const canCreateClients =
-    role === "admin" || role === "director" || role === "manager" || role === "commercial";
+    role === "admin" ||
+    role === "director" ||
+    role === "manager" ||
+    role === "commercial" ||
+    (effectiveAccess ? canAccessModule(effectiveAccess, "cadastrar_clientes") : false);
 
   const loadClients = useCallback(async () => {
     setLoading(true);
@@ -378,6 +383,7 @@ export default function ClientsPage() {
     }>("create-client-with-portal", {
       body: {
         name: normalizedName,
+        organizationId: currentOrganizationId,
         cnpj: normalizedCnpj,
         regime: newClient.regime.trim(),
         sector: newClient.sector.trim(),

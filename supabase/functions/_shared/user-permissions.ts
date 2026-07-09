@@ -13,6 +13,7 @@ export const MODULE_KEYS = [
   "dashboard",
   "portal",
   "clientes",
+  "cadastrar_clientes",
   "financeiro",
   "obrigacoes",
   "ia",
@@ -56,6 +57,9 @@ const primaryRoleSet = new Set<string>(PRIMARY_ROLES);
 const statusSet = new Set<string>(USER_STATUSES);
 const sectorSet = new Set<string>(SECTOR_CODES);
 const moduleSet = new Set<string>(MODULE_KEYS);
+const rpcManagedModuleSet = new Set<string>(
+  MODULE_KEYS.filter((moduleKey) => moduleKey !== "cadastrar_clientes"),
+);
 
 export const asRecord = (value: unknown): JsonRecord | null =>
   value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
@@ -104,6 +108,9 @@ export const normalizeModulesForRole = (role: PrimaryRole, modules: unknown): Mo
   return Array.from(new Set<ModuleKey>(["tarefas", ...asModuleKeys(modules)]));
 };
 
+export const normalizeRpcModulesForRole = (role: PrimaryRole, modules: unknown): ModuleKey[] =>
+  normalizeModulesForRole(role, modules).filter((moduleKey) => rpcManagedModuleSet.has(moduleKey));
+
 export const applyUserAccessTransaction = async (
   supabaseUser: { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> },
   payload: ApplyUserAccessPayload,
@@ -115,7 +122,7 @@ export const applyUserAccessTransaction = async (
     _primary_role: payload.primaryRole,
     _status: payload.status,
     _sector_code: payload.primaryRole === "colaborador" ? payload.sectorCode : null,
-    _enabled_modules: normalizeModulesForRole(payload.primaryRole, payload.enabledModules),
+    _enabled_modules: normalizeRpcModulesForRole(payload.primaryRole, payload.enabledModules),
     _linked_client_ids: payload.primaryRole === "cliente" ? payload.linkedClientIds : [],
     _change_reason: payload.changeReason,
   });

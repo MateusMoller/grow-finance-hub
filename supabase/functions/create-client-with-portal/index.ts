@@ -53,6 +53,18 @@ type RoleRow = {
   organization_id: string | null;
 };
 
+type AccessRow = {
+  organization_id: string;
+  primary_role: string | null;
+  status: string | null;
+  requires_access_review: boolean | null;
+};
+
+type ModuleGrantRow = {
+  organization_id: string;
+  module_key: string | null;
+};
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -244,6 +256,50 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Invalid or expired session" }, 401);
     }
 
+    const body = await req.json();
+    const payload = asRecord(body);
+    if (!payload) {
+      return jsonResponse({ error: "Invalid payload" }, 400);
+    }
+    const requestedOrganizationId = asUuid(payload.organizationId ?? payload.organization_id);
+
+    const { data: callerAccessRows, error: callerAccessError } = await supabaseAdmin
+      .from("organization_user_access")
+      .select("organization_id, primary_role, status, requires_access_review")
+      .eq("user_id", callerUser.id)
+      .eq("status", "active");
+
+    if (callerAccessError) {
+      throw callerAccessError;
+    }
+
+    const activeCanonicalAccess = ((callerAccessRows || []) as AccessRow[]).filter(
+      (row) => !row.requires_access_review && (!requestedOrganizationId || row.organization_id === requestedOrganizationId),
+    );
+
+    const canonicalOrganizationIds = activeCanonicalAccess.map((row) => row.organization_id);
+    const { data: callerModuleGrants, error: callerModuleGrantsError } = canonicalOrganizationIds.length > 0
+      ? await supabaseAdmin
+          .from("user_module_grants")
+          .select("organization_id, module_key")
+          .eq("user_id", callerUser.id)
+          .in("organization_id", canonicalOrganizationIds)
+          .eq("module_key", "cadastrar_clientes")
+      : { data: [], error: null };
+
+    if (callerModuleGrantsError) {
+      throw callerModuleGrantsError;
+    }
+
+    const createClientGrantOrganizations = new Set(
+      ((callerModuleGrants || []) as ModuleGrantRow[]).map((row) => row.organization_id),
+    );
+    const canonicalCreatorAccess = activeCanonicalAccess.find(
+      (row) =>
+        row.primary_role === "admin" ||
+        (row.primary_role === "colaborador" && createClientGrantOrganizations.has(row.organization_id)),
+    );
+
     const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
       .from("user_roles")
       .select("role, organization_id")
@@ -253,23 +309,20 @@ Deno.serve(async (req) => {
       throw callerRolesError;
     }
 
-    const creatorRole = ((callerRoles || []) as RoleRow[]).find(
-      (roleRow) => clientCreatorRoles.has(roleRow.role) && roleRow.organization_id,
+    const legacyCreatorRole = ((callerRoles || []) as RoleRow[]).find(
+      (roleRow) =>
+        clientCreatorRoles.has(roleRow.role) &&
+        roleRow.organization_id &&
+        (!requestedOrganizationId || roleRow.organization_id === requestedOrganizationId),
     );
-    if (!creatorRole?.organization_id) {
+    const organizationId = canonicalCreatorAccess?.organization_id || legacyCreatorRole?.organization_id;
+    if (!organizationId) {
       return jsonResponse(
-        { error: "Only admin, director, manager, or commercial roles can create clients" },
+        { error: "Seu perfil nao possui permissao para cadastrar clientes." },
         403,
       );
     }
-    const organizationId = creatorRole.organization_id;
     await ensureOrganizationFeatureEnabled(supabaseAdmin, organizationId, "portal");
-
-    const body = await req.json();
-    const payload = asRecord(body);
-    if (!payload) {
-      return jsonResponse({ error: "Invalid payload" }, 400);
-    }
 
     const parsedPayload: CreateClientPayload = {
       name: asTrimmedString(payload.name) || "",

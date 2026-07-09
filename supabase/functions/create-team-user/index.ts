@@ -13,6 +13,46 @@ import {
   normalizeModulesForRole,
 } from "../_shared/user-permissions.ts";
 
+const syncClientCreateGrant = async (
+  supabaseAdmin: ReturnType<typeof createClient>,
+  payload: {
+    organizationId: string;
+    targetUserId: string;
+    primaryRole: string;
+    enabledModules: string[];
+    actorId: string;
+  },
+) => {
+  const shouldGrant =
+    payload.primaryRole === "colaborador" &&
+    payload.enabledModules.includes("cadastrar_clientes");
+
+  if (!shouldGrant) {
+    const { error } = await supabaseAdmin
+      .from("user_module_grants")
+      .delete()
+      .eq("organization_id", payload.organizationId)
+      .eq("user_id", payload.targetUserId)
+      .eq("module_key", "cadastrar_clientes");
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("user_module_grants")
+    .upsert(
+      {
+        organization_id: payload.organizationId,
+        user_id: payload.targetUserId,
+        module_key: "cadastrar_clientes",
+        granted_by: payload.actorId,
+        source: "admin",
+      },
+      { onConflict: "organization_id,user_id,module_key" },
+    );
+  if (error) throw error;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -138,6 +178,14 @@ Deno.serve(async (request) => {
       enabledModules,
       linkedClientIds,
       changeReason: asTrimmedString(payload.changeReason) || "User created",
+    });
+
+    await syncClientCreateGrant(supabaseAdmin, {
+      organizationId,
+      targetUserId: authUser.id,
+      primaryRole,
+      enabledModules,
+      actorId: callerData.user.id,
     });
 
     return jsonResponse({

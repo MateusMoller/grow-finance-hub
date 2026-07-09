@@ -5,6 +5,7 @@ import {
   asSectorCode,
   asUserStatus,
   normalizeModulesForRole,
+  normalizeRpcModulesForRole,
 } from "../_shared/user-permissions.ts";
 
 Deno.test("canonical values are validated before protected mutations", () => {
@@ -27,6 +28,12 @@ Deno.test("Tasks is the only default collaborator module", () => {
   }
   if (asModuleKeys(["tarefas", "invalid"]).join(",") !== "tarefas") {
     throw new Error("invalid modules were not filtered");
+  }
+  if (!asModuleKeys(["cadastrar_clientes"]).includes("cadastrar_clientes")) {
+    throw new Error("client create permission was not accepted");
+  }
+  if (normalizeRpcModulesForRole("colaborador", ["cadastrar_clientes"]).includes("cadastrar_clientes")) {
+    throw new Error("client create permission should not be sent to the route-module RPC");
   }
 });
 
