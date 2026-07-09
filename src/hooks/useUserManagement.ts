@@ -41,6 +41,20 @@ export interface UserAccessInput {
   changeReason?: string;
 }
 
+const buildAccessPayload = (organizationId: string, input: UserAccessInput) => ({
+  organizationId,
+  displayName: input.displayName,
+  primaryRole: input.primaryRole,
+  role: input.primaryRole,
+  primary_role: input.primaryRole,
+  status: input.status,
+  sectorCode: input.sectorCode,
+  sector_code: input.sectorCode,
+  enabledModules: input.enabledModules,
+  linkedClientIds: input.linkedClientIds,
+  changeReason: input.changeReason,
+});
+
 const readFunctionError = async (error: unknown) => {
   if (error && typeof error === "object" && "context" in error) {
     try {
@@ -115,16 +129,9 @@ export function useUserManagement(organizationId: string | null, filters: UserFi
       if (input.userId) {
         const { data, error } = await supabase.functions.invoke("manage-team-user", {
           body: {
+            ...buildAccessPayload(organizationId, input),
             action: "update",
-            organizationId,
             userId: input.userId,
-            displayName: input.displayName,
-            primaryRole: input.primaryRole,
-            status: input.status,
-            sectorCode: input.sectorCode,
-            enabledModules: input.enabledModules,
-            linkedClientIds: input.linkedClientIds,
-            changeReason: input.changeReason,
           },
         });
         if (error) throw new Error(await readFunctionError(error));
@@ -133,16 +140,9 @@ export function useUserManagement(organizationId: string | null, filters: UserFi
 
       const { data, error } = await supabase.functions.invoke("create-team-user", {
         body: {
-          organizationId,
-          displayName: input.displayName,
+          ...buildAccessPayload(organizationId, input),
           email: input.email,
           password: input.password,
-          primaryRole: input.primaryRole,
-          status: input.status,
-          sectorCode: input.sectorCode,
-          enabledModules: input.enabledModules,
-          linkedClientIds: input.linkedClientIds,
-          changeReason: input.changeReason,
         },
       });
       if (error) throw new Error(await readFunctionError(error));

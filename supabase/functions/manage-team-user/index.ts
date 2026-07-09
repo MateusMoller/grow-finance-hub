@@ -89,7 +89,7 @@ Deno.serve(async (request) => {
       .eq("user_id", targetUserId)
       .eq("status", "active");
 
-    const primaryRole = asPrimaryRole(payload.primaryRole ?? payload.role) || existing.primary_role;
+    const primaryRole = asPrimaryRole(payload.primaryRole ?? payload.primary_role ?? payload.role) || existing.primary_role;
     const status = action === "update"
       ? asUserStatus(payload.status) || existing.status
       : "inactive";

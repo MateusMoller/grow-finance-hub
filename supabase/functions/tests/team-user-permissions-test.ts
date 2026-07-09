@@ -10,6 +10,7 @@ import {
 Deno.test("canonical values are validated before protected mutations", () => {
   if (asPrimaryRole("admin") !== "admin") throw new Error("admin role not accepted");
   if (asPrimaryRole("manager") !== null) throw new Error("legacy role accepted");
+  if (asPrimaryRole("ADMIN") !== "admin") throw new Error("uppercase admin role not normalized");
   if (asUserStatus("active") !== "active") throw new Error("active status not accepted");
   if (asUserStatus("blocked") !== null) throw new Error("invalid status accepted");
   if (asSectorCode("fiscal") !== "fiscal") throw new Error("fixed sector not accepted");

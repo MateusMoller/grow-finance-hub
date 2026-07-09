@@ -105,7 +105,10 @@ describe("user management permissions resources", () => {
         action: "update",
         organizationId,
         primaryRole: "colaborador",
+        role: "colaborador",
+        primary_role: "colaborador",
         sectorCode: "fiscal",
+        sector_code: "fiscal",
         enabledModules: ["tarefas", "obrigacoes"],
       }),
     }));

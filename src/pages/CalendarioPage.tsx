@@ -367,36 +367,37 @@ export default function CalendarioPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-7xl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="mx-auto w-full max-w-7xl space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Calendário</h1>
             <p className="text-sm text-muted-foreground">
               Cadastre eventos, obrigações e acompanhe prazos da operação.
             </p>
           </div>
-          <Button className="gap-2" onClick={openNewDialog}>
+          <Button className="h-11 gap-2 self-start rounded-xl px-5 sm:self-auto" onClick={openNewDialog}>
             <Plus className="h-4 w-4" /> Novo registro
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-lg border bg-card p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border bg-card p-5 shadow-sm">
             <p className="text-xs text-muted-foreground">Registros no mês</p>
             <p className="text-2xl font-bold mt-1">{stats.total}</p>
           </div>
-          <div className="rounded-lg border bg-card p-4">
+          <div className="rounded-xl border bg-card p-5 shadow-sm">
             <p className="text-xs text-muted-foreground">Obrigações</p>
             <p className="text-2xl font-bold mt-1 text-orange-600">{stats.obligations}</p>
           </div>
-          <div className="rounded-lg border bg-card p-4">
+          <div className="rounded-xl border bg-card p-5 shadow-sm">
             <p className="text-xs text-muted-foreground">Pendentes</p>
             <p className="text-2xl font-bold mt-1 text-amber-600">{stats.pending}</p>
           </div>
         </div>
 
-        <div className="grid xl:grid-cols-[370px_minmax(0,1fr)] gap-6">
-          <div className="rounded-xl border bg-card p-4 h-fit">
+        <div className="grid gap-5 lg:grid-cols-[minmax(310px,340px)_minmax(0,1fr)]">
+          <div className="h-fit min-w-0 rounded-xl border bg-card p-5 shadow-sm">
+            <div className="flex justify-center overflow-hidden">
             <Calendar
               mode="single"
               selected={selectedDate}
@@ -411,18 +412,31 @@ export default function CalendarioPage() {
                 hasEvents: "bg-primary/10 text-primary font-semibold",
                 hasObligations: "ring-2 ring-orange-500 ring-inset",
               }}
-              className="w-full"
+              className="w-full max-w-[292px] p-0"
+              classNames={{
+                month: "w-full space-y-4",
+                caption: "relative flex items-center justify-center px-10 pt-0",
+                nav_button_previous: "absolute left-0",
+                nav_button_next: "absolute right-0",
+                table: "w-full border-collapse",
+                head_row: "grid grid-cols-7",
+                head_cell: "flex h-8 items-center justify-center rounded-md text-[0.8rem] font-normal text-muted-foreground",
+                row: "grid grid-cols-7 gap-0.5",
+                cell: "relative flex h-10 items-center justify-center p-0 text-center text-sm",
+                day: "h-9 w-9 rounded-lg p-0 font-normal aria-selected:opacity-100",
+              }}
             />
-            <div className="mt-3 text-xs text-muted-foreground space-y-1">
+            </div>
+            <div className="mt-5 space-y-2 border-t pt-4 text-xs text-muted-foreground">
               <p>Legenda:</p>
               <p><span className="inline-block h-2 w-2 rounded-full bg-primary mr-1.5" /> Dia com evento</p>
               <p><span className="inline-block h-2 w-2 rounded-full bg-orange-500 mr-1.5" /> Dia com obrigação</p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="rounded-xl border bg-card">
-              <div className="p-4 border-b flex items-center justify-between gap-2">
+          <div className="min-w-0 space-y-4">
+            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="flex items-center justify-between gap-2 border-b p-5">
                 <div>
                   <h2 className="font-semibold">
                     Agenda de {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
@@ -434,12 +448,12 @@ export default function CalendarioPage() {
               </div>
 
               {loading ? (
-                <div className="p-8 flex justify-center">
+                <div className="flex min-h-[220px] justify-center p-8">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>
               ) : selectedDayEvents.length === 0 ? (
-                <div className="p-8 text-center">
-                  <CalendarDays className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <div className="flex min-h-[220px] flex-col items-center justify-center p-8 text-center">
+                  <CalendarDays className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                   <p className="font-medium">Sem registros neste dia</p>
                   <p className="text-sm text-muted-foreground mt-1">
                     Clique em "Novo registro" para adicionar um evento ou obrigação.
@@ -515,8 +529,8 @@ export default function CalendarioPage() {
               )}
             </div>
 
-            <div className="rounded-xl border bg-card">
-              <div className="p-4 border-b">
+            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="border-b p-5">
                 <h2 className="font-semibold">Próximas obrigações (7 dias)</h2>
               </div>
               {upcomingObligations.length === 0 ? (
