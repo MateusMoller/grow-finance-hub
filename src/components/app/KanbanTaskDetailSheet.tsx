@@ -5,18 +5,41 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { CalendarDays, Building2, Download, FileText, FolderOpen, Loader2, MessageSquare, Send, User } from "lucide-react";
+import {
+  CalendarDays,
+  Building2,
+  Download,
+  FileText,
+  FolderOpen,
+  Loader2,
+  MessageSquare,
+  Send,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
 import { useAuth } from "@/hooks/useAuth";
+import { loadTaskAssignees } from "@/lib/taskAssignees";
 
-export type KanbanStatus = "backlog" | "todo" | "doing" | "review" | "done" | "archived";
+export type KanbanStatus =
+  "backlog" | "todo" | "doing" | "review" | "done" | "archived";
 
 interface TaskSubtask {
   title: string;
@@ -104,7 +127,15 @@ const statusLabels: Record<KanbanStatus, string> = {
 };
 
 const priorityOptions = ["Urgente", "Alta", "Média", "Baixa"];
-const sectorOptions = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
+const sectorOptions = [
+  "Contábil",
+  "Fiscal",
+  "Departamento Pessoal",
+  "Financeiro",
+  "Comercial",
+  "Societário",
+  "Geral",
+];
 
 export function KanbanTaskDetailSheet({
   task,
@@ -116,7 +147,7 @@ export function KanbanTaskDetailSheet({
   onSubtaskToggle,
   historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
-  const { user, currentOrganizationId, effectiveAccess } = useAuth();
+  const { user, currentOrganizationId } = useAuth();
   const [form, setForm] = useState({
     description: "",
     client_name: "",
@@ -127,20 +158,27 @@ export function KanbanTaskDetailSheet({
     status: "backlog" as KanbanStatus,
     due_date: "",
   });
-  const [requestInfo, setRequestInfo] = useState<LinkedRequestInfo | null>(null);
-  const [requestAttachments, setRequestAttachments] = useState<LinkedRequestAttachment[]>([]);
+  const [requestInfo, setRequestInfo] = useState<LinkedRequestInfo | null>(
+    null,
+  );
+  const [requestAttachments, setRequestAttachments] = useState<
+    LinkedRequestAttachment[]
+  >([]);
   const [loadingRequest, setLoadingRequest] = useState(false);
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [sendingComment, setSendingComment] = useState(false);
   const [newComment, setNewComment] = useState("");
-  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const commentsBottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!task) return;
 
-    const sectors = task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
+    const sectors =
+      task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
     setForm({
       description: task.description || "",
       client_name: task.client_name || "",
@@ -154,43 +192,28 @@ export function KanbanTaskDetailSheet({
   }, [task]);
 
   useEffect(() => {
-    if (!open || effectiveAccess?.primaryRole !== "admin" || !currentOrganizationId) {
+    if (!open || !currentOrganizationId) {
       setAssigneeOptions([]);
       return;
     }
 
     let cancelled = false;
     const loadAssignees = async () => {
-      const { data: accessRows } = await supabase
-        .from("organization_user_access")
-        .select("user_id")
-        .eq("organization_id", currentOrganizationId)
-        .eq("primary_role", "colaborador")
-        .eq("status", "active")
-        .eq("requires_access_review", false);
-      const ids = (accessRows || []).map((row) => String(row.user_id));
-      if (ids.length === 0) {
-        if (!cancelled) setAssigneeOptions([]);
-        return;
-      }
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name")
-        .in("user_id", ids);
-      if (!cancelled) {
-        setAssigneeOptions(
-          (profiles || []).map((profile) => ({
-            id: String(profile.user_id),
-            name: profile.display_name || "Colaborador",
-          })),
-        );
+      try {
+        const assignees = await loadTaskAssignees(currentOrganizationId);
+        if (!cancelled) setAssigneeOptions(assignees);
+      } catch {
+        if (!cancelled) {
+          setAssigneeOptions([]);
+          toast.error("Nao foi possivel carregar os responsaveis.");
+        }
       }
     };
     void loadAssignees();
     return () => {
       cancelled = true;
     };
-  }, [currentOrganizationId, effectiveAccess?.primaryRole, open]);
+  }, [currentOrganizationId, open]);
 
   useEffect(() => {
     if (!open || !task?.request_id) {
@@ -205,7 +228,9 @@ export function KanbanTaskDetailSheet({
       const [requestRes, docsRes] = await Promise.all([
         supabase
           .from("client_requests")
-          .select("id, title, description, category, sector, status, created_at")
+          .select(
+            "id, title, description, category, sector, status, created_at",
+          )
           .eq("id", task.request_id)
           .maybeSingle(),
         supabase
@@ -257,7 +282,9 @@ export function KanbanTaskDetailSheet({
     }
 
     const rows = (data || []) as TaskComment[];
-    const userIds = Array.from(new Set(rows.map((comment) => comment.user_id).filter(Boolean)));
+    const userIds = Array.from(
+      new Set(rows.map((comment) => comment.user_id).filter(Boolean)),
+    );
     let profileMap = new Map<string, { display_name: string | null }>();
 
     if (userIds.length > 0) {
@@ -267,14 +294,24 @@ export function KanbanTaskDetailSheet({
         .in("user_id", userIds);
 
       profileMap = new Map(
-        ((profiles || []) as Array<{ user_id: string; display_name: string | null }>).map((profile) => [
+        (
+          (profiles || []) as Array<{
+            user_id: string;
+            display_name: string | null;
+          }>
+        ).map((profile) => [
           profile.user_id,
           { display_name: profile.display_name },
         ]),
       );
     }
 
-    setTaskComments(rows.map((comment) => ({ ...comment, profile: profileMap.get(comment.user_id) || null })));
+    setTaskComments(
+      rows.map((comment) => ({
+        ...comment,
+        profile: profileMap.get(comment.user_id) || null,
+      })),
+    );
     setLoadingComments(false);
   }, [task?.id]);
 
@@ -309,7 +346,9 @@ export function KanbanTaskDetailSheet({
 
   if (!task) return null;
   const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
-  const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
+  const subtaskPct = task.subtasks.length
+    ? Math.round((subtaskDone / task.subtasks.length) * 100)
+    : 0;
 
   const toggleSector = (sector: string) => {
     setForm((prev) => {
@@ -340,7 +379,9 @@ export function KanbanTaskDetailSheet({
   };
 
   const handleDownloadAttachment = async (filePath: string) => {
-    const { data, error } = await supabase.storage.from("client-documents").createSignedUrl(filePath, 60);
+    const { data, error } = await supabase.storage
+      .from("client-documents")
+      .createSignedUrl(filePath, 60);
     if (error || !data?.signedUrl) {
       toast.error("Não foi possível gerar o link do anexo.");
       return;
@@ -357,7 +398,9 @@ export function KanbanTaskDetailSheet({
       task_id: task.id,
       user_id: user.id,
       content,
-      ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+      ...(currentOrganizationId
+        ? { organization_id: currentOrganizationId }
+        : {}),
     });
     setSendingComment(false);
 
@@ -378,7 +421,10 @@ export function KanbanTaskDetailSheet({
             <Badge variant="outline" className="text-xs border-0 bg-muted">
               {form.priority}
             </Badge>
-            <Badge variant="outline" className="text-xs border-0 bg-primary/10 text-primary">
+            <Badge
+              variant="outline"
+              className="text-xs border-0 bg-primary/10 text-primary"
+            >
               {statusLabels[form.status]}
             </Badge>
           </div>
@@ -391,20 +437,26 @@ export function KanbanTaskDetailSheet({
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Building2 className="h-3 w-3" /> Cliente
               </span>
-              <span className="text-sm font-medium">{form.client_name || "Não informado"}</span>
+              <span className="text-sm font-medium">
+                {form.client_name || "Não informado"}
+              </span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <User className="h-3 w-3" /> Responsavel
               </span>
-              <span className="text-sm font-medium">{form.assignee || "Não informado"}</span>
+              <span className="text-sm font-medium">
+                {form.assignee || "Não informado"}
+              </span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <FolderOpen className="h-3 w-3" /> Setores
               </span>
               <span className="text-sm font-medium">
-                {form.sectors.length > 0 ? form.sectors.join(", ") : "Não informado"}
+                {form.sectors.length > 0
+                  ? form.sectors.join(", ")
+                  : "Não informado"}
               </span>
             </div>
             <div className="space-y-1">
@@ -412,7 +464,9 @@ export function KanbanTaskDetailSheet({
                 <CalendarDays className="h-3 w-3" /> Prazo
               </span>
               <span className="text-sm font-medium">
-                {form.due_date ? new Date(form.due_date).toLocaleDateString("pt-BR") : "Sem prazo"}
+                {form.due_date
+                  ? new Date(form.due_date).toLocaleDateString("pt-BR")
+                  : "Sem prazo"}
               </span>
             </div>
           </div>
@@ -430,7 +484,15 @@ export function KanbanTaskDetailSheet({
             <TabsContent value="informações" className="space-y-4">
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as KanbanStatus }))}>
+                <Select
+                  value={form.status}
+                  onValueChange={(value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      status: value as KanbanStatus,
+                    }))
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -440,7 +502,9 @@ export function KanbanTaskDetailSheet({
                     <SelectItem value="doing">Em Andamento</SelectItem>
                     <SelectItem value="review">Em Revisão</SelectItem>
                     <SelectItem value="done">Concluído</SelectItem>
-                    {canArchive && <SelectItem value="archived">Arquivado</SelectItem>}
+                    {canArchive && (
+                      <SelectItem value="archived">Arquivado</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -448,7 +512,12 @@ export function KanbanTaskDetailSheet({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Prioridade</Label>
-                  <Select value={form.priority} onValueChange={(value) => setForm((prev) => ({ ...prev, priority: value }))}>
+                  <Select
+                    value={form.priority}
+                    onValueChange={(value) =>
+                      setForm((prev) => ({ ...prev, priority: value }))
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -463,40 +532,62 @@ export function KanbanTaskDetailSheet({
                 </div>
                 <div className="space-y-2">
                   <Label>Prazo</Label>
-                  <Input type="date" value={form.due_date} onChange={(event) => setForm((prev) => ({ ...prev, due_date: event.target.value }))} />
+                  <Input
+                    type="date"
+                    value={form.due_date}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        due_date: event.target.value,
+                      }))
+                    }
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Cliente</Label>
-                  <Input value={form.client_name} onChange={(event) => setForm((prev) => ({ ...prev, client_name: event.target.value }))} />
+                  <Input
+                    value={form.client_name}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        client_name: event.target.value,
+                      }))
+                    }
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Responsavel</Label>
-                  {effectiveAccess?.primaryRole === "admin" ? (
-                    <Select
-                      value={form.assigned_to_user_id || "unassigned"}
-                      onValueChange={(value) => {
-                        const selected = assigneeOptions.find((option) => option.id === value);
-                        setForm((prev) => ({
-                          ...prev,
-                          assigned_to_user_id: value === "unassigned" ? "" : value,
-                          assignee: selected?.name || "",
-                        }));
-                      }}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Sem responsável" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Sem responsável</SelectItem>
-                        {assigneeOptions.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input value={form.assignee} readOnly />
-                  )}
+                  <Select
+                    value={form.assigned_to_user_id || "unassigned"}
+                    onValueChange={(value) => {
+                      const selected = assigneeOptions.find(
+                        (option) => option.id === value,
+                      );
+                      setForm((prev) => ({
+                        ...prev,
+                        assigned_to_user_id:
+                          value === "unassigned" ? "" : value,
+                        assignee: selected?.name || "",
+                      }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sem responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">
+                        Sem responsável
+                      </SelectItem>
+                      {assigneeOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -504,8 +595,14 @@ export function KanbanTaskDetailSheet({
                 <Label>Setores (seleção multipla)</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
                   {sectorOptions.map((sector) => (
-                    <label key={sector} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <Checkbox checked={form.sectors.includes(sector)} onCheckedChange={() => toggleSector(sector)} />
+                    <label
+                      key={sector}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={form.sectors.includes(sector)}
+                        onCheckedChange={() => toggleSector(sector)}
+                      />
                       <span>{sector}</span>
                     </label>
                   ))}
@@ -517,7 +614,12 @@ export function KanbanTaskDetailSheet({
                 <Textarea
                   rows={4}
                   value={form.description}
-                  onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
                   placeholder="Detalhes da tarefa..."
                 />
               </div>
@@ -527,7 +629,8 @@ export function KanbanTaskDetailSheet({
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Empresas (subtarefas)</Label>
                     <span className="text-xs text-muted-foreground">
-                      {subtaskDone}/{task.subtasks.length} concluídas ({subtaskPct}%)
+                      {subtaskDone}/{task.subtasks.length} concluídas (
+                      {subtaskPct}%)
                     </span>
                   </div>
                   <Progress value={subtaskPct} className="h-2" />
@@ -539,9 +642,17 @@ export function KanbanTaskDetailSheet({
                       >
                         <Checkbox
                           checked={subtask.done}
-                          onCheckedChange={() => onSubtaskToggle?.(task.id, index)}
+                          onCheckedChange={() =>
+                            onSubtaskToggle?.(task.id, index)
+                          }
                         />
-                        <span className={subtask.done ? "line-through text-muted-foreground" : ""}>
+                        <span
+                          className={
+                            subtask.done
+                              ? "line-through text-muted-foreground"
+                              : ""
+                          }
+                        >
                           {subtask.title}
                         </span>
                       </label>
@@ -572,29 +683,47 @@ export function KanbanTaskDetailSheet({
                     <div className="flex h-[180px] items-center justify-center text-center">
                       <div>
                         <MessageSquare className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Nenhuma mensagem nesta tarefa.</p>
+                        <p className="text-sm text-muted-foreground">
+                          Nenhuma mensagem nesta tarefa.
+                        </p>
                       </div>
                     </div>
                   ) : (
                     taskComments.map((comment) => {
                       const isOwn = comment.user_id === user?.id;
-                      const displayName = comment.profile?.display_name?.trim() || (isOwn ? "Você" : "Equipe");
+                      const displayName =
+                        comment.profile?.display_name?.trim() ||
+                        (isOwn ? "Você" : "Equipe");
 
                       return (
-                        <div key={comment.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[86%] rounded-2xl px-3 py-2 ${isOwn ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"}`}>
+                        <div
+                          key={comment.id}
+                          className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                            className={`max-w-[86%] rounded-2xl px-3 py-2 ${isOwn ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"}`}
+                          >
                             <div className="mb-1 flex items-center justify-between gap-3">
-                              <span className="text-xs font-semibold opacity-80">{displayName}</span>
-                              <span className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                                {new Date(comment.created_at).toLocaleString("pt-BR", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
+                              <span className="text-xs font-semibold opacity-80">
+                                {displayName}
+                              </span>
+                              <span
+                                className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                              >
+                                {new Date(comment.created_at).toLocaleString(
+                                  "pt-BR",
+                                  {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                )}
                               </span>
                             </div>
-                            <p className="whitespace-pre-wrap break-words text-sm leading-6">{comment.content}</p>
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                              {comment.content}
+                            </p>
                           </div>
                         </div>
                       );
@@ -625,10 +754,16 @@ export function KanbanTaskDetailSheet({
                       onClick={() => void handleSendTaskComment()}
                       disabled={sendingComment || !newComment.trim()}
                     >
-                      {sendingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      {sendingComment ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">Enter para enviar. Shift+Enter para nova linha.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Enter para enviar. Shift+Enter para nova linha.
+                  </p>
                 </div>
               </div>
             </TabsContent>
@@ -647,7 +782,13 @@ export function KanbanTaskDetailSheet({
                   <div className="space-y-2">
                     <Label>Data de envio</Label>
                     <Input
-                      value={requestInfo?.created_at ? new Date(requestInfo.created_at).toLocaleString("pt-BR") : "-"}
+                      value={
+                        requestInfo?.created_at
+                          ? new Date(requestInfo.created_at).toLocaleString(
+                              "pt-BR",
+                            )
+                          : "-"
+                      }
                       readOnly
                     />
                   </div>
@@ -656,7 +797,10 @@ export function KanbanTaskDetailSheet({
                     <Label>Informações</Label>
                     <Textarea
                       rows={5}
-                      value={requestInfo?.description || "Sem informações adicionais da solicitação."}
+                      value={
+                        requestInfo?.description ||
+                        "Sem informações adicionais da solicitação."
+                      }
                       readOnly
                     />
                   </div>
@@ -670,18 +814,27 @@ export function KanbanTaskDetailSheet({
                     ) : (
                       <div className="space-y-2">
                         {requestAttachments.map((attachment) => (
-                          <div key={attachment.id} className="rounded-lg border p-3 flex items-center justify-between gap-3">
+                          <div
+                            key={attachment.id}
+                            className="rounded-lg border p-3 flex items-center justify-between gap-3"
+                          >
                             <div className="min-w-0">
-                              <div className="text-sm font-medium truncate">{attachment.file_name}</div>
+                              <div className="text-sm font-medium truncate">
+                                {attachment.file_name}
+                              </div>
                               <div className="text-xs text-muted-foreground">
-                                {attachment.file_size ? `${Math.round(attachment.file_size / 1024)} KB` : "Tamanho não informado"}
+                                {attachment.file_size
+                                  ? `${Math.round(attachment.file_size / 1024)} KB`
+                                  : "Tamanho não informado"}
                               </div>
                             </div>
                             <Button
                               size="sm"
                               variant="outline"
                               className="shrink-0"
-                              onClick={() => handleDownloadAttachment(attachment.file_path)}
+                              onClick={() =>
+                                handleDownloadAttachment(attachment.file_path)
+                              }
                             >
                               <Download className="h-3.5 w-3.5 mr-1" />
                               Baixar
@@ -695,7 +848,8 @@ export function KanbanTaskDetailSheet({
                   {requestInfo && (
                     <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
                       <div className="flex items-center gap-1">
-                        <FileText className="h-3.5 w-3.5" /> Titulo: {requestInfo.title}
+                        <FileText className="h-3.5 w-3.5" /> Titulo:{" "}
+                        {requestInfo.title}
                       </div>
                       <div>Categoria: {requestInfo.category}</div>
                       <div>Setor solicitado: {requestInfo.sector}</div>
@@ -714,9 +868,14 @@ export function KanbanTaskDetailSheet({
                 historyEntries.map((entry) => (
                   <div key={entry.id} className="rounded-lg border p-3">
                     <div className="text-sm font-medium">{entry.action}</div>
-                    {entry.details && <div className="text-xs text-muted-foreground mt-0.5">{entry.details}</div>}
+                    {entry.details && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {entry.details}
+                      </div>
+                    )}
                     <div className="text-[11px] text-muted-foreground mt-1">
-                      {new Date(entry.createdAt).toLocaleString("pt-BR")} - {entry.actor}
+                      {new Date(entry.createdAt).toLocaleString("pt-BR")} -{" "}
+                      {entry.actor}
                     </div>
                   </div>
                 ))

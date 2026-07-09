@@ -56,6 +56,12 @@ type CnpjLookupResponse = {
   error?: string;
 };
 
+type CreateClientWithPortalResponse = {
+  portal_access_link?: string | null;
+  portal_access_link_type?: "invite" | "recovery" | "password" | null;
+  portal_password_applied?: boolean;
+};
+
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
 const isValidEmail = (value: string | null | undefined) => {
   const normalized = normalizeEmail(value);
@@ -110,6 +116,32 @@ const formatPhoneValue = (value: string) => {
 };
 
 const normalizePhoneDigits = (value: string | null | undefined) => normalizeBrazilPhoneDigits(value);
+
+const getCurrentAccessToken = async () => {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw new Error(sessionError.message || "Nao foi possivel validar a sessao atual.");
+  }
+
+  let accessToken = session?.access_token?.trim();
+  if (accessToken) return accessToken;
+
+  const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    throw new Error(refreshError.message || "Sessao expirada. Entre novamente para cadastrar o cliente.");
+  }
+
+  accessToken = refreshedData.session?.access_token?.trim();
+  if (!accessToken) {
+    throw new Error("Sessao expirada. Entre novamente para cadastrar o cliente.");
+  }
+
+  return accessToken;
+};
 
 const normalizeRegime = (value: string | null | undefined) => {
   const trimmed = (value || "").trim();
@@ -365,40 +397,53 @@ export default function ClientsPage() {
       return;
     }
 
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+    setCreating(true);
+    const invokeCreateClient = (accessToken: string) =>
+      supabase.functions.invoke<CreateClientWithPortalResponse>("create-client-with-portal", {
+        body: {
+          name: normalizedName,
+          organizationId: currentOrganizationId,
+          cnpj: normalizedCnpj,
+          regime: newClient.regime.trim(),
+          sector: newClient.sector.trim(),
+          contact: normalizedContact || null,
+          email: normalizedEmail,
+          phone: normalizedPhone || null,
+          clientEntityType: entityType,
+          parentClientId,
+          obligationCompletionWhatsAppEnabled: newClient.obligationCompletionWhatsAppEnabled,
+          portalPassword: password,
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
 
-    if (sessionError || !session?.access_token) {
-      toast.error("Sessao expirada. Entre novamente para cadastrar o cliente.");
+    let data: CreateClientWithPortalResponse | null = null;
+    let error: unknown = null;
+
+    try {
+      let accessToken = await getCurrentAccessToken();
+      const initialResult = await invokeCreateClient(accessToken);
+      data = initialResult.data;
+      error = initialResult.error;
+
+      if (error instanceof FunctionsHttpError && error.context.status === 401) {
+        const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+        const refreshedToken = refreshedData.session?.access_token?.trim();
+        if (!refreshError && refreshedToken) {
+          accessToken = refreshedToken;
+          const retryResult = await invokeCreateClient(accessToken);
+          data = retryResult.data;
+          error = retryResult.error;
+        }
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sessao expirada. Entre novamente para cadastrar o cliente.");
+      setCreating(false);
       return;
     }
 
-    setCreating(true);
-    const { data, error } = await supabase.functions.invoke<{
-      portal_access_link?: string | null;
-      portal_access_link_type?: "invite" | "recovery" | "password" | null;
-      portal_password_applied?: boolean;
-    }>("create-client-with-portal", {
-      body: {
-        name: normalizedName,
-        organizationId: currentOrganizationId,
-        cnpj: normalizedCnpj,
-        regime: newClient.regime.trim(),
-        sector: newClient.sector.trim(),
-        contact: normalizedContact || null,
-        email: normalizedEmail,
-        phone: normalizedPhone || null,
-        clientEntityType: entityType,
-        parentClientId,
-        obligationCompletionWhatsAppEnabled: newClient.obligationCompletionWhatsAppEnabled,
-        portalPassword: password,
-      },
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    });
     setCreating(false);
 
     if (error) {

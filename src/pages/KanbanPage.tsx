@@ -1,30 +1,72 @@
 import { AppLayout } from "@/components/app/AppLayout";
-import { KanbanTaskDetailSheet, type KanbanStatus, type KanbanTaskItem } from "@/components/app/KanbanTaskDetailSheet";
+import {
+  KanbanTaskDetailSheet,
+  type KanbanStatus,
+  type KanbanTaskItem,
+} from "@/components/app/KanbanTaskDetailSheet";
 import { TaskOriginLegend } from "@/components/app/TaskOriginLegend";
 import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
 import { Check, ChevronsUpDown, Filter, Loader2, Plus, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type DragEvent,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
-import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
+import {
+  getTaskCompetence,
+  matchesSelectedCompany,
+  matchesSelectedCompetence,
+} from "@/lib/globalFilters";
+import {
+  addHistoryEntry,
+  getEntityHistory,
+  type ChangeHistoryEntry,
+} from "@/lib/changeHistory";
 import {
   canCreateTaskInSector,
   getCanonicalTaskSectorAccess,
   normalizeTaskSectorLabel,
 } from "@/lib/taskSectorAccess";
+import { loadTaskAssignees } from "@/lib/taskAssignees";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -40,9 +82,25 @@ const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
   color: "bg-slate-500",
 };
 
-const sectors = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
+const sectors = [
+  "Contábil",
+  "Fiscal",
+  "Departamento Pessoal",
+  "Financeiro",
+  "Comercial",
+  "Societário",
+  "Geral",
+];
 
-const taskSectorOptions = ["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societario", "Geral"];
+const taskSectorOptions = [
+  "Contabil",
+  "Fiscal",
+  "Departamento Pessoal",
+  "Financeiro",
+  "Comercial",
+  "Societario",
+  "Geral",
+];
 
 const priorityDot: Record<string, string> = {
   Urgente: "bg-destructive",
@@ -74,7 +132,8 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-const normalizeVisibleSector = (value: string) => normalizeTaskSectorLabel(normalizeSector(value));
+const normalizeVisibleSector = (value: string) =>
+  normalizeTaskSectorLabel(normalizeSector(value));
 
 const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
   const normalized = normalizeText(errorMessage || "");
@@ -100,7 +159,8 @@ const parseSubtasks = (value: unknown): TaskSubtask[] => {
       if (!item || typeof item !== "object") return null;
 
       const subtask = item as { title?: unknown; done?: unknown };
-      const title = typeof subtask.title === "string" ? subtask.title.trim() : "";
+      const title =
+        typeof subtask.title === "string" ? subtask.title.trim() : "";
       if (!title) return null;
 
       return {
@@ -132,7 +192,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const isAdmin = effectiveAccess?.primaryRole === "admin";
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
@@ -142,10 +204,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const [selectedTask, setSelectedTask] = useState<KanbanTaskItem | null>(null);
   const [savingDetail, setSavingDetail] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-  const [dropTargetStatus, setDropTargetStatus] = useState<KanbanStatus | null>(null);
+  const [dropTargetStatus, setDropTargetStatus] = useState<KanbanStatus | null>(
+    null,
+  );
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [historyVersion, setHistoryVersion] = useState(0);
-  const [selectedTaskHistory, setSelectedTaskHistory] = useState<ChangeHistoryEntry[]>([]);
+  const [selectedTaskHistory, setSelectedTaskHistory] = useState<
+    ChangeHistoryEntry[]
+  >([]);
   const [newTask, setNewTask] = useState({
     title: "",
     client_name: "",
@@ -157,13 +223,20 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   });
 
   const actorLabel = user?.email || "Usuário";
-  const taskSectorAccess = useMemo(() => getCanonicalTaskSectorAccess(effectiveAccess), [effectiveAccess]);
+  const taskSectorAccess = useMemo(
+    () => getCanonicalTaskSectorAccess(effectiveAccess),
+    [effectiveAccess],
+  );
   const availableSectors = useMemo(() => {
     if (taskSectorAccess.canAccessAllTaskSectors) return taskSectorOptions;
     return taskSectorAccess.allowedTaskSectors;
   }, [taskSectorAccess]);
 
-  const registerTaskHistory = (taskId: string, action: string, details?: string) => {
+  const registerTaskHistory = (
+    taskId: string,
+    action: string,
+    details?: string,
+  ) => {
     if (!user?.id) return;
     addHistoryEntry(user.id, {
       entityType: "task",
@@ -177,7 +250,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
   const columns = useMemo(
     () => (isAdmin ? [...baseColumns, archiveColumn] : baseColumns),
-    [isAdmin]
+    [isAdmin],
   );
 
   useEffect(() => {
@@ -198,7 +271,10 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("kanban_tasks").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("kanban_tasks")
+      .select("*")
+      .order("created_at", { ascending: false });
 
     if (error) {
       toast.error("Erro ao carregar tarefas");
@@ -213,12 +289,21 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         priority: normalizePriority(task.priority || ""),
         sector: normalizeVisibleSector(task.sector || ""),
         status: task.status as KanbanStatus,
-        tags: (task.tags?.length ? task.tags : task.sector ? [task.sector] : []).map((sector) => normalizeVisibleSector(sector)),
+        tags: (task.tags?.length
+          ? task.tags
+          : task.sector
+            ? [task.sector]
+            : []
+        ).map((sector) => normalizeVisibleSector(sector)),
         subtasks: parseSubtasks(task.subtasks),
         integration_source:
-          typeof taskRecord.integration_source === "string" ? taskRecord.integration_source : null,
+          typeof taskRecord.integration_source === "string"
+            ? taskRecord.integration_source
+            : null,
         integration_task_id:
-          typeof taskRecord.integration_task_id === "string" ? taskRecord.integration_task_id : null,
+          typeof taskRecord.integration_task_id === "string"
+            ? taskRecord.integration_task_id
+            : null,
       };
     });
     setTasks(normalized as KanbanTaskItem[]);
@@ -244,33 +329,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   }, []);
 
   const fetchAssignees = useCallback(async () => {
-    if (!isAdmin || !currentOrganizationId) {
+    try {
+      setAssigneeOptions(await loadTaskAssignees(currentOrganizationId));
+    } catch {
       setAssigneeOptions([]);
-      return;
+      toast.error("Nao foi possivel carregar os responsaveis.");
     }
-    const { data: accessRows } = await supabase
-      .from("organization_user_access")
-      .select("user_id")
-      .eq("organization_id", currentOrganizationId)
-      .eq("primary_role", "colaborador")
-      .eq("status", "active")
-      .eq("requires_access_review", false);
-    const ids = (accessRows || []).map((row) => String(row.user_id));
-    if (ids.length === 0) {
-      setAssigneeOptions([]);
-      return;
-    }
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id, display_name")
-      .in("user_id", ids);
-    setAssigneeOptions(
-      (profiles || []).map((profile) => ({
-        id: String(profile.user_id),
-        name: profile.display_name || "Colaborador",
-      })),
-    );
-  }, [currentOrganizationId, isAdmin]);
+  }, [currentOrganizationId]);
 
   useEffect(() => {
     void fetchTasks();
@@ -280,10 +345,24 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
   const filteredTasks = tasks.filter((task) => {
     if (!isAdmin && task.status === "archived") return false;
-    if (!matchesSelectedCompany(task.client_name, selectedCompany)) return false;
-    if (!matchesSelectedCompetence(getTaskCompetence(task.due_date, task.created_at), selectedCompetence)) return false;
-    const taskSectors = task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
-    if (sectorFilter !== "all" && !taskSectors.some((sector) => normalizeVisibleSector(sector) === sectorFilter)) return false;
+    if (!matchesSelectedCompany(task.client_name, selectedCompany))
+      return false;
+    if (
+      !matchesSelectedCompetence(
+        getTaskCompetence(task.due_date, task.created_at),
+        selectedCompetence,
+      )
+    )
+      return false;
+    const taskSectors =
+      task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
+    if (
+      sectorFilter !== "all" &&
+      !taskSectors.some(
+        (sector) => normalizeVisibleSector(sector) === sectorFilter,
+      )
+    )
+      return false;
     return true;
   });
 
@@ -313,7 +392,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    setSelectedTaskHistory(getEntityHistory(user.id, "task", selectedTask.id, 15));
+    setSelectedTaskHistory(
+      getEntityHistory(user.id, "task", selectedTask.id, 15),
+    );
   }, [historyVersion, selectedTask?.id, user?.id]);
 
   const handleStatusChange = async (
@@ -325,17 +406,30 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     if (!currentTask || currentTask.status === newStatus) return;
 
     const previousStatus = currentTask.status;
-    const { error } = await supabase.from("kanban_tasks").update({ status: newStatus }).eq("id", taskId);
+    const { error } = await supabase
+      .from("kanban_tasks")
+      .update({ status: newStatus })
+      .eq("id", taskId);
     if (error) {
       toast.error(`Erro ao mover tarefa: ${error.message}`);
       return;
     }
 
-    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task)));
-    setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, status: newStatus } : prev));
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId ? { ...task, status: newStatus } : task,
+      ),
+    );
+    setSelectedTask((prev) =>
+      prev && prev.id === taskId ? { ...prev, status: newStatus } : prev,
+    );
 
     if (!options?.skipHistory) {
-      registerTaskHistory(taskId, "Status alterado", `${previousStatus} -> ${newStatus}`);
+      registerTaskHistory(
+        taskId,
+        "Status alterado",
+        `${previousStatus} -> ${newStatus}`,
+      );
     }
 
     if (options?.undoable === false) {
@@ -347,8 +441,15 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       action: {
         label: "Desfazer",
         onClick: () => {
-          void handleStatusChange(taskId, previousStatus, { undoable: false, skipHistory: true });
-          registerTaskHistory(taskId, "Alteração de status desfeita", `${newStatus} -> ${previousStatus}`);
+          void handleStatusChange(taskId, previousStatus, {
+            undoable: false,
+            skipHistory: true,
+          });
+          registerTaskHistory(
+            taskId,
+            "Alteração de status desfeita",
+            `${newStatus} -> ${previousStatus}`,
+          );
         },
       },
     });
@@ -366,11 +467,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       status: KanbanStatus;
       due_date: string | null;
       tags: string[];
-    }
+    },
   ) => {
     const previousTask = tasks.find((task) => task.id === taskId);
     setSavingDetail(true);
-    const { error } = await supabase.from("kanban_tasks").update(updates).eq("id", taskId);
+    const { error } = await supabase
+      .from("kanban_tasks")
+      .update(updates)
+      .eq("id", taskId);
     setSavingDetail(false);
 
     if (error) {
@@ -378,22 +482,35 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, ...updates } : task)));
-    setSelectedTask((prev) => (prev && prev.id === taskId ? { ...prev, ...updates } : prev));
+    setTasks((prev) =>
+      prev.map((task) => (task.id === taskId ? { ...task, ...updates } : task)),
+    );
+    setSelectedTask((prev) =>
+      prev && prev.id === taskId ? { ...prev, ...updates } : prev,
+    );
     if (previousTask) {
       const changedFields: string[] = [];
-      if ((previousTask.description || "") !== (updates.description || "")) changedFields.push("descrição");
-      if ((previousTask.client_name || "") !== (updates.client_name || "")) changedFields.push("cliente");
-      if ((previousTask.assignee || "") !== (updates.assignee || "")) changedFields.push("responsavel");
-      if (previousTask.priority !== updates.priority) changedFields.push("prioridade");
+      if ((previousTask.description || "") !== (updates.description || ""))
+        changedFields.push("descrição");
+      if ((previousTask.client_name || "") !== (updates.client_name || ""))
+        changedFields.push("cliente");
+      if ((previousTask.assignee || "") !== (updates.assignee || ""))
+        changedFields.push("responsavel");
+      if (previousTask.priority !== updates.priority)
+        changedFields.push("prioridade");
       if (previousTask.sector !== updates.sector) changedFields.push("setor");
       if (previousTask.status !== updates.status) changedFields.push("status");
-      if ((previousTask.due_date || "") !== (updates.due_date || "")) changedFields.push("prazo");
+      if ((previousTask.due_date || "") !== (updates.due_date || ""))
+        changedFields.push("prazo");
       const previousTags = (previousTask.tags || []).join("|");
       const nextTags = updates.tags.join("|");
       if (previousTags !== nextTags) changedFields.push("tags");
       if (changedFields.length > 0) {
-        registerTaskHistory(taskId, "Detalhes da tarefa atualizados", changedFields.join(", "));
+        registerTaskHistory(
+          taskId,
+          "Detalhes da tarefa atualizados",
+          changedFields.join(", "),
+        );
       }
     }
     toast.success("Tarefa atualizada");
@@ -405,14 +522,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     const toggledSubtask = taskToUpdate.subtasks[subtaskIndex];
 
     const updatedSubtasks = taskToUpdate.subtasks.map((subtask, index) =>
-      index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask
+      index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask,
     );
 
     setTasks((prev) =>
       prev.map((task) => {
         if (task.id !== taskId) return task;
         return { ...task, subtasks: updatedSubtasks };
-      })
+      }),
     );
 
     setSelectedTask((prev) => {
@@ -453,7 +570,10 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     }
 
     const selectedClient = newTask.client_name.trim()
-      ? clients.find((client) => normalizeText(client.name) === normalizeText(newTask.client_name))
+      ? clients.find(
+          (client) =>
+            normalizeText(client.name) === normalizeText(newTask.client_name),
+        )
       : null;
     if (newTask.client_name.trim() && !selectedClient) {
       toast.error("Cliente invalido. Selecione um cliente da lista");
@@ -478,7 +598,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       .single();
 
     if (error || !createdTask) {
-      toast.error(`Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`);
+      toast.error(
+        `Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`,
+      );
       return;
     }
 
@@ -487,17 +609,28 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
     setNewSubtaskTitle("");
-    setNewTask({ title: "", client_name: "", assignee: "", assigned_to_user_id: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
+    setNewTask({
+      title: "",
+      client_name: "",
+      assignee: "",
+      assigned_to_user_id: "",
+      priority: "Média",
+      sector: availableSectors[0] || "Geral",
+      subtasks: [],
+    });
     void fetchTasks();
   };
 
   useEffect(() => {
     if (!selectedCompany) return;
     const selectedActiveClient = clients.find(
-      (client) => normalizeText(client.name) === normalizeText(selectedCompany)
+      (client) => normalizeText(client.name) === normalizeText(selectedCompany),
     );
     if (selectedActiveClient) {
-      setNewTask((prev) => ({ ...prev, client_name: selectedActiveClient.name }));
+      setNewTask((prev) => ({
+        ...prev,
+        client_name: selectedActiveClient.name,
+      }));
     }
   }, [clients, selectedCompany]);
 
@@ -528,13 +661,19 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     setDropTargetStatus(null);
   };
 
-  const handleColumnDragOver = (event: DragEvent<HTMLDivElement>, status: KanbanStatus) => {
+  const handleColumnDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    status: KanbanStatus,
+  ) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     if (dropTargetStatus !== status) setDropTargetStatus(status);
   };
 
-  const handleColumnDrop = async (event: DragEvent<HTMLDivElement>, status: KanbanStatus) => {
+  const handleColumnDrop = async (
+    event: DragEvent<HTMLDivElement>,
+    status: KanbanStatus,
+  ) => {
     event.preventDefault();
     const taskId = draggingTaskId || event.dataTransfer.getData("text/plain");
     const draggedTask = tasks.find((task) => task.id === taskId);
@@ -542,7 +681,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     handleDragEnd();
     if (!draggedTask || draggedTask.status === status) return;
     if (status === "archived" && draggedTask.status !== "done") {
-      toast.error("Somente tarefas concluídas podem ser movidas para o arquivo");
+      toast.error(
+        "Somente tarefas concluídas podem ser movidas para o arquivo",
+      );
       return;
     }
 
@@ -553,10 +694,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          {!embedded && <div>
-            <h1 className="font-heading text-2xl font-bold">Kanban</h1>
-            <p className="text-sm text-muted-foreground">Gestão visual de demandas</p>
-          </div>}
+          {!embedded && (
+            <div>
+              <h1 className="font-heading text-2xl font-bold">Kanban</h1>
+              <p className="text-sm text-muted-foreground">
+                Gestão visual de demandas
+              </p>
+            </div>
+          )}
           <div className={`flex gap-2 ${embedded ? "ml-auto" : ""}`}>
             <Select value={sectorFilter} onValueChange={setSectorFilter}>
               <SelectTrigger className="w-52">
@@ -572,9 +717,15 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                 ))}
               </SelectContent>
             </Select>
-            {!embedded && <Button variant="default" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Nova Tarefa
-            </Button>}
+            {!embedded && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Nova Tarefa
+              </Button>
+            )}
           </div>
         </div>
 
@@ -590,17 +741,28 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               const columnTasks = tasksByStatus[column.id] || [];
 
               return (
-                <div key={column.id} className="min-w-[calc(100vw-2.75rem)] w-[calc(100vw-2.75rem)] shrink-0 sm:min-w-[280px] sm:w-[280px]">
+                <div
+                  key={column.id}
+                  className="min-w-[calc(100vw-2.75rem)] w-[calc(100vw-2.75rem)] shrink-0 sm:min-w-[280px] sm:w-[280px]"
+                >
                   <div className="flex items-center gap-2 mb-3">
                     <div className={`h-2 w-2 rounded-full ${column.color}`} />
-                    <span className="text-sm font-semibold">{column.label}</span>
-                    <span className="text-xs text-muted-foreground ml-auto">{columnTasks.length}</span>
+                    <span className="text-sm font-semibold">
+                      {column.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      {columnTasks.length}
+                    </span>
                   </div>
                   <div
-                    onDragOver={(event) => handleColumnDragOver(event, column.id)}
+                    onDragOver={(event) =>
+                      handleColumnDragOver(event, column.id)
+                    }
                     onDrop={(event) => void handleColumnDrop(event, column.id)}
                     className={`space-y-2 rounded-lg border border-dashed p-2 transition-colors ${
-                      draggingTaskId && dropTargetStatus === column.id ? "border-primary bg-primary/5" : "border-border/40"
+                      draggingTaskId && dropTargetStatus === column.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border/40"
                     }`}
                   >
                     {columnTasks.map((task, index) => (
@@ -652,7 +814,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Titulo *</Label>
-              <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))} />
+              <Input
+                placeholder="Ex: Fechamento contábil"
+                value={newTask.title}
+                onChange={(e) =>
+                  setNewTask((prev) => ({ ...prev, title: e.target.value }))
+                }
+              />
             </div>
             <div className="space-y-2">
               <Label>Subtarefas</Label>
@@ -668,14 +836,22 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                     }
                   }}
                 />
-                <Button type="button" variant="outline" onClick={handleAddDraftSubtask} disabled={!newSubtaskTitle.trim()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddDraftSubtask}
+                  disabled={!newSubtaskTitle.trim()}
+                >
                   Adicionar
                 </Button>
               </div>
               {newTask.subtasks.length > 0 ? (
                 <div className="space-y-1.5 rounded-lg border p-2">
                   {newTask.subtasks.map((subtask, index) => (
-                    <div key={`${subtask.title}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5">
+                    <div
+                      key={`${subtask.title}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5"
+                    >
                       <span className="text-sm">{subtask.title}</span>
                       <Button
                         type="button"
@@ -691,13 +867,18 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Nenhuma subtarefa adicionada.</p>
+                <p className="text-xs text-muted-foreground">
+                  Nenhuma subtarefa adicionada.
+                </p>
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Cliente (opcional)</Label>
-                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <Popover
+                  open={clientPickerOpen}
+                  onOpenChange={setClientPickerOpen}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
@@ -707,7 +888,10 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       className="w-full justify-between"
                       disabled={loadingClients}
                     >
-                      {newTask.client_name || (loadingClients ? "Carregando clientes..." : "Sem cliente")}
+                      {newTask.client_name ||
+                        (loadingClients
+                          ? "Carregando clientes..."
+                          : "Sem cliente")}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -720,14 +904,19 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                           <CommandItem
                             value="sem cliente"
                             onSelect={() => {
-                              setNewTask((prev) => ({ ...prev, client_name: "" }));
+                              setNewTask((prev) => ({
+                                ...prev,
+                                client_name: "",
+                              }));
                               setClientPickerOpen(false);
                             }}
                           >
                             <Check
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                !newTask.client_name ? "opacity-100" : "opacity-0"
+                                !newTask.client_name
+                                  ? "opacity-100"
+                                  : "opacity-0",
                               )}
                             />
                             Sem cliente
@@ -738,10 +927,15 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                               value={client.name}
                               onSelect={(selectedValue) => {
                                 const matchedClient = clients.find(
-                                  (item) => normalizeText(item.name) === normalizeText(selectedValue)
+                                  (item) =>
+                                    normalizeText(item.name) ===
+                                    normalizeText(selectedValue),
                                 );
                                 if (matchedClient) {
-                                  setNewTask((prev) => ({ ...prev, client_name: matchedClient.name }));
+                                  setNewTask((prev) => ({
+                                    ...prev,
+                                    client_name: matchedClient.name,
+                                  }));
                                   setClientPickerOpen(false);
                                 }
                               }}
@@ -749,7 +943,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  newTask.client_name === client.name ? "opacity-100" : "opacity-0"
+                                  newTask.client_name === client.name
+                                    ? "opacity-100"
+                                    : "opacity-0",
                                 )}
                               />
                               {client.name}
@@ -767,7 +963,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                   disabled={!isAdmin}
                   value={newTask.assigned_to_user_id || "unassigned"}
                   onValueChange={(value) => {
-                    const selected = assigneeOptions.find((option) => option.id === value);
+                    const selected = assigneeOptions.find(
+                      (option) => option.id === value,
+                    );
                     setNewTask((prev) => ({
                       ...prev,
                       assigned_to_user_id: value === "unassigned" ? "" : value,
@@ -775,11 +973,15 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                     }));
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder="Sem responsável" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sem responsável" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Sem responsável</SelectItem>
                     {assigneeOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -788,16 +990,42 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Setor</Label>
-                <Select value={newTask.sector} onValueChange={(value) => setNewTask((prev) => ({ ...prev, sector: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{availableSectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
+                <Select
+                  value={newTask.sector}
+                  onValueChange={(value) =>
+                    setNewTask((prev) => ({ ...prev, sector: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSectors.map((sector) => (
+                      <SelectItem key={sector} value={sector}>
+                        {sector}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Prioridade</Label>
-                <Select value={newTask.priority} onValueChange={(value) => setNewTask((prev) => ({ ...prev, priority: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{["Urgente", "Alta", "Média", "Baixa"].map((priority) => <SelectItem key={priority} value={priority}>{priority}</SelectItem>)}</SelectContent>
+                <Select
+                  value={newTask.priority}
+                  onValueChange={(value) =>
+                    setNewTask((prev) => ({ ...prev, priority: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Urgente", "Alta", "Média", "Baixa"].map((priority) => (
+                      <SelectItem key={priority} value={priority}>
+                        {priority}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
             </div>
@@ -808,7 +1036,15 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               onClick={() => {
                 setCreateOpen(false);
                 setNewSubtaskTitle("");
-                setNewTask({ title: "", client_name: "", assignee: "", assigned_to_user_id: "", priority: "Média", sector: availableSectors[0] || "Geral", subtasks: [] });
+                setNewTask({
+                  title: "",
+                  client_name: "",
+                  assignee: "",
+                  assigned_to_user_id: "",
+                  priority: "Média",
+                  sector: availableSectors[0] || "Geral",
+                  subtasks: [],
+                });
               }}
             >
               Cancelar
@@ -852,7 +1088,9 @@ function KanbanCard({
   isDragging: boolean;
   canArchive: boolean;
 }) {
-  const nextStatus: Partial<Record<KanbanStatus, { label: string; target: KanbanStatus }>> = {
+  const nextStatus: Partial<
+    Record<KanbanStatus, { label: string; target: KanbanStatus }>
+  > = {
     backlog: { label: "Mover para A Fazer", target: "todo" },
     todo: { label: "Iniciar", target: "doing" },
     doing: { label: "Enviar para Revisão", target: "review" },
@@ -860,7 +1098,8 @@ function KanbanCard({
     done: canArchive ? { label: "Arquivar", target: "archived" } : undefined,
   };
 
-  const taskSectors = task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
+  const taskSectors =
+    task.tags.length > 0 ? task.tags : task.sector ? [task.sector] : [];
   const primarySector = taskSectors[0] || "Geral";
   const extraSectors = Math.max(taskSectors.length - 1, 0);
   const action = nextStatus[currentStatus];
@@ -889,21 +1128,31 @@ function KanbanCard({
       />
       <div className="mb-2 flex items-start justify-between gap-2 pr-8">
         <span className="text-sm font-medium leading-tight">{task.title}</span>
-        <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${priorityDot[task.priority] || "bg-muted-foreground"}`} />
+        <div
+          className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${priorityDot[task.priority] || "bg-muted-foreground"}`}
+        />
       </div>
 
-      {task.client_name && <div className="text-xs text-muted-foreground">{task.client_name}</div>}
+      {task.client_name && (
+        <div className="text-xs text-muted-foreground">{task.client_name}</div>
+      )}
 
       <div className="mt-3 flex items-center justify-between gap-2 pr-8">
         <div className="flex items-center gap-1.5">
           <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
-            {extraSectors > 0 ? `${primarySector} +${extraSectors}` : primarySector}
+            {extraSectors > 0
+              ? `${primarySector} +${extraSectors}`
+              : primarySector}
           </span>
         </div>
         {task.assignee && (
           <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
             <span className="text-[10px] font-semibold text-primary">
-              {task.assignee.split(" ").map((name) => name[0]).join("").slice(0, 2)}
+              {task.assignee
+                .split(" ")
+                .map((name) => name[0])
+                .join("")
+                .slice(0, 2)}
             </span>
           </div>
         )}

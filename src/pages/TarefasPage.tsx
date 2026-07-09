@@ -22,12 +22,29 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { TaskOriginLegend } from "@/components/app/TaskOriginLegend";
 import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
@@ -36,14 +53,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import {
+  getTaskCompetence,
+  matchesSelectedCompany,
+  matchesSelectedCompetence,
+} from "@/lib/globalFilters";
 import {
   canCreateTaskInSector,
   getCanonicalTaskSectorAccess,
   normalizeTaskSectorLabel,
 } from "@/lib/taskSectorAccess";
+import { loadTaskAssignees } from "@/lib/taskAssignees";
 import type { Tables } from "@/integrations/supabase/types";
-import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
+import {
+  addHistoryEntry,
+  getEntityHistory,
+  type ChangeHistoryEntry,
+} from "@/lib/changeHistory";
 
 interface TaskSubtask {
   title: string;
@@ -102,16 +128,42 @@ const priorityConfig: Record<string, { color: string; bg: string }> = {
   Baixa: { color: "text-muted-foreground", bg: "bg-muted" },
 };
 
-const statusConfig: Record<string, { color: string; bg: string; icon: typeof Circle }> = {
+const statusConfig: Record<
+  string,
+  { color: string; bg: string; icon: typeof Circle }
+> = {
   Pendente: { color: "text-muted-foreground", bg: "bg-muted", icon: Circle },
   "Em andamento": { color: "text-primary", bg: "bg-primary/10", icon: Clock },
-  "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20", icon: AlertTriangle },
+  "Em revisão": {
+    color: "text-amber-600",
+    bg: "bg-amber-100 dark:bg-amber-900/20",
+    icon: AlertTriangle,
+  },
   Concluído: { color: "text-primary", bg: "bg-primary/10", icon: CheckCircle2 },
-  Atrasado: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
+  Atrasado: {
+    color: "text-destructive",
+    bg: "bg-destructive/10",
+    icon: AlertTriangle,
+  },
 };
 
-const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Geral"];
-const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
+const sectors = [
+  "Todos",
+  "Contabil",
+  "Fiscal",
+  "Departamento Pessoal",
+  "Financeiro",
+  "Comercial",
+  "Geral",
+];
+const statuses = [
+  "Todos",
+  "Pendente",
+  "Em andamento",
+  "Em revisão",
+  "Concluído",
+  "Atrasado",
+];
 
 const normalizeText = (value: string) =>
   value
@@ -132,7 +184,10 @@ const normalizePriority = (value: string): Task["priority"] => {
   return "Media";
 };
 
-const deriveStatus = (status: string, dueDate: string | null): Task["status"] => {
+const deriveStatus = (
+  status: string,
+  dueDate: string | null,
+): Task["status"] => {
   const normalizedStatus = normalizeText(status);
 
   if (normalizedStatus === "done" || normalizedStatus === "archived") {
@@ -159,7 +214,8 @@ const parseSubtasks = (value: unknown): TaskSubtask[] => {
       if (!item || typeof item !== "object") return null;
 
       const subtask = item as { title?: unknown; done?: unknown };
-      const title = typeof subtask.title === "string" ? subtask.title.trim() : "";
+      const title =
+        typeof subtask.title === "string" ? subtask.title.trim() : "";
       if (!title) return null;
 
       return {
@@ -182,7 +238,11 @@ const mapRowToTask = (row: KanbanTaskRow): Task => ({
   dueDate: row.due_date || "",
   status: deriveStatus(row.status || "todo", row.due_date),
   createdAt: row.created_at,
-  tags: row.tags?.length ? row.tags.map(normalizeSector) : row.sector ? [normalizeSector(row.sector)] : [],
+  tags: row.tags?.length
+    ? row.tags.map(normalizeSector)
+    : row.sector
+      ? [normalizeSector(row.sector)]
+      : [],
   subtasks: parseSubtasks(row.subtasks),
   attachments: 0,
   comments: 0,
@@ -207,7 +267,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [assigneeOptions, setAssigneeOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [subtasksAvailable, setSubtasksAvailable] = useState(true);
@@ -220,7 +282,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [historyVersion, setHistoryVersion] = useState(0);
-  const [selectedTaskHistory, setSelectedTaskHistory] = useState<ChangeHistoryEntry[]>([]);
+  const [selectedTaskHistory, setSelectedTaskHistory] = useState<
+    ChangeHistoryEntry[]
+  >([]);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -234,17 +298,28 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   });
 
   const actorLabel = user?.email || "Usuário";
-  const taskSectorAccess = useMemo(() => getCanonicalTaskSectorAccess(effectiveAccess), [effectiveAccess]);
+  const taskSectorAccess = useMemo(
+    () => getCanonicalTaskSectorAccess(effectiveAccess),
+    [effectiveAccess],
+  );
   const availableSectors = useMemo(() => {
-    if (taskSectorAccess.canAccessAllTaskSectors) return sectors.filter((sector) => sector !== "Todos");
+    if (taskSectorAccess.canAccessAllTaskSectors)
+      return sectors.filter((sector) => sector !== "Todos");
     return taskSectorAccess.allowedTaskSectors;
   }, [taskSectorAccess]);
   const sectorFilterOptions = useMemo(
-    () => (taskSectorAccess.canAccessAllTaskSectors ? sectors : ["Todos", ...availableSectors]),
+    () =>
+      taskSectorAccess.canAccessAllTaskSectors
+        ? sectors
+        : ["Todos", ...availableSectors],
     [availableSectors, taskSectorAccess.canAccessAllTaskSectors],
   );
 
-  const registerTaskHistory = (taskId: string, action: string, details?: string) => {
+  const registerTaskHistory = (
+    taskId: string,
+    action: string,
+    details?: string,
+  ) => {
     if (!user?.id) return;
     addHistoryEntry(user.id, {
       entityType: "task",
@@ -287,12 +362,16 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     }
 
     const rows = (data || []) as KanbanTaskRow[];
-    const subtasksColumnReturned = rows.some((row) => Object.prototype.hasOwnProperty.call(row, "subtasks"));
+    const subtasksColumnReturned = rows.some((row) =>
+      Object.prototype.hasOwnProperty.call(row, "subtasks"),
+    );
     const mapped = rows
       .filter((row) => row.status !== "archived")
       .map(mapRowToTask);
 
-    setSubtasksAvailable((prev) => (rows.length === 0 ? prev : subtasksColumnReturned));
+    setSubtasksAvailable((prev) =>
+      rows.length === 0 ? prev : subtasksColumnReturned,
+    );
     setTasks(mapped);
     setLoading(false);
   }, []);
@@ -317,33 +396,13 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   }, []);
 
   const loadAssignees = useCallback(async () => {
-    if (effectiveAccess?.primaryRole !== "admin" || !currentOrganizationId) {
+    try {
+      setAssigneeOptions(await loadTaskAssignees(currentOrganizationId));
+    } catch {
       setAssigneeOptions([]);
-      return;
+      toast.error("Nao foi possivel carregar os responsaveis.");
     }
-    const { data: accessRows } = await supabase
-      .from("organization_user_access")
-      .select("user_id")
-      .eq("organization_id", currentOrganizationId)
-      .eq("primary_role", "colaborador")
-      .eq("status", "active")
-      .eq("requires_access_review", false);
-    const ids = (accessRows || []).map((row) => String(row.user_id));
-    if (ids.length === 0) {
-      setAssigneeOptions([]);
-      return;
-    }
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id, display_name")
-      .in("user_id", ids);
-    setAssigneeOptions(
-      (profiles || []).map((profile) => ({
-        id: String(profile.user_id),
-        name: profile.display_name || "Colaborador",
-      })),
-    );
-  }, [currentOrganizationId, effectiveAccess?.primaryRole]);
+  }, [currentOrganizationId]);
 
   useEffect(() => {
     void loadTasks();
@@ -370,15 +429,20 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           matchesSelectedCompany(task.client, selectedCompany) &&
           matchesSelectedCompetence(
             getTaskCompetence(task.dueDate || null, task.createdAt),
-            selectedCompetence
-          )
+            selectedCompetence,
+          ),
       ),
-    [tasks, selectedCompany, selectedCompetence]
+    [tasks, selectedCompany, selectedCompetence],
   );
 
   const filtered = scopedTasks.filter((task) => {
     const searchTerm = search.toLowerCase();
-    if (search && !task.title.toLowerCase().includes(searchTerm) && !task.client.toLowerCase().includes(searchTerm)) return false;
+    if (
+      search &&
+      !task.title.toLowerCase().includes(searchTerm) &&
+      !task.client.toLowerCase().includes(searchTerm)
+    )
+      return false;
     if (sectorFilter !== "Todos" && task.sector !== sectorFilter) return false;
     if (statusFilter !== "Todos" && task.status !== statusFilter) return false;
     return true;
@@ -390,7 +454,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
-    setSelectedTaskHistory(getEntityHistory(user.id, "task", selectedTask.id, 12));
+    setSelectedTaskHistory(
+      getEntityHistory(user.id, "task", selectedTask.id, 12),
+    );
   }, [historyVersion, selectedTask?.id, user?.id]);
 
   const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
@@ -404,14 +470,14 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     const toggledSubtask = taskToUpdate.subtasks[subtaskIndex];
 
     const updatedSubtasks = taskToUpdate.subtasks.map((subtask, index) =>
-      index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask
+      index === subtaskIndex ? { ...subtask, done: !subtask.done } : subtask,
     );
 
     setTasks((prev) =>
       prev.map((task) => {
         if (task.id !== taskId) return task;
         return { ...task, subtasks: updatedSubtasks };
-      })
+      }),
     );
 
     setSelectedTask((prev) => {
@@ -453,7 +519,10 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     }
 
     const selectedClient = newTask.client.trim()
-      ? clients.find((client) => normalizeText(client.name) === normalizeText(newTask.client))
+      ? clients.find(
+          (client) =>
+            normalizeText(client.name) === normalizeText(newTask.client),
+        )
       : null;
     if (newTask.client.trim() && !selectedClient) {
       toast.error("Cliente invalido. Selecione um cliente da lista");
@@ -476,7 +545,11 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
 
     const firstTry = await supabase
       .from("kanban_tasks")
-      .insert(subtasksAvailable ? { ...baseInsertPayload, subtasks: newTask.subtasks } : baseInsertPayload)
+      .insert(
+        subtasksAvailable
+          ? { ...baseInsertPayload, subtasks: newTask.subtasks }
+          : baseInsertPayload,
+      )
       .select("id, title")
       .single();
 
@@ -497,7 +570,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     }
 
     if (error || !createdTask) {
-      toast.error(`Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`);
+      toast.error(
+        `Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`,
+      );
       return;
     }
 
@@ -527,7 +602,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   useEffect(() => {
     if (!selectedCompany) return;
     const selectedActiveClient = clients.find(
-      (client) => normalizeText(client.name) === normalizeText(selectedCompany)
+      (client) => normalizeText(client.name) === normalizeText(selectedCompany),
     );
     if (selectedActiveClient) {
       setNewTask((prev) => ({ ...prev, client: selectedActiveClient.name }));
@@ -556,7 +631,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     const taskToDelete = tasks.find((task) => task.id === taskId);
     if (!taskToDelete) return;
 
-    const confirmed = window.confirm(`Excluir a tarefa "${taskToDelete.title}"?`);
+    const confirmed = window.confirm(
+      `Excluir a tarefa "${taskToDelete.title}"?`,
+    );
     if (!confirmed) return;
 
     const { data: snapshot } = await supabase
@@ -565,7 +642,10 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       .eq("id", taskId)
       .maybeSingle();
 
-    const { error } = await supabase.from("kanban_tasks").delete().eq("id", taskId);
+    const { error } = await supabase
+      .from("kanban_tasks")
+      .delete()
+      .eq("id", taskId);
 
     if (error) {
       toast.error(`Erro ao excluir tarefa: ${error.message}`);
@@ -592,8 +672,15 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               return;
             }
 
-            setTasks((prev) => [mapRowToTask(snapshot as unknown as KanbanTaskRow), ...prev]);
-            registerTaskHistory(taskId, "Exclusao desfeita", taskToDelete.title);
+            setTasks((prev) => [
+              mapRowToTask(snapshot as unknown as KanbanTaskRow),
+              ...prev,
+            ]);
+            registerTaskHistory(
+              taskId,
+              "Exclusao desfeita",
+              taskToDelete.title,
+            );
             toast.success("Tarefa restaurada com sucesso");
           })();
         },
@@ -601,9 +688,15 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     });
   };
 
-  const updateTaskCounter = (taskId: string, field: "attachments" | "comments", count: number) => {
+  const updateTaskCounter = (
+    taskId: string,
+    field: "attachments" | "comments",
+    count: number,
+  ) => {
     setTasks((prev) =>
-      prev.map((task) => (task.id === taskId ? { ...task, [field]: count } : task))
+      prev.map((task) =>
+        task.id === taskId ? { ...task, [field]: count } : task,
+      ),
     );
 
     setSelectedTask((prev) => {
@@ -623,28 +716,58 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   const content = (
     <>
       <div className="space-y-6 max-w-7xl">
-        {!embedded && <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
-            <p className="text-sm text-muted-foreground">Gestão completa de tarefas da equipe</p>
+        {!embedded && (
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
+              <p className="text-sm text-muted-foreground">
+                Gestão completa de tarefas da equipe
+              </p>
+            </div>
+            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" /> Nova Tarefa
+            </Button>
           </div>
-          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> Nova Tarefa
-          </Button>
-        </div>}
+        )}
 
         <TaskOriginLegend />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: "Total", value: scopedTasks.length, color: "text-foreground" },
-            { label: "Pendentes", value: scopedTasks.filter((t) => t.status === "Pendente").length, color: "text-muted-foreground" },
-            { label: "Em andamento", value: scopedTasks.filter((t) => t.status === "Em andamento").length, color: "text-primary" },
-            { label: "Atrasadas", value: scopedTasks.filter((t) => t.status === "Atrasado").length, color: "text-destructive" },
-            { label: "Concluídas", value: scopedTasks.filter((t) => t.status === "Concluído").length, color: "text-primary" },
+            {
+              label: "Total",
+              value: scopedTasks.length,
+              color: "text-foreground",
+            },
+            {
+              label: "Pendentes",
+              value: scopedTasks.filter((t) => t.status === "Pendente").length,
+              color: "text-muted-foreground",
+            },
+            {
+              label: "Em andamento",
+              value: scopedTasks.filter((t) => t.status === "Em andamento")
+                .length,
+              color: "text-primary",
+            },
+            {
+              label: "Atrasadas",
+              value: scopedTasks.filter((t) => t.status === "Atrasado").length,
+              color: "text-destructive",
+            },
+            {
+              label: "Concluídas",
+              value: scopedTasks.filter((t) => t.status === "Concluído").length,
+              color: "text-primary",
+            },
           ].map((item) => (
-            <div key={item.label} className="rounded-lg border bg-card p-3 text-center">
-              <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
+            <div
+              key={item.label}
+              className="rounded-lg border bg-card p-3 text-center"
+            >
+              <div className={`text-xl font-bold ${item.color}`}>
+                {item.value}
+              </div>
               <div className="text-xs text-muted-foreground">{item.label}</div>
             </div>
           ))}
@@ -662,12 +785,20 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)}>
+            <select
+              className="text-sm bg-card border rounded-lg px-3 py-2 outline-none"
+              value={sectorFilter}
+              onChange={(event) => setSectorFilter(event.target.value)}
+            >
               {sectorFilterOptions.map((sector) => (
                 <option key={sector}>{sector}</option>
               ))}
             </select>
-            <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <select
+              className="text-sm bg-card border rounded-lg px-3 py-2 outline-none"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
               {statuses.map((status) => (
                 <option key={status}>{status}</option>
               ))}
@@ -684,8 +815,12 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
             {filtered.map((task, index) => {
               const statusCfg = statusConfig[task.status];
               const priorityCfg = priorityConfig[task.priority];
-              const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
-              const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
+              const subtaskDone = task.subtasks.filter(
+                (subtask) => subtask.done,
+              ).length;
+              const subtaskPct = task.subtasks.length
+                ? Math.round((subtaskDone / task.subtasks.length) * 100)
+                : 0;
               const StatusIcon = statusCfg.icon;
 
               return (
@@ -705,42 +840,72 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                     integrationSource={task.integrationSource}
                   />
                   <div className="flex items-start gap-4 pr-10 sm:pr-12">
-                    <div className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}>
+                    <div
+                      className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}
+                    >
                       <StatusIcon className={`h-4 w-4 ${statusCfg.color}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="font-medium text-sm">{task.title}</h3>
-                          <p className="text-xs text-muted-foreground mt-0.5">{task.client || "Sem cliente"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {task.client || "Sem cliente"}
+                          </p>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-                          <Badge variant="outline" className={`text-xs ${priorityCfg.color} ${priorityCfg.bg} border-0`}>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${priorityCfg.color} ${priorityCfg.bg} border-0`}
+                          >
                             {task.priority}
                           </Badge>
-                          <Badge variant="outline" className={`text-xs ${statusCfg.color} ${statusCfg.bg} border-0`}>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${statusCfg.color} ${statusCfg.bg} border-0`}
+                          >
                             {task.status}
                           </Badge>
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{task.dueDate ? new Date(task.dueDate).toLocaleDateString("pt-BR") : "Sem prazo"}</span>
+                        <span className="flex items-center gap-1">
+                          <CalendarDays className="h-3 w-3" />
+                          {task.dueDate
+                            ? new Date(task.dueDate).toLocaleDateString("pt-BR")
+                            : "Sem prazo"}
+                        </span>
                         <span>{task.assignee || "Sem responsavel"}</span>
                         <span>{task.sector}</span>
-                        <span className="flex items-center gap-1"><Paperclip className="h-3 w-3" />{task.attachments}</span>
-                        <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{task.comments}</span>
+                        <span className="flex items-center gap-1">
+                          <Paperclip className="h-3 w-3" />
+                          {task.attachments}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MessageSquare className="h-3 w-3" />
+                          {task.comments}
+                        </span>
                         <div className="flex items-center gap-1">
                           {task.tags.map((tag) => (
-                            <span key={tag} className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded text-xs">
-                              <Tag className="h-2.5 w-2.5" />{tag}
+                            <span
+                              key={tag}
+                              className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded text-xs"
+                            >
+                              <Tag className="h-2.5 w-2.5" />
+                              {tag}
                             </span>
                           ))}
                         </div>
                       </div>
                       {task.subtasks.length > 0 && (
                         <div className="flex items-center gap-3 mt-3">
-                          <Progress value={subtaskPct} className="h-1.5 flex-1 max-w-[200px]" />
-                          <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} subtarefas</span>
+                          <Progress
+                            value={subtaskPct}
+                            className="h-1.5 flex-1 max-w-[200px]"
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {subtaskDone}/{task.subtasks.length} subtarefas
+                          </span>
                         </div>
                       )}
                     </div>
@@ -777,11 +942,26 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Titulo *</Label>
-              <Input placeholder="Ex: Fechamento contábil" value={newTask.title} onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))} />
+              <Input
+                placeholder="Ex: Fechamento contábil"
+                value={newTask.title}
+                onChange={(event) =>
+                  setNewTask((prev) => ({ ...prev, title: event.target.value }))
+                }
+              />
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
-              <Textarea placeholder="Descreva a tarefa..." value={newTask.description} onChange={(event) => setNewTask((prev) => ({ ...prev, description: event.target.value }))} />
+              <Textarea
+                placeholder="Descreva a tarefa..."
+                value={newTask.description}
+                onChange={(event) =>
+                  setNewTask((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+              />
             </div>
             <div className="space-y-2">
               <Label>Subtarefas</Label>
@@ -797,14 +977,22 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                     }
                   }}
                 />
-                <Button type="button" variant="outline" onClick={handleAddDraftSubtask} disabled={!newSubtaskTitle.trim()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddDraftSubtask}
+                  disabled={!newSubtaskTitle.trim()}
+                >
                   Adicionar
                 </Button>
               </div>
               {newTask.subtasks.length > 0 ? (
                 <div className="space-y-1.5 rounded-lg border p-2">
                   {newTask.subtasks.map((subtask, index) => (
-                    <div key={`${subtask.title}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5">
+                    <div
+                      key={`${subtask.title}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5"
+                    >
                       <span className="text-sm">{subtask.title}</span>
                       <Button
                         type="button"
@@ -820,13 +1008,18 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Nenhuma subtarefa adicionada.</p>
+                <p className="text-xs text-muted-foreground">
+                  Nenhuma subtarefa adicionada.
+                </p>
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Cliente (opcional)</Label>
-                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <Popover
+                  open={clientPickerOpen}
+                  onOpenChange={setClientPickerOpen}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
@@ -836,7 +1029,10 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                       className="w-full justify-between"
                       disabled={loadingClients}
                     >
-                      {newTask.client || (loadingClients ? "Carregando clientes..." : "Sem cliente")}
+                      {newTask.client ||
+                        (loadingClients
+                          ? "Carregando clientes..."
+                          : "Sem cliente")}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -856,7 +1052,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                             <Check
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                !newTask.client ? "opacity-100" : "opacity-0"
+                                !newTask.client ? "opacity-100" : "opacity-0",
                               )}
                             />
                             Sem cliente
@@ -867,10 +1063,15 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                               value={client.name}
                               onSelect={(selectedValue) => {
                                 const matchedClient = clients.find(
-                                  (item) => normalizeText(item.name) === normalizeText(selectedValue)
+                                  (item) =>
+                                    normalizeText(item.name) ===
+                                    normalizeText(selectedValue),
                                 );
                                 if (matchedClient) {
-                                  setNewTask((prev) => ({ ...prev, client: matchedClient.name }));
+                                  setNewTask((prev) => ({
+                                    ...prev,
+                                    client: matchedClient.name,
+                                  }));
                                   setClientPickerOpen(false);
                                 }
                               }}
@@ -878,7 +1079,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  newTask.client === client.name ? "opacity-100" : "opacity-0"
+                                  newTask.client === client.name
+                                    ? "opacity-100"
+                                    : "opacity-0",
                                 )}
                               />
                               {client.name}
@@ -894,20 +1097,26 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                 <Label>Responsavel</Label>
                 <select
                   className="w-full rounded-lg border bg-card px-3 py-2 text-sm outline-none"
-                  disabled={effectiveAccess?.primaryRole !== "admin"}
                   value={newTask.assignedToUserId || "unassigned"}
                   onChange={(event) => {
-                    const selected = assigneeOptions.find((option) => option.id === event.target.value);
+                    const selected = assigneeOptions.find(
+                      (option) => option.id === event.target.value,
+                    );
                     setNewTask((prev) => ({
                       ...prev,
-                      assignedToUserId: event.target.value === "unassigned" ? "" : event.target.value,
+                      assignedToUserId:
+                        event.target.value === "unassigned"
+                          ? ""
+                          : event.target.value,
                       assignee: selected?.name || "",
                     }));
                   }}
                 >
                   <option value="unassigned">Sem responsável</option>
                   {assigneeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -915,19 +1124,50 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Setor</Label>
-                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={(event) => setNewTask((prev) => ({ ...prev, sector: event.target.value }))}>
-                  {availableSectors.map((sector) => <option key={sector}>{sector}</option>)}
+                <select
+                  className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none"
+                  value={newTask.sector}
+                  onChange={(event) =>
+                    setNewTask((prev) => ({
+                      ...prev,
+                      sector: event.target.value,
+                    }))
+                  }
+                >
+                  {availableSectors.map((sector) => (
+                    <option key={sector}>{sector}</option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Prioridade</Label>
-                <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.priority} onChange={(event) => setNewTask((prev) => ({ ...prev, priority: event.target.value as Task["priority"] }))}>
-                  {["Urgente", "Alta", "Media", "Baixa"].map((priority) => <option key={priority}>{priority}</option>)}
+                <select
+                  className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none"
+                  value={newTask.priority}
+                  onChange={(event) =>
+                    setNewTask((prev) => ({
+                      ...prev,
+                      priority: event.target.value as Task["priority"],
+                    }))
+                  }
+                >
+                  {["Urgente", "Alta", "Media", "Baixa"].map((priority) => (
+                    <option key={priority}>{priority}</option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Prazo</Label>
-                <Input type="date" value={newTask.dueDate} onChange={(event) => setNewTask((prev) => ({ ...prev, dueDate: event.target.value }))} />
+                <Input
+                  type="date"
+                  value={newTask.dueDate}
+                  onChange={(event) =>
+                    setNewTask((prev) => ({
+                      ...prev,
+                      dueDate: event.target.value,
+                    }))
+                  }
+                />
               </div>
             </div>
           </div>
