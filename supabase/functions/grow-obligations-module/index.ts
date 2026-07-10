@@ -127,6 +127,8 @@ type TemplateRow = {
   completion_email_body: string | null;
   completion_whatsapp_enabled: boolean;
   completion_whatsapp_body: string | null;
+  baseline_source?: string | null;
+  catalog_review_status?: string | null;
 };
 
 type ClientDeliveryContext = {
@@ -146,6 +148,15 @@ type ProfileRow = {
   organization_id?: string;
   client_id: string;
   template_id: string;
+  source_kind?: string | null;
+  source_load_id?: string | null;
+  source_load_item_id?: string | null;
+  applied_regime?: string | null;
+  application_batch_id?: string | null;
+  inactivation_reason?: string | null;
+  sync_status?: string | null;
+  conditional_review_reason?: string | null;
+  conditional_skip_reason?: string | null;
   assigned_to: string | null;
   start_date: string;
   end_date: string | null;
@@ -181,6 +192,44 @@ type InstanceRow = {
   completed_at: string | null;
   updated_at: string;
   created_at: string;
+};
+
+type RegimeLoadRow = {
+  id: string;
+  organization_id: string;
+  tax_regime_code: string;
+  name: string;
+  status: string;
+};
+
+type RegimeLoadItemRow = {
+  id: string;
+  organization_id: string;
+  load_id: string;
+  template_id: string;
+  applicability: string;
+  condition_key: string | null;
+  default_due_day_override: number | null;
+  is_active: boolean;
+  sort_order: number;
+};
+
+type DefaultEvidence = Record<string, boolean | null | undefined>;
+
+type DefaultApplicationSummary = {
+  created: number;
+  kept: number;
+  reactivated: number;
+  skipped: number;
+  blocked: number;
+  duplicate_risk: number;
+  conditional_skipped: number;
+  inactivated_prior_regime: number;
+  inactivated: number;
+  unsupported_clients?: number;
+  processed_clients?: number;
+  add: number;
+  keep: number;
 };
 
 function resolveRowOrganizationId(...rows: Array<{ organization_id?: string | null } | null | undefined>) {
@@ -3579,6 +3628,110 @@ async function handleUpsertTemplate(
     return jsonResponse({ error: "Envio por e-mail exige assunto e mensagem padrao." }, 400);
   }
 
+  if (id) {
+    const { data: existingTemplateData, error: existingTemplateError } = await supabaseAdmin
+      .from("obligation_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingTemplateError) return jsonResponse({ error: existingTemplateError.message }, 400);
+    if (!existingTemplateData) return jsonResponse({ error: "Obrigacao nao encontrada." }, 404);
+
+    const existingTemplate = existingTemplateData as TemplateRow;
+    const baselineSource = asTrimmedString(existingTemplate.baseline_source);
+    if (baselineSource && baselineSource !== "manual") {
+      const systemMessageUpdate = {
+        completion_email_enabled: emailEnabled,
+        completion_email_subject: emailSubject,
+        completion_email_body: emailBody,
+        completion_whatsapp_enabled: asBoolean(payload.completion_whatsapp_enabled, false),
+        completion_whatsapp_body: asTrimmedString(payload.completion_whatsapp_body),
+      };
+
+      const { data: updatedSystemTemplate, error: updateSystemError } = await supabaseAdmin
+        .from("obligation_templates")
+        .update(systemMessageUpdate)
+        .eq("organization_id", organizationId)
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (updateSystemError) return jsonResponse({ error: updateSystemError.message }, 400);
+
+      await auditObligationEvent(supabaseAdmin, {
+        organizationId,
+        templateId: id,
+        action: "system_default_template_messages_updated",
+        actorId,
+        metadata: { baseline_source: baselineSource },
+      });
+
+      return jsonResponse({ ok: true, template: updatedSystemTemplate });
+    }
+  }
+
+  const { data: duplicateTemplatesData, error: duplicateTemplatesError } = await supabaseAdmin
+    .from("obligation_templates")
+    .select("id, code, name, normalized_name, is_active, baseline_source")
+    .eq("organization_id", organizationId)
+    .eq("is_active", true);
+
+  if (duplicateTemplatesError) return jsonResponse({ error: duplicateTemplatesError.message }, 400);
+
+  const normalizedCode = normalizeDuplicateCode(codeSource);
+  const normalizedName = normalizeDuplicateText(name);
+  const duplicateMatches = ((duplicateTemplatesData || []) as Array<JsonRecord>)
+    .filter((template) => asTrimmedString(template.id) !== id)
+    .map((template) => {
+      const templateCode = normalizeDuplicateCode(template.code);
+      const templateName = normalizeDuplicateText(asTrimmedString(template.normalized_name) || template.name);
+      if (normalizedCode && templateCode && normalizedCode === templateCode) {
+        return {
+          template_id: template.id,
+          code: template.code,
+          name: template.name,
+          baseline_source: template.baseline_source,
+          match_type: "code",
+          severity: "block",
+        };
+      }
+      if (normalizedName && templateName && normalizedName === templateName) {
+        return {
+          template_id: template.id,
+          code: template.code,
+          name: template.name,
+          baseline_source: template.baseline_source,
+          match_type: "normalized_name",
+          severity: "block",
+        };
+      }
+      if (normalizedName && templateName && (normalizedName.includes(templateName) || templateName.includes(normalizedName))) {
+        return {
+          template_id: template.id,
+          code: template.code,
+          name: template.name,
+          baseline_source: template.baseline_source,
+          match_type: "semantic",
+          severity: "review",
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  const blockingDuplicates = duplicateMatches.filter((match) => asRecord(match)?.severity === "block");
+  if (blockingDuplicates.length > 0 && !asBoolean(payload.confirm_duplicate, false)) {
+    return jsonResponse(
+      {
+        error: "Ja existe uma obrigacao ativa com mesmo codigo ou nome normalizado.",
+        duplicate_matches: blockingDuplicates,
+      },
+      409,
+    );
+  }
+
   const row = {
     organization_id: organizationId,
     code: normalizeTemplateCode(codeSource),
@@ -3603,6 +3756,7 @@ async function handleUpsertTemplate(
     completion_whatsapp_enabled: asBoolean(payload.completion_whatsapp_enabled, false),
     completion_whatsapp_body: asTrimmedString(payload.completion_whatsapp_body),
     created_by: actorId,
+    ...(id ? {} : { baseline_source: "manual", catalog_review_status: "approved" }),
   };
 
   const query = id
@@ -3614,6 +3768,17 @@ async function handleUpsertTemplate(
 
   const template = data as TemplateRow;
   const linkedClientIds = Array.from(new Set(asStringArray(payload.linked_client_ids)));
+
+  await auditObligationEvent(supabaseAdmin, {
+    organizationId,
+    templateId: template.id,
+    action: id ? "manual_obligation_template_updated" : "manual_obligation_template_created",
+    actorId,
+    metadata: {
+      linked_client_ids: linkedClientIds,
+      duplicate_warnings: duplicateMatches.filter((match) => asRecord(match)?.severity === "review"),
+    },
+  });
 
   if ("linked_client_ids" in payload) {
     const { data: existingProfilesData, error: existingProfilesError } = await supabaseAdmin
@@ -3646,6 +3811,15 @@ async function handleUpsertTemplate(
         expected_documents_override: existingProfile?.expected_documents_override ?? null,
         notes: existingProfile?.notes || null,
         parameters: asRecord(existingProfile?.parameters) || {},
+        source_kind: "manual",
+        source_load_id: null,
+        source_load_item_id: null,
+        applied_regime: null,
+        application_batch_id: null,
+        inactivation_reason: null,
+        sync_status: "current",
+        conditional_review_reason: null,
+        conditional_skip_reason: null,
         created_by: actorId,
       };
 
@@ -3657,6 +3831,14 @@ async function handleUpsertTemplate(
 
       if (syncedProfileError) return jsonResponse({ error: syncedProfileError.message }, 400);
       activatedProfiles.push(syncedProfile as ProfileRow);
+      await auditObligationEvent(supabaseAdmin, {
+        organizationId,
+        clientId,
+        templateId: template.id,
+        action: "manual_obligation_linked_to_client",
+        actorId,
+        metadata: { source: "template_linked_client_ids" },
+      });
     }
 
     const profilesToDeactivate = existingProfiles.filter(
@@ -3715,6 +3897,14 @@ async function handleDeleteTemplate(
   if (!templateData) return jsonResponse({ error: "Obrigacao nao encontrada." }, 404);
 
   const template = templateData as TemplateRow;
+  const baselineSource = asTrimmedString(template.baseline_source);
+  if (baselineSource && baselineSource !== "manual") {
+    return jsonResponse(
+      { error: "Obrigacoes padrao do sistema nao podem ser excluidas pela interface. Inative apenas obrigacoes manuais complementares." },
+      403,
+    );
+  }
+
   const [profilesResult, instancesResult, documentsResult, referencesResult, loadItemsResult] = await Promise.all([
     supabaseAdmin
       .from("client_obligation_profiles")
@@ -3895,6 +4085,15 @@ async function handleUpsertProfile(
       : null,
     notes: asTrimmedString(payload.notes),
     parameters: asRecord(payload.parameters) || {},
+    source_kind: "manual",
+    source_load_id: null,
+    source_load_item_id: null,
+    applied_regime: null,
+    application_batch_id: null,
+    inactivation_reason: null,
+    sync_status: "current",
+    conditional_review_reason: null,
+    conditional_skip_reason: null,
     created_by: actorId,
   };
 
@@ -3907,6 +4106,14 @@ async function handleUpsertProfile(
 
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
   const profile = data as ProfileRow;
+  await auditObligationEvent(supabaseAdmin, {
+    organizationId,
+    clientId,
+    templateId,
+    action: id ? "manual_obligation_profile_updated" : "manual_obligation_linked_to_client",
+    actorId,
+    metadata: { profile_id: profile.id, source: "client_obligations_panel" },
+  });
   await ensureInstancesForProfiles(
     supabaseAdmin,
     [profile],
@@ -4747,6 +4954,10 @@ function normalizeRegimeCode(value: unknown) {
   return aliases.get(normalized) || normalized.replace(/\s+/g, "_");
 }
 
+function isSupportedTaxRegimeCode(value: string | null | undefined) {
+  return value === "simples_nacional" || value === "lucro_presumido" || value === "lucro_real" || value === "mei";
+}
+
 function normalizeDuplicateText(value: unknown) {
   return (asTrimmedString(value) || "")
     .normalize("NFD")
@@ -4780,9 +4991,9 @@ async function handleDetectObligationDuplicates(
     return jsonResponse({ error: "Nome ou codigo da obrigacao e obrigatorio." }, 400);
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("obligation_templates")
-    .select("id, code, name, normalized_name, is_active")
+    const { data, error } = await supabaseAdmin
+      .from("obligation_templates")
+    .select("id, code, name, normalized_name, is_active, baseline_source")
     .eq("organization_id", organizationId)
     .eq("is_active", true);
 
@@ -4798,6 +5009,7 @@ async function handleDetectObligationDuplicates(
           template_id: template.id,
           code: template.code,
           name: template.name,
+          baseline_source: template.baseline_source,
           match_type: "code",
           severity: "block",
         };
@@ -4807,6 +5019,7 @@ async function handleDetectObligationDuplicates(
           template_id: template.id,
           code: template.code,
           name: template.name,
+          baseline_source: template.baseline_source,
           match_type: "normalized_name",
           severity: "block",
         };
@@ -4816,6 +5029,7 @@ async function handleDetectObligationDuplicates(
           template_id: template.id,
           code: template.code,
           name: template.name,
+          baseline_source: template.baseline_source,
           match_type: "semantic",
           severity: "review",
         };
@@ -4825,6 +5039,906 @@ async function handleDetectObligationDuplicates(
     .filter(Boolean);
 
   return jsonResponse({ ok: true, matches });
+}
+
+function asEvidence(payload: unknown): DefaultEvidence {
+  const record = asRecord(payload) || {};
+  const evidence: DefaultEvidence = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === "boolean" || value === null) evidence[key] = value;
+  }
+  return evidence;
+}
+
+function normalizeEvidenceText(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isPositiveEvidenceText(value: unknown) {
+  const token = normalizeEvidenceText(value);
+  return ["sim", "s", "yes", "true", "1", "possui"].includes(token);
+}
+
+function hasEffectiveRegistrationText(value: unknown) {
+  const token = normalizeEvidenceText(value);
+  if (!token) return false;
+  return !["nao", "n", "isento", "isenta", "sem inscricao", "nao possui", "nao consta", "nao localizado", "verificar"].includes(token);
+}
+
+function mergeDefaultEvidence(primary: DefaultEvidence, fallback: DefaultEvidence) {
+  const merged: DefaultEvidence = { ...fallback };
+  for (const [key, value] of Object.entries(primary)) {
+    if (value === true || value === false) merged[key] = value;
+  }
+  return merged;
+}
+
+async function loadClientDefaultEvidence(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  clientId: string,
+): Promise<DefaultEvidence> {
+  const { data: clientData, error: clientError } = await supabaseAdmin
+    .from("clients")
+    .select("sector")
+    .eq("organization_id", organizationId)
+    .eq("id", clientId)
+    .maybeSingle();
+  if (clientError) throw clientError;
+
+  const { data: rows, error } = await supabaseAdmin
+    .from("client_data")
+    .select("field_name, field_value")
+    .eq("client_id", clientId)
+    .in("field_name", [
+      "perfil_atuacao",
+      "inscricao_municipal",
+      "inscricao_estadual",
+      "possui_funcionarios",
+      "contribuinte_icms",
+      "regime_icms",
+    ]);
+  if (error) throw error;
+
+  const values = new Map<string, unknown>();
+  for (const row of (rows || []) as JsonRecord[]) {
+    const fieldName = asTrimmedString(row.field_name);
+    if (fieldName) values.set(fieldName, row.field_value);
+  }
+
+  const perfil = normalizeEvidenceText(values.get("perfil_atuacao"));
+  const sector = normalizeEvidenceText((clientData as JsonRecord | null)?.sector);
+  const serviceProvider = perfil.includes("serv") || sector.includes("serv");
+  const hasEmployees = isPositiveEvidenceText(values.get("possui_funcionarios"));
+  const icmsTaxpayer = isPositiveEvidenceText(values.get("contribuinte_icms")) || isPositiveEvidenceText(values.get("regime_icms"));
+  const hasStateRegistration = icmsTaxpayer || hasEffectiveRegistrationText(values.get("inscricao_estadual"));
+  const hasMunicipalRegistration = hasEffectiveRegistrationText(values.get("inscricao_municipal"));
+
+  return {
+    service_provider: serviceProvider || null,
+    iss_applicable: serviceProvider || null,
+    municipal_service_declaration_required: hasMunicipalRegistration || null,
+    has_employees: hasEmployees || null,
+    has_employees_or_retentions: hasEmployees || null,
+    retentions_or_services: serviceProvider || null,
+    state_registration: hasStateRegistration || null,
+    state_registration_or_required: hasStateRegistration || null,
+    icms_ipi_taxpayer: icmsTaxpayer || null,
+    icms_taxpayer: icmsTaxpayer || null,
+  };
+}
+
+const conditionEvidenceKey: Record<string, string> = {
+  has_employees: "has_employees",
+  iss_applicable: "service_provider",
+  icms_taxpayer: "icms_ipi_taxpayer",
+  service_provider: "service_provider",
+  accounting_contracted: "ecd_applicable",
+  municipal_service_declaration_required: "municipal_service_declaration_required",
+  state_registration: "state_registration",
+  state_registration_or_required: "state_registration_or_required",
+  icms_ipi_taxpayer: "icms_ipi_taxpayer",
+  icms_st_difal_anticipation: "icms_st_difal_anticipation",
+  retentions_or_services: "retentions_or_services",
+  has_employees_or_retentions: "has_employees_or_retentions",
+  ecd_applicable: "ecd_applicable",
+  efd_contribuicoes_applicable: "efd_contribuicoes_applicable",
+  tax_benefit_or_incentive_usage: "tax_benefit_or_incentive_usage",
+};
+
+function emptyDefaultSummary(): DefaultApplicationSummary {
+  return {
+    created: 0,
+    kept: 0,
+    reactivated: 0,
+    skipped: 0,
+    blocked: 0,
+    duplicate_risk: 0,
+    conditional_skipped: 0,
+    inactivated_prior_regime: 0,
+    inactivated: 0,
+    add: 0,
+    keep: 0,
+  };
+}
+
+function mergeDefaultSummary(target: DefaultApplicationSummary, source: Partial<DefaultApplicationSummary>) {
+  target.created += source.created || 0;
+  target.kept += source.kept || 0;
+  target.reactivated += source.reactivated || 0;
+  target.skipped += source.skipped || 0;
+  target.blocked += source.blocked || 0;
+  target.duplicate_risk += source.duplicate_risk || 0;
+  target.conditional_skipped += source.conditional_skipped || 0;
+  target.inactivated_prior_regime += source.inactivated_prior_regime || 0;
+  target.inactivated += source.inactivated || 0;
+  target.add += source.add || 0;
+  target.keep += source.keep || 0;
+  target.unsupported_clients = (target.unsupported_clients || 0) + (source.unsupported_clients || 0);
+  target.processed_clients = (target.processed_clients || 0) + (source.processed_clients || 0);
+}
+
+function evaluateLoadItemApplicability(item: RegimeLoadItemRow, evidence: DefaultEvidence) {
+  if (item.applicability !== "conditional") {
+    return { apply: item.applicability === "required", evidenceSource: null, reason: "non_required_optional_default" };
+  }
+  const conditionKey = item.condition_key || "";
+  const evidenceSource = conditionEvidenceKey[conditionKey] || conditionKey;
+  const value = evidence[evidenceSource];
+  if (value === true) return { apply: true, evidenceSource, reason: "client_evidence_indicates_applicability" };
+  if (value === false) return { apply: false, evidenceSource, reason: "client_evidence_indicates_not_applicable" };
+  return { apply: false, evidenceSource, reason: "insufficient_client_evidence" };
+}
+
+async function loadActiveDefaultLoad(supabaseAdmin: SupabaseAdmin, organizationId: string, taxRegimeCode: string) {
+  const { data: loadData, error: loadError } = await supabaseAdmin
+    .from("obligation_regime_loads")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("tax_regime_code", taxRegimeCode)
+    .eq("status", "active")
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (loadError) throw loadError;
+  if (!loadData) return { load: null, items: [] as RegimeLoadItemRow[] };
+
+  const load = loadData as RegimeLoadRow;
+  const { data: itemsData, error: itemsError } = await supabaseAdmin
+    .from("obligation_regime_load_items")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("load_id", load.id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (itemsError) throw itemsError;
+  return { load, items: (itemsData || []) as RegimeLoadItemRow[] };
+}
+
+async function insertDefaultDecision(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    organizationId: string;
+    batchId: string;
+    clientId: string;
+    templateId: string | null;
+    decisionType: string;
+    reason: string;
+    loadItemId?: string | null;
+    currentProfileId?: string | null;
+    evidenceSource?: string | null;
+    syncEffect?: string;
+    autoApplied?: boolean;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("obligation_load_application_reviews")
+    .insert({
+      organization_id: params.organizationId,
+      batch_id: params.batchId,
+      client_id: params.clientId,
+      template_id: params.templateId,
+      load_item_id: params.loadItemId || null,
+      current_profile_id: params.currentProfileId || null,
+      decision_type: params.decisionType,
+      reason: params.reason,
+      requires_confirmation: false,
+      selected: true,
+      auto_applied: params.autoApplied ?? false,
+      evidence_source: params.evidenceSource || null,
+      sync_effect: params.syncEffect || "profile_only",
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as JsonRecord;
+}
+
+async function insertDefaultBatch(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    organizationId: string;
+    clientId: string;
+    taxRegimeCode: string;
+    loadId: string | null;
+    mode: string;
+    actorId: string;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("obligation_load_application_batches")
+    .insert({
+      organization_id: params.organizationId,
+      client_id: params.clientId,
+      tax_regime_code: params.taxRegimeCode,
+      load_id: params.loadId,
+      mode: params.mode,
+      sync_scope: "single_client",
+      status: "applied",
+      summary: {},
+      warnings: [],
+      created_by: params.actorId,
+      applied_by: params.actorId,
+      applied_at: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as JsonRecord;
+}
+
+async function updateDefaultBatch(
+  supabaseAdmin: SupabaseAdmin,
+  batchId: string,
+  summary: DefaultApplicationSummary,
+  warnings: string[],
+) {
+  const { error } = await supabaseAdmin
+    .from("obligation_load_application_batches")
+    .update({ summary, warnings })
+    .eq("id", batchId);
+  if (error) throw error;
+}
+
+async function auditDefaultApplication(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    organizationId: string;
+    clientId: string;
+    batchId: string;
+    action: string;
+    actorId: string;
+    metadata: JsonRecord;
+  },
+) {
+  const { error } = await supabaseAdmin.from("obligation_audit_events").insert({
+    organization_id: params.organizationId,
+    client_id: params.clientId,
+    entity_type: "application_batch",
+    entity_id: params.batchId,
+    action: params.action,
+    actor_id: params.actorId,
+    metadata: params.metadata,
+  });
+  if (error) console.warn("default obligation audit failed", error.message);
+}
+
+async function auditObligationEvent(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    organizationId: string;
+    clientId?: string | null;
+    templateId?: string | null;
+    action: string;
+    actorId: string;
+    metadata?: JsonRecord;
+  },
+) {
+  const { error } = await supabaseAdmin.from("obligation_audit_events").insert({
+    organization_id: params.organizationId,
+    client_id: params.clientId || null,
+    template_id: params.templateId || null,
+    action: params.action,
+    actor_id: params.actorId,
+    metadata: params.metadata || {},
+  });
+
+  if (error) console.warn("obligation audit failed", error.message);
+}
+
+async function applyDefaultLoadForClient(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    organizationId: string;
+    actorId: string;
+    clientId: string;
+    taxRegimeCode: string;
+    mode: string;
+    sourceKind: string;
+    evidence: DefaultEvidence;
+  },
+) {
+  const { load, items } = await loadActiveDefaultLoad(supabaseAdmin, params.organizationId, params.taxRegimeCode);
+  const summary = emptyDefaultSummary();
+  const warnings: string[] = [];
+  const profiles: ProfileRow[] = [];
+  const skippedItems: JsonRecord[] = [];
+  const decisions: JsonRecord[] = [];
+
+  const batch = await insertDefaultBatch(supabaseAdmin, {
+    organizationId: params.organizationId,
+    clientId: params.clientId,
+    taxRegimeCode: params.taxRegimeCode,
+    loadId: load?.id || null,
+    mode: params.mode,
+    actorId: params.actorId,
+  });
+  const batchId = String(batch.id);
+
+  if (!load) {
+    warnings.push("Nenhuma carga padrao ativa encontrada para o regime informado.");
+    await updateDefaultBatch(supabaseAdmin, batchId, summary, warnings);
+    return { batch: { ...batch, summary, warnings }, summary, warnings, profiles, skippedItems, decisions };
+  }
+
+  const { data: existingProfilesData, error: existingProfilesError } = await supabaseAdmin
+    .from("client_obligation_profiles")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .eq("client_id", params.clientId);
+  if (existingProfilesError) throw existingProfilesError;
+  const existingProfiles = (existingProfilesData || []) as ProfileRow[];
+  const existingByTemplate = new Map(existingProfiles.map((profile) => [profile.template_id, profile]));
+  const today = toIsoDate(new Date());
+  const applicableLoadTemplateIds = new Set(
+    items
+      .filter((item) => evaluateLoadItemApplicability(item, params.evidence).apply)
+      .map((item) => item.template_id),
+  );
+  const staleDefaultProfiles = existingProfiles.filter((profile) => {
+    if (!profile.is_active) return false;
+    if (profile.source_kind !== "standard_load" && profile.source_kind !== "regime_migration") return false;
+    if (!applicableLoadTemplateIds.has(profile.template_id)) return true;
+    const appliedRegime = asTrimmedString(profile.applied_regime);
+    return Boolean(appliedRegime && appliedRegime !== params.taxRegimeCode);
+  });
+
+  for (const profile of staleDefaultProfiles) {
+    const { error: staleUpdateError } = await supabaseAdmin
+      .from("client_obligation_profiles")
+      .update({
+        is_active: false,
+        end_date: profile.end_date || today,
+        inactivation_reason: "regime_reconciliation",
+        sync_status: "not_applicable",
+      })
+      .eq("organization_id", params.organizationId)
+      .eq("id", profile.id);
+    if (staleUpdateError) throw staleUpdateError;
+    summary.inactivated += 1;
+    decisions.push(await insertDefaultDecision(supabaseAdmin, {
+      organizationId: params.organizationId,
+      batchId,
+      clientId: params.clientId,
+      templateId: profile.template_id,
+      currentProfileId: profile.id,
+      decisionType: "auto_inactivate_prior_regime",
+      reason: "default_not_applicable_to_current_client_regime",
+      syncEffect: "future_only",
+      autoApplied: true,
+    }));
+  }
+
+  for (const item of items) {
+    const decision = evaluateLoadItemApplicability(item, params.evidence);
+    if (!decision.apply) {
+      summary.skipped += 1;
+      if (item.applicability === "conditional") summary.conditional_skipped += 1;
+      const row = await insertDefaultDecision(supabaseAdmin, {
+        organizationId: params.organizationId,
+        batchId,
+        clientId: params.clientId,
+        templateId: item.template_id,
+        loadItemId: item.id,
+        decisionType: "skip",
+        reason: decision.reason,
+        evidenceSource: decision.evidenceSource,
+        syncEffect: "no_change",
+      });
+      decisions.push(row);
+      skippedItems.push({ ...row, auto_apply_when_positive_evidence_exists: item.applicability === "conditional" });
+      continue;
+    }
+
+    const existingProfile = existingByTemplate.get(item.template_id);
+    if (existingProfile?.is_active) {
+      const appliedRegime = asTrimmedString(existingProfile.applied_regime);
+      if (appliedRegime && appliedRegime !== params.taxRegimeCode) {
+        const { data: reconciledProfileData, error: reconciledProfileError } = await supabaseAdmin
+          .from("client_obligation_profiles")
+          .insert({
+            organization_id: params.organizationId,
+            client_id: params.clientId,
+            template_id: item.template_id,
+            source_kind: params.sourceKind,
+            source_load_id: load.id,
+            source_load_item_id: item.id,
+            applied_regime: params.taxRegimeCode,
+            application_batch_id: batchId,
+            assigned_to: existingProfile.assigned_to || null,
+            start_date: today,
+            end_date: null,
+            is_active: true,
+            due_day_override: item.default_due_day_override ?? existingProfile.due_day_override ?? null,
+            yearly_due_month_override: existingProfile.yearly_due_month_override ?? null,
+            legal_due_day_override: existingProfile.legal_due_day_override ?? null,
+            expected_documents_override: existingProfile.expected_documents_override ?? null,
+            notes: existingProfile.notes || null,
+            parameters: asRecord(existingProfile.parameters) || {},
+            sync_status: "current",
+            conditional_review_reason: null,
+            conditional_skip_reason: null,
+            created_by: params.actorId,
+          })
+          .select("*")
+          .single();
+        if (reconciledProfileError) throw reconciledProfileError;
+        const reconciledProfile = reconciledProfileData as ProfileRow;
+        summary.created += 1;
+        summary.add += 1;
+        profiles.push(reconciledProfile);
+        decisions.push(await insertDefaultDecision(supabaseAdmin, {
+          organizationId: params.organizationId,
+          batchId,
+          clientId: params.clientId,
+          templateId: item.template_id,
+          loadItemId: item.id,
+          currentProfileId: reconciledProfile.id,
+          decisionType: "add",
+          reason: "default_obligation_recreated_for_current_client_regime",
+          autoApplied: true,
+        }));
+        continue;
+      }
+
+      if (
+        existingProfile.source_kind === "standard_load" &&
+        (existingProfile.source_load_id !== load.id ||
+          existingProfile.source_load_item_id !== item.id ||
+          existingProfile.applied_regime !== params.taxRegimeCode)
+      ) {
+        const { error: refreshProfileError } = await supabaseAdmin
+          .from("client_obligation_profiles")
+          .update({
+            source_load_id: load.id,
+            source_load_item_id: item.id,
+            applied_regime: params.taxRegimeCode,
+            sync_status: "current",
+          })
+          .eq("organization_id", params.organizationId)
+          .eq("id", existingProfile.id);
+        if (refreshProfileError) throw refreshProfileError;
+      }
+      summary.kept += 1;
+      summary.keep += 1;
+      profiles.push(existingProfile);
+      decisions.push(await insertDefaultDecision(supabaseAdmin, {
+        organizationId: params.organizationId,
+        batchId,
+        clientId: params.clientId,
+        templateId: item.template_id,
+        loadItemId: item.id,
+        currentProfileId: existingProfile.id,
+        decisionType: "keep",
+        reason: "active_profile_already_exists",
+        autoApplied: true,
+      }));
+      continue;
+    }
+
+    if (existingProfile && existingProfile.source_kind !== "standard_load" && existingProfile.source_kind !== "regime_migration") {
+      summary.duplicate_risk += 1;
+      summary.blocked += 1;
+      decisions.push(await insertDefaultDecision(supabaseAdmin, {
+        organizationId: params.organizationId,
+        batchId,
+        clientId: params.clientId,
+        templateId: item.template_id,
+        loadItemId: item.id,
+        currentProfileId: existingProfile.id,
+        decisionType: "duplicate_risk",
+        reason: "manual_or_non_default_profile_exists_for_template",
+        syncEffect: "blocked",
+      }));
+      continue;
+    }
+
+    if (existingProfile && existingProfile.is_active === false) {
+      const inactiveReason = asTrimmedString(existingProfile.inactivation_reason);
+      if (
+        existingProfile.source_kind === "standard_load" ||
+        existingProfile.source_kind === "regime_migration" ||
+        inactiveReason === "regime_reconciliation" ||
+        inactiveReason === "regime_change"
+      ) {
+        const { data: reactivatedProfileData, error: reactivatedProfileError } = await supabaseAdmin
+          .from("client_obligation_profiles")
+          .update({
+            source_kind: params.sourceKind,
+            source_load_id: load.id,
+            source_load_item_id: item.id,
+            applied_regime: params.taxRegimeCode,
+            application_batch_id: batchId,
+            start_date: today,
+            end_date: null,
+            is_active: true,
+            due_day_override: item.default_due_day_override ?? existingProfile.due_day_override ?? null,
+            inactivation_reason: null,
+            sync_status: "current",
+            conditional_review_reason: null,
+            conditional_skip_reason: null,
+          })
+          .eq("organization_id", params.organizationId)
+          .eq("id", existingProfile.id)
+          .select("*")
+          .single();
+        if (reactivatedProfileError) throw reactivatedProfileError;
+        const reactivatedProfile = reactivatedProfileData as ProfileRow;
+        summary.reactivated += 1;
+        profiles.push(reactivatedProfile);
+        decisions.push(await insertDefaultDecision(supabaseAdmin, {
+          organizationId: params.organizationId,
+          batchId,
+          clientId: params.clientId,
+          templateId: item.template_id,
+          loadItemId: item.id,
+          currentProfileId: reactivatedProfile.id,
+          decisionType: "reactivate",
+          reason: "default_obligation_reactivated_for_current_client_regime",
+          autoApplied: true,
+        }));
+        continue;
+      }
+
+      summary.skipped += 1;
+      decisions.push(await insertDefaultDecision(supabaseAdmin, {
+        organizationId: params.organizationId,
+        batchId,
+        clientId: params.clientId,
+        templateId: item.template_id,
+        loadItemId: item.id,
+        currentProfileId: existingProfile.id,
+        decisionType: "skip",
+        reason: "previously_inactivated_manual_or_exception_requires_visible_user_decision",
+        syncEffect: "no_change",
+      }));
+      continue;
+    }
+
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from("client_obligation_profiles")
+      .insert({
+        organization_id: params.organizationId,
+        client_id: params.clientId,
+        template_id: item.template_id,
+        source_kind: params.sourceKind,
+        source_load_id: load.id,
+        source_load_item_id: item.id,
+        applied_regime: params.taxRegimeCode,
+        application_batch_id: batchId,
+        assigned_to: null,
+        start_date: today,
+        end_date: null,
+        is_active: true,
+        due_day_override: item.default_due_day_override ?? null,
+        yearly_due_month_override: null,
+        legal_due_day_override: null,
+        expected_documents_override: null,
+        notes: null,
+        parameters: {},
+        sync_status: "current",
+        conditional_review_reason: null,
+        conditional_skip_reason: null,
+        created_by: params.actorId,
+      })
+      .select("*")
+      .single();
+    if (profileError) throw profileError;
+
+    const profile = profileData as ProfileRow;
+    summary.created += 1;
+    summary.add += 1;
+    profiles.push(profile);
+    decisions.push(await insertDefaultDecision(supabaseAdmin, {
+      organizationId: params.organizationId,
+      batchId,
+      clientId: params.clientId,
+      templateId: item.template_id,
+      loadItemId: item.id,
+      currentProfileId: profile.id,
+      decisionType: "add",
+      reason: "default_obligation_applied",
+      autoApplied: true,
+    }));
+  }
+
+  await updateDefaultBatch(supabaseAdmin, batchId, summary, warnings);
+  await auditDefaultApplication(supabaseAdmin, {
+    organizationId: params.organizationId,
+    clientId: params.clientId,
+    batchId,
+    action: params.mode === "regime_migration" ? "default_regime_migration_applied" : "default_obligations_applied",
+    actorId: params.actorId,
+    metadata: { tax_regime_code: params.taxRegimeCode, summary },
+  });
+
+  return { batch: { ...batch, summary, warnings }, summary, warnings, profiles, skippedItems, decisions };
+}
+
+async function handleApplyDefaultObligations(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const clientId = asTrimmedString(payload.client_id);
+  if (!clientId) return jsonResponse({ error: "Cliente obrigatorio." }, 400);
+
+  const { data: clientData, error: clientError } = await supabaseAdmin
+    .from("clients")
+    .select("id, regime")
+    .eq("organization_id", organizationId)
+    .eq("id", clientId)
+    .maybeSingle();
+  if (clientError) return jsonResponse({ error: clientError.message }, 400);
+  if (!clientData) return jsonResponse({ error: "Cliente nao encontrado." }, 404);
+
+  const taxRegimeCode = normalizeRegimeCode((clientData as JsonRecord).regime);
+  if (!taxRegimeCode) return jsonResponse({ error: "Cliente sem regime tributario suportado." }, 400);
+  if (!isSupportedTaxRegimeCode(taxRegimeCode)) return jsonResponse({ error: "Regime tributario nao suportado para obrigacoes padrao." }, 400);
+
+  const storedEvidence = await loadClientDefaultEvidence(supabaseAdmin, organizationId, clientId);
+  const evidence = mergeDefaultEvidence(storedEvidence, asEvidence(payload.evidence));
+
+  const result = await applyDefaultLoadForClient(supabaseAdmin, {
+    organizationId,
+    actorId,
+    clientId,
+    taxRegimeCode,
+    mode: asTrimmedString(payload.mode) || "new_client",
+    sourceKind: "standard_load",
+    evidence,
+  });
+
+  return jsonResponse({
+    ok: true,
+    batch_id: result.batch.id,
+    summary: result.summary,
+    warnings: result.warnings,
+    profiles: result.profiles,
+    skipped_items: result.skippedItems,
+  });
+}
+
+async function handleApplyConditionalDefaultsAfterEvidenceUpdate(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const clientId = asTrimmedString(payload.client_id);
+  if (!clientId) return jsonResponse({ error: "Cliente obrigatorio." }, 400);
+
+  const { data: clientData, error: clientError } = await supabaseAdmin
+    .from("clients")
+    .select("id, regime")
+    .eq("organization_id", organizationId)
+    .eq("id", clientId)
+    .maybeSingle();
+  if (clientError) return jsonResponse({ error: clientError.message }, 400);
+  if (!clientData) return jsonResponse({ error: "Cliente nao encontrado." }, 404);
+
+  const taxRegimeCode = normalizeRegimeCode((clientData as JsonRecord).regime);
+  if (!taxRegimeCode) return jsonResponse({ error: "Cliente sem regime tributario suportado." }, 400);
+  if (!isSupportedTaxRegimeCode(taxRegimeCode)) return jsonResponse({ error: "Cliente sem regime tributario suportado." }, 400);
+
+  const storedEvidence = await loadClientDefaultEvidence(supabaseAdmin, organizationId, clientId);
+  const evidence = mergeDefaultEvidence(storedEvidence, asEvidence(payload.evidence));
+
+  const result = await applyDefaultLoadForClient(supabaseAdmin, {
+    organizationId,
+    actorId,
+    clientId,
+    taxRegimeCode,
+    mode: "reconcile_existing",
+    sourceKind: "standard_load",
+    evidence,
+  });
+
+  return jsonResponse({
+    ok: true,
+    batch_id: result.batch.id,
+    summary: result.summary,
+    warnings: result.warnings,
+    profiles: result.profiles,
+    skipped_items: result.skippedItems,
+  });
+}
+
+async function handleSyncDefaultObligationsForExistingClients(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const onlyTaxRegimeCode = normalizeRegimeCode(payload.tax_regime_code);
+  if (onlyTaxRegimeCode && !isSupportedTaxRegimeCode(onlyTaxRegimeCode)) {
+    return jsonResponse({ error: "Regime tributario nao suportado para sincronizacao." }, 400);
+  }
+
+  const { data: clientsData, error: clientsError } = await supabaseAdmin
+    .from("clients")
+    .select("id, name, regime, status")
+    .eq("organization_id", organizationId)
+    .order("name", { ascending: true });
+
+  if (clientsError) return jsonResponse({ error: clientsError.message }, 400);
+
+  const summary = emptyDefaultSummary();
+  const warnings: string[] = [];
+  const clientResults: JsonRecord[] = [];
+
+  for (const client of (clientsData || []) as JsonRecord[]) {
+    const clientId = asTrimmedString(client.id);
+    const status = (asTrimmedString(client.status) || "").toLowerCase();
+    if (!clientId || status === "inativo") continue;
+
+    const taxRegimeCode = normalizeRegimeCode(client.regime);
+    if (!isSupportedTaxRegimeCode(taxRegimeCode)) {
+      summary.unsupported_clients = (summary.unsupported_clients || 0) + 1;
+      warnings.push(`Cliente ${asTrimmedString(client.name) || clientId} sem regime tributario suportado.`);
+      continue;
+    }
+    if (onlyTaxRegimeCode && taxRegimeCode !== onlyTaxRegimeCode) continue;
+
+    try {
+      const storedEvidence = await loadClientDefaultEvidence(supabaseAdmin, organizationId, clientId);
+      const evidence = mergeDefaultEvidence(storedEvidence, asEvidence(payload.evidence));
+      const result = await applyDefaultLoadForClient(supabaseAdmin, {
+        organizationId,
+        actorId,
+        clientId,
+        taxRegimeCode,
+        mode: "reconcile_existing",
+        sourceKind: "standard_load",
+        evidence,
+      });
+
+      summary.processed_clients = (summary.processed_clients || 0) + 1;
+      mergeDefaultSummary(summary, result.summary);
+      clientResults.push({
+        client_id: clientId,
+        client_name: asTrimmedString(client.name),
+        tax_regime_code: taxRegimeCode,
+        batch_id: result.batch.id,
+        summary: result.summary,
+        warnings: result.warnings,
+      });
+      warnings.push(...result.warnings.map((warning) => `${asTrimmedString(client.name) || clientId}: ${warning}`));
+    } catch (error) {
+      summary.blocked += 1;
+      warnings.push(`${asTrimmedString(client.name) || clientId}: ${error instanceof Error ? error.message : "Falha ao sincronizar obrigacoes padrao."}`);
+    }
+  }
+
+  await auditDefaultApplication(supabaseAdmin, {
+    organizationId,
+    clientId: null,
+    batchId: crypto.randomUUID(),
+    action: "existing_clients_default_obligations_synced",
+    actorId,
+    metadata: { tax_regime_code: onlyTaxRegimeCode || null, summary, clients: clientResults.length },
+  });
+
+  return jsonResponse({
+    ok: true,
+    summary,
+    warnings,
+    clients: clientResults,
+  });
+}
+
+async function handleApplyRegimeChangeDefaultObligations(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const clientId = asTrimmedString(payload.client_id);
+  const toTaxRegimeCode = normalizeRegimeCode(payload.to_tax_regime_code);
+  const fromTaxRegimeCode = normalizeRegimeCode(payload.from_tax_regime_code);
+  if (!clientId || !toTaxRegimeCode) return jsonResponse({ error: "Cliente e novo regime tributario sao obrigatorios." }, 400);
+  if (!isSupportedTaxRegimeCode(toTaxRegimeCode)) return jsonResponse({ error: "Novo regime tributario nao suportado para obrigacoes padrao." }, 400);
+
+  const { items: newItems } = await loadActiveDefaultLoad(supabaseAdmin, organizationId, toTaxRegimeCode);
+  const newTemplateIds = new Set(newItems.map((item) => item.template_id));
+  const storedEvidence = await loadClientDefaultEvidence(supabaseAdmin, organizationId, clientId);
+  const evidence = mergeDefaultEvidence(storedEvidence, asEvidence(payload.evidence));
+  const result = await applyDefaultLoadForClient(supabaseAdmin, {
+    organizationId,
+    actorId,
+    clientId,
+    taxRegimeCode: toTaxRegimeCode,
+    mode: "regime_migration",
+    sourceKind: "regime_migration",
+    evidence,
+  });
+
+  const { data: profilesData, error: profilesError } = await supabaseAdmin
+    .from("client_obligation_profiles")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("client_id", clientId)
+    .eq("is_active", true)
+    .in("source_kind", ["standard_load", "regime_migration"]);
+  if (profilesError) return jsonResponse({ error: profilesError.message }, 400);
+
+  const today = toIsoDate(new Date());
+  const profilesToInactivate = ((profilesData || []) as ProfileRow[]).filter((profile) => {
+    if (newTemplateIds.has(profile.template_id)) return false;
+    if (!fromTaxRegimeCode) return profile.applied_regime !== toTaxRegimeCode;
+    return profile.applied_regime === fromTaxRegimeCode;
+  });
+
+  for (const profile of profilesToInactivate) {
+    const { error: updateError } = await supabaseAdmin
+      .from("client_obligation_profiles")
+      .update({
+        is_active: false,
+        end_date: profile.end_date || today,
+        inactivation_reason: "regime_change",
+        sync_status: "not_applicable",
+      })
+      .eq("organization_id", organizationId)
+      .eq("id", profile.id);
+    if (updateError) return jsonResponse({ error: updateError.message }, 400);
+    result.decisions.push(await insertDefaultDecision(supabaseAdmin, {
+      organizationId,
+      batchId: String(result.batch.id),
+      clientId,
+      templateId: profile.template_id,
+      currentProfileId: profile.id,
+      decisionType: "auto_inactivate_prior_regime",
+      reason: "default_belongs_only_to_prior_regime",
+      syncEffect: "future_only",
+      autoApplied: true,
+    }));
+  }
+
+  result.summary.inactivated_prior_regime = profilesToInactivate.length;
+  await updateDefaultBatch(supabaseAdmin, String(result.batch.id), result.summary, result.warnings);
+  await auditDefaultApplication(supabaseAdmin, {
+    organizationId,
+    clientId,
+    batchId: String(result.batch.id),
+    action: "automatic_regime_change_defaults_applied",
+    actorId,
+    metadata: { from_tax_regime_code: fromTaxRegimeCode, to_tax_regime_code: toTaxRegimeCode, summary: result.summary },
+  });
+
+  return jsonResponse({
+    ok: true,
+    batch_id: result.batch.id,
+    summary: result.summary,
+    warnings: result.warnings,
+    decisions: result.decisions,
+    profiles: result.profiles,
+  });
 }
 
 async function handleListRegimeLoads(
@@ -5071,6 +6185,22 @@ Deno.serve(async (req) => {
 
     if (action === "upsert_regime_load_item") {
       return await handleUpsertRegimeLoadItem(supabaseAdmin, user.id, roles, organizationId, payload);
+    }
+
+    if (action === "apply_default_obligations") {
+      return await handleApplyDefaultObligations(supabaseAdmin, user.id, organizationId, payload);
+    }
+
+    if (action === "apply_conditional_default_obligations_after_evidence_update") {
+      return await handleApplyConditionalDefaultsAfterEvidenceUpdate(supabaseAdmin, user.id, organizationId, payload);
+    }
+
+    if (action === "sync_default_obligations_for_existing_clients") {
+      return await handleSyncDefaultObligationsForExistingClients(supabaseAdmin, user.id, organizationId, payload);
+    }
+
+    if (action === "apply_regime_change_default_obligations") {
+      return await handleApplyRegimeChangeDefaultObligations(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "detect_obligation_duplicates") {

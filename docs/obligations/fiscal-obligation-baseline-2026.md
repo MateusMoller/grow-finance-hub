@@ -16,7 +16,9 @@ Levantamento inicial para cadastro das cargas padrao por tributacao no modulo na
 
 O modelo atual guarda dia e mes de referencia, mas ainda nao calcula "ultimo dia util". Para DCTFWeb/MIT, ECD e ECF, foi cadastrado dia 31/30 como prazo operacional, com observacao de "ultimo dia util" em `operational_notes`.
 
-Obrigacoes estaduais e municipais variam por UF, inscricao estadual, atividade, municipio e sistema local. Por isso, EFD ICMS/IPI, DeSTDA, ISS e declaracoes municipais foram cadastradas como condicionais e com prazo operacional revisavel por cliente.
+Obrigacoes estaduais e municipais variam por UF, inscricao estadual, atividade, municipio e sistema local. Por isso, EFD ICMS/IPI, DeSTDA, ISS, NFS-e e declaracoes municipais foram cadastradas como condicionais e com prazo operacional revisavel por cliente.
+
+Esta matriz e generica por regime tributario. Obrigacoes especificas de ramo de atuacao foram excluidas do padrao do sistema, incluindo DMED, DIMOB, DOI, e-Financeira, CNO e SERO. Essas obrigacoes devem ser cadastradas manualmente quando aplicaveis a um cliente ou ramo especifico.
 
 ## Cargas por tributacao
 
@@ -24,13 +26,13 @@ Obrigacoes estaduais e municipais variam por UF, inscricao estadual, atividade, 
 
 - PGDAS-D: mensal, dia 20.
 - DEFIS: anual, 31/03.
-- Revisao de DAS complementar e ajustes: mensal, condicional para prestadores.
-- ISS Municipal e declaracao municipal de servicos: mensais, condicionais quando houver ISS.
-- Rotina estadual ICMS e DeSTDA: mensais, condicionais quando houver ICMS/IE.
+- Revisao de DAS complementar e ajustes: mensal, condicional quando houver beneficio, incentivo ou ajuste tributario.
+- ISS Municipal, NFS-e e declaracao municipal de servicos: mensais, condicionais quando houver prestacao de servico ou obrigatoriedade municipal.
+- EFD ICMS/IPI: mensal, condicional para contribuinte ICMS/IPI.
+- DeSTDA: mensal, condicional para ICMS-ST, DIFAL ou antecipacao.
 - FGTS, eSocial, DCTFWeb/MIT e fechamento de folha: mensais, condicionais quando houver empregados.
 - EFD-Reinf: mensal, condicional para prestadores/tomadores sujeitos a retencoes.
-- Fechamento contabil mensal: condicional quando contratado.
-- Regularidade fiscal, checklist documental, revisao cadastral/fiscal anual e revisao da opcao pelo Simples: controles internos obrigatorios.
+- Revisao anual da opcao pelo Simples: anual.
 
 ### Lucro Presumido
 
@@ -42,9 +44,9 @@ Obrigacoes estaduais e municipais variam por UF, inscricao estadual, atividade, 
 - ECD: anual, condicional conforme obrigatoriedade/contratacao contabil.
 - EFD-Contribuicoes: mensal, condicional conforme perfil fiscal.
 - EFD ICMS/IPI: mensal, condicional para contribuinte ICMS.
-- ISS Municipal e declaracao municipal de servicos: mensais, condicionais quando houver ISS.
-- FGTS, eSocial, fechamento de folha e revisao de INSS: condicionais quando houver empregados.
-- Revisao de retencoes, regularidade fiscal, checklist documental, fechamento contabil e revisao cadastral anual.
+- ISS Municipal, NFS-e e declaracao municipal de servicos: mensais, condicionais quando houver ISS ou obrigatoriedade municipal.
+- FGTS e eSocial: condicionais quando houver empregados.
+- DIRBI: condicional quando houver beneficio ou incentivo tributario.
 
 ### Lucro Real
 
@@ -56,17 +58,16 @@ Obrigacoes estaduais e municipais variam por UF, inscricao estadual, atividade, 
 - ECF: anual, ultimo dia util de julho.
 - EFD-Reinf: mensal, condicional para retencoes/servicos.
 - EFD ICMS/IPI: mensal, condicional para contribuinte ICMS.
-- ISS Municipal e declaracao municipal de servicos: mensais, condicionais quando houver ISS.
-- FGTS, eSocial, fechamento de folha e revisao de INSS: condicionais quando houver empregados.
-- Revisao de retencoes, Lalur/Lacs, regularidade fiscal, checklist documental, fechamento contabil e revisao cadastral anual.
+- ISS Municipal, NFS-e e declaracao municipal de servicos: mensais, condicionais quando houver ISS ou obrigatoriedade municipal.
+- FGTS e eSocial: condicionais quando houver empregados.
+- DIRBI: condicional quando houver beneficio ou incentivo tributario.
 
 ### MEI
 
 - PGMEI/DAS MEI: mensal, dia 20.
 - DASN-SIMEI: anual, 31/05.
 - Controle de receita bruta MEI: mensal.
-- ISS Municipal e declaracao municipal de servicos: condicionais quando houver ISS/municipio exigir.
+- ISS Municipal, NFS-e e declaracao municipal de servicos: condicionais quando houver ISS, prestacao de servico ou municipio exigir.
 - Revisao anual de limite e status MEI.
-- FGTS, eSocial, DCTFWeb/MIT e fechamento de folha: condicionais quando houver empregado.
-- Alerta de desenquadramento: opcional.
-- Checklist documental e revisao cadastral/fiscal anual.
+- FGTS, eSocial e DCTFWeb/MIT: condicionais quando houver empregado ou retencoes.
+- DeSTDA: condicional quando houver inscricao estadual ou obrigatoriedade estadual.

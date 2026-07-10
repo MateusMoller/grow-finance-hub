@@ -17,9 +17,25 @@ describe("conditional applicability", () => {
     });
   });
 
-  it("requires review when evidence is missing", () => {
+  it("skips without review when evidence is missing", () => {
     expect(evaluateConditionalApplicability("iss_applicable", {})).toMatchObject({
-      status: "review",
+      status: "skip",
+      reason: "insufficient_client_evidence",
+    });
+  });
+
+  it("supports positive-evidence keys used by the generic matrix", () => {
+    expect(evaluateConditionalApplicability("tax_benefit_or_incentive_usage", {
+      taxBenefitOrIncentiveUsage: true,
+    })).toMatchObject({
+      status: "apply",
+      evidenceSource: "taxBenefitOrIncentiveUsage",
+    });
+
+    expect(evaluateConditionalApplicability("efd_contribuicoes_applicable", {
+      efdContribuicoesApplicable: null,
+    })).toMatchObject({
+      status: "skip",
       reason: "insufficient_client_evidence",
     });
   });

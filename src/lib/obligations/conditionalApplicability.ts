@@ -1,6 +1,6 @@
 import type { RegimeLoadConditionKey } from "./regimeLoadTypes";
 
-export type ConditionalDecisionStatus = "apply" | "skip" | "review";
+export type ConditionalDecisionStatus = "apply" | "skip";
 
 export interface ConditionalClientEvidence {
   hasEmployees?: boolean | null;
@@ -8,6 +8,16 @@ export interface ConditionalClientEvidence {
   icmsTaxpayer?: boolean | null;
   serviceProvider?: boolean | null;
   accountingContracted?: boolean | null;
+  municipalServiceDeclarationRequired?: boolean | null;
+  stateRegistration?: boolean | null;
+  stateRegistrationOrRequired?: boolean | null;
+  icmsIpiTaxpayer?: boolean | null;
+  icmsStDifalAnticipation?: boolean | null;
+  retentionsOrServices?: boolean | null;
+  hasEmployeesOrRetentions?: boolean | null;
+  ecdApplicable?: boolean | null;
+  efdContribuicoesApplicable?: boolean | null;
+  taxBenefitOrIncentiveUsage?: boolean | null;
 }
 
 export interface ConditionalApplicabilityDecision {
@@ -23,6 +33,16 @@ const conditionEvidenceField: Record<RegimeLoadConditionKey, keyof ConditionalCl
   icms_taxpayer: "icmsTaxpayer",
   service_provider: "serviceProvider",
   accounting_contracted: "accountingContracted",
+  municipal_service_declaration_required: "municipalServiceDeclarationRequired",
+  state_registration: "stateRegistration",
+  state_registration_or_required: "stateRegistrationOrRequired",
+  icms_ipi_taxpayer: "icmsIpiTaxpayer",
+  icms_st_difal_anticipation: "icmsStDifalAnticipation",
+  retentions_or_services: "retentionsOrServices",
+  has_employees_or_retentions: "hasEmployeesOrRetentions",
+  ecd_applicable: "ecdApplicable",
+  efd_contribuicoes_applicable: "efdContribuicoesApplicable",
+  tax_benefit_or_incentive_usage: "taxBenefitOrIncentiveUsage",
 };
 
 export function evaluateConditionalApplicability(
@@ -51,9 +71,15 @@ export function evaluateConditionalApplicability(
   }
 
   return {
-    status: "review",
+    status: "skip",
     conditionKey,
     evidenceSource,
     reason: "insufficient_client_evidence",
   };
+}
+
+export function getEvidenceFieldForCondition(
+  conditionKey: RegimeLoadConditionKey,
+): keyof ConditionalClientEvidence {
+  return conditionEvidenceField[conditionKey];
 }

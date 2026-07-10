@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { baselineMasterObligations, baselineRegimeLoads, getBaselineLoadByRegime } from "@/lib/obligations/baselineRegimeLoads";
+import {
+  baselineMasterObligations,
+  baselineRegimeLoads,
+  excludedSectorSpecificObligationCodes,
+  getBaselineLoadByRegime,
+} from "@/lib/obligations/baselineRegimeLoads";
 
 describe("baseline regime loads", () => {
   it("defines one active baseline load per supported regime", () => {
@@ -22,19 +27,17 @@ describe("baseline regime loads", () => {
     expect(fgtsLoadReferences).toHaveLength(4);
   });
 
-  it("registers the governed catalog routines as separate master obligations", () => {
+  it("registers only the generic default obligations as master obligations", () => {
     const masterCodes = new Set(baselineMasterObligations.map((obligation) => obligation.code));
 
     expect(masterCodes).toEqual(
       new Set([
-        "accounting_monthly_closing",
-        "annual_cadastral_fiscal_review",
-        "client_document_checklist",
         "das_complementar_review",
         "dasn_simei",
         "defis",
         "dctfweb_mit",
         "destda",
+        "dirbi",
         "ecd",
         "ecf",
         "efd_contribuicoes",
@@ -42,26 +45,32 @@ describe("baseline regime loads", () => {
         "efd_reinf",
         "esocial",
         "fgts",
-        "icms_state_routine",
-        "inss_contribution_review",
+        "generic_municipal_obligations",
+        "generic_state_obligations",
         "irpj_csll_lucro_real",
         "irpj_csll_presumido",
         "iss_municipal",
-        "lalur_lacs_review",
-        "mei_migration_alert",
         "mei_revenue_support",
         "mei_status_limit_review",
         "municipal_service_tax_return",
-        "payroll_closing",
+        "nfse_municipal",
         "pgdas_d",
         "pgmei",
         "pis_cofins_cumulativo",
         "pis_cofins_nao_cumulativo",
         "simples_option_status_review",
-        "tax_regularidade_review",
-        "tax_withholding_review",
       ]),
     );
+  });
+
+  it("excludes sector-specific obligations from default loads", () => {
+    const masterCodes = new Set(baselineMasterObligations.map((obligation) => obligation.code));
+    const loadCodes = new Set(baselineRegimeLoads.flatMap((load) => load.items.map((item) => item.templateCode)));
+
+    for (const code of excludedSectorSpecificObligationCodes) {
+      expect(masterCodes.has(code)).toBe(false);
+      expect(loadCodes.has(code)).toBe(false);
+    }
   });
 
   it("requires condition keys for conditional baseline items", () => {
@@ -75,6 +84,12 @@ describe("baseline regime loads", () => {
 
   it("can find a baseline load by regime", () => {
     expect(getBaselineLoadByRegime("lucro_real")?.name).toBe("Lucro Real - Carga Padrao");
+  });
+
+  it("keeps manual obligations outside default-load membership", () => {
+    const allDefaultCodes = new Set(baselineRegimeLoads.flatMap((load) => load.items.map((item) => item.templateCode)));
+
+    expect(allDefaultCodes.has("custom_manual_obligation")).toBe(false);
   });
 
   it("stores annual obligations in their statutory delivery months", () => {

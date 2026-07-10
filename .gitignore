@@ -9,8 +9,10 @@ lerna-debug.log*
 
 node_modules
 dist
+build
 dist-ssr
 *.local
+supabase/.branches/
 tools/grow-document-robot/runtime/*.json
 tools/grow-document-robot/runtime/*.log
 tools/grow-document-robot/runtime/state.json

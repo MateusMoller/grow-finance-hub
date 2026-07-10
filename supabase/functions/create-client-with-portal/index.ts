@@ -135,6 +135,66 @@ function normalizePhone(value: unknown): string | null {
   return `(${ddd}) ${phoneDigits.slice(0, 5)}-${phoneDigits.slice(5)}`;
 }
 
+function normalizeTaxRegime(value: unknown): string | null {
+  const normalized = (asTrimmedString(value) || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const aliases = new Map([
+    ["simples", "simples_nacional"],
+    ["simples nacional", "simples_nacional"],
+    ["lucro presumido", "lucro_presumido"],
+    ["presumido", "lucro_presumido"],
+    ["lucro real", "lucro_real"],
+    ["real", "lucro_real"],
+    ["mei", "mei"],
+    ["simei", "mei"],
+  ]);
+  return aliases.get(normalized) || null;
+}
+
+async function applyDefaultObligationsAfterClientCreate(params: {
+  supabaseUrl: string;
+  anonKey: string;
+  token: string;
+  organizationId: string;
+  clientId: string;
+  taxRegimeCode: string | null;
+}) {
+  if (!params.taxRegimeCode) {
+    return { ok: false, warning: "Regime tributario ausente ou nao suportado; obrigacoes padrao nao aplicadas." };
+  }
+
+  const response = await fetch(`${params.supabaseUrl}/functions/v1/grow-obligations-module`, {
+    method: "POST",
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+      apikey: params.anonKey,
+    },
+    body: JSON.stringify({
+      action: "apply_default_obligations",
+      organization_id: params.organizationId,
+      client_id: params.clientId,
+      tax_regime_code: params.taxRegimeCode,
+      mode: "new_client",
+      evidence: {},
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    return {
+      ok: false,
+      warning: payload?.error || "Cliente cadastrado, mas houve falha ao aplicar obrigacoes padrao.",
+    };
+  }
+  return { ok: true, payload };
+}
+
 function isInactiveClientStatus(value: string | null | undefined) {
   return asTrimmedString(value)?.toLowerCase() === "inativo";
 }
@@ -675,9 +735,22 @@ Deno.serve(async (req) => {
       portalAccessLinkType = "recovery";
     }
 
+    const defaultObligations = await applyDefaultObligationsAfterClientCreate({
+      supabaseUrl,
+      anonKey,
+      token,
+      organizationId,
+      clientId: createdClient.id,
+      taxRegimeCode: normalizeTaxRegime(clientWritePayload.regime),
+    }).catch((error) => ({
+      ok: false,
+      warning: error instanceof Error ? error.message : "Cliente cadastrado, mas houve falha ao aplicar obrigacoes padrao.",
+    }));
+
     return jsonResponse({
       ok: true,
       client: createdClient,
+      default_obligations: defaultObligations,
       portal_user_created_now: portalUserCreatedNow,
       portal_user_id: portalUserId,
       portal_access_link: portalAccessLink,

@@ -62,5 +62,5 @@ Adaptacao ao Grow Finance Hub:
 
 <!-- SPECKIT START -->
 Current Spec Kit feature plan:
-`specs/006-site-design-refresh/plan.md`
+`specs/007-default-obligations/plan.md`
 <!-- SPECKIT END -->

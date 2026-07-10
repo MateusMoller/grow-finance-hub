@@ -12,7 +12,17 @@ export type RegimeLoadConditionKey =
   | "iss_applicable"
   | "icms_taxpayer"
   | "service_provider"
-  | "accounting_contracted";
+  | "accounting_contracted"
+  | "municipal_service_declaration_required"
+  | "state_registration"
+  | "state_registration_or_required"
+  | "icms_ipi_taxpayer"
+  | "icms_st_difal_anticipation"
+  | "retentions_or_services"
+  | "has_employees_or_retentions"
+  | "ecd_applicable"
+  | "efd_contribuicoes_applicable"
+  | "tax_benefit_or_incentive_usage";
 
 export type RegimeLoadDefaultStartPolicy = "client_created_at" | "current_month" | "next_month" | "custom";
 
@@ -23,7 +33,7 @@ export type ClientObligationSourceKind =
   | "legacy"
   | "exception";
 
-export type ClientObligationSyncStatus = "current" | "pending_review" | "skipped" | "not_applicable";
+export type ClientObligationSyncStatus = "current" | "skipped" | "not_applicable";
 
 export type RegimeLoadApplicationMode =
   | "new_client"
@@ -33,12 +43,14 @@ export type RegimeLoadApplicationMode =
   | "standard_load_sync";
 
 export type RegimeLoadSyncScope = "single_client" | "existing_clients_same_regime" | "branch_inherited_regime";
-export type RegimeLoadBatchStatus = "previewed" | "applied" | "failed" | "cancelled";
+export type RegimeLoadBatchStatus = "initialized" | "previewed" | "applied" | "failed" | "cancelled";
 export type RegimeLoadReviewDecision =
   | "add"
   | "keep"
   | "reactivate"
   | "suggest_inactivate"
+  | "auto_inactivate_prior_regime"
+  | "inactivate_prior_regime"
   | "skip"
   | "duplicate_risk"
   | "blocked";
@@ -95,10 +107,12 @@ export interface RegimeLoadApplicationSummary {
   created: number;
   reactivated: number;
   suggest_inactivate: number;
+  inactivated_prior_regime: number;
   inactivated: number;
   duplicate_risk: number;
   blocked: number;
   skipped: number;
+  conditional_skipped: number;
   review_required: number;
 }
 
@@ -127,6 +141,7 @@ export interface RegimeLoadApplicationReview {
   reason: string;
   requires_confirmation: boolean;
   selected: boolean;
+  auto_applied?: boolean;
   evidence_source: string | null;
   sync_effect: "profile_only" | "future_only" | "no_change" | "blocked";
 }
@@ -156,6 +171,8 @@ export interface ObligationDuplicateMatch {
   code: string | null;
   name: string;
   normalized_name: string;
+  source_kind?: "standard_load" | "manual" | "regime_migration" | "legacy" | "exception" | null;
+  baseline_source?: string | null;
   match_type: DuplicateMatchType;
   severity: DuplicateSeverity;
 }

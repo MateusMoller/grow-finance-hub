@@ -26,6 +26,8 @@ import {
 } from "@/lib/fileUploadSecurity";
 import { sectorOptions } from "@/components/portal/types";
 import { ClientObligationsPanel } from "@/components/obligations/ClientObligationsPanel";
+import { invokeGrowObligations } from "@/lib/growObligations";
+import { normalizeTaxRegime } from "@/lib/obligations/taxRegimes";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -61,6 +63,50 @@ type ClientAcessoriasObligation = {
   notes: string | null;
   last_synced_at: string | null;
 };
+
+function normalizeEvidenceToken(value: string | null | undefined) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isPositiveEvidence(value: string | null | undefined) {
+  const token = normalizeEvidenceToken(value);
+  return ["sim", "s", "yes", "true", "1", "possui"].includes(token);
+}
+
+function hasEffectiveRegistration(value: string | null | undefined) {
+  const token = normalizeEvidenceToken(value);
+  if (!token || ["nao", "n", "isento", "isenta", "sem inscricao", "nao possui"].includes(token)) return false;
+  return true;
+}
+
+function buildDefaultObligationEvidence(values: Record<string, string>) {
+  const perfil = normalizeEvidenceToken(values.perfil_atuacao);
+  const providesServices = perfil.includes("serv");
+  const hasEmployees = isPositiveEvidence(values.possui_funcionarios);
+  const isIcmsTaxpayer = isPositiveEvidence(values.contribuinte_icms) || isPositiveEvidence(values.regime_icms);
+  const hasStateRegistration = isIcmsTaxpayer || hasEffectiveRegistration(values.inscricao_estadual);
+  const hasMunicipalRegistration = hasEffectiveRegistration(values.inscricao_municipal);
+
+  return {
+    service_provider: providesServices || null,
+    municipal_service_declaration_required: hasMunicipalRegistration || null,
+    state_registration: hasStateRegistration || null,
+    state_registration_or_required: hasStateRegistration || null,
+    icms_ipi_taxpayer: isIcmsTaxpayer || null,
+    icms_st_difal_anticipation: null,
+    retentions_or_services: providesServices || null,
+    has_employees_or_retentions: hasEmployees || null,
+    ecd_applicable: null,
+    efd_contribuicoes_applicable: null,
+    tax_benefit_or_incentive_usage: null,
+    has_employees: hasEmployees || null,
+  };
+}
 
 interface ClientFile {
   id: string;
@@ -1635,6 +1681,14 @@ export default function ClientDetailPage() {
     const nextObligationCompletionWhatsAppEnabled = clientWillBeInactive
       ? false
       : Boolean(clientForm.obligation_completion_whatsapp_enabled);
+    const previousTaxRegimeCode = normalizeTaxRegime(client?.regime || null);
+    const nextTaxRegimeCode = normalizeTaxRegime(clientForm.regime || null);
+    const defaultObligationEvidence = buildDefaultObligationEvidence({
+      ...generalValues,
+      possui_funcionarios: latestDataEntries[getCategoryFieldEntryKey("cadastro_departamento_pessoal", "possui_funcionarios")] || "",
+      contribuinte_icms: latestDataEntries[getCategoryFieldEntryKey("cadastro_fiscal", "contribuinte_icms")] || "",
+      regime_icms: latestDataEntries[getCategoryFieldEntryKey("cadastro_fiscal", "regime_icms")] || "",
+    });
 
     setSaving(true);
 
@@ -1705,6 +1759,48 @@ export default function ClientDetailPage() {
 
       if (!options?.silent) {
         toast.success("Dados do cliente salvos");
+      }
+
+      if (id && nextTaxRegimeCode && previousTaxRegimeCode !== nextTaxRegimeCode) {
+        try {
+          const response = await invokeGrowObligations<{
+            summary?: { created?: number; kept?: number; inactivated_prior_regime?: number; conditional_skipped?: number };
+          }>({
+            action: "apply_regime_change_default_obligations",
+            client_id: id,
+            from_tax_regime_code: previousTaxRegimeCode,
+            to_tax_regime_code: nextTaxRegimeCode,
+            evidence: defaultObligationEvidence,
+          });
+          if (!options?.silent) {
+            toast.success(
+              `Obrigações futuras alinhadas ao novo regime: ${response.summary?.created ?? 0} criadas, ${response.summary?.kept ?? 0} mantidas, ${response.summary?.inactivated_prior_regime ?? 0} inativadas.`,
+            );
+          }
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Dados salvos, mas houve falha ao alinhar obrigações padrão.");
+        }
+      } else if (id && nextTaxRegimeCode) {
+        try {
+          await invokeGrowObligations({
+            action: "apply_default_obligations",
+            client_id: id,
+            tax_regime_code: nextTaxRegimeCode,
+            mode: "reconcile_existing",
+            changed_evidence_keys: [
+              "service_provider",
+              "municipal_service_declaration_required",
+              "state_registration",
+              "icms_ipi_taxpayer",
+              "retentions_or_services",
+            ],
+            evidence: defaultObligationEvidence,
+          });
+        } catch (error) {
+          if (!options?.silent) {
+            toast.error(error instanceof Error ? error.message : "Dados salvos, mas houve falha ao reavaliar obrigações condicionais.");
+          }
+        }
       }
 
       if (clientWillBeInactive) {

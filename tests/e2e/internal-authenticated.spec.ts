@@ -69,5 +69,48 @@ test.describe("Internal app - authenticated QA", () => {
 
     await page.getByRole("button", { name: /cancelar/i }).click();
   });
-});
 
+  test("client registration exposes tax regime and default obligation feedback path", async ({ page }) => {
+    await loginWithProfile(page, "internal", internalCredentials!);
+    await page.goto("/app/clientes");
+
+    const newClientButton = page.getByRole("button", { name: /novo cliente/i });
+    test.skip(
+      (await newClientButton.count()) === 0,
+      "Current profile has no permission to create clients.",
+    );
+
+    await newClientButton.click();
+    await expect(page.getByRole("heading", { name: /novo cliente/i })).toBeVisible();
+    await expect(page.getByText(/regime tributario/i)).toBeVisible();
+
+    const regimeSelect = page
+      .locator("div")
+      .filter({ has: page.getByText(/regime tributario/i) })
+      .locator("select");
+
+    await expect(regimeSelect.locator("option", { hasText: /mei/i })).toHaveCount(1);
+    await expect(regimeSelect.locator("option", { hasText: /simples nacional/i })).toHaveCount(1);
+
+    await page.getByRole("button", { name: /cancelar/i }).click();
+  });
+
+  test("manual obligation catalog flow remains available", async ({ page }) => {
+    await loginWithProfile(page, "internal", internalCredentials!);
+    await page.goto("/app/obrigacoes");
+
+    await expect(page.getByRole("heading", { name: /obrigacoes grow/i })).toBeVisible();
+    await page.getByRole("tab", { name: /catalogo/i }).click();
+
+    const newObligationButton = page.getByRole("button", { name: /nova obriga/i });
+    test.skip(
+      (await newObligationButton.count()) === 0,
+      "Current profile has no permission to create manual obligations.",
+    );
+
+    await expect(newObligationButton).toBeVisible();
+    await newObligationButton.click();
+    await expect(page.getByRole("heading", { name: /nova obriga/i })).toBeVisible();
+    await expect(page.getByText(/clientes vinculados/i)).toBeVisible();
+  });
+});

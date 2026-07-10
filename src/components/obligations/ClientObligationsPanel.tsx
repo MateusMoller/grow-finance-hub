@@ -23,6 +23,7 @@ import {
   getStoredCurrentOrganizationId,
   growObligationStatusClass,
   growObligationStatusLabel,
+  growObligationSourceLabel,
   invokeGrowObligations,
   type GrowClientSnapshotPayload,
   type GrowObligationInstance,
@@ -48,6 +49,54 @@ const buildToday = () => new Date().toISOString().slice(0, 10);
 const toTemplate = (row: unknown): GrowObligationTemplate => row as GrowObligationTemplate;
 const toProfile = (row: unknown): GrowObligationProfile => row as GrowObligationProfile;
 const toInstance = (row: unknown): GrowObligationInstance => row as GrowObligationInstance;
+
+function getProfileDecisionState(profile: GrowObligationProfile) {
+  if (!profile.is_active && profile.inactivation_reason === "regime_change") {
+    return {
+      label: "Auto-inativada",
+      description: "Default de regime anterior encerrado apenas para efeitos futuros.",
+      badgeVariant: "outline" as const,
+    };
+  }
+  if (profile.sync_status === "skipped") {
+    return {
+      label: "Condicional ignorada",
+      description: "Sem evidencia positiva. Sera aplicada automaticamente quando a evidencia for registrada.",
+      badgeVariant: "outline" as const,
+    };
+  }
+  if (profile.sync_status === "not_applicable") {
+    return {
+      label: "Nao aplicavel",
+      description: profile.inactivation_reason
+        ? `Estado encerrado: ${profile.inactivation_reason}.`
+        : "Vinculo mantido no historico sem aplicacao futura.",
+      badgeVariant: "secondary" as const,
+    };
+  }
+  if (profile.source_kind === "regime_migration") {
+    return {
+      label: "Adicionada por troca de regime",
+      description: "Incluida automaticamente pela matriz do regime tributario atual.",
+      badgeVariant: "default" as const,
+    };
+  }
+  if (profile.source_kind === "standard_load") {
+    return {
+      label: "Mantida no padrao",
+      description: "Obrigacao padrao ativa para o regime tributario atual.",
+      badgeVariant: "default" as const,
+    };
+  }
+  if (profile.source_kind === "manual") {
+    return {
+      label: "Manual",
+      description: "Obrigacao complementar criada pelo usuario.",
+      badgeVariant: "secondary" as const,
+    };
+  }
+  return null;
+}
 
 async function loadClientSnapshotDirectly(clientId: string): Promise<GrowClientSnapshotPayload> {
   const organizationId = await getStoredCurrentOrganizationId();
@@ -237,20 +286,45 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
             {(snapshot.profiles || []).length === 0 ? (
               <p className="text-sm text-muted-foreground">Este cliente ainda não possui obrigações vinculadas.</p>
             ) : (
-              snapshot.profiles.map((profile) => (
+              snapshot.profiles.map((profile) => {
+                const decisionState = getProfileDecisionState(profile);
+                const hasDuplicateRisk = profile.conditional_review_reason === "duplicate_risk" || profile.notes?.toLowerCase().includes("duplic");
+                const isBlocked = profile.sync_status === "not_applicable" && profile.inactivation_reason === "blocked";
+                return (
                 <div key={profile.id} className="rounded-2xl border border-border/60 p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-medium">{profile.template?.name || "Obrigação"}</p>
                     <Badge variant="outline">{profile.template?.sector || "Geral"}</Badge>
+                    {profile.source_kind && (
+                      <Badge variant="secondary">
+                        {growObligationSourceLabel[profile.source_kind] || profile.source_kind}
+                      </Badge>
+                    )}
                     {!profile.is_active && <Badge variant="destructive">Inativo</Badge>}
+                    {profile.sync_status === "skipped" && <Badge variant="outline">Condicional ignorada</Badge>}
+                    {decisionState ? <Badge variant={decisionState.badgeVariant}>{decisionState.label}</Badge> : null}
+                    {hasDuplicateRisk ? <Badge variant="outline">Risco de duplicidade</Badge> : null}
+                    {isBlocked ? <Badge variant="destructive">Bloqueada</Badge> : null}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
                     Vigência inicial: {new Date(`${profile.start_date}T00:00:00`).toLocaleDateString("pt-BR")}
                     {profile.due_day_override ? ` · vencimento customizado dia ${profile.due_day_override}` : ""}
                   </p>
+                  {profile.sync_status === "skipped" && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Condicional sem evidencia positiva. Sera aplicada automaticamente quando a evidencia for registrada.
+                    </p>
+                  )}
+                  {decisionState?.description ? (
+                    <p className="mt-2 text-xs text-muted-foreground">{decisionState.description}</p>
+                  ) : null}
+                  {profile.conditional_skip_reason ? (
+                    <p className="mt-1 text-xs text-muted-foreground">Motivo: {profile.conditional_skip_reason}</p>
+                  ) : null}
                   {profile.notes && <p className="mt-2 text-xs text-muted-foreground">{profile.notes}</p>}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
 

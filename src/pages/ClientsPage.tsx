@@ -60,6 +60,17 @@ type CreateClientWithPortalResponse = {
   portal_access_link?: string | null;
   portal_access_link_type?: "invite" | "recovery" | "password" | null;
   portal_password_applied?: boolean;
+  default_obligations?: {
+    ok?: boolean;
+    warning?: string;
+    payload?: {
+      summary?: {
+        created?: number;
+        kept?: number;
+        conditional_skipped?: number;
+      };
+    };
+  };
 };
 
 const normalizeEmail = (value: string | null | undefined) => (value || "").trim().toLowerCase();
@@ -454,10 +465,17 @@ export default function ClientsPage() {
 
     const portalPasswordApplied = Boolean(data?.portal_password_applied);
 
+    const defaultSummary = data?.default_obligations?.payload?.summary;
+    const defaultMessage = data?.default_obligations?.ok
+      ? ` Obrigações padrão: ${defaultSummary?.created ?? 0} criadas, ${defaultSummary?.kept ?? 0} mantidas, ${defaultSummary?.conditional_skipped ?? 0} condicionais ignoradas.`
+      : data?.default_obligations?.warning
+        ? ` ${data.default_obligations.warning}`
+        : "";
+
     if (portalPasswordApplied) {
-      toast.success(`Cliente cadastrado. Senha inicial do portal: ${password}.`);
+      toast.success(`Cliente cadastrado. Senha inicial do portal: ${password}.${defaultMessage}`);
     } else {
-      toast.success("Cliente cadastrado com acesso de portal.");
+      toast.success(`Cliente cadastrado com acesso de portal.${defaultMessage}`);
     }
     setCreateOpen(false);
     setNewClient({

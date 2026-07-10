@@ -6,6 +6,8 @@ export interface ObligationCandidate {
   name: string;
   normalized_name?: string | null;
   is_active?: boolean;
+  source_kind?: ObligationDuplicateMatch["source_kind"];
+  baseline_source?: string | null;
 }
 
 const semanticAliases = new Map<string, string>([
@@ -86,6 +88,8 @@ function buildMatch(
     code: candidate.code ?? null,
     name: candidate.name,
     normalized_name: normalizedName,
+    source_kind: candidate.source_kind ?? null,
+    baseline_source: candidate.baseline_source ?? null,
     match_type: matchType,
     severity,
   };

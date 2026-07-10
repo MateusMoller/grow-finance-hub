@@ -39,7 +39,7 @@ export type GrowObligationTemplate = {
   name: string;
   normalized_name?: string | null;
   duplicate_group_key?: string | null;
-  baseline_source?: "manual" | "seed" | "migration" | "legacy_import";
+  baseline_source?: "manual" | "seed" | "migration" | "legacy_import" | "default_regime_matrix_20260710" | string | null;
   catalog_review_status?: "approved" | "needs_review" | "duplicate_candidate" | "inactive";
   sector: string;
   periodicity: "monthly" | "quarterly" | "yearly" | "custom";
@@ -103,8 +103,9 @@ export type GrowObligationProfile = {
   applied_regime?: string | null;
   application_batch_id?: string | null;
   inactivation_reason?: string | null;
-  sync_status?: "current" | "pending_review" | "skipped" | "not_applicable";
+  sync_status?: "current" | "skipped" | "not_applicable";
   conditional_review_reason?: string | null;
+  conditional_skip_reason?: string | null;
   assigned_to: string | null;
   start_date: string;
   end_date: string | null;
@@ -116,6 +117,14 @@ export type GrowObligationProfile = {
   notes: string | null;
   template: GrowObligationTemplate | null;
   client: GrowClientSummary | null;
+};
+
+export const growObligationSourceLabel: Record<NonNullable<GrowObligationProfile["source_kind"]>, string> = {
+  standard_load: "Padrão por regime",
+  manual: "Manual",
+  regime_migration: "Migração de regime",
+  legacy: "Legado",
+  exception: "Exceção",
 };
 
 export type GrowObligationInstance = {

@@ -1251,6 +1251,7 @@ export type Database = {
           assigned_to: string | null;
           client_id: string;
           conditional_review_reason: string | null;
+          conditional_skip_reason: string | null;
           created_at: string;
           created_by: string | null;
           due_day_override: number | null;
@@ -1278,6 +1279,7 @@ export type Database = {
           assigned_to?: string | null;
           client_id: string;
           conditional_review_reason?: string | null;
+          conditional_skip_reason?: string | null;
           created_at?: string;
           created_by?: string | null;
           due_day_override?: number | null;
@@ -1305,6 +1307,7 @@ export type Database = {
           assigned_to?: string | null;
           client_id?: string;
           conditional_review_reason?: string | null;
+          conditional_skip_reason?: string | null;
           created_at?: string;
           created_by?: string | null;
           due_day_override?: number | null;
@@ -3409,6 +3412,7 @@ export type Database = {
       };
       obligation_load_application_reviews: {
         Row: {
+          auto_applied: boolean;
           batch_id: string;
           client_id: string | null;
           created_at: string;
@@ -3425,6 +3429,7 @@ export type Database = {
           template_id: string | null;
         };
         Insert: {
+          auto_applied?: boolean;
           batch_id: string;
           client_id?: string | null;
           created_at?: string;
@@ -3441,6 +3446,7 @@ export type Database = {
           template_id?: string | null;
         };
         Update: {
+          auto_applied?: boolean;
           batch_id?: string;
           client_id?: string | null;
           created_at?: string;
