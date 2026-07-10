@@ -20,6 +20,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,6 +115,12 @@ interface TemplateFormState {
 interface TemplateSaveResult {
   ok: true;
   template?: GrowObligationTemplate;
+}
+
+interface TemplateDeleteResult {
+  ok: true;
+  mode: "deleted" | "deactivated";
+  cancelled_instances?: number;
 }
 
 interface ClientListResult {
@@ -1198,6 +1214,7 @@ export function GrowObligationsWorkspace({
   const [instanceClientFilter, setInstanceClientFilter] = useState<string>(initialClientId || "all");
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(makeTemplateForm());
+  const [templateDeleteTarget, setTemplateDeleteTarget] = useState<GrowObligationTemplate | null>(null);
   const [instanceDialogOpen, setInstanceDialogOpen] = useState(false);
   const [instanceForm, setInstanceForm] = useState<InstanceFormState | null>(null);
   const [documentResolutionId, setDocumentResolutionId] = useState<string | null>(null);
@@ -1329,6 +1346,26 @@ export function GrowObligationsWorkspace({
       await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigação."),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (templateId: string) =>
+      invokeGrowObligations<TemplateDeleteResult>({
+        action: "delete_template",
+        template_id: templateId,
+      }),
+    onSuccess: async (response) => {
+      toast.success(
+        response.mode === "deleted"
+          ? "Obrigacao excluida."
+          : `Obrigacao inativada${response.cancelled_instances ? ` e ${response.cancelled_instances} competencia(s) aberta(s) cancelada(s)` : ""}.`,
+      );
+      setTemplateDeleteTarget(null);
+      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "template-clients"] });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao excluir obrigacao."),
   });
 
   const generateMutation = useMutation({
@@ -1869,19 +1906,36 @@ export function GrowObligationsWorkspace({
                         ))}
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="rounded-2xl"
-                      onClick={() => {
-                        setTemplateForm({
-                          ...makeTemplateForm(template),
-                          linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
-                        });
-                        setTemplateClientSearch("");
-                        setPendingReferenceFiles({});
-                        setTemplateDialogOpen(true);
-                      }}
-                    >Editar</Button>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl"
+                        onClick={() => {
+                          setTemplateForm({
+                            ...makeTemplateForm(template),
+                            linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
+                          });
+                          setTemplateClientSearch("");
+                          setPendingReferenceFiles({});
+                          setTemplateDialogOpen(true);
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        disabled={deleteTemplateMutation.isPending && templateDeleteTarget?.id === template.id}
+                        onClick={() => setTemplateDeleteTarget(template)}
+                      >
+                        {deleteTemplateMutation.isPending && templateDeleteTarget?.id === template.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-2 h-4 w-4" />
+                        )}
+                        Excluir
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2874,6 +2928,41 @@ export function GrowObligationsWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(templateDeleteTarget)} onOpenChange={(open) => !open && setTemplateDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir obrigacao?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {templateDeleteTarget ? (
+                <>
+                  A obrigacao "{templateDeleteTarget.name}" sera removida do controle ativo. Se houver historico, ela sera inativada,
+                  os vinculos com clientes serao encerrados e as competencias abertas serao canceladas.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {templateDeleteTarget ? (
+            <div className="rounded-xl border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+              Clientes vinculados: {buildTemplateLinkedClientIds(overview?.profiles, templateDeleteTarget.id).length}
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteTemplateMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteTemplateMutation.isPending || !templateDeleteTarget}
+              onClick={(event) => {
+                event.preventDefault();
+                if (templateDeleteTarget) deleteTemplateMutation.mutate(templateDeleteTarget.id);
+              }}
+            >
+              {deleteTemplateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Excluir obrigacao
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={instanceDialogOpen} onOpenChange={setInstanceDialogOpen}>
         <DialogContent className="max-w-2xl">

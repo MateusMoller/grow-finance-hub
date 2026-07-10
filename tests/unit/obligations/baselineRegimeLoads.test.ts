@@ -33,8 +33,8 @@ describe("baseline regime loads", () => {
         "das_complementar_review",
         "dasn_simei",
         "defis",
-        "dctf_mensal",
         "dctfweb_mit",
+        "destda",
         "ecd",
         "ecf",
         "efd_contribuicoes",
@@ -51,6 +51,7 @@ describe("baseline regime loads", () => {
         "mei_migration_alert",
         "mei_revenue_support",
         "mei_status_limit_review",
+        "municipal_service_tax_return",
         "payroll_closing",
         "pgdas_d",
         "pgmei",
@@ -74,5 +75,18 @@ describe("baseline regime loads", () => {
 
   it("can find a baseline load by regime", () => {
     expect(getBaselineLoadByRegime("lucro_real")?.name).toBe("Lucro Real - Carga Padrao");
+  });
+
+  it("stores annual obligations in their statutory delivery months", () => {
+    const annualDueMonths = new Map(
+      baselineMasterObligations
+        .filter((obligation) => obligation.periodicity === "yearly")
+        .map((obligation) => [obligation.code, obligation.yearly_due_month]),
+    );
+
+    expect(annualDueMonths.get("defis")).toBe(3);
+    expect(annualDueMonths.get("dasn_simei")).toBe(5);
+    expect(annualDueMonths.get("ecd")).toBe(6);
+    expect(annualDueMonths.get("ecf")).toBe(7);
   });
 });

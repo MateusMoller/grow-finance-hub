@@ -3093,7 +3093,7 @@ async function syncInstanceArtifacts(
   if (taskLookupError) throw taskLookupError;
 
   const taskStatus =
-    instance.status === "concluida"
+    instance.status === "concluida" || instance.status === "cancelada"
       ? "done"
       : instance.status === "em_revisao"
         ? "review"
@@ -3688,6 +3688,182 @@ async function handleUpsertTemplate(
   }
 
   return jsonResponse({ ok: true, template: data });
+}
+
+async function handleDeleteTemplate(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  roles: string[],
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  if (!roles.some((role) => templateManagerRoles.has(role))) {
+    return jsonResponse({ error: "Only admin, director, or manager can delete templates" }, 403);
+  }
+
+  const templateId = asTrimmedString(payload.template_id || payload.id);
+  if (!templateId) return jsonResponse({ error: "Obrigacao obrigatoria para exclusao." }, 400);
+
+  const { data: templateData, error: templateError } = await supabaseAdmin
+    .from("obligation_templates")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("id", templateId)
+    .maybeSingle();
+
+  if (templateError) return jsonResponse({ error: templateError.message }, 400);
+  if (!templateData) return jsonResponse({ error: "Obrigacao nao encontrada." }, 404);
+
+  const template = templateData as TemplateRow;
+  const [profilesResult, instancesResult, documentsResult, referencesResult, loadItemsResult] = await Promise.all([
+    supabaseAdmin
+      .from("client_obligation_profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("template_id", templateId),
+    supabaseAdmin
+      .from("obligation_instances")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("template_id", templateId),
+    supabaseAdmin
+      .from("document_inbox_items")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("suggested_template_id", templateId),
+    supabaseAdmin
+      .from("expected_document_reference_files")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("template_id", templateId),
+    supabaseAdmin
+      .from("obligation_regime_load_items")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("template_id", templateId),
+  ]);
+
+  const countError =
+    profilesResult.error ||
+    instancesResult.error ||
+    documentsResult.error ||
+    referencesResult.error ||
+    loadItemsResult.error;
+  if (countError) return jsonResponse({ error: countError.message }, 400);
+
+  const usage = {
+    profiles: profilesResult.count || 0,
+    instances: instancesResult.count || 0,
+    documents: documentsResult.count || 0,
+    reference_files: referencesResult.count || 0,
+    regime_load_items: loadItemsResult.count || 0,
+  };
+  const hasHistory = Object.values(usage).some((count) => count > 0);
+
+  if (!hasHistory) {
+    const { error: deleteError } = await supabaseAdmin
+      .from("obligation_templates")
+      .delete()
+      .eq("organization_id", organizationId)
+      .eq("id", templateId);
+
+    if (deleteError) return jsonResponse({ error: deleteError.message }, 400);
+    return jsonResponse({ ok: true, mode: "deleted", usage });
+  }
+
+  const now = new Date().toISOString();
+  const today = toIsoDate(new Date());
+  const deletionNote = `Excluida/inativada em ${today} por solicitacao operacional.`;
+  const nextNotes = [asTrimmedString(template.operational_notes), deletionNote].filter(Boolean).join("\n\n");
+
+  const { error: templateUpdateError } = await supabaseAdmin
+    .from("obligation_templates")
+    .update({
+      is_active: false,
+      catalog_review_status: "inactive",
+      operational_notes: nextNotes,
+      updated_at: now,
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", templateId);
+
+  if (templateUpdateError) return jsonResponse({ error: templateUpdateError.message }, 400);
+
+  const { error: profilesUpdateError } = await supabaseAdmin
+    .from("client_obligation_profiles")
+    .update({
+      is_active: false,
+      end_date: today,
+      inactivation_reason: "template_deleted",
+      sync_status: "not_applicable",
+      updated_at: now,
+    })
+    .eq("organization_id", organizationId)
+    .eq("template_id", templateId)
+    .eq("is_active", true);
+
+  if (profilesUpdateError) return jsonResponse({ error: profilesUpdateError.message }, 400);
+
+  const { error: loadItemsUpdateError } = await supabaseAdmin
+    .from("obligation_regime_load_items")
+    .update({
+      is_active: false,
+      notes: deletionNote,
+      updated_at: now,
+    })
+    .eq("organization_id", organizationId)
+    .eq("template_id", templateId)
+    .eq("is_active", true);
+
+  if (loadItemsUpdateError) return jsonResponse({ error: loadItemsUpdateError.message }, 400);
+
+  const { data: openInstancesData, error: openInstancesError } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("template_id", templateId)
+    .not("status", "in", "(concluida,cancelada)");
+
+  if (openInstancesError) return jsonResponse({ error: openInstancesError.message }, 400);
+
+  const openInstances = (openInstancesData || []) as InstanceRow[];
+  if (openInstances.length > 0) {
+    const { data: cancelledInstancesData, error: cancelError } = await supabaseAdmin
+      .from("obligation_instances")
+      .update({
+        status: "cancelada",
+        completion_notes: deletionNote,
+        last_status_at: now,
+        updated_at: now,
+      })
+      .eq("organization_id", organizationId)
+      .eq("template_id", templateId)
+      .not("status", "in", "(concluida,cancelada)")
+      .select("*");
+
+    if (cancelError) return jsonResponse({ error: cancelError.message }, 400);
+
+    const clientsMap = await loadClientsMap(supabaseAdmin);
+    for (const instance of (cancelledInstancesData || []) as InstanceRow[]) {
+      const previous = openInstances.find((current) => current.id === instance.id);
+      await createInstanceEvent(
+        supabaseAdmin,
+        instance.id,
+        actorId,
+        "template_deleted",
+        previous?.status || null,
+        "cancelada",
+        deletionNote,
+        { template_id: templateId },
+      );
+      const client = clientsMap.get(instance.client_id);
+      if (client) {
+        await syncInstanceArtifacts(supabaseAdmin, instance, template, client.name);
+      }
+    }
+  }
+
+  return jsonResponse({ ok: true, mode: "deactivated", usage, cancelled_instances: openInstances.length });
 }
 
 async function handleUpsertProfile(
@@ -4879,6 +5055,10 @@ Deno.serve(async (req) => {
 
     if (action === "upsert_template") {
       return await handleUpsertTemplate(supabaseAdmin, user.id, roles, organizationId, payload);
+    }
+
+    if (action === "delete_template") {
+      return await handleDeleteTemplate(supabaseAdmin, user.id, roles, organizationId, payload);
     }
 
     if (action === "list_regime_loads") {
