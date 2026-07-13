@@ -460,6 +460,13 @@ function toMonthWindowEnd(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
 }
 
+function getCurrentCompetenceWindow(now = new Date()) {
+  return {
+    start: toMonthWindowStart(now),
+    end: toMonthWindowEnd(now),
+  };
+}
+
 function isInstanceEligibleWithoutExactCompetence(instance: InstanceRow, windowStart: Date, windowEnd: Date) {
   if (instance.document_required !== true) return false;
   if (instance.status === "cancelada" || instance.status === "concluida") return false;
@@ -814,8 +821,7 @@ function buildEligibleInstanceCandidates(
 ) {
   const competenceCandidates = buildCompetenceCandidates(exactCompetence);
   const now = new Date();
-  const windowStart = toMonthWindowStart(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
-  const windowEnd = toMonthWindowEnd(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1)));
+  const { start: windowStart, end: windowEnd } = getCurrentCompetenceWindow(now);
 
   return instances.filter((instance) => {
     if (instance.client_id !== clientId) return false;
@@ -2401,7 +2407,8 @@ async function ensureInstancesForProfiles(
     const assignedEnd = profile.end_date ? new Date(`${profile.end_date}T00:00:00.000Z`) : null;
 
     const cursor = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), 1));
-    while (cursor <= windowEnd) {
+    const cursorEnd = new Date(Date.UTC(windowEnd.getUTCFullYear(), windowEnd.getUTCMonth() + 1, 1));
+    while (cursor <= cursorEnd) {
       const currentCompetenceDate = computeCompetenceDate(
         template.periodicity,
         cursor,
@@ -2412,6 +2419,11 @@ async function ensureInstancesForProfiles(
       const currentCompetenceKey = competenceKey(currentCompetenceDate);
       const currentCompetenceLabel = monthLabel(currentCompetenceDate);
       const currentCompetenceTime = currentCompetenceDate.getTime();
+
+      if (currentCompetenceTime < windowStart.getTime() || currentCompetenceTime > windowEnd.getTime()) {
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+        continue;
+      }
 
       if (currentCompetenceTime < assignedStart.getTime()) {
         cursor.setUTCMonth(cursor.getUTCMonth() + 1);
@@ -2550,12 +2562,7 @@ async function buildOverview(supabaseAdmin: SupabaseAdmin, actorId: string) {
   const clientsMap = await loadClientsMap(supabaseAdmin);
   const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
 
-  const windowStart = new Date();
-  windowStart.setUTCMonth(windowStart.getUTCMonth() - 1);
-  windowStart.setUTCDate(1);
-  const windowEnd = new Date();
-  windowEnd.setUTCMonth(windowEnd.getUTCMonth() + 2);
-  windowEnd.setUTCDate(1);
+  const { start: windowStart, end: windowEnd } = getCurrentCompetenceWindow();
 
   await ensureInstancesForProfiles(
     supabaseAdmin,
@@ -2805,13 +2812,14 @@ async function handleUpsertTemplate(
     }
 
     if (activatedProfiles.length > 0) {
+      const { start, end } = getCurrentCompetenceWindow();
       await ensureInstancesForProfiles(
         supabaseAdmin,
         activatedProfiles,
         templatesMap,
         actorId,
-        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)),
-        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 2, 1)),
+        start,
+        end,
       );
     }
   }
@@ -2858,13 +2866,14 @@ async function handleUpsertProfile(
 
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
   const profile = data as ProfileRow;
+  const { start, end } = getCurrentCompetenceWindow();
   await ensureInstancesForProfiles(
     supabaseAdmin,
     [profile],
     templatesMap,
     actorId,
-    new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)),
-    new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 2, 1)),
+    start,
+    end,
   );
 
   return jsonResponse({ ok: true, profile: data });
@@ -2876,8 +2885,6 @@ async function handleGenerateInstances(
   payload: JsonRecord,
 ) {
   const clientId = asTrimmedString(payload.client_id);
-  const monthsBack = Math.max(0, asInteger(payload.months_back, 1) || 1);
-  const monthsForward = Math.max(0, asInteger(payload.months_forward, 2) || 2);
 
   let profilesQuery = supabaseAdmin.from("client_obligation_profiles").select("*").eq("is_active", true);
   if (clientId) profilesQuery = profilesQuery.eq("client_id", clientId);
@@ -2886,12 +2893,7 @@ async function handleGenerateInstances(
   if (profilesError) return jsonResponse({ error: profilesError.message }, 400);
 
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
-  const start = new Date();
-  start.setUTCMonth(start.getUTCMonth() - monthsBack);
-  start.setUTCDate(1);
-  const end = new Date();
-  end.setUTCMonth(end.getUTCMonth() + monthsForward);
-  end.setUTCDate(1);
+  const { start, end } = getCurrentCompetenceWindow();
 
   const result = await ensureInstancesForProfiles(
     supabaseAdmin,

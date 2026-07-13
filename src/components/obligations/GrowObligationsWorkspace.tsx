@@ -3,14 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
-  CalendarClock,
   ClipboardList,
   FileArchive,
   FileSpreadsheet,
   FolderUp,
   Loader2,
   Plus,
-  RefreshCcw,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -481,19 +479,6 @@ export function GrowObligationsWorkspace({
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar obrigação."),
   });
 
-  const generateMutation = useMutation({
-    mutationFn: () =>
-      invokeGrowObligations({
-        action: "generate_instances",
-        client_id: instanceClientFilter !== "all" ? instanceClientFilter : null,
-      }),
-    onSuccess: async () => {
-      toast.success("Competencias sincronizadas.");
-      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao gerar competências."),
-  });
-
   const instanceMutation = useMutation({
     mutationFn: (payload: InstanceFormState) =>
       invokeGrowObligations({
@@ -862,20 +847,12 @@ export function GrowObligationsWorkspace({
     <div className="space-y-6">
       <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 p-6 shadow-sm">
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-primary/8 via-primary/0 to-primary/10" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative">
           <div className="space-y-3">
             <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.28em]">Grow Native</Badge>
             <div className="space-y-2">
               <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigacoes Grow</h1>
-              <p className="max-w-3xl text-sm text-muted-foreground">Domínio interno de obrigações, execução operacional e central de documentos com documentos modelo e matching por CNPJ.</p>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" className="rounded-2xl" onClick={() => overviewQuery.refetch()}><RefreshCcw className="mr-2 h-4 w-4" />Atualizar visao</Button>
-            <Button className="rounded-2xl" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
-              {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
-              Gerar competências
-            </Button>
           </div>
         </div>
         <div className="relative mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
