@@ -45,7 +45,7 @@ const services = [
     detail:
       "Fechamos, lemos e traduzimos os dados da operação para que margem, caixa e evolução do negócio fiquem mais claros para o empresário.",
     expandedDescription:
-      "A contabilidade consultiva organiza os números da operação para que eles sirvam como base de decisão, e não apenas como registro do passado. A Grow cruza fechamento, margem, despesas, caixa e evolução mensal para transformar dados financeiros em leitura prática de gestão.",
+      "A contabilidade consultiva organiza os números da operação para que eles sirvam como base de decisão, e não apenas como registro do passado. A Grow cruza fechamento, margem, despesas, caixa e evolução mensal para transformar dados gerenciais em leitura prática de gestão.",
     visualAccent: "Visão de margem",
     visualCaption: "Leitura estratégica dos indicadores que puxam resultado.",
     imagePath: "/images/services/contabilidade-consultiva.png",
@@ -136,7 +136,7 @@ const testimonials = [
   },
   {
     name: "Rafael Alves",
-    role: "Diretor Financeiro, BlueLine",
+    role: "Diretor Administrativo, BlueLine",
     text: "A consultoria estratégica da Grow virou parte da nossa rotina de tomada de decisão.",
   },
 ];

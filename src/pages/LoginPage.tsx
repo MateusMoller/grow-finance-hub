@@ -14,7 +14,7 @@ import { GrowHeroArtwork } from "@/components/site/GrowHeroArtwork";
 const resolveAccessTarget = (roles: string[]) => {
   const normalizedRoles = normalizeRoles(roles);
 
-  if (hasAnyInternalRole(normalizedRoles)) {
+  if (hasAnyInternalRole(normalizedRoles) || normalizedRoles.includes("colaborador")) {
     return { path: "/app", label: "App Interno" as const };
   }
 
@@ -23,6 +23,44 @@ const resolveAccessTarget = (roles: string[]) => {
   }
 
   return null;
+};
+
+const resolvePostLoginTarget = async (userId: string) => {
+  const { data: accessRows, error: accessError } = await supabase
+    .from("organization_user_access")
+    .select("primary_role, status, requires_access_review")
+    .eq("user_id", userId);
+
+  if (accessError) {
+    return { target: null, error: "Nao foi possivel validar suas permissoes de acesso." };
+  }
+
+  const activeCanonicalRoles = (accessRows || [])
+    .filter((row) => row.status === "active" && row.requires_access_review !== true)
+    .map((row) => String(row.primary_role || ""));
+  const canonicalTarget = resolveAccessTarget(activeCanonicalRoles);
+  if (canonicalTarget) return { target: canonicalTarget, error: null };
+
+  const blockedCanonicalAccess = (accessRows || []).some(
+    (row) => row.status !== "active" || row.requires_access_review === true,
+  );
+  if (blockedCanonicalAccess) {
+    return { target: null, error: "Seu acesso esta pendente de revisao ou inativo. Procure um administrador." };
+  }
+
+  const { data: roleRows, error: roleError } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+
+  if (roleError) {
+    return { target: null, error: "Nao foi possivel validar suas permissoes de acesso." };
+  }
+
+  return {
+    target: resolveAccessTarget((roleRows || []).map((row) => String(row.role || ""))),
+    error: null,
+  };
 };
 
 export default function LoginPage() {
@@ -66,20 +104,15 @@ export default function LoginPage() {
       return;
     }
 
-    const { data: roleRows, error: roleError } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userData.user.id);
+    const { target, error: accessError } = await resolvePostLoginTarget(userData.user.id);
 
     setLoading(false);
 
-    if (roleError) {
+    if (accessError) {
       await signOut();
-      toast.error("Não foi possível validar suas permissões de acesso.");
+      toast.error(accessError);
       return;
     }
-
-    const target = resolveAccessTarget((roleRows || []).map((row) => String(row.role || "")));
 
     if (!target) {
       await signOut();

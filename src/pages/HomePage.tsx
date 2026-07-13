@@ -54,7 +54,7 @@ const testimonials = [
   },
   {
     name: "Rafael Alves",
-    role: "Diretor Financeiro, BlueLine",
+    role: "Diretor Administrativo, BlueLine",
     text: "Relatórios gerenciais consistentes e suporte estratégico. Parceria essencial em momentos de crescimento.",
   },
 ];

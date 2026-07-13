@@ -152,7 +152,6 @@ const sectors = [
   "Contabil",
   "Fiscal",
   "Departamento Pessoal",
-  "Financeiro",
   "Comercial",
   "Geral",
 ];

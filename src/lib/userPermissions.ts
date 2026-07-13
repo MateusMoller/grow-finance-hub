@@ -8,7 +8,6 @@ export const SECTOR_CODES = [
   "contabil",
   "fiscal",
   "departamento_pessoal",
-  "financeiro",
   "comercial",
   "societario",
   "geral",
@@ -19,7 +18,6 @@ export const SECTOR_LABELS: Record<SectorCode, string> = {
   contabil: "Contábil",
   fiscal: "Fiscal",
   departamento_pessoal: "Departamento Pessoal",
-  financeiro: "Financeiro",
   comercial: "Comercial",
   societario: "Societário",
   geral: "Geral",
@@ -30,11 +28,9 @@ export const MODULE_KEYS = [
   "portal",
   "clientes",
   "cadastrar_clientes",
-  "financeiro",
   "obrigacoes",
   "ia",
   "whatsapp",
-  "open_finance",
   "acessorias",
   "robo_documentos",
   "crm",
@@ -57,11 +53,9 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   portal: "Portal",
   clientes: "Clientes",
   cadastrar_clientes: "Cadastrar clientes",
-  financeiro: "Financeiro",
   obrigacoes: "Obrigações",
   ia: "IA",
   whatsapp: "WhatsApp",
-  open_finance: "Open Finance",
   acessorias: "Acessórias",
   robo_documentos: "Robô de documentos",
   crm: "CRM",
@@ -84,7 +78,6 @@ export const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   "/app": "dashboard",
   "/app/portal": "portal",
   "/app/clientes": "clientes",
-  "/app/financeiro": "financeiro",
   "/app/obrigacoes": "obrigacoes",
   "/app/econtinuo": "obrigacoes",
   "/app/acessorias": "acessorias",
@@ -143,7 +136,6 @@ export const normalizeSectorCode = (value: string | null | undefined): SectorCod
   if (normalized.includes("pessoal") || normalized === "dp") return "departamento_pessoal";
   if (normalized.includes("contab")) return "contabil";
   if (normalized.includes("fiscal")) return "fiscal";
-  if (normalized.includes("financ")) return "financeiro";
   if (normalized.includes("comer")) return "comercial";
   if (normalized.includes("societ")) return "societario";
   if (normalized.includes("geral")) return "geral";

@@ -40,7 +40,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { motion } from "framer-motion";
-import { Check, ChevronsUpDown, Filter, Loader2, Plus, X } from "lucide-react";
+import { Archive, CalendarDays, Check, ChevronsUpDown, Filter, Loader2, Plus, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -82,11 +82,13 @@ const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
   color: "bg-slate-500",
 };
 
+const AUTO_ARCHIVE_COMPLETED_AFTER_DAYS = 3;
+const AUTO_ARCHIVE_COMPLETED_AFTER_MS = AUTO_ARCHIVE_COMPLETED_AFTER_DAYS * 24 * 60 * 60 * 1000;
+
 const sectors = [
   "Contábil",
   "Fiscal",
   "Departamento Pessoal",
-  "Financeiro",
   "Comercial",
   "Societário",
   "Geral",
@@ -96,7 +98,6 @@ const taskSectorOptions = [
   "Contabil",
   "Fiscal",
   "Departamento Pessoal",
-  "Financeiro",
   "Comercial",
   "Societario",
   "Geral",
@@ -134,6 +135,20 @@ const normalizeText = (value: string) =>
 
 const normalizeVisibleSector = (value: string) =>
   normalizeTaskSectorLabel(normalizeSector(value));
+
+const formatTaskCreatedDate = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+};
+
+const shouldAutoArchiveCompletedTask = (task: { status: string; updated_at?: string | null }) => {
+  if (task.status !== "done" || !task.updated_at) return false;
+  const updatedAt = new Date(task.updated_at).getTime();
+  if (Number.isNaN(updatedAt)) return false;
+  return Date.now() - updatedAt > AUTO_ARCHIVE_COMPLETED_AFTER_MS;
+};
 
 const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
   const normalized = normalizeText(errorMessage || "");
@@ -203,6 +218,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<KanbanTaskItem | null>(null);
   const [savingDetail, setSavingDetail] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropTargetStatus, setDropTargetStatus] = useState<KanbanStatus | null>(
     null,
@@ -249,8 +265,8 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   };
 
   const columns = useMemo(
-    () => (isAdmin ? [...baseColumns, archiveColumn] : baseColumns),
-    [isAdmin],
+    () => (isAdmin && showArchived ? [...baseColumns, archiveColumn] : baseColumns),
+    [isAdmin, showArchived],
   );
 
   useEffect(() => {
@@ -282,13 +298,28 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
+    const tasksToAutoArchive = (data || []).filter(shouldAutoArchiveCompletedTask);
+    let autoArchivedIds = new Set<string>();
+    if (tasksToAutoArchive.length > 0) {
+      const { error: archiveError } = await supabase
+        .from("kanban_tasks")
+        .update({ status: "archived", updated_at: new Date().toISOString() })
+        .in("id", tasksToAutoArchive.map((task) => task.id));
+
+      if (archiveError) {
+        toast.error("Nao foi possivel arquivar automaticamente tarefas concluidas antigas.");
+      } else {
+        autoArchivedIds = new Set(tasksToAutoArchive.map((task) => task.id));
+      }
+    }
+
     const normalized = (data || []).map((task) => {
       const taskRecord = task as unknown as Record<string, unknown>;
       return {
         ...task,
         priority: normalizePriority(task.priority || ""),
         sector: normalizeVisibleSector(task.sector || ""),
-        status: task.status as KanbanStatus,
+        status: (autoArchivedIds.has(task.id) ? "archived" : task.status) as KanbanStatus,
         tags: (task.tags?.length
           ? task.tags
           : task.sector
@@ -385,6 +416,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     });
     return grouped;
   }, [filteredTasks]);
+  const archivedCount = tasksByStatus.archived.length;
 
   useEffect(() => {
     if (!user?.id || !selectedTask?.id) {
@@ -406,9 +438,10 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     if (!currentTask || currentTask.status === newStatus) return;
 
     const previousStatus = currentTask.status;
+    const updatedAt = new Date().toISOString();
     const { error } = await supabase
       .from("kanban_tasks")
-      .update({ status: newStatus })
+      .update({ status: newStatus, updated_at: updatedAt })
       .eq("id", taskId);
     if (error) {
       toast.error(`Erro ao mover tarefa: ${error.message}`);
@@ -417,11 +450,11 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
     setTasks((prev) =>
       prev.map((task) =>
-        task.id === taskId ? { ...task, status: newStatus } : task,
+        task.id === taskId ? { ...task, status: newStatus, updated_at: updatedAt } : task,
       ),
     );
     setSelectedTask((prev) =>
-      prev && prev.id === taskId ? { ...prev, status: newStatus } : prev,
+      prev && prev.id === taskId ? { ...prev, status: newStatus, updated_at: updatedAt } : prev,
     );
 
     if (!options?.skipHistory) {
@@ -717,6 +750,23 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                 ))}
               </SelectContent>
             </Select>
+            {isAdmin && (
+              <Button
+                type="button"
+                variant={showArchived ? "secondary" : "ghost"}
+                size="sm"
+                className="gap-1.5 text-muted-foreground"
+                onClick={() => setShowArchived((current) => !current)}
+              >
+                <Archive className="h-3.5 w-3.5" />
+                Arquivo
+                {archivedCount > 0 && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none">
+                    {archivedCount}
+                  </span>
+                )}
+              </Button>
+            )}
             {!embedded && (
               <Button
                 variant="default"
@@ -1103,6 +1153,7 @@ function KanbanCard({
   const primarySector = taskSectors[0] || "Geral";
   const extraSectors = Math.max(taskSectors.length - 1, 0);
   const action = nextStatus[currentStatus];
+  const createdDate = formatTaskCreatedDate(task.created_at);
 
   return (
     <motion.div
@@ -1117,59 +1168,78 @@ function KanbanCard({
       }}
       onDragEnd={onDragEnd}
       onClick={onOpenDetails}
-      className={`relative overflow-hidden rounded-lg border bg-card p-3.5 hover:shadow-md transition-shadow group cursor-grab active:cursor-grabbing ${
+      className={`relative flex min-h-[150px] flex-col overflow-hidden rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md group cursor-grab active:cursor-grabbing ${
         isDragging ? "opacity-50" : ""
       }`}
     >
       <TaskOriginRibbon
         requestId={task.request_id}
         integrationSource={task.integration_source}
-        className="right-3"
+        className="right-2"
       />
-      <div className="mb-2 flex items-start justify-between gap-2 pr-8">
-        <span className="text-sm font-medium leading-tight">{task.title}</span>
-        <div
-          className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${priorityDot[task.priority] || "bg-muted-foreground"}`}
-        />
-      </div>
+      <div className="flex flex-1 flex-col gap-3 pr-5">
+        <div className="space-y-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[15px] font-semibold leading-snug text-foreground">
+              {task.title}
+            </span>
+            <div
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${priorityDot[task.priority] || "bg-muted-foreground"}`}
+              title={`Prioridade: ${task.priority}`}
+            />
+          </div>
 
-      {task.client_name && (
-        <div className="text-xs text-muted-foreground">{task.client_name}</div>
-      )}
+          {task.client_name && (
+            <div className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+              {task.client_name}
+            </div>
+          )}
 
-      <div className="mt-3 flex items-center justify-between gap-2 pr-8">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
+          {createdDate && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+              <CalendarDays className="h-3 w-3" />
+              <span>Criada em {createdDate}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-auto flex items-end justify-between gap-2">
+          <span className="max-w-[150px] rounded-md bg-muted px-2 py-1 text-xs leading-tight text-muted-foreground">
             {extraSectors > 0
               ? `${primarySector} +${extraSectors}`
               : primarySector}
           </span>
+          {task.assignee && (
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
+              <span className="text-[10px] font-semibold text-primary">
+                {task.assignee
+                  .split(" ")
+                  .map((name) => name[0])
+                  .join("")
+                  .slice(0, 2)}
+              </span>
+            </div>
+          )}
+          {!task.assignee && (
+            <div className="h-7 w-7 shrink-0 rounded-full border border-dashed border-border" />
+          )}
         </div>
-        {task.assignee && (
-          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-[10px] font-semibold text-primary">
-              {task.assignee
-                .split(" ")
-                .map((name) => name[0])
-                .join("")
-                .slice(0, 2)}
-            </span>
-          </div>
-        )}
       </div>
 
       {action && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full mt-2 h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={(event) => {
-            event.stopPropagation();
-            onStatusChange(task.id, action.target);
-          }}
-        >
-          {action.label} {"->"}
-        </Button>
+        <div className="pt-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-full text-xs opacity-0 transition-opacity group-hover:opacity-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              onStatusChange(task.id, action.target);
+            }}
+          >
+            {action.label} {"->"}
+          </Button>
+        </div>
       )}
     </motion.div>
   );

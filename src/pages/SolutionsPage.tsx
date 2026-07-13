@@ -2,7 +2,7 @@ import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, BarChart3, FileText, Users, Calculator, Briefcase, PieChart } from "lucide-react";
+import { ArrowRight, FileText, Users, Calculator, Briefcase } from "lucide-react";
 
 const solutions = [
   {
@@ -10,12 +10,6 @@ const solutions = [
     title: "Contabilidade Digital",
     description: "Escrituracao fiscal e contábil automatizada, declaracoes e demonstrativos com acompanhamento em tempo real pelo portal.",
     features: ["Escrituracao completa", "Declaracoes fiscais", "Balanços patrimoniais", "Portal em tempo real"],
-  },
-  {
-    icon: BarChart3,
-    title: "BPO Financeiro",
-    description: "Terceirizacao completa da gestão financeira: contas a pagar e receber, fluxo de caixa, conciliacoes e relatórios gerenciais.",
-    features: ["Contas a pagar/receber", "Fluxo de caixa", "Conciliação bancária", "Relatórios gerenciais"],
   },
   {
     icon: Users,
@@ -34,12 +28,6 @@ const solutions = [
     title: "Abertura de Empresas",
     description: "Assessoria completa para constituição empresarial, escolha de regime tributário e regularização.",
     features: ["Constituição societaria", "Escolha do CNAE", "Regime tributário", "Licencas e alvaras"],
-  },
-  {
-    icon: PieChart,
-    title: "Consultoria Financeira",
-    description: "Análise de indicadores, planejamento financeiro estratégico e suporte na tomada de decisões.",
-    features: ["Análise de indicadores", "Planejamento estratégico", "Budget e forecast", "KPIs financeiros"],
   },
 ];
 

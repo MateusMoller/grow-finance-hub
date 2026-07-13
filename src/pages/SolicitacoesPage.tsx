@@ -162,7 +162,6 @@ const sectorOptions = [
   "Contabil",
   "Fiscal",
   "Departamento Pessoal",
-  "Financeiro",
   "Comercial",
   "Societario",
   "Geral",

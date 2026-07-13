@@ -61,6 +61,7 @@ export interface KanbanTaskItem {
   subtasks: TaskSubtask[];
   request_id: string | null;
   created_at: string;
+  updated_at?: string | null;
   integration_source?: string | null;
   integration_task_id?: string | null;
 }
@@ -131,7 +132,6 @@ const sectorOptions = [
   "Contábil",
   "Fiscal",
   "Departamento Pessoal",
-  "Financeiro",
   "Comercial",
   "Societário",
   "Geral",

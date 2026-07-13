@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardList, History, LayoutDashboard, Settings2, Upload, Wallet } from "lucide-react";
+import { BookOpen, ClipboardList, History, LayoutDashboard, Settings2, Upload } from "lucide-react";
 import growIcon from "@/assets/grow-icon.png";
 import {
   Sidebar,
@@ -12,7 +12,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-export type PortalTab = "overview" | "requests" | "request-history" | "uploads" | "cashflow" | "manual" | "settings";
+export type PortalTab = "overview" | "requests" | "request-history" | "uploads" | "manual" | "settings";
 
 interface PortalClienteSidebarProps {
   activeTab: PortalTab;
@@ -44,10 +44,6 @@ const menuSections: PortalMenuSection[] = [
     ],
   },
   {
-    label: "Financeiro",
-    items: [{ key: "cashflow", title: "Controle de caixa", icon: Wallet }],
-  },
-  {
     label: "Conta",
     items: [
       { key: "manual", title: "Manual do usuário", icon: BookOpen },
@@ -71,7 +67,7 @@ export function PortalClienteSidebar({ activeTab, onChangeTab }: PortalClienteSi
             <div className="min-w-0">
               <p className="font-heading text-sm font-bold text-sidebar-foreground">Portal do Cliente</p>
               <p className="text-[11px] leading-relaxed text-sidebar-foreground/65">
-                Solicitacoes, documentos e caixa
+                Solicitacoes e documentos
               </p>
             </div>
           )}

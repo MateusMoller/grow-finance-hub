@@ -1,10 +1,8 @@
 export const organizationFeatureDefaults = {
   portal: true,
-  financeiro: true,
   obrigacoes: true,
   ia: true,
   whatsapp: true,
-  open_finance: true,
   acessorias: true,
   robo_documentos: true,
   crm: true,
@@ -23,7 +21,6 @@ export type OrganizationFeatureKey = keyof typeof organizationFeatureDefaults;
 
 export const routeFeatureMap: Record<string, OrganizationFeatureKey> = {
   "/app/portal": "portal",
-  "/app/financeiro": "financeiro",
   "/app/obrigacoes": "obrigacoes",
   "/app/econtinuo": "obrigacoes",
   "/app/acessorias": "acessorias",

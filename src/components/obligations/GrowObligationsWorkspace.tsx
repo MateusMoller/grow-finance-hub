@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  CalendarClock,
   CheckCircle2,
   ClipboardList,
   FileText,
@@ -183,7 +182,7 @@ interface UploadQueueResult {
   match: ReferenceMatchPreview["match"];
 }
 
-const sectors = ["Contabil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societario", "Geral"];
+const sectors = ["Contabil", "Fiscal", "Departamento Pessoal", "Comercial", "Societario", "Geral"];
 const periodicities: GrowObligationTemplate["periodicity"][] = ["monthly", "quarterly", "yearly", "custom"];
 const priorities: GrowObligationInstance["priority"][] = ["baixa", "media", "alta", "urgente"];
 const statusOptions: GrowObligationInstance["status"][] = [
@@ -1262,10 +1261,10 @@ export function GrowObligationsWorkspace({
   const [isDraggingUpload, setIsDraggingUpload] = useState(false);
   const [templateClientSearch, setTemplateClientSearch] = useState("");
   const [deliveryRecipientByInstance, setDeliveryRecipientByInstance] = useState<Record<string, string>>({});
-  const [documentStatusFilter, setDocumentStatusFilter] = useState("all");
-  const [documentClientFilter, setDocumentClientFilter] = useState(initialClientId || "all");
-  const [documentTemplateFilter, setDocumentTemplateFilter] = useState("all");
-  const [documentCompetenceFilter, setDocumentCompetenceFilter] = useState("");
+  const documentStatusFilter = "all";
+  const documentClientFilter = initialClientId || "all";
+  const documentTemplateFilter = "all";
+  const documentCompetenceFilter = "";
 
   const overviewQuery = useQuery({
     queryKey: [
@@ -1407,19 +1406,6 @@ export function GrowObligationsWorkspace({
       await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao excluir obrigacao."),
-  });
-
-  const generateMutation = useMutation({
-    mutationFn: () =>
-      invokeGrowObligations({
-        action: "generate_instances",
-        client_id: instanceClientFilter !== "all" ? instanceClientFilter : null,
-      }),
-    onSuccess: async () => {
-      toast.success("Competencias sincronizadas sem duplicar tarefas existentes.");
-      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao gerar competências."),
   });
 
   const instanceMutation = useMutation({
@@ -1890,15 +1876,10 @@ export function GrowObligationsWorkspace({
             <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.28em]">Grow Native</Badge>
             <div className="space-y-2">
               <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigacoes Grow</h1>
-              <p className="max-w-3xl text-sm text-muted-foreground">Domínio interno de obrigações, execução operacional e central de documentos com documentos modelo e matching por CNPJ.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" className="rounded-2xl" onClick={() => overviewQuery.refetch()}><RefreshCcw className="mr-2 h-4 w-4" />Atualizar visao</Button>
-            <Button className="rounded-2xl" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
-              {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
-              Gerar competências
-            </Button>
           </div>
         </div>
       </section>
@@ -1912,7 +1893,7 @@ export function GrowObligationsWorkspace({
         <TabsContent value="catalogo" className="space-y-4">
           <Card className="rounded-3xl">
             <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div><CardTitle>Catalogo mestre</CardTitle><CardDescription>Cadastre documentos esperados e PDFs modelo apenas para extracao; as guias enviadas ao cliente entram pela Central de Documentos.</CardDescription></div>
+              <div><CardTitle>Catalogo mestre</CardTitle></div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Buscar por nome ou setor" className="w-full sm:w-72" />
                 <Button
@@ -2091,36 +2072,6 @@ export function GrowObligationsWorkspace({
                       Use esse modo quando quiser que uma pasta monitorada envie PDFs sozinha, sem depender da tela aberta.
                     </p>
                   </div>
-                </div>
-                <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4 md:grid-cols-4">
-                  <Select value={documentStatusFilter} onValueChange={setDocumentStatusFilter}>
-                    <SelectTrigger><SelectValue placeholder="Status do documento" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os documentos</SelectItem>
-                      <SelectItem value="pending_review">Em revisao</SelectItem>
-                      <SelectItem value="linked">Vinculados</SelectItem>
-                      <SelectItem value="rejected">Rejeitados</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={documentClientFilter} onValueChange={setDocumentClientFilter}>
-                    <SelectTrigger><SelectValue placeholder="Cliente" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os clientes</SelectItem>
-                      {overview.clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={documentTemplateFilter} onValueChange={setDocumentTemplateFilter}>
-                    <SelectTrigger><SelectValue placeholder="Obrigacao" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas as obrigacoes</SelectItem>
-                      {overview.templates.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={documentCompetenceFilter}
-                    onChange={(event) => setDocumentCompetenceFilter(event.target.value)}
-                    placeholder="Competencia"
-                  />
                 </div>
                 {readyDeliveryInstances.length > 0 && (
                   <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900/50 dark:bg-cyan-950/20">

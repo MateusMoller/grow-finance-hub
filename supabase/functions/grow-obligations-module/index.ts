@@ -610,6 +610,18 @@ function competenceKey(date: Date) {
   return `${year}-${month}`;
 }
 
+function currentCompetenceGenerationWindow(now = new Date()) {
+  const targetCompetenceDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const cursorStart = new Date(targetCompetenceDate);
+  const cursorEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+  return {
+    cursorStart,
+    cursorEnd,
+    targetCompetenceKey: competenceKey(targetCompetenceDate),
+  };
+}
+
 function clampDay(day: number, year: number, monthIndex: number) {
   const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   return Math.max(1, Math.min(day, lastDay));
@@ -3189,6 +3201,7 @@ async function ensureInstancesForProfiles(
   actorId: string,
   windowStart: Date,
   windowEnd: Date,
+  targetCompetenceKey?: string,
 ) {
   if (profiles.length === 0) return { created: 0 };
 
@@ -3214,7 +3227,11 @@ async function ensureInstancesForProfiles(
     if (!template || !template.is_active) continue;
 
     const assignedStart = new Date(`${profile.start_date}T00:00:00.000Z`);
+    const assignedStartMonth = new Date(Date.UTC(assignedStart.getUTCFullYear(), assignedStart.getUTCMonth(), 1));
     const assignedEnd = profile.end_date ? new Date(`${profile.end_date}T00:00:00.000Z`) : null;
+    const assignedEndMonth = assignedEnd
+      ? new Date(Date.UTC(assignedEnd.getUTCFullYear(), assignedEnd.getUTCMonth(), 1))
+      : null;
 
     const cursor = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), 1));
     while (cursor <= windowEnd) {
@@ -3229,12 +3246,17 @@ async function ensureInstancesForProfiles(
       const currentCompetenceLabel = monthLabel(currentCompetenceDate);
       const currentCompetenceTime = currentCompetenceDate.getTime();
 
-      if (currentCompetenceTime < assignedStart.getTime()) {
+      if (targetCompetenceKey && currentCompetenceKey !== targetCompetenceKey) {
         cursor.setUTCMonth(cursor.getUTCMonth() + 1);
         continue;
       }
 
-      if (assignedEnd && currentCompetenceTime > assignedEnd.getTime()) {
+      if (currentCompetenceTime < assignedStartMonth.getTime()) {
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+        continue;
+      }
+
+      if (assignedEndMonth && currentCompetenceTime > assignedEndMonth.getTime()) {
         cursor.setUTCMonth(cursor.getUTCMonth() + 1);
         continue;
       }
@@ -3382,12 +3404,7 @@ async function buildOverview(
   const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
   const overviewWarnings: string[] = [];
 
-  const windowStart = new Date();
-  windowStart.setUTCMonth(windowStart.getUTCMonth() - 1);
-  windowStart.setUTCDate(1);
-  const windowEnd = new Date();
-  windowEnd.setUTCMonth(windowEnd.getUTCMonth() + 2);
-  windowEnd.setUTCDate(1);
+  const currentGenerationWindow = currentCompetenceGenerationWindow();
 
   try {
     await ensureInstancesForProfiles(
@@ -3395,8 +3412,9 @@ async function buildOverview(
       Array.from(profilesMap.values()),
       templatesMap,
       actorId,
-      windowStart,
-      windowEnd,
+      currentGenerationWindow.cursorStart,
+      currentGenerationWindow.cursorEnd,
+      currentGenerationWindow.targetCompetenceKey,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao sincronizar competencias.";
@@ -3858,13 +3876,15 @@ async function handleUpsertTemplate(
     }
 
     if (activatedProfiles.length > 0) {
+      const currentGenerationWindow = currentCompetenceGenerationWindow();
       await ensureInstancesForProfiles(
         supabaseAdmin,
         activatedProfiles,
         templatesMap,
         actorId,
-        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)),
-        new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 2, 1)),
+        currentGenerationWindow.cursorStart,
+        currentGenerationWindow.cursorEnd,
+        currentGenerationWindow.targetCompetenceKey,
       );
     }
   }
@@ -4114,13 +4134,15 @@ async function handleUpsertProfile(
     actorId,
     metadata: { profile_id: profile.id, source: "client_obligations_panel" },
   });
+  const currentGenerationWindow = currentCompetenceGenerationWindow();
   await ensureInstancesForProfiles(
     supabaseAdmin,
     [profile],
     templatesMap,
     actorId,
-    new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)),
-    new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 2, 1)),
+    currentGenerationWindow.cursorStart,
+    currentGenerationWindow.cursorEnd,
+    currentGenerationWindow.targetCompetenceKey,
   );
 
   return jsonResponse({ ok: true, profile: data });
@@ -4133,8 +4155,6 @@ async function handleGenerateInstances(
   payload: JsonRecord,
 ) {
   const clientId = asTrimmedString(payload.client_id);
-  const monthsBack = Math.max(0, asInteger(payload.months_back, 1) || 1);
-  const monthsForward = Math.max(0, asInteger(payload.months_forward, 2) || 2);
 
   let profilesQuery = supabaseAdmin
     .from("client_obligation_profiles")
@@ -4147,20 +4167,16 @@ async function handleGenerateInstances(
   if (profilesError) return jsonResponse({ error: profilesError.message }, 400);
 
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
-  const start = new Date();
-  start.setUTCMonth(start.getUTCMonth() - monthsBack);
-  start.setUTCDate(1);
-  const end = new Date();
-  end.setUTCMonth(end.getUTCMonth() + monthsForward);
-  end.setUTCDate(1);
+  const currentGenerationWindow = currentCompetenceGenerationWindow();
 
   const result = await ensureInstancesForProfiles(
     supabaseAdmin,
     (profilesData || []) as ProfileRow[],
     templatesMap,
     actorId,
-    start,
-    end,
+    currentGenerationWindow.cursorStart,
+    currentGenerationWindow.cursorEnd,
+    currentGenerationWindow.targetCompetenceKey,
   );
 
   return jsonResponse({ ok: true, created_instances: result.created });

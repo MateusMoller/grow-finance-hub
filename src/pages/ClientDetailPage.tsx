@@ -44,7 +44,6 @@ interface ClientRecord {
   address: string | null;
   notes: string | null;
   portal_user_id: string | null;
-  portal_cashflow_enabled: boolean;
   obligation_completion_whatsapp_enabled: boolean;
 }
 
@@ -226,8 +225,6 @@ const cadastroContabilFields = [
   { name: "obrigacao_contabil", label: "Obrigação Contábil" },
   { name: "envia_extratos_bancarios", label: "Envia Extratos Bancarios" },
   { name: "envia_notas_fiscais", label: "Envia Notas Fiscais" },
-  { name: "controle_financeiro", label: "Controle Financeiro" },
-  { name: "sistema_financeiro", label: "Sistema Financeiro" },
   { name: "integracao_contabil", label: "Integração Contábil" },
   { name: "balanco_anual", label: "Balanco Anual" },
   { name: "responsavel_contabil_grow", label: "Responsavel Contábil Grow" },
@@ -361,7 +358,6 @@ const fieldValidationRules: Record<ClientCategoryKey, Partial<Record<string, Fie
   cadastro_contabil: {
     envia_extratos_bancarios: yesNoRule,
     envia_notas_fiscais: yesNoRule,
-    controle_financeiro: yesNoRule,
     integracao_contabil: yesNoRule,
     balanco_anual: yesNoRule,
   },
@@ -1131,7 +1127,7 @@ export default function ClientDetailPage() {
   const [creatingPortalTask, setCreatingPortalTask] = useState(false);
   const [updatingPortalTaskId, setUpdatingPortalTaskId] = useState<string | null>(null);
   const [deletingPortalTaskId, setDeletingPortalTaskId] = useState<string | null>(null);
-  const canManageCashflowAccess = role === "admin";
+  const canManagePortalAccess = role === "admin";
   const clientIsInactive = isInactiveClientStatus(clientForm.status);
 
   const loadClientData = useCallback(async () => {
@@ -1677,7 +1673,6 @@ export default function ClientDetailPage() {
       },
     ];
     const clientWillBeInactive = isInactiveClientStatus(clientForm.status);
-    const nextPortalCashflowEnabled = clientWillBeInactive ? false : Boolean(clientForm.portal_cashflow_enabled);
     const nextObligationCompletionWhatsAppEnabled = clientWillBeInactive
       ? false
       : Boolean(clientForm.obligation_completion_whatsapp_enabled);
@@ -1704,7 +1699,6 @@ export default function ClientDetailPage() {
         phone: normalizedPhone || null,
         address: normalizedAddress || clientForm.address || null,
         notes: clientForm.notes,
-        portal_cashflow_enabled: nextPortalCashflowEnabled,
         obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
         ...(clientWillBeInactive ? { portal_user_id: null } : {}),
       }).eq("id", id);
@@ -1819,7 +1813,6 @@ export default function ClientDetailPage() {
         email: normalizedEmail || null,
         phone: normalizedPhone || null,
         address: normalizedAddress || clientForm.address || null,
-        portal_cashflow_enabled: nextPortalCashflowEnabled,
         obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
         ...(clientWillBeInactive ? { portal_user_id: null } : {}),
       } as ClientRecord);
@@ -1834,7 +1827,6 @@ export default function ClientDetailPage() {
         email: normalizedEmail || null,
         phone: normalizedPhone || "",
         address: normalizedAddress || prev.address || null,
-        portal_cashflow_enabled: nextPortalCashflowEnabled,
         obligation_completion_whatsapp_enabled: nextObligationCompletionWhatsAppEnabled,
       }));
       setDataEntries((prev) => {
@@ -1874,7 +1866,7 @@ export default function ClientDetailPage() {
   }, []);
 
   const handlePortalAccessChange = async (checked: boolean) => {
-    if (!canManageCashflowAccess) {
+    if (!canManagePortalAccess) {
       toast.error("Apenas usuário admin pode alterar este acesso.");
       return;
     }
@@ -2928,7 +2920,7 @@ export default function ClientDetailPage() {
                     </div>
                     <Switch
                       checked={portalAccessEnabled}
-                      disabled={!canManageCashflowAccess || savingPortalAccess || clientIsInactive}
+                      disabled={!canManagePortalAccess || savingPortalAccess || clientIsInactive}
                       onCheckedChange={(checked) => void handlePortalAccessChange(checked)}
                       aria-label="Liberar acesso ao portal do cliente"
                     />
@@ -2944,32 +2936,6 @@ export default function ClientDetailPage() {
                       </p>
                     )}
                   </div>
-                </div>
-                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">Liberar controle de caixa no portal</p>
-                      <p className="text-xs text-muted-foreground">
-                        Define se este cliente pode acessar a nova aba de controle de caixa no portal.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={clientIsInactive ? false : Boolean(clientForm.portal_cashflow_enabled)}
-                      disabled={!canManageCashflowAccess || clientIsInactive}
-                      onCheckedChange={(checked) => setClientForm((prev) => ({ ...prev, portal_cashflow_enabled: checked }))}
-                      aria-label="Liberar controle de caixa no portal"
-                    />
-                  </div>
-                  {clientIsInactive && (
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Cliente inativo: acesso ao portal e fluxo de caixa ficam bloqueados automaticamente.
-                    </p>
-                  )}
-                  {!canManageCashflowAccess && (
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Apenas usuário admin pode alterar esta liberacao.
-                    </p>
-                  )}
                 </div>
                 <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
                   <div className="flex items-start justify-between gap-3">

@@ -26,7 +26,6 @@ const quickPrompts = [
   "Quais documentos estão pendentes?",
   "Minhas guias estão prontas?",
   "Qual o status do meu chamado?",
-  "Me envie o relatório financeiro do último mês.",
 ] as const;
 
 function riskVariant(riskLevel: GrowAssistantResponse["safety"]["riskLevel"]) {

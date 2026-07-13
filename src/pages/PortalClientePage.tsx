@@ -19,22 +19,13 @@ import {
 } from "lucide-react";
 import { RequestChat } from "@/components/app/RequestChat";
 import { ManualEngine } from "@/components/manual/ManualEngine";
-import { ClientPortalCashflow } from "@/components/portal/ClientPortalCashflow";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { GrowAssistantWidget } from "@/components/portal/GrowAssistantWidget";
 import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
 import {
-  type CashflowAccount,
-  type CashflowConsultiveAlert,
-  type CashflowHealthSnapshot,
   documentCategories,
   sectorOptions,
-  type NewPortalCashflowEntryPayload,
-  type OpenFinanceAccount,
-  type OpenFinanceConnection,
-  type OpenFinanceSyncStatus,
   type PortalActionItem,
-  type PortalCashflowEntry,
   type PortalClientDocument,
   type PortalObligationDocument,
   type PortalClientProfile,
@@ -329,37 +320,6 @@ const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
       ],
     },
   ],
-  financeiro: [
-    {
-      key: "controle_caixa",
-      label: "Controle de caixa",
-      sector: "Financeiro",
-      description: "Solicite liberação, apoio ou ajustes no módulo de caixa do portal.",
-      defaultTitle: "Controle de caixa no portal",
-      fields: [
-        {
-          name: "tipo_caixa",
-          label: "O que voce precisa",
-          type: "select",
-          required: true,
-          options: ["Liberação do módulo", "Ajuste de configuração", "Suporte de uso", "Conferência de lançamentos"],
-        },
-        { name: "periodo_caixa", label: "Periodo ou referencia", type: "text", placeholder: "Opcional" },
-      ],
-    },
-    {
-      key: "conciliacao_financeira",
-      label: "Conciliacao financeira",
-      sector: "Financeiro",
-      description: "Use para alinhar extratos, lancamentos e divergencias financeiras.",
-      defaultTitle: "Conciliacao financeira",
-      fields: [
-        { name: "conta_conciliacao", label: "Conta ou banco", type: "text", required: true },
-        { name: "periodo_conciliacao", label: "Periodo", type: "text", required: true },
-        { name: "detalhe_conciliacao", label: "Divergencia ou necessidade", type: "textarea", required: true },
-      ],
-    },
-  ],
   societario: [
     {
       key: "alteracao_contratual",
@@ -557,18 +517,6 @@ export default function PortalClientePage() {
   const [portalObligationDocuments, setPortalObligationDocuments] = useState<PortalObligationDocument[]>([]);
   const [portalTasks, setPortalTasks] = useState<PortalClientTask[]>([]);
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
-  const [cashflowEntries, setCashflowEntries] = useState<PortalCashflowEntry[]>([]);
-  const [cashflowAccounts, setCashflowAccounts] = useState<CashflowAccount[]>([]);
-  const [cashflowAlerts, setCashflowAlerts] = useState<CashflowConsultiveAlert[]>([]);
-  const [cashflowHealthSnapshot, setCashflowHealthSnapshot] = useState<CashflowHealthSnapshot | null>(null);
-  const [openFinanceConnections, setOpenFinanceConnections] = useState<OpenFinanceConnection[]>([]);
-  const [openFinanceAccounts, setOpenFinanceAccounts] = useState<OpenFinanceAccount[]>([]);
-  const [openFinanceLoading, setOpenFinanceLoading] = useState(false);
-  const [openFinanceConnecting, setOpenFinanceConnecting] = useState(false);
-  const [openFinanceSyncingConnectionId, setOpenFinanceSyncingConnectionId] = useState<string | null>(null);
-  const [openFinanceDisconnectingConnectionId, setOpenFinanceDisconnectingConnectionId] = useState<string | null>(null);
-  const [creatingCashflowEntry, setCreatingCashflowEntry] = useState(false);
-
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("all");
   const [requestEntryMode, setRequestEntryMode] = useState<PortalRequestEntryMode>("freeform");
@@ -616,101 +564,7 @@ export default function PortalClientePage() {
     setDocuments([]);
     setPortalObligationDocuments([]);
     setPortalTasks([]);
-    setCashflowEntries([]);
-    setCashflowAccounts([]);
-    setCashflowAlerts([]);
-    setCashflowHealthSnapshot(null);
-    setOpenFinanceConnections([]);
-    setOpenFinanceAccounts([]);
     setMessages([]);
-  }, []);
-
-  const invokeOpenFinanceModule = useCallback(
-    async <TData extends Record<string, unknown> = Record<string, unknown>>(
-      body: Record<string, unknown>,
-    ) => {
-      const {
-        data: { session: activeSession },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        throw new Error("Não foi possível validar a sessão atual.");
-      }
-
-      const accessToken = activeSession?.access_token;
-      if (!accessToken) {
-        throw new Error("Sessao expirada. Entre novamente para continuar.");
-      }
-
-      const invokeOnce = async (token: string) =>
-        supabase.functions.invoke<TData>("open-finance-module", {
-          body,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-      let { data, error } = await invokeOnce(accessToken);
-
-      if (error instanceof FunctionsHttpError && error.context.status === 401) {
-        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-        const refreshedToken = refreshed.session?.access_token;
-        if (!refreshError && refreshedToken) {
-          const retried = await invokeOnce(refreshedToken);
-          data = retried.data;
-          error = retried.error;
-        }
-      }
-
-      if (error) {
-        const parsedError = await parseFunctionError(error);
-        throw new Error(parsedError.message);
-      }
-
-      return (data || {}) as TData;
-    },
-    [],
-  );
-
-  const fetchOpenFinanceData = useCallback(
-    async (clientId: string) => {
-      setOpenFinanceLoading(true);
-      try {
-        const response = await invokeOpenFinanceModule<{
-          connections?: OpenFinanceConnection[];
-          accounts?: OpenFinanceAccount[];
-        }>({
-          action: "list_connections",
-          clientId,
-        });
-        setOpenFinanceConnections(response.connections || []);
-        setOpenFinanceAccounts(response.accounts || []);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Erro ao carregar conexoes bancarias.");
-      } finally {
-        setOpenFinanceLoading(false);
-      }
-    },
-    [invokeOpenFinanceModule],
-  );
-
-  const fetchCashflowAccounts = useCallback(async (clientId: string) => {
-    const { data, error } = await supabase
-      .from("client_cashflow_accounts")
-      .select(
-        "id, client_id, label, source_type, currency_code, open_finance_account_id, open_finance_connection_id, institution_name, account_mask, is_primary, is_active, notes, created_at, updated_at",
-      )
-      .eq("client_id", clientId)
-      .order("is_primary", { ascending: false })
-      .order("label", { ascending: true });
-
-    if (error) {
-      toast.error("Erro ao carregar contas do fluxo de caixa.");
-      return [];
-    }
-
-    return asArray<CashflowAccount>(data);
   }, []);
 
   const fetchPortalData = useCallback(async () => {
@@ -762,7 +616,7 @@ export default function PortalClientePage() {
       if (linkedClientIds.length > 0) {
         const { data, error } = await supabase
           .from("clients")
-          .select("id, organization_id, name, contact, email, portal_user_id, portal_cashflow_enabled")
+          .select("id, organization_id, name, contact, email, portal_user_id")
           .in("id", linkedClientIds)
           .order("created_at", { ascending: false });
 
@@ -974,56 +828,6 @@ export default function PortalClientePage() {
       }
     }
 
-    let fetchedCashflowEntries: PortalCashflowEntry[] = [];
-    let fetchedCashflowAccounts: CashflowAccount[] = [];
-    let fetchedCashflowAlerts: CashflowConsultiveAlert[] = [];
-    let fetchedCashflowHealthSnapshot: CashflowHealthSnapshot | null = null;
-    if (client?.id && client.portal_cashflow_enabled) {
-      const [cashflowRes, cashflowAlertsRes, cashflowHealthRes] = await Promise.all([
-        supabase
-          .from("client_cashflow_entries")
-          .select(
-            "id, client_id, entry_date, due_date, effective_date, competence_month, account_id, entry_type, category, description, amount, status, lifecycle_status, matched_rule_id, origin_type, reconciliation_status, review_status, review_owner_id, reviewed_at, rule_match_confidence, counterparty_name, document_ref, notes, is_transfer, is_hidden_from_projection, integration_source, integration_key, integration_connection_id, integration_account_id, created_by, created_at, updated_at",
-          )
-          .eq("client_id", client.id)
-          .order("entry_date", { ascending: false })
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("client_cashflow_consultive_alerts")
-          .select("id, client_id, source_type, source_key, severity, title, message, status, metadata, resolved_at, created_at, updated_at")
-          .eq("client_id", client.id)
-          .eq("status", "active")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("client_cashflow_health_snapshots")
-          .select(
-            "client_id, health_status, current_balance, projected_balance_7, projected_balance_15, projected_balance_30, overdue_entries, pending_review_entries, pending_reconciliation_entries, review_coverage, critical_calendar_events, last_activity_at, projected_gap_date, metadata, generated_at, updated_at",
-          )
-          .eq("client_id", client.id)
-          .maybeSingle(),
-      ]);
-
-      if (cashflowRes.error) {
-        toast.error("Erro ao carregar controle de caixa.");
-      } else {
-        fetchedCashflowEntries = asArray<PortalCashflowEntry>(cashflowRes.data);
-      }
-
-      if (cashflowAlertsRes.error) {
-        toast.error("Erro ao carregar alertas consultivos do caixa.");
-      } else {
-        fetchedCashflowAlerts = asArray<CashflowConsultiveAlert>(cashflowAlertsRes.data);
-      }
-
-      if (cashflowHealthRes.error) {
-        toast.error("Erro ao carregar saude do caixa.");
-      } else {
-        fetchedCashflowHealthSnapshot = (cashflowHealthRes.data || null) as CashflowHealthSnapshot | null;
-      }
-
-      fetchedCashflowAccounts = await fetchCashflowAccounts(client.id);
-    }
-
     let fetchedMessages: PortalRequestMessage[] = [];
     if (fetchedRequests.length > 0) {
       const requestIds = fetchedRequests.map((request) => request.id);
@@ -1058,21 +862,10 @@ export default function PortalClientePage() {
     setDocuments(fetchedDocuments);
     setPortalObligationDocuments(fetchedObligationDocuments);
     setPortalTasks(fetchedTasks);
-    setCashflowEntries(fetchedCashflowEntries);
-    setCashflowAccounts(fetchedCashflowAccounts);
-    setCashflowAlerts(fetchedCashflowAlerts);
-    setCashflowHealthSnapshot(fetchedCashflowHealthSnapshot);
     setMessages(fetchedMessages);
 
-    if (client.portal_cashflow_enabled) {
-      await fetchOpenFinanceData(client.id);
-    } else {
-      setOpenFinanceConnections([]);
-      setOpenFinanceAccounts([]);
-    }
-
     setLoadingData(false);
-  }, [effectiveAccess?.primaryRole, fetchCashflowAccounts, fetchOpenFinanceData, resetPortalCollections, selectedPortalClientId, session, user]);
+  }, [effectiveAccess?.primaryRole, resetPortalCollections, selectedPortalClientId, session, user]);
 
   const portalQueryKey = useMemo(
     () => buildPortalDataQueryKey(user?.id, selectedPortalClientId, effectiveAccess?.primaryRole),
@@ -1656,189 +1449,6 @@ export default function PortalClientePage() {
 
   const handleRequestFieldValueChange = (fieldName: string, value: string) => {
     setRequestFieldValues((prev) => ({ ...prev, [fieldName]: value }));
-  };
-
-  const handleCreateCashflowEntry = async (payload: NewPortalCashflowEntryPayload) => {
-    if (!user || !clientProfile?.id) {
-      toast.error("Cliente não vinculado ao portal para registrar lançamentos.");
-      return false;
-    }
-
-    if (!clientProfile.portal_cashflow_enabled) {
-      toast.error("Controle de caixa ainda não liberado para este cliente.");
-      return false;
-    }
-
-    setCreatingCashflowEntry(true);
-    const dueDate = payload.due_date || payload.entry_date;
-    const effectiveDate = payload.status === "confirmed" ? payload.effective_date || dueDate : null;
-    const { error } = await supabase.from("client_cashflow_entries").insert({
-      client_id: clientProfile.id,
-      entry_date: payload.entry_date,
-      due_date: dueDate,
-      effective_date: effectiveDate,
-      competence_month: payload.competence_month || `${dueDate.slice(0, 7)}-01`,
-      account_id: payload.account_id || null,
-      entry_type: payload.entry_type,
-      category: payload.category,
-      description: payload.description,
-      amount: payload.amount,
-      status: payload.status,
-      lifecycle_status: payload.lifecycle_status || (payload.status === "confirmed" ? "confirmed" : "predicted"),
-      origin_type: payload.origin_type || "manual",
-      reconciliation_status: payload.reconciliation_status || "not_applicable",
-      review_status: payload.review_status || "pending_review",
-      counterparty_name: payload.counterparty_name || null,
-      document_ref: payload.document_ref || null,
-      notes: payload.notes || null,
-      is_transfer: payload.is_transfer || false,
-      is_hidden_from_projection: payload.is_hidden_from_projection || false,
-      created_by: user.id,
-    });
-    setCreatingCashflowEntry(false);
-
-    if (error) {
-      toast.error("Não foi possível registrar o lançamento no caixa.");
-      return false;
-    }
-
-    toast.success("Lançamento registrado no controle de caixa.");
-    await refetchPortalData();
-    return true;
-  };
-
-  const handleCreateCashflowEntriesBatch = async (payloads: NewPortalCashflowEntryPayload[]) => {
-    if (!user || !clientProfile?.id) {
-      toast.error("Cliente não vinculado ao portal para registrar lançamentos.");
-      return { success: false, inserted: 0 };
-    }
-
-    if (!clientProfile.portal_cashflow_enabled) {
-      toast.error("Controle de caixa ainda não liberado para este cliente.");
-      return { success: false, inserted: 0 };
-    }
-
-    if (payloads.length === 0) {
-      toast.error("Nenhum lançamento selecionado para importacao.");
-      return { success: false, inserted: 0 };
-    }
-
-    setCreatingCashflowEntry(true);
-    const { error } = await supabase.from("client_cashflow_entries").insert(
-      payloads.map((payload) => ({
-        client_id: clientProfile.id,
-        entry_date: payload.entry_date,
-        due_date: payload.due_date || payload.entry_date,
-        effective_date:
-          payload.status === "confirmed"
-            ? payload.effective_date || payload.due_date || payload.entry_date
-            : null,
-        competence_month:
-          payload.competence_month || `${(payload.due_date || payload.entry_date).slice(0, 7)}-01`,
-        account_id: payload.account_id || null,
-        entry_type: payload.entry_type,
-        category: payload.category,
-        description: payload.description,
-        amount: payload.amount,
-        status: payload.status,
-        lifecycle_status: payload.lifecycle_status || (payload.status === "confirmed" ? "confirmed" : "predicted"),
-        origin_type: payload.origin_type || "import_file",
-        reconciliation_status: payload.reconciliation_status || "not_applicable",
-        review_status: payload.review_status || "pending_review",
-        counterparty_name: payload.counterparty_name || null,
-        document_ref: payload.document_ref || null,
-        notes: payload.notes || null,
-        is_transfer: payload.is_transfer || false,
-        is_hidden_from_projection: payload.is_hidden_from_projection || false,
-        created_by: user.id,
-      })),
-    );
-    setCreatingCashflowEntry(false);
-
-    if (error) {
-      toast.error("Não foi possível importar os lançamentos no controle de caixa.");
-      return { success: false, inserted: 0 };
-    }
-
-    await refetchPortalData();
-    return { success: true, inserted: payloads.length };
-  };
-
-  const handleCreateOpenFinanceSession = async (): Promise<string | null> => {
-    if (!clientProfile?.id) {
-      toast.error("Cliente não vinculado ao portal.");
-      return null;
-    }
-
-    setOpenFinanceConnecting(true);
-    try {
-      const data = await invokeOpenFinanceModule<{
-        sessionToken?: string;
-        connectUrl?: string | null;
-      }>({
-        action: "create_connect_session",
-        provider: "pluggy",
-        clientId: clientProfile.id,
-      });
-
-      if (!data.sessionToken || typeof data.sessionToken !== "string") {
-        throw new Error("Não foi possível iniciar a sessão de conexão.");
-      }
-      return data.sessionToken;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao iniciar conexão bancária.");
-      return null;
-    } finally {
-      setOpenFinanceConnecting(false);
-    }
-  };
-
-  const handleManualSyncOpenFinance = async (connectionId: string): Promise<OpenFinanceSyncStatus | null> => {
-    if (!clientProfile?.id) {
-      toast.error("Cliente não vinculado ao portal.");
-      return null;
-    }
-
-    setOpenFinanceSyncingConnectionId(connectionId);
-    try {
-      const data = await invokeOpenFinanceModule<OpenFinanceSyncStatus>({
-        action: "manual_sync",
-        connectionId,
-        clientId: clientProfile.id,
-      });
-      await refetchPortalData();
-      return data;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao sincronizar extratos.");
-      return null;
-    } finally {
-      setOpenFinanceSyncingConnectionId(null);
-    }
-  };
-
-  const handleDisconnectOpenFinance = async (connectionId: string) => {
-    if (!clientProfile?.id) {
-      toast.error("Cliente não vinculado ao portal.");
-      return false;
-    }
-
-    setOpenFinanceDisconnectingConnectionId(connectionId);
-    try {
-      const data = await invokeOpenFinanceModule<{ success?: boolean }>({
-        action: "disconnect_connection",
-        connectionId,
-        clientId: clientProfile.id,
-      });
-
-      await fetchOpenFinanceData(clientProfile.id);
-      setCashflowAccounts(await fetchCashflowAccounts(clientProfile.id));
-      return data.success === true;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao desconectar conta.");
-      return false;
-    } finally {
-      setOpenFinanceDisconnectingConnectionId(null);
-    }
   };
 
   const handlePortalPasswordChange = async () => {
@@ -2571,41 +2181,6 @@ export default function PortalClientePage() {
               </div>
             )}
           </TabsContent>
-          <TabsContent value="cashflow" className="space-y-4">
-      <ClientPortalCashflow
-        enabled={Boolean(clientProfile?.portal_cashflow_enabled)}
-        loading={loadingData}
-        openFinanceLoading={openFinanceLoading}
-        openFinanceConnecting={openFinanceConnecting}
-        openFinanceSyncingConnectionId={openFinanceSyncingConnectionId}
-        openFinanceDisconnectingConnectionId={openFinanceDisconnectingConnectionId}
-        openFinanceConnections={openFinanceConnections}
-        openFinanceAccounts={openFinanceAccounts}
-        cashflowAccounts={cashflowAccounts}
-        entries={cashflowEntries}
-        consultiveAlerts={cashflowAlerts}
-        healthSnapshot={cashflowHealthSnapshot}
-              creating={creatingCashflowEntry}
-              onCreateEntry={handleCreateCashflowEntry}
-              onCreateEntriesBatch={handleCreateCashflowEntriesBatch}
-              onCreateOpenFinanceSession={handleCreateOpenFinanceSession}
-              onManualSyncOpenFinance={handleManualSyncOpenFinance}
-              onDisconnectOpenFinance={handleDisconnectOpenFinance}
-              onRefreshOpenFinance={async () => {
-                if (!clientProfile?.id) return;
-                await fetchOpenFinanceData(clientProfile.id);
-              }}
-              onRequestEnable={() =>
-                prepareInlineRequest({
-                  sector: "Financeiro",
-                  reasonKey: "controle_caixa",
-                  title: "Liberacao do controle de caixa no portal",
-                  description: "Solicito a liberação do módulo de controle de caixa para uso no portal do cliente.",
-                })
-              }
-            />
-          </TabsContent>
-
           <TabsContent value="manual" className="space-y-4">
             <ManualEngine
               mode="portal"
@@ -2628,10 +2203,6 @@ export default function PortalClientePage() {
                 }
                 if (actionKey === "portal:uploads") {
                   setActiveTab("uploads");
-                  return true;
-                }
-                if (actionKey === "portal:cashflow") {
-                  setActiveTab("cashflow");
                   return true;
                 }
                 return false;
@@ -2725,12 +2296,6 @@ export default function PortalClientePage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Dica: use uma senha forte com letras, numeros e simbolos.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
-                    <p className="text-sm font-medium">Modulo de controle de caixa</p>
-                    <p className="text-sm text-muted-foreground">
-                      Status atual: {clientProfile?.portal_cashflow_enabled ? "liberado pelo admin" : "aguardando liberação do admin"}.
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

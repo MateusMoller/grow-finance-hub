@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Link2, Loader2, Plus } from "lucide-react";
+import { Link2, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -223,18 +223,6 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
     },
   });
 
-  const generateMutation = useMutation({
-    mutationFn: () => invokeGrowObligations({ action: "generate_instances", client_id: clientId }),
-    onSuccess: async () => {
-      toast.success("Competencias sincronizadas sem duplicar tarefas existentes.");
-      await queryClient.invalidateQueries({ queryKey: snapshotKey(clientId) });
-      await queryClient.invalidateQueries({ queryKey: ["grow-obligations-overview"] });
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Falha ao gerar competências.");
-    },
-  });
-
   if (snapshotQuery.isLoading) {
     return (
       <div className="flex items-center justify-center py-10">
@@ -267,10 +255,6 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
             </CardDescription>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button variant="outline" className="rounded-2xl" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
-              {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
-              Gerar competências
-            </Button>
             <Button className="rounded-2xl" onClick={() => setDialogOpen(true)} disabled={availableTemplates.length === 0}>
               <Plus className="mr-2 h-4 w-4" />
               Vincular obrigação

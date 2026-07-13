@@ -63,7 +63,6 @@ const sectorOptions = [
   "Contábil",
   "Fiscal",
   "Departamento Pessoal",
-  "Financeiro",
   "Comercial",
   "Societário",
   "Geral",
@@ -688,5 +687,4 @@ export default function FormulariosPage() {
     </AppLayout>
   );
 }
-
 

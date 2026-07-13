@@ -28,7 +28,6 @@ const normalizeTaskSectorToken = (value: string | null | undefined) => {
   if (normalized.includes("pessoal") || normalized === "dp") return "departamento_pessoal";
   if (normalized.includes("cont")) return "contabil";
   if (normalized.includes("comer")) return "commercial";
-  if (normalized.includes("financ")) return "financeiro";
   if (normalized.includes("societ")) return "societario";
   if (normalized.includes("geral")) return "geral";
   return normalized;
@@ -40,7 +39,6 @@ export const normalizeTaskSectorLabel = (value: string | null | undefined) => {
   if (token === "fiscal") return "Fiscal";
   if (token === "departamento_pessoal") return "Departamento Pessoal";
   if (token === "commercial") return "Comercial";
-  if (token === "financeiro") return "Financeiro";
   if (token === "societario") return "Societario";
   if (token === "geral") return "Geral";
   return String(value || "Geral").trim() || "Geral";

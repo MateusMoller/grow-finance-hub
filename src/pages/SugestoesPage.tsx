@@ -27,7 +27,6 @@ const areaOptions = [
   "Portal do cliente",
   "Kanban",
   "Atendimento",
-  "Financeiro",
   "Relatórios",
   "Automacoes",
   "Outros",

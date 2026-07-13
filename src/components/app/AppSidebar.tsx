@@ -3,7 +3,6 @@ import {
   Users,
   CalendarDays,
   BarChart3,
-  Wallet,
   FileSpreadsheet,
   Bell,
   Settings,
@@ -46,7 +45,6 @@ const operationalItems = [
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Financeiro", url: "/app/financeiro", icon: Wallet },
   { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
 ];
 

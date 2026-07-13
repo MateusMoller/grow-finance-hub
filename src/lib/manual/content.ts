@@ -180,29 +180,6 @@ export const manualModules: ManualModule[] = [
     ],
   },
   {
-    key: "internal_finance",
-    contextKey: "internal",
-    audience: ["internal_team", "leadership", "admin"],
-    title: "Financeiro e caixa consultivo",
-    objective: "Ler caixa por cliente com foco em revisão, conciliação e risco.",
-    order: 50,
-    lessons: [
-      {
-        key: "internal_finance_reading",
-        title: "Leitura por cliente",
-        summary: "Escolha um cliente por vez para reduzir ruído e melhorar decisão.",
-        estimatedMinutes: 7,
-        steps: [
-          "Selecione o cliente antes de abrir demais filtros.",
-          "Trate revisão e conciliação dentro da mesma fila.",
-          "Acompanhe alertas consultivos e cobertura de revisão.",
-        ],
-        actions: [{ label: "Ir para financeiro", actionKey: "route:/app/financeiro" }],
-        tags: ["financeiro", "fluxo de caixa", "conciliação"],
-      },
-    ],
-  },
-  {
     key: "internal_reports",
     contextKey: "internal",
     audience: ["leadership", "admin"],
@@ -343,42 +320,19 @@ export const manualModules: ManualModule[] = [
       },
     ],
   },
-  {
-    key: "portal_cashflow",
-    contextKey: "portal",
-    audience: ["client"],
-    title: "Controle de caixa",
-    objective: "Gerir entradas/saídas e conexão bancária quando habilitado.",
-    order: 50,
-    lessons: [
-      {
-        key: "portal_cashflow_usage",
-        title: "Uso diário do caixa no portal",
-        summary: "Registre lançamentos e acompanhe indicadores do período.",
-        estimatedMinutes: 6,
-        steps: [
-          "Acesse a aba de controle de caixa.",
-          "Cadastre entradas e saídas conforme categoria.",
-          "Acompanhe alertas de revisão e conciliação.",
-        ],
-        actions: [{ label: "Ir para controle de caixa", actionKey: "portal:cashflow" }],
-        tags: ["caixa", "lançamentos", "indicadores"],
-      },
-    ],
-  },
 ];
 
 const trackByRole: Record<string, string[]> = {
   admin: ["internal_dashboard", "internal_tasks", "internal_clients", "internal_obligations", "internal_reports", "internal_governance"],
-  director: ["internal_dashboard", "internal_tasks", "internal_clients", "internal_reports", "internal_finance"],
-  manager: ["internal_dashboard", "internal_tasks", "internal_clients", "internal_obligations", "internal_finance"],
+  director: ["internal_dashboard", "internal_tasks", "internal_clients", "internal_reports"],
+  manager: ["internal_dashboard", "internal_tasks", "internal_clients", "internal_obligations"],
   employee: ["internal_dashboard", "internal_tasks", "internal_clients", "internal_obligations"],
   commercial: ["institutional_positioning", "internal_clients", "internal_reports"],
   partner: ["internal_dashboard", "internal_clients", "internal_obligations"],
   departamento_pessoal: ["internal_tasks", "internal_clients", "internal_obligations"],
   fiscal: ["internal_tasks", "internal_clients", "internal_obligations"],
-  contabil: ["internal_tasks", "internal_clients", "internal_obligations", "internal_finance"],
-  client: ["portal_overview", "portal_requests", "portal_history", "portal_uploads", "portal_cashflow"],
+  contabil: ["internal_tasks", "internal_clients", "internal_obligations"],
+  client: ["portal_overview", "portal_requests", "portal_history", "portal_uploads"],
 };
 
 export const getManualModulesByContexts = (contexts: ManualContextKey[]) =>
