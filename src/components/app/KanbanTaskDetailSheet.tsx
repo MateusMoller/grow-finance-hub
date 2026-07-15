@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AssigneeCombobox } from "@/components/app/AssigneeCombobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,7 +11,9 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useInternalAssigneeOptions } from "@/hooks/useInternalAssigneeOptions";
 import { supabase } from "@/integrations/supabase/client";
+import { TASK_SECTOR_OPTIONS, getTaskSectorLabel } from "@/lib/taskMetadata";
 import { CalendarDays, Building2, Download, FileText, FolderOpen, Loader2, User } from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
@@ -90,7 +93,6 @@ const statusLabels: Record<KanbanStatus, string> = {
 };
 
 const priorityOptions = ["Urgente", "Alta", "Média", "Baixa"];
-const sectorOptions = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
 
 export function KanbanTaskDetailSheet({
   task,
@@ -102,6 +104,7 @@ export function KanbanTaskDetailSheet({
   onSubtaskToggle,
   historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
+  const { assigneeOptions, loadingAssignees } = useInternalAssigneeOptions();
   const [form, setForm] = useState({
     description: "",
     client_name: "",
@@ -248,7 +251,7 @@ export function KanbanTaskDetailSheet({
                 <FolderOpen className="h-3 w-3" /> Setores
               </span>
               <span className="text-sm font-medium">
-                {form.sectors.length > 0 ? form.sectors.join(", ") : "Não informado"}
+                {form.sectors.length > 0 ? form.sectors.map((sector) => getTaskSectorLabel(sector)).join(", ") : "Não informado"}
               </span>
             </div>
             <div className="space-y-1">
@@ -317,17 +320,22 @@ export function KanbanTaskDetailSheet({
                 </div>
                 <div className="space-y-2">
                   <Label>Responsavel</Label>
-                  <Input value={form.assignee} onChange={(event) => setForm((prev) => ({ ...prev, assignee: event.target.value }))} />
+                  <AssigneeCombobox
+                    value={form.assignee}
+                    onChange={(assignee) => setForm((prev) => ({ ...prev, assignee }))}
+                    options={assigneeOptions}
+                    loading={loadingAssignees}
+                  />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Setores (seleção multipla)</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
-                  {sectorOptions.map((sector) => (
+                  {TASK_SECTOR_OPTIONS.map((sector) => (
                     <label key={sector} className="flex items-center gap-2 text-sm cursor-pointer">
                       <Checkbox checked={form.sectors.includes(sector)} onCheckedChange={() => toggleSector(sector)} />
-                      <span>{sector}</span>
+                      <span>{getTaskSectorLabel(sector)}</span>
                     </label>
                   ))}
                 </div>

@@ -110,6 +110,7 @@ export type Database = {
       is_internal_user: GenericFunction
       list_admin_users: GenericFunction
       list_internal_user_profiles: GenericFunction
+      list_internal_user_profiles_by_org: GenericFunction
       normalize_cashflow_match_text: GenericFunction
       prevent_internal_user_client_link: GenericFunction
       prevent_mixed_portal_internal_roles: GenericFunction

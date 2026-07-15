@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
+import { getTaskSectorLabel } from "@/lib/taskMetadata";
 
 interface Task {
   id: string;
@@ -270,7 +271,7 @@ export function TaskDetailSheet({
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Setor</span>
-              <span className="text-sm font-medium">{task.sector}</span>
+              <span className="text-sm font-medium">{getTaskSectorLabel(task.sector)}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Prazo</span>
@@ -282,7 +283,7 @@ export function TaskDetailSheet({
             <span className="text-xs text-muted-foreground flex items-center gap-1 mb-2"><Tag className="h-3 w-3" /> Etiquetas</span>
             <div className="flex flex-wrap gap-1.5">
               {task.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                <Badge key={tag} variant="secondary" className="text-xs">{getTaskSectorLabel(tag)}</Badge>
               ))}
             </div>
           </div>
@@ -458,4 +459,3 @@ export function TaskDetailSheet({
     </Sheet>
   );
 }
-

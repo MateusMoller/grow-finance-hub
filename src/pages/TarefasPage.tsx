@@ -28,15 +28,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { AssigneeCombobox } from "@/components/app/AssigneeCombobox";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { TaskOriginLegend } from "@/components/app/TaskOriginLegend";
 import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useInternalAssigneeOptions } from "@/hooks/useInternalAssigneeOptions";
 import { cn } from "@/lib/utils";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import { TASK_SECTOR_OPTIONS, getTaskSectorLabel, normalizeTaskSector } from "@/lib/taskMetadata";
 import type { Tables } from "@/integrations/supabase/types";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
@@ -103,7 +106,7 @@ const statusConfig: Record<string, { color: string; bg: string; icon: typeof Cir
   Atrasado: { color: "text-destructive", bg: "bg-destructive/10", icon: AlertTriangle },
 };
 
-const sectors = ["Todos", "Contabil", "Fiscal", "Departamento Pessoal", "Financeiro"];
+const sectors = ["Todos", ...TASK_SECTOR_OPTIONS] as const;
 const statuses = ["Todos", "Pendente", "Em andamento", "Em revisão", "Concluído", "Atrasado"];
 
 const normalizeText = (value: string) =>
@@ -112,15 +115,6 @@ const normalizeText = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
-
-const normalizeSector = (value: string): string => {
-  const normalized = normalizeText(value);
-  if (normalized.includes("contabil")) return "Contabil";
-  if (normalized.includes("fiscal")) return "Fiscal";
-  if (normalized.includes("pessoal")) return "Departamento Pessoal";
-  if (normalized.includes("finance")) return "Financeiro";
-  return value || "Geral";
-};
 
 const normalizePriority = (value: string): Task["priority"] => {
   const normalized = normalizeText(value);
@@ -173,13 +167,13 @@ const mapRowToTask = (row: KanbanTaskRow): Task => ({
   title: row.title,
   description: row.description || "",
   client: row.client_name || "",
-  sector: normalizeSector(row.sector || ""),
+  sector: normalizeTaskSector(row.sector || ""),
   assignee: row.assignee || "",
   priority: normalizePriority(row.priority || ""),
   dueDate: row.due_date || "",
   status: deriveStatus(row.status || "todo", row.due_date),
   createdAt: row.created_at,
-  tags: row.tags?.length ? row.tags.map(normalizeSector) : row.sector ? [normalizeSector(row.sector)] : [],
+  tags: row.tags?.length ? row.tags.map(normalizeTaskSector) : row.sector ? [normalizeTaskSector(row.sector)] : [],
   subtasks: parseSubtasks(row.subtasks),
   attachments: 0,
   comments: 0,
@@ -197,9 +191,12 @@ interface TaskListViewProps {
   embedded?: boolean;
 }
 
+const defaultTaskSector = TASK_SECTOR_OPTIONS[0];
+
 export function TaskListView({ embedded = false }: TaskListViewProps) {
   const { user } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const { assigneeOptions, loadingAssignees } = useInternalAssigneeOptions();
   const location = useLocation();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -221,7 +218,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     title: "",
     description: "",
     client: "",
-    sector: "Contabil",
+    sector: defaultTaskSector,
     assignee: "",
     priority: "Media" as Task["priority"],
     dueDate: "",
@@ -451,7 +448,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       title: "",
       description: "",
       client: "",
-      sector: "Contabil",
+      sector: defaultTaskSector,
       assignee: "",
       priority: "Media",
       dueDate: "",
@@ -600,7 +597,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
             <Filter className="h-4 w-4 text-muted-foreground" />
             <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)}>
               {sectors.map((sector) => (
-                <option key={sector}>{sector}</option>
+                <option key={sector} value={sector}>
+                  {sector === "Todos" ? sector : getTaskSectorLabel(sector)}
+                </option>
               ))}
             </select>
             <select className="text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -662,13 +661,13 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                       <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{task.dueDate ? new Date(task.dueDate).toLocaleDateString("pt-BR") : "Sem prazo"}</span>
                         <span>{task.assignee || "Sem responsavel"}</span>
-                        <span>{task.sector}</span>
+                        <span>{getTaskSectorLabel(task.sector)}</span>
                         <span className="flex items-center gap-1"><Paperclip className="h-3 w-3" />{task.attachments}</span>
                         <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{task.comments}</span>
                         <div className="flex items-center gap-1">
                           {task.tags.map((tag) => (
                             <span key={tag} className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded text-xs">
-                              <Tag className="h-2.5 w-2.5" />{tag}
+                              <Tag className="h-2.5 w-2.5" />{getTaskSectorLabel(tag)}
                             </span>
                           ))}
                         </div>
@@ -813,14 +812,23 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               </div>
               <div className="space-y-2">
                 <Label>Responsavel</Label>
-                <Input placeholder="Nome" value={newTask.assignee} onChange={(event) => setNewTask((prev) => ({ ...prev, assignee: event.target.value }))} />
+                <AssigneeCombobox
+                  value={newTask.assignee}
+                  onChange={(assignee) => setNewTask((prev) => ({ ...prev, assignee }))}
+                  options={assigneeOptions}
+                  loading={loadingAssignees}
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Setor</Label>
                 <select className="w-full text-sm bg-card border rounded-lg px-3 py-2 outline-none" value={newTask.sector} onChange={(event) => setNewTask((prev) => ({ ...prev, sector: event.target.value }))}>
-                  {sectors.filter((sector) => sector !== "Todos").map((sector) => <option key={sector}>{sector}</option>)}
+                  {TASK_SECTOR_OPTIONS.map((sector) => (
+                    <option key={sector} value={sector}>
+                      {getTaskSectorLabel(sector)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
@@ -845,7 +853,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   title: "",
                   description: "",
                   client: "",
-                  sector: "Contabil",
+                  sector: defaultTaskSector,
                   assignee: "",
                   priority: "Media",
                   dueDate: "",

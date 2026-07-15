@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { AssigneeCombobox } from "@/components/app/AssigneeCombobox";
 import { KanbanTaskDetailSheet, type KanbanStatus, type KanbanTaskItem } from "@/components/app/KanbanTaskDetailSheet";
 import { TaskOriginLegend } from "@/components/app/TaskOriginLegend";
 import { TaskOriginRibbon } from "@/components/app/TaskOriginRibbon";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useInternalAssigneeOptions } from "@/hooks/useInternalAssigneeOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
@@ -19,6 +21,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
+import { TASK_SECTOR_OPTIONS, getTaskSectorLabel, normalizeTaskSector } from "@/lib/taskMetadata";
 import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
@@ -35,8 +38,6 @@ const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
   color: "bg-slate-500",
 };
 
-const sectors = ["Contábil", "Fiscal", "Departamento Pessoal", "Financeiro", "Comercial", "Societário", "Geral"];
-
 const priorityDot: Record<string, string> = {
   Urgente: "bg-destructive",
   Alta: "bg-orange-500",
@@ -44,14 +45,6 @@ const priorityDot: Record<string, string> = {
   Media: "bg-amber-500",
   Baixa: "bg-muted-foreground",
 };
-
-const normalizeSector = (value: string) =>
-  value
-    .replace("ContÃ¡bil", "Contábil")
-    .replace("ContÃƒÂ¡bil", "Contábil")
-    .replace("SocietÃ¡rio", "Societário")
-    .replace("SocietÃƒÂ¡rio", "Societário")
-    .trim();
 
 const normalizePriority = (value: string) =>
   value
@@ -115,9 +108,12 @@ interface TaskKanbanViewProps {
   embedded?: boolean;
 }
 
+const defaultTaskSector = TASK_SECTOR_OPTIONS[0];
+
 export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const { user, role } = useAuth();
   const { selectedCompany, selectedCompetence } = useGlobalFilters();
+  const { assigneeOptions, loadingAssignees } = useInternalAssigneeOptions();
   const location = useLocation();
   const navigate = useNavigate();
   const isAdmin = role === "admin";
@@ -141,7 +137,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     client_name: "",
     assignee: "",
     priority: "Média",
-    sector: "Contábil",
+    sector: defaultTaskSector,
     subtasks: [] as TaskSubtask[],
   });
 
@@ -200,9 +196,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return {
         ...task,
         priority: normalizePriority(task.priority || ""),
-        sector: normalizeSector(task.sector || ""),
+        sector: normalizeTaskSector(task.sector || ""),
         status: task.status as KanbanStatus,
-        tags: (task.tags?.length ? task.tags : task.sector ? [task.sector] : []).map((sector) => normalizeSector(sector)),
+        tags: (task.tags?.length ? task.tags : task.sector ? [task.sector] : []).map((sector) => normalizeTaskSector(sector)),
         subtasks: parseSubtasks(task.subtasks),
         integration_source:
           typeof taskRecord.integration_source === "string" ? taskRecord.integration_source : null,
@@ -426,7 +422,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     toast.success("Tarefa adicionada ao Kanban");
     setCreateOpen(false);
     setNewSubtaskTitle("");
-    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil", subtasks: [] });
+    setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: defaultTaskSector, subtasks: [] });
     void fetchTasks();
   };
 
@@ -499,9 +495,9 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Setores</SelectItem>
-                {sectors.map((sector) => (
+                {TASK_SECTOR_OPTIONS.map((sector) => (
                   <SelectItem key={sector} value={sector}>
-                    {sector}
+                    {getTaskSectorLabel(sector)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -682,7 +678,12 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               </div>
               <div className="space-y-2">
                 <Label>Responsavel</Label>
-                <Input placeholder="Nome" value={newTask.assignee} onChange={(e) => setNewTask((prev) => ({ ...prev, assignee: e.target.value }))} />
+                <AssigneeCombobox
+                  value={newTask.assignee}
+                  onChange={(assignee) => setNewTask((prev) => ({ ...prev, assignee }))}
+                  options={assigneeOptions}
+                  loading={loadingAssignees}
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -690,7 +691,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                 <Label>Setor</Label>
                 <Select value={newTask.sector} onValueChange={(value) => setNewTask((prev) => ({ ...prev, sector: value }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {TASK_SECTOR_OPTIONS.map((sector) => (
+                      <SelectItem key={sector} value={sector}>
+                        {getTaskSectorLabel(sector)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
@@ -708,7 +715,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               onClick={() => {
                 setCreateOpen(false);
                 setNewSubtaskTitle("");
-                setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: "Contábil", subtasks: [] });
+                setNewTask({ title: "", client_name: "", assignee: "", priority: "Média", sector: defaultTaskSector, subtasks: [] });
               }}
             >
               Cancelar
@@ -797,7 +804,7 @@ function KanbanCard({
       <div className="mt-3 flex items-center justify-between gap-2 pr-8">
         <div className="flex items-center gap-1.5">
           <span className="text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
-            {extraSectors > 0 ? `${primarySector} +${extraSectors}` : primarySector}
+            {extraSectors > 0 ? `${getTaskSectorLabel(primarySector)} +${extraSectors}` : getTaskSectorLabel(primarySector)}
           </span>
         </div>
         {task.assignee && (
@@ -825,6 +832,4 @@ function KanbanCard({
     </motion.div>
   );
 }
-
-
 
