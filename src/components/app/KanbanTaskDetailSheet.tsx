@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -9,6 +14,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -25,18 +31,26 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   CalendarDays,
   Building2,
+  ChevronDown,
   Download,
   FileText,
   FolderOpen,
   Loader2,
   MessageSquare,
+  Paperclip,
   Send,
   User,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
 import { useAuth } from "@/hooks/useAuth";
-import { loadTaskAssignees } from "@/lib/taskAssignees";
+import {
+  formatTaskAssigneeLabel,
+  loadTaskAssignees,
+  type TaskAssigneeOption,
+} from "@/lib/taskAssignees";
+import { normalizeSectorCode, type SectorCode } from "@/lib/userPermissions";
 
 export type KanbanStatus =
   "backlog" | "todo" | "doing" | "review" | "done" | "archived";
@@ -61,6 +75,7 @@ export interface KanbanTaskItem {
   subtasks: TaskSubtask[];
   request_id: string | null;
   created_at: string;
+  created_by?: string | null;
   updated_at?: string | null;
   integration_source?: string | null;
   integration_task_id?: string | null;
@@ -78,24 +93,6 @@ type SavePayload = {
   tags: string[];
 };
 
-interface LinkedRequestInfo {
-  id: string;
-  title: string;
-  description: string | null;
-  category: string;
-  sector: string;
-  status: string;
-  created_at: string;
-}
-
-interface LinkedRequestAttachment {
-  id: string;
-  file_name: string;
-  file_path: string;
-  file_size: number | null;
-  created_at: string;
-}
-
 interface TaskComment {
   id: string;
   task_id: string;
@@ -107,6 +104,30 @@ interface TaskComment {
   } | null;
 }
 
+type TaskCommentAttachmentType = "task_chat_attachment" | "task_internal_attachment";
+
+interface TaskCommentAttachment {
+  type: TaskCommentAttachmentType;
+  text: string;
+  file: {
+    name: string;
+    path: string;
+    size: number;
+    contentType: string;
+  };
+}
+
+interface TaskInternalMessage {
+  type: "task_internal_message";
+  text: string;
+}
+
+interface TaskSectorAddedMessage {
+  type: "task_sector_added";
+  text: string;
+  sectors: string[];
+}
+
 interface KanbanTaskDetailSheetProps {
   task: KanbanTaskItem | null;
   open: boolean;
@@ -115,6 +136,7 @@ interface KanbanTaskDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onSave: (taskId: string, updates: SavePayload) => Promise<void>;
   onSubtaskToggle?: (taskId: string, subtaskIndex: number) => void;
+  onHistory?: (taskId: string, action: string, details?: string) => void;
   historyEntries?: ChangeHistoryEntry[];
 }
 
@@ -137,6 +159,78 @@ const sectorOptions = [
   "Geral",
 ];
 
+const parseTaskCommentAttachment = (content: string): TaskCommentAttachment | null => {
+  try {
+    const parsed = JSON.parse(content) as Partial<TaskCommentAttachment>;
+    if (
+      (parsed.type !== "task_chat_attachment" && parsed.type !== "task_internal_attachment") ||
+      !parsed.file ||
+      typeof parsed.file.name !== "string" ||
+      typeof parsed.file.path !== "string"
+    ) {
+      return null;
+    }
+    return {
+      type: parsed.type,
+      text: typeof parsed.text === "string" ? parsed.text : "",
+      file: {
+        name: parsed.file.name,
+        path: parsed.file.path,
+        size: typeof parsed.file.size === "number" ? parsed.file.size : 0,
+        contentType: typeof parsed.file.contentType === "string" ? parsed.file.contentType : "application/octet-stream",
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
+const parseInternalTaskMessage = (content: string): TaskInternalMessage | null => {
+  try {
+    const parsed = JSON.parse(content) as Partial<TaskInternalMessage>;
+    if (parsed.type !== "task_internal_message" || typeof parsed.text !== "string") return null;
+    return { type: "task_internal_message", text: parsed.text };
+  } catch {
+    return null;
+  }
+};
+
+const parseSectorAddedMessage = (content: string): TaskSectorAddedMessage | null => {
+  try {
+    const parsed = JSON.parse(content) as Partial<TaskSectorAddedMessage>;
+    if (parsed.type !== "task_sector_added") return null;
+    return {
+      type: "task_sector_added",
+      text: typeof parsed.text === "string" ? parsed.text : "Setor adicionado à tarefa.",
+      sectors: Array.isArray(parsed.sectors)
+        ? parsed.sectors.filter((sector): sector is string => typeof sector === "string")
+        : [],
+    };
+  } catch {
+    return null;
+  }
+};
+
+const isInternalTaskComment = (content: string) => {
+  const attachment = parseTaskCommentAttachment(content);
+  if (attachment?.type === "task_internal_attachment") return true;
+  return parseInternalTaskMessage(content) !== null || parseSectorAddedMessage(content) !== null;
+};
+
+const formatFileSize = (bytes: number) => {
+  if (!bytes) return "Tamanho não informado";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const sanitizeStorageFileName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "arquivo";
+
 export function KanbanTaskDetailSheet({
   task,
   open,
@@ -145,6 +239,7 @@ export function KanbanTaskDetailSheet({
   onOpenChange,
   onSave,
   onSubtaskToggle,
+  onHistory,
   historyEntries = [],
 }: KanbanTaskDetailSheetProps) {
   const { user, currentOrganizationId } = useAuth();
@@ -158,21 +253,23 @@ export function KanbanTaskDetailSheet({
     status: "backlog" as KanbanStatus,
     due_date: "",
   });
-  const [requestInfo, setRequestInfo] = useState<LinkedRequestInfo | null>(
-    null,
-  );
-  const [requestAttachments, setRequestAttachments] = useState<
-    LinkedRequestAttachment[]
-  >([]);
-  const [loadingRequest, setLoadingRequest] = useState(false);
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [sendingComment, setSendingComment] = useState(false);
   const [newComment, setNewComment] = useState("");
-  const [assigneeOptions, setAssigneeOptions] = useState<
-    Array<{ id: string; name: string }>
-  >([]);
+  const [selectedCommentFile, setSelectedCommentFile] = useState<File | null>(null);
+  const [sendingInternalComment, setSendingInternalComment] = useState(false);
+  const [newInternalComment, setNewInternalComment] = useState("");
+  const [selectedInternalFile, setSelectedInternalFile] = useState<File | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [creatorName, setCreatorName] = useState<string | null>(null);
+  const [assigneeOptions, setAssigneeOptions] = useState<TaskAssigneeOption[]>(
+    [],
+  );
   const commentsBottomRef = useRef<HTMLDivElement | null>(null);
+  const commentFileInputRef = useRef<HTMLInputElement | null>(null);
+  const internalCommentsBottomRef = useRef<HTMLDivElement | null>(null);
+  const internalFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!task) return;
@@ -189,6 +286,13 @@ export function KanbanTaskDetailSheet({
       status: task.status,
       due_date: task.due_date || "",
     });
+    setDetailsOpen(false);
+    setSelectedCommentFile(null);
+    setSelectedInternalFile(null);
+    setNewInternalComment("");
+    setNewComment("");
+    if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+    if (internalFileInputRef.current) internalFileInputRef.current.value = "";
   }, [task]);
 
   useEffect(() => {
@@ -205,7 +309,7 @@ export function KanbanTaskDetailSheet({
       } catch {
         if (!cancelled) {
           setAssigneeOptions([]);
-          toast.error("Nao foi possivel carregar os responsaveis.");
+          toast.error("Não foi possível carregar os responsáveis.");
         }
       }
     };
@@ -216,50 +320,29 @@ export function KanbanTaskDetailSheet({
   }, [currentOrganizationId, open]);
 
   useEffect(() => {
-    if (!open || !task?.request_id) {
-      setRequestInfo(null);
-      setRequestAttachments([]);
+    if (!open || !task?.created_by) {
+      setCreatorName(null);
       return;
     }
 
     let cancelled = false;
-    const loadRequestData = async () => {
-      setLoadingRequest(true);
-      const [requestRes, docsRes] = await Promise.all([
-        supabase
-          .from("client_requests")
-          .select(
-            "id, title, description, category, sector, status, created_at",
-          )
-          .eq("id", task.request_id)
-          .maybeSingle(),
-        supabase
-          .from("client_documents")
-          .select("id, file_name, file_path, file_size, created_at")
-          .eq("request_id", task.request_id)
-          .order("created_at", { ascending: false }),
-      ]);
+    const loadCreatorName = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("user_id", task.created_by)
+        .maybeSingle();
 
-      if (cancelled) return;
-
-      if (requestRes.error) {
-        toast.error("Não foi possível carregar os dados da solicitação.");
+      if (!cancelled) {
+        setCreatorName(data?.display_name?.trim() || null);
       }
-      if (docsRes.error) {
-        toast.error("Não foi possível carregar os anexos da solicitação.");
-      }
-
-      setRequestInfo((requestRes.data as LinkedRequestInfo | null) || null);
-      setRequestAttachments((docsRes.data as LinkedRequestAttachment[]) || []);
-      setLoadingRequest(false);
     };
 
-    void loadRequestData();
-
+    void loadCreatorName();
     return () => {
       cancelled = true;
     };
-  }, [open, task?.request_id]);
+  }, [open, task?.created_by]);
 
   const fetchTaskComments = useCallback(async () => {
     if (!task?.id) {
@@ -342,9 +425,53 @@ export function KanbanTaskDetailSheet({
 
   useEffect(() => {
     commentsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    internalCommentsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [taskComments.length]);
 
+  const selectedSectorCodes = useMemo<SectorCode[]>(
+    () =>
+      form.sectors
+        .map((sector) => normalizeSectorCode(sector))
+        .filter((sector): sector is SectorCode => Boolean(sector)),
+    [form.sectors],
+  );
+  const selectedSectorCodeSet = useMemo(
+    () => new Set(selectedSectorCodes),
+    [selectedSectorCodes],
+  );
+  const filteredAssigneeOptions = useMemo(
+    () =>
+      selectedSectorCodeSet.size === 0
+        ? []
+        : assigneeOptions.filter(
+            (option) =>
+              option.sectorCode && selectedSectorCodeSet.has(option.sectorCode),
+          ),
+    [assigneeOptions, selectedSectorCodeSet],
+  );
+
+  useEffect(() => {
+    if (!form.assigned_to_user_id) return;
+
+    const selected = assigneeOptions.find(
+      (option) => option.id === form.assigned_to_user_id,
+    );
+    const isAllowed =
+      Boolean(selected?.sectorCode) &&
+      selectedSectorCodeSet.has(selected?.sectorCode as SectorCode);
+
+    if (selectedSectorCodeSet.size === 0 || !selected || !isAllowed) {
+      setForm((prev) => ({
+        ...prev,
+        assignee: "",
+        assigned_to_user_id: "",
+      }));
+    }
+  }, [assigneeOptions, form.assigned_to_user_id, selectedSectorCodeSet]);
+
   if (!task) return null;
+  const clientTaskComments = taskComments.filter((comment) => !isInternalTaskComment(comment.content));
+  const internalTaskComments = taskComments.filter((comment) => isInternalTaskComment(comment.content));
   const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
   const subtaskPct = task.subtasks.length
     ? Math.round((subtaskDone / task.subtasks.length) * 100)
@@ -367,7 +494,7 @@ export function KanbanTaskDetailSheet({
 
     await onSave(task.id, {
       description: form.description.trim() || null,
-      client_name: form.client_name.trim() || null,
+      client_name: task.client_name,
       assignee: form.assignee.trim() || null,
       assigned_to_user_id: form.assigned_to_user_id || null,
       priority: form.priority,
@@ -390,10 +517,37 @@ export function KanbanTaskDetailSheet({
   };
 
   const handleSendTaskComment = async () => {
-    const content = newComment.trim();
-    if (!task?.id || !user?.id || !content) return;
+    const text = newComment.trim();
+    const file = selectedCommentFile;
+    if (!task?.id || !user?.id || (!text && !file)) return;
 
     setSendingComment(true);
+    let content = text;
+
+    if (file) {
+      const filePath = `${user.id}/task-chat/${task.id}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("client-documents")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        setSendingComment(false);
+        toast.error("Não foi possível anexar o arquivo.");
+        return;
+      }
+
+      content = JSON.stringify({
+        type: "task_chat_attachment",
+        text,
+        file: {
+          name: file.name,
+          path: filePath,
+          size: file.size,
+          contentType: file.type || "application/octet-stream",
+        },
+      } satisfies TaskCommentAttachment);
+    }
+
     const { error } = await supabase.from("kanban_task_comments").insert({
       task_id: task.id,
       user_id: user.id,
@@ -410,6 +564,74 @@ export function KanbanTaskDetailSheet({
     }
 
     setNewComment("");
+    setSelectedCommentFile(null);
+    if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+    onHistory?.(
+      task.id,
+      file ? "Mensagem/anexo enviado ao chat do cliente" : "Mensagem enviada ao chat do cliente",
+      text || file?.name,
+    );
+    void fetchTaskComments();
+  };
+
+  const handleSendInternalTaskComment = async () => {
+    const text = newInternalComment.trim();
+    const file = selectedInternalFile;
+    if (!task?.id || !user?.id || (!text && !file)) return;
+
+    setSendingInternalComment(true);
+    let content = JSON.stringify({
+      type: "task_internal_message",
+      text,
+    } satisfies TaskInternalMessage);
+
+    if (file) {
+      const filePath = `${user.id}/task-internal/${task.id}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("client-documents")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        setSendingInternalComment(false);
+        toast.error("Não foi possível anexar o arquivo.");
+        return;
+      }
+
+      content = JSON.stringify({
+        type: "task_internal_attachment",
+        text,
+        file: {
+          name: file.name,
+          path: filePath,
+          size: file.size,
+          contentType: file.type || "application/octet-stream",
+        },
+      } satisfies TaskCommentAttachment);
+    }
+
+    const { error } = await supabase.from("kanban_task_comments").insert({
+      task_id: task.id,
+      user_id: user.id,
+      content,
+      ...(currentOrganizationId
+        ? { organization_id: currentOrganizationId }
+        : {}),
+    });
+    setSendingInternalComment(false);
+
+    if (error) {
+      toast.error("Não foi possível registrar o andamento da tarefa.");
+      return;
+    }
+
+    setNewInternalComment("");
+    setSelectedInternalFile(null);
+    if (internalFileInputRef.current) internalFileInputRef.current.value = "";
+    onHistory?.(
+      task.id,
+      file ? "Andamento interno com anexo registrado" : "Andamento interno registrado",
+      text || file?.name,
+    );
     void fetchTaskComments();
   };
 
@@ -443,7 +665,7 @@ export function KanbanTaskDetailSheet({
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <User className="h-3 w-3" /> Responsavel
+                <User className="h-3 w-3" /> Responsável
               </span>
               <span className="text-sm font-medium">
                 {form.assignee || "Não informado"}
@@ -469,19 +691,55 @@ export function KanbanTaskDetailSheet({
                   : "Sem prazo"}
               </span>
             </div>
+            <div className="space-y-1 sm:col-span-2">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <User className="h-3 w-3" /> Criada por
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {creatorName || (task.created_by ? "Usuário registrado" : "Não informado")}
+              </span>
+            </div>
           </div>
 
           <Separator />
 
-          <Tabs defaultValue="informações" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-              <TabsTrigger value="informações">Informações</TabsTrigger>
+          <Tabs defaultValue="informacoes" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="informacoes">Informações</TabsTrigger>
               <TabsTrigger value="chat">Chat</TabsTrigger>
-              <TabsTrigger value="solicitação">Solicitação</TabsTrigger>
-              <TabsTrigger value="histórico">Histórico</TabsTrigger>
+              <TabsTrigger value="historico">Histórico</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="informações" className="space-y-4">
+            <TabsContent value="informacoes" className="space-y-4">
+              <Collapsible
+                open={detailsOpen}
+                onOpenChange={setDetailsOpen}
+                className="rounded-lg border bg-muted/20"
+              >
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-semibold">
+                        Editar detalhes da tarefa
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {statusLabels[form.status]} - {form.priority} -{" "}
+                        {form.due_date
+                          ? new Date(form.due_date).toLocaleDateString("pt-BR")
+                          : "Sem prazo"}
+                      </p>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                        detailsOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 border-t px-4 py-4">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select
@@ -550,20 +808,17 @@ export function KanbanTaskDetailSheet({
                   <Label>Cliente</Label>
                   <Input
                     value={form.client_name}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        client_name: event.target.value,
-                      }))
-                    }
+                    readOnly
+                    aria-readonly="true"
+                    className="bg-muted/40 text-muted-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Responsavel</Label>
+                  <Label>Responsável</Label>
                   <Select
                     value={form.assigned_to_user_id || "unassigned"}
                     onValueChange={(value) => {
-                      const selected = assigneeOptions.find(
+                      const selected = filteredAssigneeOptions.find(
                         (option) => option.id === value,
                       );
                       setForm((prev) => ({
@@ -581,18 +836,34 @@ export function KanbanTaskDetailSheet({
                       <SelectItem value="unassigned">
                         Sem responsável
                       </SelectItem>
-                      {assigneeOptions.map((option) => (
+                      {filteredAssigneeOptions.length > 0 && (
+                        <SelectLabel className="px-2 text-xs font-medium text-muted-foreground">
+                          Responsáveis dos setores selecionados
+                        </SelectLabel>
+                      )}
+                      {filteredAssigneeOptions.map((option) => (
                         <SelectItem key={option.id} value={option.id}>
-                          {option.name}
+                          {formatTaskAssigneeLabel(option)}
                         </SelectItem>
                       ))}
+                      {form.sectors.length === 0 && (
+                        <SelectItem value="select-sector-first" disabled>
+                          Selecione um setor primeiro
+                        </SelectItem>
+                      )}
+                      {form.sectors.length > 0 &&
+                        filteredAssigneeOptions.length === 0 && (
+                          <SelectItem value="no-sector-assignees" disabled>
+                            Nenhum responsável nos setores selecionados
+                          </SelectItem>
+                        )}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Setores (seleção multipla)</Label>
+                <Label>Setores (seleção múltipla)</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
                   {sectorOptions.map((sector) => (
                     <label
@@ -660,6 +931,175 @@ export function KanbanTaskDetailSheet({
                   </div>
                 </div>
               )}
+                </CollapsibleContent>
+              </Collapsible>
+
+              <div className="rounded-lg border">
+                <div className="border-b px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <MessageSquare className="h-4 w-4" />
+                    Andamento
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Comunicação interna da equipe vinculada a esta tarefa. Use este espaço para registrar decisões, contexto operacional e arquivos internos.
+                  </p>
+                </div>
+
+                <div className="max-h-[420px] min-h-[260px] space-y-3 overflow-y-auto p-4">
+                  {loadingComments ? (
+                    <div className="flex h-[240px] items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                  ) : internalTaskComments.length === 0 ? (
+                    <div className="flex h-[240px] items-center justify-center text-center">
+                      <div>
+                        <MessageSquare className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          Nenhum andamento interno registrado.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    internalTaskComments.map((comment) => {
+                      const isOwn = comment.user_id === user?.id;
+                      const attachment = parseTaskCommentAttachment(comment.content);
+                      const internalMessage = parseInternalTaskMessage(comment.content);
+                      const sectorMessage = parseSectorAddedMessage(comment.content);
+                      const displayName =
+                        comment.profile?.display_name?.trim() ||
+                        (isOwn ? "Você" : "Equipe");
+                      const text = attachment?.text || internalMessage?.text || sectorMessage?.text || "";
+
+                      return (
+                        <div
+                          key={comment.id}
+                          className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                              className={`max-w-[86%] rounded-2xl px-3 py-2 ${isOwn ? "rounded-br-md bg-muted text-foreground" : "rounded-bl-md bg-muted/70"}`}
+                          >
+                            <div className="mb-1 flex items-center justify-between gap-3">
+                              <span className="text-xs font-semibold opacity-80">
+                                {displayName}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(comment.created_at).toLocaleString(
+                                  "pt-BR",
+                                  {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                )}
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              {text && (
+                                <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                                  {text}
+                                </p>
+                              )}
+                              {attachment && (
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/70"
+                                  onClick={() => handleDownloadAttachment(attachment.file.path)}
+                                >
+                                  <FileText className="h-4 w-4 shrink-0" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate font-medium">
+                                      {attachment.file.name}
+                                    </span>
+                                    <span className="block text-muted-foreground">
+                                      {formatFileSize(attachment.file.size)}
+                                    </span>
+                                  </span>
+                                  <Download className="h-3.5 w-3.5 shrink-0" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={internalCommentsBottomRef} />
+                </div>
+
+                <div className="border-t p-4">
+                  {selectedInternalFile && (
+                    <div className="mb-2 flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {selectedInternalFile.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatFileSize(selectedInternalFile.size)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setSelectedInternalFile(null);
+                          if (internalFileInputRef.current) internalFileInputRef.current.value = "";
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                  <input
+                    ref={internalFileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => setSelectedInternalFile(event.target.files?.[0] || null)}
+                  />
+                  <div className="flex items-end gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-12 w-12 shrink-0"
+                      onClick={() => internalFileInputRef.current?.click()}
+                      disabled={sendingInternalComment}
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                    <Textarea
+                      rows={3}
+                      value={newInternalComment}
+                      onChange={(event) => setNewInternalComment(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void handleSendInternalTaskComment();
+                        }
+                      }}
+                      placeholder="Registre um andamento interno..."
+                      className="min-h-[72px] resize-none text-sm"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-12 w-12 shrink-0"
+                      onClick={() => void handleSendInternalTaskComment()}
+                      disabled={sendingInternalComment || (!newInternalComment.trim() && !selectedInternalFile)}
+                    >
+                      {sendingInternalComment ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Comunicação interna. Enter para enviar. Shift+Enter para nova linha.
+                  </p>
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="chat" className="space-y-4">
@@ -670,7 +1110,7 @@ export function KanbanTaskDetailSheet({
                     Chat da tarefa
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Conversa interna vinculada somente a esta tarefa.
+                    Use este chat apenas para alinhamentos e arquivos de tarefas relacionadas ao cliente.
                   </p>
                 </div>
 
@@ -679,7 +1119,7 @@ export function KanbanTaskDetailSheet({
                     <div className="flex h-[180px] items-center justify-center">
                       <Loader2 className="h-5 w-5 animate-spin text-primary" />
                     </div>
-                  ) : taskComments.length === 0 ? (
+                  ) : clientTaskComments.length === 0 ? (
                     <div className="flex h-[180px] items-center justify-center text-center">
                       <div>
                         <MessageSquare className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
@@ -689,8 +1129,9 @@ export function KanbanTaskDetailSheet({
                       </div>
                     </div>
                   ) : (
-                    taskComments.map((comment) => {
+                    clientTaskComments.map((comment) => {
                       const isOwn = comment.user_id === user?.id;
+                      const attachment = parseTaskCommentAttachment(comment.content);
                       const displayName =
                         comment.profile?.display_name?.trim() ||
                         (isOwn ? "Você" : "Equipe");
@@ -721,9 +1162,39 @@ export function KanbanTaskDetailSheet({
                                 )}
                               </span>
                             </div>
-                            <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                              {comment.content}
-                            </p>
+                            {attachment ? (
+                              <div className="space-y-2">
+                                {attachment.text && (
+                                  <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                                    {attachment.text}
+                                  </p>
+                                )}
+                                <button
+                                  type="button"
+                                  className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                                    isOwn
+                                      ? "border-primary-foreground/25 bg-primary-foreground/10 hover:bg-primary-foreground/15"
+                                      : "border-border bg-background hover:bg-muted/70"
+                                  }`}
+                                  onClick={() => handleDownloadAttachment(attachment.file.path)}
+                                >
+                                  <FileText className="h-4 w-4 shrink-0" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate font-medium">
+                                      {attachment.file.name}
+                                    </span>
+                                    <span className="block opacity-70">
+                                      {formatFileSize(attachment.file.size)}
+                                    </span>
+                                  </span>
+                                  <Download className="h-3.5 w-3.5 shrink-0" />
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                                {comment.content}
+                              </p>
+                            )}
                           </div>
                         </div>
                       );
@@ -733,7 +1204,46 @@ export function KanbanTaskDetailSheet({
                 </div>
 
                 <div className="border-t p-3">
+                  {selectedCommentFile && (
+                    <div className="mb-2 flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {selectedCommentFile.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatFileSize(selectedCommentFile.size)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setSelectedCommentFile(null);
+                          if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                  <input
+                    ref={commentFileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => setSelectedCommentFile(event.target.files?.[0] || null)}
+                  />
                   <div className="flex items-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      onClick={() => commentFileInputRef.current?.click()}
+                      disabled={sendingComment}
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
                     <Textarea
                       rows={2}
                       value={newComment}
@@ -752,7 +1262,7 @@ export function KanbanTaskDetailSheet({
                       size="icon"
                       className="h-10 w-10 shrink-0"
                       onClick={() => void handleSendTaskComment()}
-                      disabled={sendingComment || !newComment.trim()}
+                      disabled={sendingComment || (!newComment.trim() && !selectedCommentFile)}
                     >
                       {sendingComment ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -768,101 +1278,10 @@ export function KanbanTaskDetailSheet({
               </div>
             </TabsContent>
 
-            <TabsContent value="solicitação" className="space-y-4">
-              {!task.request_id ? (
-                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Esta tarefa não veio de uma solicitação de cliente.
-                </div>
-              ) : loadingRequest ? (
-                <div className="flex justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label>Data de envio</Label>
-                    <Input
-                      value={
-                        requestInfo?.created_at
-                          ? new Date(requestInfo.created_at).toLocaleString(
-                              "pt-BR",
-                            )
-                          : "-"
-                      }
-                      readOnly
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Informações</Label>
-                    <Textarea
-                      rows={5}
-                      value={
-                        requestInfo?.description ||
-                        "Sem informações adicionais da solicitação."
-                      }
-                      readOnly
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Anexos ({requestAttachments.length})</Label>
-                    {requestAttachments.length === 0 ? (
-                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                        Nenhum anexo enviado nesta solicitação.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {requestAttachments.map((attachment) => (
-                          <div
-                            key={attachment.id}
-                            className="rounded-lg border p-3 flex items-center justify-between gap-3"
-                          >
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium truncate">
-                                {attachment.file_name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {attachment.file_size
-                                  ? `${Math.round(attachment.file_size / 1024)} KB`
-                                  : "Tamanho não informado"}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="shrink-0"
-                              onClick={() =>
-                                handleDownloadAttachment(attachment.file_path)
-                              }
-                            >
-                              <Download className="h-3.5 w-3.5 mr-1" />
-                              Baixar
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {requestInfo && (
-                    <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                      <div className="flex items-center gap-1">
-                        <FileText className="h-3.5 w-3.5" /> Titulo:{" "}
-                        {requestInfo.title}
-                      </div>
-                      <div>Categoria: {requestInfo.category}</div>
-                      <div>Setor solicitado: {requestInfo.sector}</div>
-                    </div>
-                  )}
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="histórico" className="space-y-3">
+            <TabsContent value="historico" className="space-y-3">
               {historyEntries.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Nenhuma alteracao registrada para esta tarefa.
+                  Nenhuma alteração registrada para esta tarefa.
                 </div>
               ) : (
                 historyEntries.map((entry) => (

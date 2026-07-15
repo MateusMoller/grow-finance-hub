@@ -5,17 +5,19 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import type { Tables } from "@/integrations/supabase/types";
 import {
   buildPriorityNotifications,
+  buildTaskEventNotifications,
   clearReadNotifications,
   getReadNotificationIds,
   markAllNotificationsRead,
   markNotificationRead,
   type PriorityNotification,
+  type TaskEventNotificationRow,
 } from "@/lib/priorityNotifications";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 
 type TaskNotificationRow = Pick<
   Tables<"kanban_tasks">,
-  "id" | "title" | "due_date" | "status" | "assignee" | "client_name" | "created_at"
+  "id" | "title" | "due_date" | "status" | "assignee" | "client_name" | "created_at" | "created_by" | "updated_at" | "integration_source"
 >;
 
 export interface NotificationWithRead extends PriorityNotification {
@@ -44,13 +46,20 @@ export function usePriorityNotifications() {
     }
 
     setLoading(true);
-    const { data } = await supabase
-      .from("kanban_tasks")
-      .select("id, title, due_date, status, assignee, assigned_to_user_id, client_name, created_at")
-      .order("created_at", { ascending: false })
-      .limit(3000);
+    const [tasksResponse, commentsResponse] = await Promise.all([
+      supabase
+        .from("kanban_tasks")
+        .select("id, title, due_date, status, assignee, assigned_to_user_id, client_name, created_at, created_by, updated_at, integration_source")
+        .order("created_at", { ascending: false })
+        .limit(3000),
+      supabase
+        .from("kanban_task_comments")
+        .select("id, task_id, user_id, content, created_at, task:kanban_tasks(id, title, client_name, due_date, created_at)")
+        .order("created_at", { ascending: false })
+        .limit(1000),
+    ]);
 
-    const scopedTasks = ((data || []) as TaskNotificationRow[]).filter(
+    const scopedTasks = ((tasksResponse.data || []) as TaskNotificationRow[]).filter(
       (task) =>
         matchesSelectedCompany(task.client_name, selectedCompany) &&
         matchesSelectedCompetence(
@@ -58,12 +67,25 @@ export function usePriorityNotifications() {
           selectedCompetence,
         ),
     );
+    const scopedComments = ((commentsResponse.data || []) as unknown as TaskEventNotificationRow[]).filter(
+      (comment) =>
+        matchesSelectedCompany(comment.task?.client_name || null, selectedCompany) &&
+        matchesSelectedCompetence(
+          getTaskCompetence(comment.task?.due_date || null, comment.task?.created_at || comment.created_at),
+          selectedCompetence,
+        ),
+    );
 
     const readIds = new Set(getReadNotificationIds(user.id));
-    const built = buildPriorityNotifications(scopedTasks).map((notification) => ({
-      ...notification,
-      read: readIds.has(notification.id),
-    }));
+    const built = [
+      ...buildPriorityNotifications(scopedTasks, user.id),
+      ...buildTaskEventNotifications(scopedComments, user.id),
+    ]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .map((notification) => ({
+        ...notification,
+        read: readIds.has(notification.id),
+      }));
 
     if (source === "realtime") {
       const previousIds = new Set(notificationsRef.current.map((notification) => notification.id));
@@ -100,6 +122,17 @@ export function usePriorityNotifications() {
           event: "*",
           schema: "public",
           table: "kanban_tasks",
+        },
+        () => {
+          void refresh("realtime");
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "kanban_task_comments",
         },
         () => {
           void refresh("realtime");

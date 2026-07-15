@@ -1868,26 +1868,37 @@ export function GrowObligationsWorkspace({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 p-6 shadow-sm">
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-primary/8 via-primary/0 to-primary/10" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
+    <div className="mx-auto w-full max-w-none space-y-5 px-1 sm:px-2 xl:px-4">
+      <section className="relative overflow-hidden rounded-[1.75rem] border border-border/70 bg-card p-6 shadow-sm">
+        <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
+        <div className="absolute right-8 top-6 h-24 w-24 rounded-full bg-primary/5 blur-2xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 space-y-3">
             <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.28em]">Grow Native</Badge>
-            <div className="space-y-2">
-              <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigacoes Grow</h1>
+            <div className="space-y-1">
+              <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigações Grow</h1>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Central operacional para envio de guias, documentos esperados e gestão do catálogo padrão.
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" className="rounded-2xl" onClick={() => overviewQuery.refetch()}><RefreshCcw className="mr-2 h-4 w-4" />Atualizar visao</Button>
+            <Button variant="outline" className="rounded-xl" onClick={() => overviewQuery.refetch()}>
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              Atualizar visão
+            </Button>
           </div>
         </div>
       </section>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-muted/50 p-1">
-          <TabsTrigger value="documentos" className="rounded-xl">Central de Documentos</TabsTrigger>
-          <TabsTrigger value="catalogo" className="rounded-xl">Catalogo</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl border bg-card p-1 shadow-sm">
+          <TabsTrigger value="documentos" className="rounded-xl py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Central de Documentos
+          </TabsTrigger>
+          <TabsTrigger value="catalogo" className="rounded-xl py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            Catálogo
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="catalogo" className="space-y-4">
@@ -2046,12 +2057,21 @@ export function GrowObligationsWorkspace({
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-4">
-          <Card className="rounded-3xl">
-            <CardHeader>
-              <CardTitle>Central de Documentos</CardTitle>
-              <CardDescription>Arraste ou selecione PDFs para enviar.</CardDescription>
+          <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm">
+            <CardHeader className="border-b bg-muted/20">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <CardTitle>Central de Documentos</CardTitle>
+                  <CardDescription>Envie PDFs das obrigações e acompanhe a fila de processamento.</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="rounded-full">PDF</Badge>
+                  <Badge variant="outline" className="rounded-full">Leitura automática</Badge>
+                  <Badge variant="outline" className="rounded-full">Auditoria preservada</Badge>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5 p-6">
               <div className="space-y-4">
                 <div className="hidden">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
@@ -2163,10 +2183,10 @@ export function GrowObligationsWorkspace({
                   </div>
                 )}
                 <div
-                  className={`min-h-[280px] rounded-3xl border border-dashed p-8 transition-colors ${
+                  className={`group relative overflow-hidden rounded-3xl border border-dashed p-8 transition-all ${
                     isDraggingUpload
-                      ? "border-primary bg-primary/10 shadow-sm"
-                      : "border-primary/30 bg-primary/5"
+                      ? "border-primary bg-primary/10 shadow-md"
+                      : "border-border bg-muted/20 hover:border-primary/50 hover:bg-primary/[0.03]"
                   }`}
                   onDragEnter={(event) => {
                     event.preventDefault();
@@ -2189,12 +2209,23 @@ export function GrowObligationsWorkspace({
                     }
                   }}
                 >
-                  <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 text-center">
-                    <UploadCloud className="h-12 w-12 text-primary" />
-                    <div>
-                      <p className="text-lg font-medium">{isDraggingUpload ? "Solte os PDFs para adicionar" : "Arraste PDFs aqui"}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">PDFs serão adicionados à fila de envio.</p>
-                    </div>
+                  <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+                  <div className="grid min-h-[260px] items-center gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="flex flex-col items-center justify-center text-center lg:items-start lg:text-left">
+                      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                        <UploadCloud className="h-8 w-8" />
+                      </div>
+                      <p className="text-2xl font-semibold tracking-tight">
+                        {isDraggingUpload ? "Solte os PDFs para adicionar" : "Arraste PDFs para importar"}
+                      </p>
+                      <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                        Os arquivos entram na fila de envio para identificar cliente, competência e obrigação correspondente.
+                      </p>
+                      <div className="mt-5 flex flex-wrap justify-center gap-2 lg:justify-start">
+                        <Badge variant="secondary" className="rounded-full">PDFs múltiplos</Badge>
+                        <Badge variant="outline" className="rounded-full">Pré-validação</Badge>
+                        <Badge variant="outline" className="rounded-full">Baixa operacional</Badge>
+                      </div>
                     <input
                       ref={uploadInputRef}
                       type="file"
@@ -2208,13 +2239,31 @@ export function GrowObligationsWorkspace({
                         event.currentTarget.value = "";
                       }}
                     />
-                    <Button type="button" variant="outline" className="rounded-2xl" onClick={(event) => {
-                      event.stopPropagation();
-                      uploadInputRef.current?.click();
-                    }}>
-                      <UploadCloud className="mr-2 h-4 w-4" />
-                      Escolher arquivos
-                    </Button>
+                      <Button type="button" className="mt-6 rounded-xl" onClick={(event) => {
+                        event.stopPropagation();
+                        uploadInputRef.current?.click();
+                      }}>
+                        <UploadCloud className="mr-2 h-4 w-4" />
+                        Escolher arquivos
+                      </Button>
+                    </div>
+                    <div className="rounded-2xl border bg-background/80 p-4 shadow-sm">
+                      <p className="text-sm font-medium">Como funciona</p>
+                      <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                        <div className="flex gap-3">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">1</span>
+                          <span>Selecione ou arraste um ou mais PDFs para a central.</span>
+                        </div>
+                        <div className="flex gap-3">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">2</span>
+                          <span>O sistema cruza os dados com cliente, competência e obrigação.</span>
+                        </div>
+                        <div className="flex gap-3">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">3</span>
+                          <span>Documentos reconhecidos dão baixa operacional na tarefa correta.</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -2420,85 +2469,21 @@ export function GrowObligationsWorkspace({
                 </Button>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-3xl border p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div><p className="text-sm font-medium">Triagem pendente</p><p className="text-xs text-muted-foreground">{pendingDocuments.length} documentos aguardando analise</p></div>
-                    <Badge variant="secondary">{overview.summary.inbox_pending}</Badge>
-                  </div>
-                  <div className="space-y-3">
-                    {pendingDocuments.map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-border/60 p-3">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-medium">{item.file_name}</p>
-                            <Badge variant="outline">Score {item.reference_match_score.toFixed(2)}</Badge>
-                            <Badge variant="outline">{matchStrategyLabel(item.matched_by)}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">Cliente: {item.detected_client?.name || item.client?.name || "não identificado"} · CNPJ: {item.detected_cnpj || "não detectado"} · Documento: {item.document_definition?.label || item.document_type_key || "não identificado"}</p>
-                          {item.auto_link_block_reason && <p className="text-[11px] text-orange-600">{item.auto_link_block_reason}</p>}
-                          <p className="text-[11px] text-muted-foreground">{item.reference_match_reasons.join(" · ")}</p>
-                          {item.execution_notes && <p className="text-[11px] text-muted-foreground">{item.execution_notes}</p>}
-                          <div className="flex flex-wrap gap-2">
-                            <Badge variant="outline">{classificationStatusLabel(item.classification_status)}</Badge>
-                            <Badge variant="outline">{processingStatusLabel(item.processing_status)}</Badge>
-                            <Badge variant="outline">{executionStatusLabel(item.execution_status)}</Badge>
-                            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => { setDocumentResolutionId(item.id); setDocumentResolutionInstanceId(item.linked_instance?.id || ""); setDocumentResolutionNotes(item.notes || ""); }}>Revisar vinculo</Button>
-                            <Button variant="ghost" size="sm" className="rounded-xl text-destructive" onClick={() => documentResolveMutation.mutate({ inboxItemId: item.id, decision: "reject", notes: "Documento rejeitado manualmente." })}>Rejeitar</Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div><p className="text-sm font-medium">Ultimos documentos</p><p className="text-xs text-muted-foreground">Historico recente da central interna</p></div>
-                    <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="space-y-3">
-                    {overview.documents.slice(0, 8).map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-border/60 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">{item.file_name}</p>
-                            <p className="text-xs text-muted-foreground">{item.detected_client?.name || item.client?.name || "Sem cliente"} · {item.document_definition?.label || item.document_type_key || "Sem documento"}</p>
-                            <p className="text-[11px] text-muted-foreground">{matchStrategyLabel(item.matched_by)} · {formatDateTime(item.created_at)}</p>
-                            {item.execution_notes && <p className="text-[11px] text-muted-foreground">{item.execution_notes}</p>}
-                            {item.archive_path && <p className="text-[11px] text-muted-foreground">Arquivo lógico: {item.archive_path}</p>}
-                            {item.protocol_number && <p className="text-[11px] text-muted-foreground">Protocolo: {item.protocol_number}</p>}
-                            <p className="text-[11px] text-muted-foreground">
-                              Origem: {item.source_kind === "local_robot" ? "Robô local" : item.source_kind === "api" ? "API" : "Central web"} · Comunicação: {communicationStatusLabel(item.communication_status)} · Publicação: {publicationStatusLabel(item.publication_status)}
-                            </p>
-                            {item.last_processing_error && <p className="text-[11px] text-destructive">{item.last_processing_error}</p>}
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <Badge variant={item.status === "linked" ? "default" : item.status === "rejected" ? "destructive" : "secondary"}>{inboxStatusLabel(item.status)}</Badge>
-                            <Badge variant="outline">{classificationStatusLabel(item.classification_status)}</Badge>
-                            <Badge variant="outline">{processingStatusLabel(item.processing_status)}</Badge>
-                            <Badge variant="outline">{executionStatusLabel(item.execution_status)}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border p-5 xl:col-span-2">
-                  <div className="mb-4 flex items-center justify-between">
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-border/70 bg-muted/10 p-5">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium">Historico de envios</p>
+                      <p className="text-sm font-semibold">Histórico de envios</p>
                       <p className="text-xs text-muted-foreground">Tentativas recentes preservadas para auditoria.</p>
                     </div>
-                    <Badge variant="secondary">{deliveryAttempts.length}</Badge>
+                    <Badge variant="secondary" className="rounded-full px-3">{deliveryAttempts.length}</Badge>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {deliveryAttempts.slice(0, 12).map((attempt) => (
-                      <div key={attempt.id} className="rounded-2xl border border-border/60 p-3">
+                      <div key={attempt.id} className="rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-sm font-medium">{attempt.recipient_email}</p>
-                          <Badge variant={attempt.status === "sent" ? "default" : attempt.status === "failed" ? "destructive" : "outline"}>
+                          <Badge className="rounded-full" variant={attempt.status === "sent" ? "default" : attempt.status === "failed" ? "destructive" : "outline"}>
                             {attempt.status}
                           </Badge>
                         </div>
@@ -2510,7 +2495,10 @@ export function GrowObligationsWorkspace({
                       </div>
                     ))}
                     {deliveryAttempts.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Nenhuma tentativa registrada ainda.</p>
+                      <div className="rounded-2xl border border-dashed bg-background/70 p-6 text-center lg:col-span-2">
+                        <p className="text-sm font-medium">Nenhum envio registrado</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Quando houver tentativa de envio, ela aparecerá aqui.</p>
+                      </div>
                     ) : null}
                   </div>
                 </div>

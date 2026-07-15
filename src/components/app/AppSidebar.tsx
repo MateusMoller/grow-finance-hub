@@ -4,21 +4,25 @@ import {
   CalendarDays,
   BarChart3,
   FileSpreadsheet,
-  Bell,
-  Settings,
   TrendingUp,
   ClipboardList,
-  BookOpenText,
   Newspaper,
   MessagesSquare,
   UserCog,
   Lightbulb,
+  ChevronDown,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import growIcon from "@/assets/grow-icon.png";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -32,6 +36,7 @@ import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { routeFeatureMap } from "@/lib/organizationFeatures";
 import { canAccessModule, resolveRouteModule } from "@/lib/userPermissions";
+import type { ReactNode } from "react";
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
@@ -41,7 +46,7 @@ const mainItems = [
 ];
 
 const operationalItems = [
-  { title: "CRM", url: "/app/crm", icon: TrendingUp },
+  { title: "Vendas", url: "/app/crm", icon: TrendingUp },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
@@ -49,11 +54,8 @@ const operationalItems = [
 ];
 
 const systemItems = [
-  { title: "Notificações", url: "/app/notificacoes", icon: Bell },
   { title: "Usuários", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
-  { title: "Manual de uso", url: "/app/manual", icon: BookOpenText },
-  { title: "Configurações", url: "/app/configuracoes", icon: Settings },
 ];
 
 function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {
@@ -61,35 +63,52 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
   const collapsed = state === "collapsed";
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <NavLink
-                  to={item.url}
-                  end={item.url === "/app"}
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false);
-                  }}
-                  className="hover:bg-sidebar-accent/50"
-                  activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
-                >
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {!collapsed && <span>{item.title}</span>}
-                </NavLink>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <Collapsible defaultOpen className="group/section">
+      <SidebarGroup>
+        <CollapsibleTrigger asChild disabled={collapsed}>
+          <SidebarGroupLabel
+            className={
+              collapsed
+                ? "cursor-default"
+                : "flex cursor-pointer items-center justify-between rounded-md pr-2 transition-colors hover:bg-sidebar-accent/35"
+            }
+          >
+            <span>{label}</span>
+            {!collapsed && (
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=closed]/section:-rotate-90" />
+            )}
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      end={item.url === "/app"}
+                      onClick={() => {
+                        if (isMobile) setOpenMobile(false);
+                      }}
+                      className="hover:bg-sidebar-accent/50"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                    >
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
   );
 }
 
-export function AppSidebar() {
+export function AppSidebar({ footerControls }: { footerControls?: ReactNode }) {
   const { state } = useSidebar();
   const { role, roles, effectiveAccess } = useAuth();
   const { isFeatureEnabled } = useOrganizationSettings();
@@ -104,6 +123,11 @@ export function AppSidebar() {
     return (
       <Sidebar collapsible="icon">
         <SidebarContent className="pb-[max(env(safe-area-inset-bottom),0.75rem)]" />
+        {footerControls && (
+          <SidebarFooter className="border-t border-sidebar-border/70 px-3 py-3">
+            {footerControls}
+          </SidebarFooter>
+        )}
       </Sidebar>
     );
   }
@@ -162,6 +186,11 @@ export function AppSidebar() {
         {visibleOperationalItems.length > 0 && <SidebarSection label="Operacional" items={visibleOperationalItems} />}
         {visibleSystemItems.length > 0 && <SidebarSection label="Sistema" items={visibleSystemItems} />}
       </SidebarContent>
+      {footerControls && (
+        <SidebarFooter className="border-t border-sidebar-border/70 px-3 py-3">
+          {footerControls}
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

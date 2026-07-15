@@ -7,7 +7,7 @@ import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, MessageSquare, Send, ShieldCheck, UserRound, Users } from "lucide-react";
+import { Download, FileText, Loader2, MessageSquare, Paperclip, Send, ShieldCheck, UserRound, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -24,6 +24,17 @@ interface InternalUser {
 }
 
 type ActiveChat = { type: "group" } | { type: "direct"; targetUserId: string };
+
+interface InternalChatAttachment {
+  type: "internal_chat_attachment";
+  text: string;
+  file: {
+    name: string;
+    path: string;
+    size: number;
+    contentType: string;
+  };
+}
 
 const formatMessageTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -54,6 +65,52 @@ const initialsFromName = (name: string) => {
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
 };
 
+const isHiddenSystemUser = (name: string | null | undefined) => {
+  const normalized = (name || "").trim().toLowerCase();
+  return normalized.startsWith("grow docume") || normalized.startsWith("grow bot");
+};
+
+const parseInternalChatAttachment = (content: string): InternalChatAttachment | null => {
+  try {
+    const parsed = JSON.parse(content) as Partial<InternalChatAttachment>;
+    if (
+      parsed.type !== "internal_chat_attachment" ||
+      !parsed.file ||
+      typeof parsed.file.name !== "string" ||
+      typeof parsed.file.path !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      type: "internal_chat_attachment",
+      text: typeof parsed.text === "string" ? parsed.text : "",
+      file: {
+        name: parsed.file.name,
+        path: parsed.file.path,
+        size: typeof parsed.file.size === "number" ? parsed.file.size : 0,
+        contentType: typeof parsed.file.contentType === "string" ? parsed.file.contentType : "application/octet-stream",
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
+const formatFileSize = (bytes: number) => {
+  if (!bytes) return "Tamanho não informado";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const sanitizeStorageFileName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "arquivo";
+
 export default function ChatInternoPage() {
   const { user, role, roles, currentOrganizationId, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<InternalMessage[]>([]);
@@ -62,8 +119,10 @@ export default function ChatInternoPage() {
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeRoles = useMemo(() => normalizeRoles(roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
   const canAccess = hasAnyInternalRole(activeRoles);
@@ -91,7 +150,7 @@ export default function ChatInternoPage() {
     }
 
     const users = ((data || []) as Array<{ user_id: string; display_name: string | null }>)
-      .filter((item) => item.user_id !== user.id)
+      .filter((item) => item.user_id !== user.id && !isHiddenSystemUser(item.display_name))
       .map((item) => ({
         userId: item.user_id,
         displayName: resolveDisplayName(item.display_name, `Usuário ${item.user_id.slice(0, 6)}`),
@@ -227,10 +286,39 @@ export default function ChatInternoPage() {
   }, [activeChat, contacts]);
 
   const handleSendMessage = async () => {
-    const content = newMessage.trim();
-    if (!content || !user) return;
+    const text = newMessage.trim();
+    const file = selectedFile;
+    if ((!text && !file) || !user || !currentOrganizationId) return;
 
     setSending(true);
+    let content = text;
+    let uploadedPath: string | null = null;
+
+    if (file) {
+      const chatScope = activeChat.type === "group" ? "group" : `direct-${activeChat.targetUserId}`;
+      const filePath = `${currentOrganizationId}/${user.id}/${chatScope}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("internal-chat-files")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        setSending(false);
+        toast.error(`Não foi possível anexar o arquivo: ${uploadError.message}`);
+        return;
+      }
+
+      uploadedPath = filePath;
+      content = JSON.stringify({
+        type: "internal_chat_attachment",
+        text,
+        file: {
+          name: file.name,
+          path: filePath,
+          size: file.size,
+          contentType: file.type || "application/octet-stream",
+        },
+      } satisfies InternalChatAttachment);
+    }
 
     const payload =
       activeChat.type === "group"
@@ -239,14 +327,14 @@ export default function ChatInternoPage() {
           content,
           chat_type: "group",
           recipient_user_id: null,
-          ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+          organization_id: currentOrganizationId,
         }
         : {
             user_id: user.id,
             content,
             chat_type: "direct",
             recipient_user_id: activeChat.targetUserId,
-            ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
+            organization_id: currentOrganizationId,
           };
 
     const { error } = await supabase.from("internal_chat_messages").insert(payload);
@@ -254,12 +342,30 @@ export default function ChatInternoPage() {
     setSending(false);
 
     if (error) {
+      if (uploadedPath) {
+        void supabase.storage.from("internal-chat-files").remove([uploadedPath]);
+      }
       toast.error(`Não foi possível enviar mensagem: ${error.message}`);
       return;
     }
 
     setNewMessage("");
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     void fetchMessages();
+  };
+
+  const handleDownloadAttachment = async (filePath: string) => {
+    const { data, error } = await supabase.storage
+      .from("internal-chat-files")
+      .createSignedUrl(filePath, 60);
+
+    if (error || !data?.signedUrl) {
+      toast.error("Não foi possível gerar o link do anexo.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -311,7 +417,7 @@ export default function ChatInternoPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-7xl space-y-6">
+      <div className="mx-auto flex h-[calc(100vh-7.5rem)] min-h-[640px] w-full max-w-none flex-col space-y-5 px-1 sm:px-2 xl:px-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-heading text-2xl font-bold">Chat Interno</h1>
@@ -332,37 +438,37 @@ export default function ChatInternoPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-          <aside className="rounded-xl border bg-card">
-            <div className="border-b px-4 py-3">
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <div className="border-b bg-muted/30 px-4 py-4">
               <p className="text-sm font-semibold">Conversas</p>
-              <p className="text-xs text-muted-foreground">
-                Escolha entre grupo geral e conversa pessoal.
+              <p className="text-xs leading-5 text-muted-foreground">
+                Canais internos e conversas diretas da equipe.
               </p>
             </div>
 
-            <div className="max-h-[62vh] overflow-y-auto p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <button
                 type="button"
-                className={`mb-2 w-full rounded-lg border p-3 text-left transition-colors ${
+                className={`mb-3 w-full rounded-2xl border p-3 text-left transition-all ${
                   activeChat.type === "group"
-                    ? "border-primary bg-primary/10"
-                    : "hover:bg-muted"
+                    ? "border-primary/40 bg-primary/10 shadow-sm"
+                    : "border-transparent bg-muted/30 hover:bg-muted"
                 }`}
                 onClick={() => setActiveChat({ type: "group" })}
               >
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-primary/15 text-primary flex items-center justify-center">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <Users className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium">Grupo Geral</p>
-                    <p className="text-xs text-muted-foreground">Canal unico de toda equipe</p>
+                    <p className="text-sm font-semibold">Grupo Geral</p>
+                    <p className="text-xs text-muted-foreground">Canal único da equipe</p>
                   </div>
                 </div>
               </button>
 
-              <div className="mb-2 px-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+              <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Conversas pessoais
               </div>
 
@@ -375,7 +481,7 @@ export default function ChatInternoPage() {
                   Nenhum outro usuário interno encontrado.
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {contacts.map((contact) => {
                     const isActive =
                       activeChat.type === "direct" &&
@@ -385,15 +491,17 @@ export default function ChatInternoPage() {
                       <button
                         key={contact.userId}
                         type="button"
-                        className={`w-full rounded-lg border p-2.5 text-left transition-colors ${
-                          isActive ? "border-primary bg-primary/10" : "hover:bg-muted"
+                        className={`w-full rounded-2xl border p-2.5 text-left transition-all ${
+                          isActive
+                            ? "border-primary/40 bg-primary/10 shadow-sm"
+                            : "border-transparent hover:bg-muted"
                         }`}
                         onClick={() =>
                           setActiveChat({ type: "direct", targetUserId: contact.userId })
                         }
                       >
                         <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                             {initialsFromName(contact.displayName)}
                           </div>
                           <div className="min-w-0">
@@ -409,20 +517,34 @@ export default function ChatInternoPage() {
             </div>
           </aside>
 
-          <section className="rounded-xl border bg-card">
-            <div className="border-b px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold">{chatTitle}</p>
-                <p className="text-xs text-muted-foreground">
-                  Enter para enviar. Shift+Enter para quebrar linha.
-                </p>
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                  {activeChat.type === "group" ? (
+                    <Users className="h-5 w-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">
+                      {initialsFromName(activeDirectUser?.displayName || "Usuário")}
+                    </span>
+                  )}
+                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-emerald-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{chatTitle}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {activeChat.type === "group"
+                      ? "Canal interno para alinhamentos rápidos da equipe"
+                      : "Conversa direta entre usuários internos"}
+                  </p>
+                </div>
               </div>
               <Badge variant="outline" className="gap-1.5">
                 <UserRound className="h-3.5 w-3.5" /> {participantsInCurrentChat} participante(s)
               </Badge>
             </div>
 
-            <div className="h-[52vh] min-h-[320px] space-y-3 overflow-y-auto px-4 py-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-4 py-5 [background-image:linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] [background-size:28px_28px]">
               {loadingMessages ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -440,6 +562,7 @@ export default function ChatInternoPage() {
                 <AnimatePresence initial={false}>
                   {messages.map((message) => {
                     const isOwn = message.user_id === user?.id;
+                    const attachment = parseInternalChatAttachment(message.content);
                     const senderName =
                       message.profile?.display_name?.trim() ||
                       (isOwn ? "Voce" : `Usuário ${message.user_id.slice(0, 6)}`);
@@ -449,30 +572,61 @@ export default function ChatInternoPage() {
                         key={message.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                        className={`flex items-end gap-2 ${isOwn ? "justify-end" : "justify-start"}`}
                       >
+                        {!isOwn && (
+                          <div className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-card text-[10px] font-semibold text-muted-foreground shadow-sm">
+                            {initialsFromName(senderName)}
+                          </div>
+                        )}
                         <div
-                          className={`max-w-[92%] rounded-2xl px-4 py-2.5 sm:max-w-[78%] ${
+                          className={`max-w-[92%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[72%] ${
                             isOwn
-                              ? "rounded-br-md bg-primary text-primary-foreground"
-                              : "rounded-bl-md bg-muted"
+                              ? "rounded-br-md bg-[#dcf8c6] text-slate-900"
+                              : "rounded-bl-md bg-card text-card-foreground"
                           }`}
                         >
                           <div className="mb-1 flex items-center justify-between gap-3">
-                            <p className="text-xs font-semibold opacity-80">
-                              {activeChat.type === "group" ? senderName : isOwn ? "Voce" : senderName}
+                            <p className="text-xs font-semibold text-muted-foreground">
+                              {activeChat.type === "group" ? senderName : isOwn ? "Você" : senderName}
                             </p>
-                            <p
-                              className={`text-[10px] ${
-                                isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
-                              }`}
-                            >
+                            <p className="text-[10px] text-muted-foreground">
                               {formatMessageTime(message.created_at)}
                             </p>
                           </div>
-                          <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                            {message.content}
-                          </p>
+                          {attachment ? (
+                            <div className="space-y-2">
+                              {attachment.text && (
+                                <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                                  {attachment.text}
+                                </p>
+                              )}
+                              <button
+                                type="button"
+                                className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                                  isOwn
+                                    ? "border-slate-900/10 bg-white/40 hover:bg-white/60"
+                                    : "border-border bg-muted/50 hover:bg-muted"
+                                }`}
+                                onClick={() => handleDownloadAttachment(attachment.file.path)}
+                              >
+                                <FileText className="h-4 w-4 shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate font-medium">
+                                    {attachment.file.name}
+                                  </span>
+                                  <span className="block text-muted-foreground">
+                                    {formatFileSize(attachment.file.size)}
+                                  </span>
+                                </span>
+                                <Download className="h-3.5 w-3.5 shrink-0" />
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                              {message.content}
+                            </p>
+                          )}
                         </div>
                       </motion.div>
                     );
@@ -483,22 +637,68 @@ export default function ChatInternoPage() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="border-t px-4 py-3">
-              <div className="flex items-end gap-2">
-                <Textarea
-                  rows={2}
-                  value={newMessage}
-                  onChange={(event) => setNewMessage(event.target.value)}
-                  onKeyDown={handleInputKeyDown}
-                  placeholder={inputPlaceholder}
-                  className="resize-none"
+            <div className="border-t bg-card px-4 py-3">
+              <div className="flex items-end gap-2 rounded-2xl bg-muted/50 p-2">
+                <div className="min-w-0 flex-1">
+                  {selectedFile && (
+                    <div className="mb-2 flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-xs shadow-sm">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {selectedFile.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatFileSize(selectedFile.size)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        aria-label="Remover anexo"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                  <Textarea
+                    rows={1}
+                    value={newMessage}
+                    onChange={(event) => setNewMessage(event.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    placeholder={inputPlaceholder}
+                    className="max-h-32 min-h-11 resize-none rounded-xl border-0 bg-background px-4 py-3 shadow-sm focus-visible:ring-1"
+                  />
+                  <p className="mt-1 px-1 text-[11px] text-muted-foreground">
+                    Enter envia. Shift+Enter quebra linha.
+                  </p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
                 />
                 <Button
                   type="button"
+                  variant="outline"
                   size="icon"
-                  className="h-10 w-10 shrink-0"
+                  className="h-11 w-11 shrink-0 rounded-full bg-background"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sending}
+                  aria-label="Anexar arquivo"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 rounded-full"
                   onClick={() => void handleSendMessage()}
-                  disabled={sending || !newMessage.trim()}
+                  disabled={sending || (!newMessage.trim() && !selectedFile)}
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>

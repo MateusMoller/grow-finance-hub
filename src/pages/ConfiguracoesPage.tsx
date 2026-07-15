@@ -5,11 +5,8 @@ import {
   Bell,
   Building2,
   ChevronRight,
-  Copy,
-  Globe,
   Loader2,
   Palette,
-  RefreshCcw,
   Shield,
   Upload,
   User,
@@ -24,18 +21,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import type { TablesInsert } from "@/integrations/supabase/types";
-import { applyOrganizationScope, withOrganizationId } from "@/lib/tenantCompatibility";
+import { applyOrganizationScope } from "@/lib/tenantCompatibility";
 
-type SettingSectionId = "profile" | "company" | "security" | "notifications" | "appearance" | "integrations";
+type SettingSectionId = "profile" | "company" | "security" | "notifications" | "appearance";
 type ThemePreference = "light" | "dark" | "system";
-type IntegrationTokenStatus = {
-  enabled: boolean;
-  token_configured: boolean;
-  token_prefix: string | null;
-  last_used_at: string | null;
-  rotated_at: string | null;
-  revealed_token?: string | null;
-};
 
 const settingSections: { id: SettingSectionId; title: string; description: string; icon: typeof User }[] = [
   { id: "profile", title: "Perfil", description: "Dados pessoais e avatar", icon: User },
@@ -43,7 +32,6 @@ const settingSections: { id: SettingSectionId; title: string; description: strin
   { id: "security", title: "Seguranca", description: "Senha e autenticacao", icon: Shield },
   { id: "notifications", title: "Notificacoes", description: "Alertas do sistema", icon: Bell },
   { id: "appearance", title: "Aparencia", description: "Tema e idioma", icon: Palette },
-  { id: "integrations", title: "Integracoes", description: "Conexoes externas", icon: Globe },
 ];
 
 const notificationLabels = [
@@ -53,33 +41,6 @@ const notificationLabels = [
   { key: "newLeads", title: "Novos leads", desc: "Quando lead for capturado" },
   { key: "dailyEmail", title: "Resumo diario por e-mail", desc: "Resumo de eventos diarios" },
 ] as const;
-
-function isMissingColumnError(message: string | undefined, column: string) {
-  if (!message) return false;
-  const normalized = message.toLowerCase();
-  return normalized.includes("column") && normalized.includes(column.toLowerCase());
-}
-
-function readStringSetting(settings: Record<string, unknown>, modernKey: string, legacyKey: string) {
-  const modernValue = settings[modernKey];
-  if (typeof modernValue === "string") return modernValue;
-  const legacyValue = settings[legacyKey];
-  if (typeof legacyValue === "string") return legacyValue;
-  return "";
-}
-
-function readBooleanSetting(
-  settings: Record<string, unknown>,
-  modernKey: string,
-  legacyKey: string,
-  fallback = false,
-) {
-  const modernValue = settings[modernKey];
-  if (typeof modernValue === "boolean") return modernValue;
-  const legacyValue = settings[legacyKey];
-  if (typeof legacyValue === "boolean") return legacyValue;
-  return fallback;
-}
 
 function normalizeThemePreference(value: unknown, fallback: ThemePreference = "system"): ThemePreference {
   if (typeof value !== "string") return fallback;
@@ -99,7 +60,6 @@ export default function ConfiguracoesPage() {
   const [loading, setLoading] = useState(true);
   const [savingSection, setSavingSection] = useState<SettingSectionId | "avatar" | null>(null);
   const [savingThemePreference, setSavingThemePreference] = useState(false);
-  const [integrationTokenAction, setIntegrationTokenAction] = useState<"rotate" | "toggle" | "copy" | null>(null);
 
   const [profileForm, setProfileForm] = useState({
     displayName: "",
@@ -127,20 +87,6 @@ export default function ConfiguracoesPage() {
     languageCode: "pt-BR",
     compactMode: false,
   });
-  const [integrationSettings, setIntegrationSettings] = useState({
-    calendarSync: false,
-    driveSync: false,
-    webhookUrl: "",
-    apiAccess: false,
-  });
-  const [integrationTokenStatus, setIntegrationTokenStatus] = useState<IntegrationTokenStatus>({
-    enabled: false,
-    token_configured: false,
-    token_prefix: null,
-    last_used_at: null,
-    rotated_at: null,
-    revealed_token: null,
-  });
   const [securityForm, setSecurityForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -157,16 +103,11 @@ export default function ConfiguracoesPage() {
       : supabase.from("user_settings").upsert({ user_id: user.id, ...payload }, { onConflict: "user_id" });
   };
 
-  const invokeIntegrationTokenManager = useCallback((body: Record<string, unknown>) =>
-    supabase.functions.invoke<IntegrationTokenStatus>("manage-integration-token", {
-      body: withOrganizationId(body, currentOrganizationId),
-    }), [currentOrganizationId]);
-
   const loadSettings = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
-    const [profileRes, settingsRes, tokenStatusRes] = await Promise.all([
+    const [profileRes, settingsRes] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_url").eq("user_id", user.id).maybeSingle(),
       applyOrganizationScope(
         supabase
@@ -175,12 +116,10 @@ export default function ConfiguracoesPage() {
           .eq("user_id", user.id),
         currentOrganizationId,
       ).maybeSingle(),
-      invokeIntegrationTokenManager({ action: "status" }),
     ]);
 
     if (profileRes.error) toast.error("Falha ao carregar perfil.");
     if (settingsRes.error) toast.error("Falha ao carregar configurações.");
-    if (tokenStatusRes.error) toast.error("Falha ao carregar o status do token.");
 
     const profile = profileRes.data;
     const settings = (settingsRes.data || {}) as Record<string, unknown>;
@@ -213,27 +152,13 @@ export default function ConfiguracoesPage() {
       languageCode: typeof settings.language_code === "string" ? settings.language_code : "pt-BR",
       compactMode: typeof settings.compact_mode === "boolean" ? settings.compact_mode : false,
     });
-    setIntegrationSettings({
-      calendarSync: readBooleanSetting(settings, "calendar_sync", "integrations_calendar_sync"),
-      driveSync: readBooleanSetting(settings, "drive_sync", "integrations_drive_sync"),
-      webhookUrl: readStringSetting(settings, "webhook_url", "integrations_webhook_url"),
-      apiAccess: tokenStatusRes.data?.enabled ?? false,
-    });
-    setIntegrationTokenStatus({
-      enabled: tokenStatusRes.data?.enabled ?? false,
-      token_configured: tokenStatusRes.data?.token_configured ?? false,
-      token_prefix: tokenStatusRes.data?.token_prefix ?? null,
-      last_used_at: tokenStatusRes.data?.last_used_at ?? null,
-      rotated_at: tokenStatusRes.data?.rotated_at ?? null,
-      revealed_token: null,
-    });
 
     if (initialTheme !== currentTheme) {
       setTheme(initialTheme);
     }
 
     setLoading(false);
-  }, [currentOrganizationId, invokeIntegrationTokenManager, setTheme, theme, user]);
+  }, [currentOrganizationId, setTheme, theme, user]);
 
   useEffect(() => {
     if (user) {
@@ -359,82 +284,6 @@ export default function ConfiguracoesPage() {
     setSavingSection(null);
     if (error) return toast.error("Erro ao salvar aparencia.");
     toast.success("Aparencia salva.");
-  };
-
-  const saveIntegrations = async () => {
-    setSavingSection("integrations");
-    let { error } = await upsertUserSettings({
-      calendar_sync: integrationSettings.calendarSync,
-      drive_sync: integrationSettings.driveSync,
-      webhook_url: integrationSettings.webhookUrl.trim() || null,
-    });
-
-    if (
-      error &&
-      (
-        isMissingColumnError(error.message, "calendar_sync") ||
-        isMissingColumnError(error.message, "drive_sync") ||
-        isMissingColumnError(error.message, "webhook_url")
-      )
-    ) {
-      ({ error } = await upsertUserSettings({
-        integrations_calendar_sync: integrationSettings.calendarSync,
-        integrations_drive_sync: integrationSettings.driveSync,
-        integrations_webhook_url: integrationSettings.webhookUrl.trim() || null,
-      } as unknown as Partial<Omit<TablesInsert<"user_settings">, "user_id">>));
-    }
-
-    setSavingSection(null);
-    if (error) return toast.error("Erro ao salvar integracoes.");
-    toast.success("Integracoes salvas.");
-  };
-
-  const handleRotateIntegrationToken = async () => {
-    setIntegrationTokenAction("rotate");
-    const { data, error } = await invokeIntegrationTokenManager({ action: "rotate" });
-    setIntegrationTokenAction(null);
-
-    if (error || !data) {
-      toast.error("Não foi possível gerar um novo token seguro.");
-      return;
-    }
-
-    setIntegrationTokenStatus(data);
-    setIntegrationSettings((prev) => ({ ...prev, apiAccess: data.enabled }));
-    toast.success("Novo token gerado. Copie-o agora; ele não será exibido novamente.");
-  };
-
-  const handleIntegrationAccessToggle = async (enabled: boolean) => {
-    if (enabled && !integrationTokenStatus.token_configured) {
-      await handleRotateIntegrationToken();
-      return;
-    }
-
-    setIntegrationTokenAction("toggle");
-    const { data, error } = await invokeIntegrationTokenManager({ action: "set_enabled", enabled });
-    setIntegrationTokenAction(null);
-
-    if (error || !data) {
-      toast.error("Não foi possível atualizar o acesso por token.");
-      return;
-    }
-
-    setIntegrationTokenStatus((prev) => ({ ...prev, ...data, revealed_token: prev.revealed_token }));
-    setIntegrationSettings((prev) => ({ ...prev, apiAccess: data.enabled }));
-    toast.success(enabled ? "Acesso por token habilitado." : "Acesso por token desabilitado.");
-  };
-
-  const copyIntegrationToken = async () => {
-    if (!integrationTokenStatus.revealed_token) return;
-    setIntegrationTokenAction("copy");
-    try {
-      await navigator.clipboard.writeText(integrationTokenStatus.revealed_token);
-      toast.success("Token copiado.");
-    } catch {
-      toast.error("Não foi possível copiar o token.");
-    } finally {
-      setIntegrationTokenAction(null);
-    }
   };
 
   const changePassword = async () => {
@@ -705,112 +554,7 @@ export default function ConfiguracoesPage() {
                 </Button>
               </div>
             )}
-
-            {activeSection === "integrations" && (
-              <div className="rounded-xl border bg-card p-6">
-                <h2 className="font-heading font-semibold mb-4">Integracoes</h2>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium">Sincronização com calendário</div>
-                      <div className="text-xs text-muted-foreground">Atualiza compromissos automaticamente</div>
-                    </div>
-                    <Switch
-                      checked={integrationSettings.calendarSync}
-                      onCheckedChange={(checked) => setIntegrationSettings((prev) => ({ ...prev, calendarSync: checked }))}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium">Integracao com drive</div>
-                      <div className="text-xs text-muted-foreground">Sincroniza arquivos enviados</div>
-                    </div>
-                    <Switch
-                      checked={integrationSettings.driveSync}
-                      onCheckedChange={(checked) => setIntegrationSettings((prev) => ({ ...prev, driveSync: checked }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">Webhook</Label>
-                    <Input
-                      value={integrationSettings.webhookUrl}
-                      onChange={(event) => setIntegrationSettings((prev) => ({ ...prev, webhookUrl: event.target.value }))}
-                    />
-                  </div>
-
-                  <div className="rounded-lg border p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium">Acesso por token</div>
-                        <div className="text-xs text-muted-foreground">
-                          O token e gerenciado no servidor e apenas o hash fica persistido.
-                        </div>
-                      </div>
-                      <Switch
-                        checked={integrationSettings.apiAccess}
-                        onCheckedChange={(checked) => void handleIntegrationAccessToggle(checked)}
-                        disabled={integrationTokenAction === "toggle" || integrationTokenAction === "rotate"}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-sm">Status do token</Label>
-                      <Input
-                        readOnly
-                        value={
-                          integrationTokenStatus.revealed_token ||
-                          (integrationTokenStatus.token_configured ? `${integrationTokenStatus.token_prefix}...` : "Nenhum token ativo")
-                        }
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void handleRotateIntegrationToken()}
-                        disabled={integrationTokenAction === "rotate" || integrationTokenAction === "toggle"}
-                      >
-                        {integrationTokenAction === "rotate" ? (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        ) : (
-                          <RefreshCcw className="h-4 w-4 mr-1" />
-                        )}
-                        Gerar novo token
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void copyIntegrationToken()}
-                        disabled={!integrationTokenStatus.revealed_token || integrationTokenAction === "copy"}
-                      >
-                        {integrationTokenAction === "copy" ? (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        ) : (
-                          <Copy className="h-4 w-4 mr-1" />
-                        )}
-                        Copiar token
-                      </Button>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      O valor completo do token so aparece no momento da geracao. Ultimo uso:{" "}
-                      {integrationTokenStatus.last_used_at
-                        ? new Date(integrationTokenStatus.last_used_at).toLocaleString("pt-BR")
-                        : "ainda não utilizado"}
-                      .
-                    </p>
-                  </div>
-                </div>
-
-                <Button className="mt-4" onClick={saveIntegrations} disabled={savingSection === "integrations"}>
-                  {savingSection === "integrations" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Salvar integracoes
-                </Button>
-              </div>
-            )}
-
-            {activeSection === "security" && (
+{activeSection === "security" && (
               <div className="rounded-xl border bg-card p-6">
                 <h2 className="font-heading font-semibold mb-4">Seguranca</h2>
                 <div className="space-y-4">

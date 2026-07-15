@@ -63,11 +63,16 @@ import {
   getCanonicalTaskSectorAccess,
   normalizeTaskSectorLabel,
 } from "@/lib/taskSectorAccess";
-import { loadTaskAssignees } from "@/lib/taskAssignees";
+import {
+  formatTaskAssigneeLabel,
+  loadTaskAssignees,
+  type TaskAssigneeOption,
+} from "@/lib/taskAssignees";
+import { normalizeSectorCode, type SectorCode } from "@/lib/userPermissions";
 import type { Tables } from "@/integrations/supabase/types";
 import {
-  addHistoryEntry,
-  getEntityHistory,
+  getTaskHistoryEntries,
+  recordTaskHistoryEntry,
   type ChangeHistoryEntry,
 } from "@/lib/changeHistory";
 
@@ -266,9 +271,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [assigneeOptions, setAssigneeOptions] = useState<
-    Array<{ id: string; name: string }>
-  >([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<TaskAssigneeOption[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [subtasksAvailable, setSubtasksAvailable] = useState(true);
@@ -313,16 +318,43 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
         : ["Todos", ...availableSectors],
     [availableSectors, taskSectorAccess.canAccessAllTaskSectors],
   );
+  const newTaskSectorCode = useMemo<SectorCode | null>(
+    () => normalizeSectorCode(newTask.sector),
+    [newTask.sector],
+  );
+  const filteredCreateAssigneeOptions = useMemo(
+    () =>
+      newTaskSectorCode
+        ? assigneeOptions.filter(
+            (option) => option.sectorCode === newTaskSectorCode,
+          )
+        : [],
+    [assigneeOptions, newTaskSectorCode],
+  );
 
-  const registerTaskHistory = (
+  useEffect(() => {
+    if (!newTask.assignedToUserId) return;
+
+    const selected = assigneeOptions.find(
+      (option) => option.id === newTask.assignedToUserId,
+    );
+    if (!newTaskSectorCode || selected?.sectorCode !== newTaskSectorCode) {
+      setNewTask((prev) => ({
+        ...prev,
+        assignee: "",
+        assignedToUserId: "",
+      }));
+    }
+  }, [assigneeOptions, newTask.assignedToUserId, newTaskSectorCode]);
+
+  const registerTaskHistory = async (
     taskId: string,
     action: string,
     details?: string,
   ) => {
-    if (!user?.id) return;
-    addHistoryEntry(user.id, {
-      entityType: "task",
-      entityId: taskId,
+    await recordTaskHistoryEntry({
+      organizationId: currentOrganizationId,
+      taskId,
       action,
       details,
       actor: actorLabel,
@@ -399,7 +431,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       setAssigneeOptions(await loadTaskAssignees(currentOrganizationId));
     } catch {
       setAssigneeOptions([]);
-      toast.error("Nao foi possivel carregar os responsaveis.");
+      toast.error("Não foi possível carregar os responsáveis.");
     }
   }, [currentOrganizationId]);
 
@@ -448,15 +480,26 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   });
 
   useEffect(() => {
-    if (!user?.id || !selectedTask?.id) {
+    if (!currentOrganizationId || !selectedTask?.id) {
       setSelectedTaskHistory([]);
       return;
     }
 
-    setSelectedTaskHistory(
-      getEntityHistory(user.id, "task", selectedTask.id, 12),
-    );
-  }, [historyVersion, selectedTask?.id, user?.id]);
+    let cancelled = false;
+    const loadHistory = async () => {
+      const history = await getTaskHistoryEntries(
+        currentOrganizationId,
+        selectedTask.id,
+        30,
+      );
+      if (!cancelled) setSelectedTaskHistory(history);
+    };
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganizationId, historyVersion, selectedTask?.id]);
 
   const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
     if (!subtasksAvailable) {
@@ -484,7 +527,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return { ...prev, subtasks: updatedSubtasks };
     });
 
-    registerTaskHistory(
+    void registerTaskHistory(
       taskId,
       toggledSubtask.done ? "Subtarefa reaberta" : "Subtarefa concluída",
       toggledSubtask.title,
@@ -508,7 +551,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
 
   const handleCreate = async () => {
     if (!newTask.title.trim()) {
-      toast.error("Titulo e obrigatorio");
+      toast.error("Título é obrigatório");
       return;
     }
 
@@ -575,7 +618,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
-    registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
+    void registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
 
     setCreateOpen(false);
     setNewSubtaskTitle("");
@@ -654,7 +697,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
     setSelectedTask((prev) => (prev?.id === taskId ? null : prev));
     setSheetOpen(false);
-    registerTaskHistory(taskId, "Tarefa excluida", taskToDelete.title);
+    void registerTaskHistory(taskId, "Tarefa excluida", taskToDelete.title);
 
     toast.success("Tarefa excluida", {
       action: {
@@ -675,7 +718,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               mapRowToTask(snapshot as unknown as KanbanTaskRow),
               ...prev,
             ]);
-            registerTaskHistory(
+            void registerTaskHistory(
               taskId,
               "Exclusao desfeita",
               taskToDelete.title,
@@ -714,7 +757,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
 
   const content = (
     <>
-      <div className="space-y-6 max-w-7xl">
+      <div className="max-w-7xl space-y-4">
         {!embedded && (
           <div className="flex items-center justify-between">
             <div>
@@ -729,9 +772,41 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           </div>
         )}
 
-        <TaskOriginLegend />
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card/45 px-3 py-2.5">
+          <TaskOriginLegend />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="flex w-full items-center gap-2 rounded-md border border-border/70 bg-background/80 px-3 py-2 sm:w-72">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input
+                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                placeholder="Buscar tarefa ou cliente..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+            <Filter className="hidden h-4 w-4 text-muted-foreground sm:block" />
+            <select
+              className="h-9 rounded-md border border-border/70 bg-background/80 px-3 text-xs outline-none"
+              value={sectorFilter}
+              onChange={(event) => setSectorFilter(event.target.value)}
+            >
+              {sectorFilterOptions.map((sector) => (
+                <option key={sector}>{sector}</option>
+              ))}
+            </select>
+            <select
+              className="h-9 rounded-md border border-border/70 bg-background/80 px-3 text-xs outline-none"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              {statuses.map((status) => (
+                <option key={status}>{status}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
           {[
             {
               label: "Total",
@@ -762,47 +837,16 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           ].map((item) => (
             <div
               key={item.label}
-              className="rounded-lg border bg-card p-3 text-center"
+              className="rounded-md border border-border/60 bg-muted/20 px-3 py-2"
             >
-              <div className={`text-xl font-bold ${item.color}`}>
+              <div className={`text-lg font-semibold leading-none ${item.color}`}>
                 {item.value}
               </div>
-              <div className="text-xs text-muted-foreground">{item.label}</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {item.label}
+              </div>
             </div>
           ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex w-full items-center gap-2 rounded-lg border bg-card px-3 py-2 sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <input
-              className="bg-transparent text-sm outline-none w-full placeholder:text-muted-foreground"
-              placeholder="Buscar tarefa ou cliente..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <select
-              className="text-sm bg-card border rounded-lg px-3 py-2 outline-none"
-              value={sectorFilter}
-              onChange={(event) => setSectorFilter(event.target.value)}
-            >
-              {sectorFilterOptions.map((sector) => (
-                <option key={sector}>{sector}</option>
-              ))}
-            </select>
-            <select
-              className="text-sm bg-card border rounded-lg px-3 py-2 outline-none"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              {statuses.map((status) => (
-                <option key={status}>{status}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
         {loading ? (
@@ -828,7 +872,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.04 }}
-                  className="relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all cursor-pointer"
+                  className="relative overflow-hidden rounded-lg border border-border/60 bg-card/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:shadow-sm cursor-pointer"
                   onClick={() => {
                     setSelectedTask(task);
                     setSheetOpen(true);
@@ -838,16 +882,16 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                     requestId={task.requestId}
                     integrationSource={task.integrationSource}
                   />
-                  <div className="flex items-start gap-4 pr-10 sm:pr-12">
+                  <div className="flex items-start gap-3 pr-10 sm:pr-12">
                     <div
-                      className={`mt-1 h-8 w-8 rounded-lg ${statusCfg.bg} flex items-center justify-center shrink-0`}
+                      className={`mt-0.5 h-7 w-7 rounded-md ${statusCfg.bg} flex items-center justify-center shrink-0`}
                     >
-                      <StatusIcon className={`h-4 w-4 ${statusCfg.color}`} />
+                      <StatusIcon className={`h-3.5 w-3.5 ${statusCfg.color}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-medium text-sm">{task.title}</h3>
+                          <h3 className="text-sm font-semibold text-foreground/95">{task.title}</h3>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {task.client || "Sem cliente"}
                           </p>
@@ -855,26 +899,26 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                           <Badge
                             variant="outline"
-                            className={`text-xs ${priorityCfg.color} ${priorityCfg.bg} border-0`}
+                            className={`border-0 text-[11px] ${priorityCfg.color} ${priorityCfg.bg}`}
                           >
                             {task.priority}
                           </Badge>
                           <Badge
                             variant="outline"
-                            className={`text-xs ${statusCfg.color} ${statusCfg.bg} border-0`}
+                            className={`border-0 text-[11px] ${statusCfg.color} ${statusCfg.bg}`}
                           >
                             {task.status}
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted-foreground">
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <CalendarDays className="h-3 w-3" />
                           {task.dueDate
                             ? new Date(task.dueDate).toLocaleDateString("pt-BR")
                             : "Sem prazo"}
                         </span>
-                        <span>{task.assignee || "Sem responsavel"}</span>
+                        <span>{task.assignee || "Sem responsável"}</span>
                         <span>{task.sector}</span>
                         <span className="flex items-center gap-1">
                           <Paperclip className="h-3 w-3" />
@@ -888,7 +932,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                           {task.tags.map((tag) => (
                             <span
                               key={tag}
-                              className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded text-xs"
+                              className="flex items-center gap-0.5 rounded bg-muted/70 px-1.5 py-0.5 text-xs"
                             >
                               <Tag className="h-2.5 w-2.5" />
                               {tag}
@@ -929,6 +973,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
         onDeleteTask={handleDeleteTask}
         onCommentCountChange={handleCommentCountChange}
         onAttachmentCountChange={handleAttachmentCountChange}
+        onHistory={(taskId, action, details) => {
+          void registerTaskHistory(taskId, action, details);
+        }}
         actorName={actorLabel}
         historyEntries={selectedTaskHistory}
       />
@@ -940,7 +987,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Titulo *</Label>
+              <Label>Título *</Label>
               <Input
                 placeholder="Ex: Fechamento contábil"
                 value={newTask.title}
@@ -1093,12 +1140,12 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label>Responsavel</Label>
+                <Label>Responsável</Label>
                 <select
                   className="w-full rounded-lg border bg-card px-3 py-2 text-sm outline-none"
                   value={newTask.assignedToUserId || "unassigned"}
                   onChange={(event) => {
-                    const selected = assigneeOptions.find(
+                    const selected = filteredCreateAssigneeOptions.find(
                       (option) => option.id === event.target.value,
                     );
                     setNewTask((prev) => ({
@@ -1112,9 +1159,20 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   }}
                 >
                   <option value="unassigned">Sem responsável</option>
-                  {assigneeOptions.map((option) => (
+                  {!newTaskSectorCode && (
+                    <option value="select-sector-first" disabled>
+                      Selecione um setor primeiro
+                    </option>
+                  )}
+                  {newTaskSectorCode &&
+                    filteredCreateAssigneeOptions.length === 0 && (
+                      <option value="no-sector-assignees" disabled>
+                        Nenhum responsável no setor selecionado
+                      </option>
+                    )}
+                  {filteredCreateAssigneeOptions.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.name}
+                      {formatTaskAssigneeLabel(option)}
                     </option>
                   ))}
                 </select>

@@ -19,6 +19,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -282,6 +283,10 @@ export default function ClientsPage() {
     () => clients.filter((client) => String(client.status || "").trim().toLowerCase() === "ativo").length,
     [clients],
   );
+  const totalInactiveClients = useMemo(
+    () => clients.filter((client) => String(client.status || "").trim().toLowerCase() === "inativo").length,
+    [clients],
+  );
 
   const isInactiveClient = (client: Client) =>
     String(client.status || "").trim().toLowerCase() === "inativo";
@@ -496,37 +501,59 @@ export default function ClientsPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-7xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-2xl font-bold">Clientes</h1>
-            <p className="text-sm text-muted-foreground">
-              {clients.length} clientes cadastrados <span className="mx-1">•</span> {totalActiveClients} ativos
-            </p>
-          </div>
-          {canCreateClients && (
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={openCreateDialog}>
-                <Plus className="mr-1 h-4 w-4" />
+      <div className="mx-auto w-full max-w-none space-y-5 px-1 sm:px-2 xl:px-3">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Users className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="font-heading text-2xl font-bold">Clientes</h1>
+                <p className="text-sm text-muted-foreground">
+                  Base cadastral da operação, acessos de portal e dados fiscais.
+                </p>
+              </div>
+            </div>
+            {canCreateClients && (
+              <Button className="h-11 gap-2 rounded-xl px-5 lg:self-start" onClick={openCreateDialog}>
+                <Plus className="h-4 w-4" />
                 Novo cliente
               </Button>
+            )}
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs text-muted-foreground">Total cadastrado</p>
+              <p className="mt-1 text-2xl font-bold">{clients.length}</p>
             </div>
-          )}
+            <div className="rounded-xl border bg-primary/5 p-4">
+              <p className="text-xs text-muted-foreground">Clientes ativos</p>
+              <p className="mt-1 text-2xl font-bold text-primary">{totalActiveClients}</p>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs text-muted-foreground">Inativos arquivados</p>
+              <p className="mt-1 text-2xl font-bold text-muted-foreground">{totalInactiveClients}</p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Buscar por nome ou CNPJ..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+        <div className="rounded-2xl border bg-card p-3 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-11 rounded-xl border-muted bg-muted/30 pl-10"
+                placeholder="Buscar por razão social, contato, e-mail ou CNPJ..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+            <Button variant="outline" className="h-11 gap-2 rounded-xl px-4">
+              <Filter className="h-4 w-4" /> Filtros
+            </Button>
           </div>
-          <Button variant="outline" size="sm">
-            <Filter className="mr-1 h-4 w-4" /> Filtros
-          </Button>
         </div>
 
         {loading ? (
@@ -534,17 +561,30 @@ export default function ClientsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border bg-card">
+          <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <div className="flex flex-col gap-1 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">Carteira de clientes</p>
+                <p className="text-xs text-muted-foreground">
+                  {filtered.length} resultado(s) na visualização atual
+                </p>
+              </div>
+              {search.trim() && (
+                <Button variant="ghost" size="sm" className="self-start rounded-lg" onClick={() => setSearch("")}>
+                  Limpar busca
+                </Button>
+              )}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Empresa</th>
-                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground md:table-cell">CNPJ</th>
-                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Tipo</th>
-                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Tributação</th>
-                    <th className="hidden p-4 text-left text-xs font-semibold text-muted-foreground lg:table-cell">Segmento</th>
-                    <th className="p-4 text-left text-xs font-semibold text-muted-foreground">Status</th>
+                  <tr className="border-b bg-card">
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Empresa</th>
+                    <th className="hidden px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:table-cell">CNPJ</th>
+                    <th className="hidden px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:table-cell">Tipo</th>
+                    <th className="hidden px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:table-cell">Tributação</th>
+                    <th className="hidden px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:table-cell">Segmento</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -554,26 +594,26 @@ export default function ClientsPage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: index * 0.03 }}
-                      className="cursor-pointer transition-colors hover:bg-muted/20"
+                      className="group cursor-pointer transition-colors hover:bg-primary/[0.035]"
                       onClick={() => navigate(`/app/clientes/${client.id}`)}
                     >
-                      <td className="p-4">
+                      <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 transition-colors group-hover:bg-primary/15">
                             <Building2 className="h-4 w-4 text-primary" />
                           </div>
-                          <div>
-                            <div className="text-sm font-medium">{client.name}</div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold">{client.name}</div>
                             <div className="text-xs text-muted-foreground">
                               {(client.client_entity_type || "matriz") === "filial" && client.parent_client?.name
                                 ? `Filial de ${client.parent_client.name}`
-                                : client.contact}
+                                : client.contact || "Contato não informado"}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
-                      <td className="hidden p-4 lg:table-cell">
+                      <td className="hidden px-5 py-4 text-sm text-muted-foreground md:table-cell">{client.cnpj || "Não informado"}</td>
+                      <td className="hidden px-5 py-4 lg:table-cell">
                         {(() => {
                           const entityType = client.client_entity_type || "matriz";
                           return (
@@ -583,9 +623,9 @@ export default function ClientsPage() {
                           );
                         })()}
                       </td>
-                      <td className="hidden p-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
-                      <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
-                      <td className="p-4">
+                      <td className="hidden px-5 py-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
+                      <td className="hidden px-5 py-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
+                      <td className="px-5 py-4">
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[client.status || ""] || "bg-muted"}`}
                         >
@@ -626,16 +666,16 @@ export default function ClientsPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: index * 0.02 }}
-                            className="cursor-pointer transition-colors hover:bg-muted/20 opacity-85"
+                            className="cursor-pointer transition-colors hover:bg-muted/30 opacity-85"
                             onClick={() => navigate(`/app/clientes/${client.id}`)}
                           >
-                            <td className="p-4">
+                            <td className="px-5 py-4">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted">
                                   <Building2 className="h-4 w-4 text-muted-foreground" />
                                 </div>
                                 <div>
-                                  <div className="text-sm font-medium">{client.name}</div>
+                                  <div className="text-sm font-semibold">{client.name}</div>
                                   <div className="text-xs text-muted-foreground">
                                     {(client.client_entity_type || "matriz") === "filial" && client.parent_client?.name
                                       ? `Filial de ${client.parent_client.name}`
@@ -644,8 +684,8 @@ export default function ClientsPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="hidden p-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
-                            <td className="hidden p-4 lg:table-cell">
+                            <td className="hidden px-5 py-4 text-sm text-muted-foreground md:table-cell">{client.cnpj}</td>
+                            <td className="hidden px-5 py-4 lg:table-cell">
                               {(() => {
                                 const entityType = client.client_entity_type || "matriz";
                                 return (
@@ -655,9 +695,9 @@ export default function ClientsPage() {
                                 );
                               })()}
                             </td>
-                            <td className="hidden p-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
-                            <td className="hidden p-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
-                            <td className="p-4">
+                            <td className="hidden px-5 py-4 text-sm lg:table-cell">{renderRegimeLabel(client.regime)}</td>
+                            <td className="hidden px-5 py-4 text-sm lg:table-cell">{client.sector || "Não informado"}</td>
+                            <td className="px-5 py-4">
                               <span
                                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[client.status || ""] || "bg-muted"}`}
                               >
@@ -845,7 +885,7 @@ export default function ClientsPage() {
             <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">Enviar WhatsApp automático ao concluir obrigações</p>
+                  <p className="text-sm font-semibold">Enviar WhatsApp automático ao concluir obrigações</p>
                   <p className="text-xs text-muted-foreground">
                     Ative apenas para clientes que devem receber confirmação automática no WhatsApp. O número será buscado no cadastro do cliente.
                   </p>

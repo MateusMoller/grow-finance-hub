@@ -21,8 +21,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getStoredCurrentOrganizationId,
-  growObligationStatusClass,
-  growObligationStatusLabel,
   growObligationSourceLabel,
   invokeGrowObligations,
   type GrowClientSnapshotPayload,
@@ -251,7 +249,7 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
           <div>
             <CardTitle>Obrigações do cliente</CardTitle>
             <CardDescription>
-              Vínculos ativos, próximas competências e geração operacional nativa da Grow.
+              Vínculos ativos que geram tarefas mensais automaticamente pela competência vigente.
             </CardDescription>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -261,7 +259,7 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <CardContent>
           <div className="space-y-3 rounded-3xl border border-border/70 p-4">
             <div className="flex items-center gap-2">
               <Link2 className="h-4 w-4 text-primary" />
@@ -311,27 +309,6 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
               })
             )}
           </div>
-
-          <div className="space-y-3 rounded-3xl border border-border/70 p-4">
-            <p className="text-sm font-medium">Competências recentes</p>
-            {(snapshot.instances || []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma competência gerada para este cliente ainda.</p>
-            ) : (
-              snapshot.instances.slice(0, 10).map((instance) => (
-                <div key={instance.id} className="rounded-2xl border border-border/60 p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium">{instance.template?.name || "Obrigação"}</p>
-                    <Badge className={`border-0 ${growObligationStatusClass[instance.status]}`}>
-                      {growObligationStatusLabel[instance.status]}
-                    </Badge>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Competência {instance.competence_label} · vencimento {new Date(`${instance.technical_due_date}T00:00:00`).toLocaleDateString("pt-BR")}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
         </CardContent>
       </Card>
 
@@ -340,7 +317,7 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
           <DialogHeader>
             <DialogTitle>Vincular obrigação ao cliente</DialogTitle>
             <DialogDescription>
-              A obrigação nasce do catálogo mestre da Grow e passa a gerar competências próprias para este cliente.
+              A obrigação nasce do catálogo mestre da Grow e passa a gerar tarefas mensais para este cliente.
             </DialogDescription>
           </DialogHeader>
 

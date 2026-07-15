@@ -2565,7 +2565,7 @@ async function determineInstanceDocumentStatus(
 
   const allRequiredReceived = requiredDocuments.every((documentTypeKey) => linkedDocumentTypes.has(documentTypeKey));
   if (allRequiredReceived) {
-    return "concluida";
+    return "em_revisao";
   }
 
   return instance.status === "atrasada" ? "atrasada" : "aguardando_documento";
@@ -3011,7 +3011,9 @@ async function applyDocumentOperationalFlowV2(
       "status_change",
       instance.status,
       nextStatus,
-      deliveryRequired
+      nextStatus === "em_revisao"
+        ? "Documentos obrigatorios anexados. Tarefa enviada automaticamente para revisao."
+        : deliveryRequired
         ? "Documentos obrigatorios anexados. Aguardando confirmacao humana para envio ao cliente."
         : "Status ajustado automaticamente apos recebimento do documento.",
       { inbox_item_id: inboxItem.id, protocol_number: protocolNumber, delivery_required: deliveryRequired },
@@ -3040,9 +3042,11 @@ async function applyDocumentOperationalFlowV2(
   const communicationStatus = deliveryRequired ? "pending" : "not_applicable";
   let executionNotes = nextStatus === "aguardando_documento"
     ? "Documento anexado. A obrigacao ainda aguarda outros documentos obrigatorios."
-    : deliveryRequired
-      ? "Documento anexado. Obrigacao pronta para revisao e envio manual ao cliente."
-      : "Documento anexado e obrigacao concluida automaticamente.";
+    : nextStatus === "em_revisao"
+      ? "Documento esperado anexado na competencia correta. Tarefa enviada automaticamente para revisao."
+      : deliveryRequired
+        ? "Documento anexado. Obrigacao pronta para revisao e envio manual ao cliente."
+        : "Documento anexado e obrigacao concluida automaticamente.";
   if (protocolNumber && nextStatus === "concluida") {
     executionNotes = `${executionNotes} Protocolo ${protocolNumber}.`;
   }
@@ -4203,7 +4207,14 @@ async function handleUpdateInstance(
   const current = currentData as InstanceRow;
   const nextStatus = asTrimmedString(payload.status) || current.status;
   if (nextStatus === "concluida" && current.status !== "concluida") {
-    return jsonResponse({ error: "A obrigação só pode ser concluída automaticamente por documento válido anexado." }, 400);
+    const templatesMap = await loadTemplatesMap(supabaseAdmin);
+    const template = templatesMap.get(current.template_id);
+    if (!template) return jsonResponse({ error: "Obrigacao vinculada nao encontrada." }, 404);
+
+    const documentStatus = await determineInstanceDocumentStatus(supabaseAdmin, current, template);
+    if (!["em_revisao", "concluida"].includes(current.status) && !["em_revisao", "concluida"].includes(documentStatus)) {
+      return jsonResponse({ error: "A obrigacao so pode ser concluida depois que o arquivo esperado for anexado na competencia correta." }, 400);
+    }
   }
   const updates = {
     status: nextStatus,

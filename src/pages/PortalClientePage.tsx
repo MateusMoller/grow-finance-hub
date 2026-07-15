@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,7 +18,6 @@ import {
   X,
 } from "lucide-react";
 import { RequestChat } from "@/components/app/RequestChat";
-import { ManualEngine } from "@/components/manual/ManualEngine";
 import { ClientPortalOverview } from "@/components/portal/ClientPortalOverview";
 import { GrowAssistantWidget } from "@/components/portal/GrowAssistantWidget";
 import { PortalClienteSidebar, type PortalTab } from "@/components/portal/PortalClienteSidebar";
@@ -2180,34 +2179,6 @@ export default function PortalClientePage() {
                 ) : null}
               </div>
             )}
-          </TabsContent>
-          <TabsContent value="manual" className="space-y-4">
-            <ManualEngine
-              mode="portal"
-              title="Manual do usuário do portal"
-              subtitle="Guia interativo para abrir solicitações, acompanhar histórico, enviar documentos e usar o caixa."
-              allowedContexts={["portal"]}
-              role="client"
-              onRunAction={(actionKey) => {
-                if (actionKey === "portal:overview") {
-                  setActiveTab("overview");
-                  return true;
-                }
-                if (actionKey === "portal:requests") {
-                  openRequestsHub("freeform");
-                  return true;
-                }
-                if (actionKey === "portal:request-history") {
-                  setActiveTab("request-history");
-                  return true;
-                }
-                if (actionKey === "portal:uploads") {
-                  setActiveTab("uploads");
-                  return true;
-                }
-                return false;
-              }}
-            />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">

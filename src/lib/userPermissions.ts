@@ -15,11 +15,11 @@ export const SECTOR_CODES = [
 export type SectorCode = (typeof SECTOR_CODES)[number];
 
 export const SECTOR_LABELS: Record<SectorCode, string> = {
-  contabil: "Contábil",
+  contabil: "ContÃ¡bil",
   fiscal: "Fiscal",
   departamento_pessoal: "Departamento Pessoal",
   comercial: "Comercial",
-  societario: "Societário",
+  societario: "SocietÃ¡rio",
   geral: "Geral",
 };
 
@@ -43,7 +43,6 @@ export const MODULE_KEYS = [
   "usuarios",
   "newsletter",
   "sugestoes",
-  "manual",
   "configuracoes",
 ] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -53,23 +52,22 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   portal: "Portal",
   clientes: "Clientes",
   cadastrar_clientes: "Cadastrar clientes",
-  obrigacoes: "Obrigações",
+  obrigacoes: "ObrigaÃ§Ãµes",
   ia: "IA",
   whatsapp: "WhatsApp",
-  acessorias: "Acessórias",
-  robo_documentos: "Robô de documentos",
-  crm: "CRM",
+  acessorias: "AcessÃ³rias",
+  robo_documentos: "RobÃ´ de documentos",
+  crm: "Vendas",
   chat_interno: "Chat interno",
-  calendario: "Calendário",
+  calendario: "CalendÃ¡rio",
   tarefas: "Tarefas",
-  formularios: "Formulários",
-  relatorios: "Relatórios",
-  notificacoes: "Notificações",
-  usuarios: "Usuários",
+  formularios: "FormulÃ¡rios",
+  relatorios: "RelatÃ³rios",
+  notificacoes: "NotificaÃ§Ãµes",
+  usuarios: "UsuÃ¡rios",
   newsletter: "Newsletter",
-  sugestoes: "Sugestões",
-  manual: "Manual",
-  configuracoes: "Configurações",
+  sugestoes: "SugestÃµes",
+  configuracoes: "ConfiguraÃ§Ãµes",
 };
 
 export const DEFAULT_COLLABORATOR_MODULES: readonly ModuleKey[] = ["tarefas"];
@@ -92,7 +90,6 @@ export const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   "/app/usuarios": "usuarios",
   "/app/newsletter": "newsletter",
   "/app/sugestoes": "sugestoes",
-  "/app/manual": "manual",
   "/app/configuracoes": "configuracoes",
 };
 

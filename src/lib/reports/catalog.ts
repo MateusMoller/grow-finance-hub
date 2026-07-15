@@ -49,13 +49,13 @@ const clientFields: ReportFieldDefinition[] = [
 ];
 
 const leadFields: ReportFieldDefinition[] = [
-  field({ key: "nome", label: "Nome", sourcePath: "site_leads.full_name", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e CRM", group: "Identificacao" }),
-  field({ key: "empresa", label: "Empresa", sourcePath: "site_leads.company_name", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e CRM", group: "Identificacao" }),
-  field({ key: "email", label: "E-mail", sourcePath: "site_leads.email", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e CRM", group: "Contato" }),
-  field({ key: "telefone", label: "Telefone", sourcePath: "site_leads.phone", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e CRM", group: "Contato" }),
-  field({ key: "origem", label: "Origem", sourcePath: "site_leads.source_tag", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e CRM", group: "Origem" }),
-  field({ key: "pagina_origem", label: "Pagina de origem", sourcePath: "site_leads.origin_page", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e CRM", group: "Origem" }),
-  field({ key: "criado_em", label: "Criado em", sourcePath: "site_leads.created_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e CRM", group: "Controle" }),
+  field({ key: "nome", label: "Nome", sourcePath: "site_leads.full_name", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Identificacao" }),
+  field({ key: "empresa", label: "Empresa", sourcePath: "site_leads.company_name", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Identificacao" }),
+  field({ key: "email", label: "E-mail", sourcePath: "site_leads.email", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Contato" }),
+  field({ key: "telefone", label: "Telefone", sourcePath: "site_leads.phone", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Contato" }),
+  field({ key: "origem", label: "Origem", sourcePath: "site_leads.source_tag", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Origem" }),
+  field({ key: "pagina_origem", label: "Pagina de origem", sourcePath: "site_leads.origin_page", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Origem" }),
+  field({ key: "criado_em", label: "Criado em", sourcePath: "site_leads.created_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Controle" }),
 ];
 
 const taskFields: ReportFieldDefinition[] = [
@@ -108,7 +108,7 @@ export const reportCatalog = [
   }),
   dataset({
     id: "leads_crm",
-    name: "Leads e CRM",
+    name: "Leads e Vendas",
     description: "Leads capturados e origem comercial com dados de contato permitidos.",
     sourceOwner: "Comercial",
     sourceTablesOrViews: ["site_leads"],

@@ -523,10 +523,10 @@ export default function CRMPage() {
     void importLocalCrmMutation.mutateAsync()
       .then(() => {
         localStorage.setItem(importFlagKey, "1");
-        toast.success("Dados antigos do CRM importados para o Supabase.");
+        toast.success("Dados antigos de vendas importados para o Supabase.");
       })
       .catch((error: unknown) => {
-        toast.error(error instanceof Error ? error.message : "Não foi possível importar o CRM antigo.");
+        toast.error(error instanceof Error ? error.message : "Não foi possível importar os dados antigos de vendas.");
       });
   }, [currentOrganizationId, importLocalCrmMutation, user?.id]);
   useEffect(() => {
@@ -846,9 +846,9 @@ export default function CRMPage() {
       });
       setGoalForm(createGoalFormState(nextGoals));
       setGoalsDialogOpen(false);
-      toast.success("Metas do CRM atualizadas.");
+      toast.success("Metas de vendas atualizadas.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as metas do CRM.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as metas de vendas.");
     }
   };
 
@@ -1054,7 +1054,7 @@ export default function CRMPage() {
       <div className="space-y-6 max-w-7xl">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold">CRM</h1>
+            <h1 className="font-heading text-2xl font-bold">Vendas</h1>
             <p className="text-sm text-muted-foreground">
               Controle de negociacoes e pipeline comercial ({leads.length} cadastradas)
             </p>
@@ -1294,7 +1294,7 @@ export default function CRMPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Cadastrar metas do CRM</DialogTitle>
+            <DialogTitle>Cadastrar metas de vendas</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">

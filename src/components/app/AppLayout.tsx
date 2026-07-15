@@ -3,9 +3,13 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import {
   Bell,
+  Check,
+  ChevronRight,
   Clock3,
   Filter,
+  FolderPlus,
   LogOut,
+  MessageSquare,
   PlusCircle,
   Search,
   Settings,
@@ -34,10 +38,17 @@ import {
   resolveRouteModule,
   type EffectiveAccess,
 } from "@/lib/userPermissions";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface QuickLink {
   title: string;
   url: string;
+}
+
+interface UserProfileSummary {
+  displayName: string | null;
+  avatarUrl: string | null;
 }
 
 const toRelativeTime = (isoDate: string) => {
@@ -64,6 +75,36 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
+const browserNotificationPromptKey = "grow-browser-notification-prompted";
+
+const canUseBrowserNotifications = () =>
+  typeof window !== "undefined" && "Notification" in window;
+
+const showBrowserNotification = async (
+  title: string,
+  options: NotificationOptions,
+  onClick: () => void,
+) => {
+  if (!canUseBrowserNotifications() || Notification.permission !== "granted") return;
+
+  const serviceWorkerRegistration =
+    "serviceWorker" in navigator
+      ? await navigator.serviceWorker.getRegistration().catch(() => null)
+      : null;
+
+  if (serviceWorkerRegistration) {
+    await serviceWorkerRegistration.showNotification(title, options);
+    return;
+  }
+
+  const notification = new Notification(title, options);
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+    onClick();
+  };
+};
+
 const buildQuickLinks = (
   effectiveAccess: EffectiveAccess | null,
   hasInternalAccess: boolean,
@@ -75,7 +116,7 @@ const buildQuickLinks = (
     { title: "Calendário", url: "/app/calendario" },
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
-    { title: "CRM", url: "/app/crm" },
+    { title: "Vendas", url: "/app/crm" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatórios", url: "/app/relatorios" },
     { title: "Obrigações", url: "/app/obrigacoes" },
@@ -83,7 +124,6 @@ const buildQuickLinks = (
     { title: "Usuários", url: "/app/usuarios" },
     { title: "Sugestões", url: "/app/sugestoes" },
     { title: "Configurações", url: "/app/configuracoes" },
-    { title: "Manual de uso", url: "/app/manual" },
   ];
 
   if (!effectiveAccess) return base;
@@ -111,6 +151,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     markAsRead,
     markAllAsRead,
     notificationSignal,
+    latestRealtimeNotifications,
   } = usePriorityNotifications();
 
   const navigate = useNavigate();
@@ -127,7 +168,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfileSummary>({
+    displayName: null,
+    avatarUrl: null,
+  });
   const audioContextRef = useRef<AudioContext | null>(null);
+  const shownBrowserNotificationIdsRef = useRef<Set<string>>(new Set());
 
   const playNotificationSound = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -182,12 +228,119 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [notificationSignal, playNotificationSound]);
 
   useEffect(() => {
+    if (notificationSignal === 0 || latestRealtimeNotifications.length === 0) return;
+    if (!canUseBrowserNotifications()) return;
+
+    const requestPermissionFromToast = () => {
+      localStorage.setItem(browserNotificationPromptKey, "true");
+      void Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          toast.success("Notificacoes do navegador ativadas.");
+        } else if (permission === "denied") {
+          toast.error("Notificacoes bloqueadas no navegador.");
+        }
+      });
+    };
+
+    if (Notification.permission === "default") {
+      const alreadyPrompted = localStorage.getItem(browserNotificationPromptKey) === "true";
+      if (!alreadyPrompted) {
+        toast("Ative as notificacoes do navegador", {
+          description: "Assim os alertas aparecem no canto da tela mesmo com o sistema em segundo plano.",
+          action: {
+            label: "Ativar",
+            onClick: requestPermissionFromToast,
+          },
+          duration: 10000,
+        });
+      }
+      return;
+    }
+
+    if (Notification.permission !== "granted") return;
+
+    const freshNotifications = latestRealtimeNotifications.filter(
+      (notification) => !shownBrowserNotificationIdsRef.current.has(notification.id),
+    );
+    if (freshNotifications.length === 0) return;
+
+    freshNotifications.forEach((notification) => {
+      shownBrowserNotificationIdsRef.current.add(notification.id);
+    });
+
+    const firstNotification = freshNotifications[0];
+    const overflowCount = freshNotifications.length - 1;
+    const title =
+      overflowCount > 0
+        ? `${freshNotifications.length} novas notificacoes`
+        : firstNotification.title;
+    const body =
+      overflowCount > 0
+        ? `${firstNotification.title}. E mais ${overflowCount} alerta(s).`
+        : firstNotification.description;
+    const targetUrl =
+      overflowCount > 0
+        ? "/app/notificacoes"
+        : `/app/tarefas?task=${encodeURIComponent(firstNotification.taskId)}`;
+
+    void showBrowserNotification(
+      title,
+      {
+        body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        tag: overflowCount > 0 ? `grow-notifications-${notificationSignal}` : firstNotification.id,
+        renotify: true,
+        data: { url: targetUrl },
+      },
+      () => {
+        navigate(targetUrl);
+      },
+    ).catch(() => undefined);
+  }, [latestRealtimeNotifications, navigate, notificationSignal]);
+
+  useEffect(() => {
     return () => {
       if (!audioContextRef.current) return;
       void audioContextRef.current.close();
       audioContextRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setUserProfile({ displayName: null, avatarUrl: null });
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUserProfile = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("display_name, avatar_url")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        setUserProfile({ displayName: null, avatarUrl: null });
+        return;
+      }
+
+      setUserProfile({
+        displayName: data?.display_name?.trim() || null,
+        avatarUrl: data?.avatar_url || null,
+      });
+    };
+
+    void loadUserProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const filteredLinks = useMemo(() => {
     const term = normalizeText(searchTerm);
@@ -202,6 +355,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
     return username.slice(0, 2).toUpperCase();
   }, [user?.email]);
 
+  const userDisplayName = useMemo(() => {
+    const metadata = user?.user_metadata as { display_name?: string; full_name?: string; name?: string } | undefined;
+    return (
+      userProfile.displayName ||
+      metadata?.display_name?.trim() ||
+      metadata?.full_name?.trim() ||
+      metadata?.name?.trim() ||
+      user?.email?.split("@")[0] ||
+      "Usuário"
+    );
+  }, [user?.email, user?.user_metadata, userProfile.displayName]);
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/app/login");
@@ -213,10 +378,129 @@ export function AppLayout({ children }: { children: ReactNode }) {
     navigate(url);
   };
 
+  const sidebarFooterControls = (
+    <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-1">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            className="h-12 min-w-0 flex-1 justify-start gap-2 rounded-xl px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-primary">
+              {userProfile.avatarUrl ? (
+                <img src={userProfile.avatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
+              ) : (
+                userInitials
+              )}
+            </span>
+            <span className="min-w-0 flex-1 text-left group-data-[collapsible=icon]:hidden">
+              <span className="block truncate text-xs font-semibold leading-4">{userDisplayName}</span>
+              <span className="block truncate text-[11px] leading-4 text-sidebar-foreground/60">
+                {user?.email || "Sem e-mail"}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="right" className="w-[min(14rem,calc(100vw-1rem))]">
+          <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
+            <UserRound className="mr-2 h-4 w-4" /> Meu perfil
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
+            <Settings className="mr-2 h-4 w-4" /> Configurações
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
+            <Bell className="mr-2 h-4 w-4" /> Notificações
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={handleSignOut}
+          >
+            <LogOut className="mr-2 h-4 w-4" /> Sair
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="relative h-10 w-10 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent">
+            <Bell className="h-4 w-4" />
+            {unreadCount > 0 && (
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="right" className="w-[min(20rem,calc(100vw-1rem))]">
+          <DropdownMenuLabel className="flex items-center justify-between">
+            <span>Notificações</span>
+            <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="max-h-72 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-muted-foreground">Sem alertas no momento.</div>
+            ) : (
+              notifications.slice(0, 12).map((notification) => {
+                const kindIcon =
+                  notification.kind === "overdue"
+                    ? TriangleAlert
+                    : notification.kind === "due_today"
+                      ? Clock3
+                      : notification.kind === "completed"
+                        ? Check
+                        : notification.kind === "sector_added"
+                          ? FolderPlus
+                          : notification.kind === "internal_message" || notification.kind === "client_chat"
+                            ? MessageSquare
+                            : UserX;
+                const priorityClass =
+                  notification.priority === "alta"
+                    ? "text-destructive"
+                    : notification.priority === "media"
+                      ? "text-amber-600"
+                      : "text-muted-foreground";
+                const KindIcon = kindIcon;
+
+                return (
+                  <DropdownMenuItem
+                    key={notification.id}
+                    className="flex cursor-pointer items-start gap-2 py-2"
+                    onClick={() => {
+                      markAsRead(notification.id);
+                      navigate(`/app/tarefas?task=${encodeURIComponent(notification.taskId)}`);
+                    }}
+                  >
+                    <KindIcon className={`mt-0.5 h-4 w-4 ${priorityClass}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-sm ${notification.read ? "text-muted-foreground" : "font-medium"}`}>
+                        {notification.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{notification.description}</div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {toRelativeTime(notification.createdAt)}
+                      </div>
+                    </div>
+                  </DropdownMenuItem>
+                );
+              })
+            )}
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={markAllAsRead}>Marcar todas como lidas</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
+            Ver central de notificações
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AppSidebar />
+        <AppSidebar footerControls={sidebarFooterControls} />
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -238,114 +522,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 md:gap-2">
+            <div className="flex items-center gap-1 md:hidden">
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Buscar"
               >
                 <Search className="h-4 w-4" />
               </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="h-4 w-4" />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
-                  <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Notificações</span>
-                    <span className="text-xs text-muted-foreground">{unreadCount} não lidas</span>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <div className="max-h-72 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="px-3 py-4 text-sm text-muted-foreground">Sem alertas no momento.</div>
-                    ) : (
-                      notifications.slice(0, 12).map((notification) => {
-                        const kindIcon =
-                          notification.kind === "overdue"
-                            ? TriangleAlert
-                            : notification.kind === "due_today"
-                              ? Clock3
-                              : UserX;
-                        const priorityClass =
-                          notification.priority === "alta"
-                            ? "text-destructive"
-                            : notification.priority === "media"
-                              ? "text-amber-600"
-                              : "text-muted-foreground";
-                        const KindIcon = kindIcon;
-
-                        return (
-                          <DropdownMenuItem
-                            key={notification.id}
-                            className="flex items-start gap-2 py-2 cursor-pointer"
-                            onClick={() => {
-                              markAsRead(notification.id);
-                              navigate("/app/notificacoes");
-                            }}
-                          >
-                            <KindIcon className={`h-4 w-4 mt-0.5 ${priorityClass}`} />
-                            <div className="flex-1 min-w-0">
-                              <div className={`text-sm ${notification.read ? "text-muted-foreground" : "font-medium"}`}>
-                                {notification.title}
-                              </div>
-                              <div className="text-xs text-muted-foreground">{notification.description}</div>
-                              <div className="text-[11px] text-muted-foreground mt-0.5">
-                                {toRelativeTime(notification.createdAt)}
-                              </div>
-                            </div>
-                          </DropdownMenuItem>
-                        );
-                      })
-                    )}
-                  </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={markAllAsRead}>Marcar todas como lidas</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    Ver central de notificações
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
-                  >
-                    <span className="text-xs font-semibold">{userInitials}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[min(14rem,calc(100vw-1rem))]">
-                  <DropdownMenuLabel className="truncate">{user?.email || "Usuário"}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <UserRound className="h-4 w-4 mr-2" /> Meu perfil
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
-                    <Settings className="h-4 w-4 mr-2" /> Configurações
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/app/notificacoes")}>
-                    <Bell className="h-4 w-4 mr-2" /> Notificações
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={handleSignOut}
-                  >
-                    <LogOut className="h-4 w-4 mr-2" /> Sair
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </header>
 

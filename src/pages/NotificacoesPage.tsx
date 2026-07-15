@@ -17,13 +17,16 @@ import {
   Check,
   CheckCheck,
   Clock3,
+  FolderPlus,
   Inbox,
   Loader2,
+  MessageSquare,
   RefreshCcw,
   Smartphone,
   UserX,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 type NotificationFilter = "all" | "unread" | "alta" | "media" | "baixa";
@@ -59,6 +62,7 @@ const filterLabels: Record<NotificationFilter, string> = {
 
 export default function NotificacoesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -166,6 +170,11 @@ export default function NotificacoesPage() {
     } finally {
       setPushActionLoading(null);
     }
+  };
+
+  const openNotificationTask = (notificationId: string, taskId: string) => {
+    markAsRead(notificationId);
+    navigate(`/app/tarefas?task=${encodeURIComponent(taskId)}`);
   };
 
   return (
@@ -312,7 +321,13 @@ export default function NotificacoesPage() {
                     ? AlertTriangle
                     : notification.kind === "due_today"
                       ? Clock3
-                      : UserX;
+                      : notification.kind === "completed"
+                        ? Check
+                        : notification.kind === "sector_added"
+                          ? FolderPlus
+                          : notification.kind === "internal_message" || notification.kind === "client_chat"
+                            ? MessageSquare
+                            : UserX;
                 const KindIcon = kindIcon;
 
                 const priorityClass =
@@ -329,7 +344,7 @@ export default function NotificacoesPage() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.02 }}
-                    onClick={() => markAsRead(notification.id)}
+                    onClick={() => openNotificationTask(notification.id, notification.taskId)}
                     className={`flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/40 sm:px-5 ${
                       notification.read ? "bg-card" : "bg-primary/5"
                     }`}

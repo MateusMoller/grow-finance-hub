@@ -2,11 +2,18 @@ import type { Tables } from "@/integrations/supabase/types";
 
 type TaskNotificationRow = Pick<
   Tables<"kanban_tasks">,
-  "id" | "title" | "due_date" | "status" | "assignee" | "client_name" | "created_at"
+  "id" | "title" | "due_date" | "status" | "assignee" | "client_name" | "created_at" | "created_by" | "updated_at" | "integration_source"
 >;
 
 export type NotificationPriority = "alta" | "media" | "baixa";
-export type NotificationKind = "overdue" | "due_today" | "unassigned";
+export type NotificationKind =
+  | "overdue"
+  | "due_today"
+  | "unassigned"
+  | "completed"
+  | "sector_added"
+  | "internal_message"
+  | "client_chat";
 
 export interface PriorityNotification {
   id: string;
@@ -19,6 +26,7 @@ export interface PriorityNotification {
 }
 
 const doneStatuses = new Set(["done", "archived"]);
+const obligationTaskSources = new Set(["grow_obligation_task"]);
 
 const normalizeText = (value: string | null | undefined) =>
   (value || "")
@@ -42,9 +50,53 @@ const priorityWeight: Record<NotificationPriority, number> = {
 
 const kindWeight: Record<NotificationKind, number> = {
   overdue: 3,
+  completed: 3,
   due_today: 2,
+  sector_added: 2,
+  internal_message: 2,
+  client_chat: 2,
   unassigned: 1,
 };
+
+export interface TaskEventNotificationRow {
+  id: string;
+  task_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  task: {
+    id: string;
+    title: string;
+    client_name: string | null;
+    due_date: string | null;
+    created_at: string;
+  } | null;
+}
+
+const parseJsonRecord = (value: string): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const isInternalCommentPayload = (payload: Record<string, unknown> | null) =>
+  payload?.type === "task_internal_message" || payload?.type === "task_internal_attachment";
+
+const isClientChatPayload = (payload: Record<string, unknown> | null) =>
+  payload?.type === "task_chat_attachment";
+
+const getPayloadText = (payload: Record<string, unknown> | null) =>
+  typeof payload?.text === "string" ? payload.text.trim() : "";
+
+const getPayloadSectors = (payload: Record<string, unknown> | null) =>
+  Array.isArray(payload?.sectors)
+    ? payload.sectors.filter((sector): sector is string => typeof sector === "string" && sector.trim().length > 0)
+    : [];
 
 const buildStorageKey = (userId: string) => `grow-priority-notification-read-${userId}`;
 
@@ -84,17 +136,38 @@ export const clearReadNotifications = (userId: string) => {
   localStorage.removeItem(buildStorageKey(userId));
 };
 
-export const buildPriorityNotifications = (tasks: TaskNotificationRow[]): PriorityNotification[] => {
+export const buildPriorityNotifications = (
+  tasks: TaskNotificationRow[],
+  currentUserId?: string | null,
+): PriorityNotification[] => {
   const today = dateKey(new Date());
 
   const notifications = tasks
-    .filter((task) => !doneStatuses.has(normalizeText(task.status)))
     .flatMap((task) => {
+      const status = normalizeText(task.status);
+      const clientLabel = task.client_name || "Sem cliente";
+      if (doneStatuses.has(status)) {
+        if (status === "done" && task.created_by && task.created_by === currentUserId) {
+          return [
+            {
+              id: `task-${task.id}-completed-${task.updated_at || task.created_at}`,
+              taskId: task.id,
+              title: `Tarefa concluida: ${task.title}`,
+              description: `${clientLabel} - a tarefa que voce criou foi concluida`,
+              priority: "alta" as const,
+              kind: "completed" as const,
+              createdAt: task.updated_at || task.created_at,
+            },
+          ];
+        }
+        return [];
+      }
+
       const hasDueDate = Boolean(task.due_date);
       const overdue = hasDueDate && (task.due_date as string) < today;
       const dueToday = hasDueDate && task.due_date === today;
-      const unassigned = !normalizeText(task.assignee);
-      const clientLabel = task.client_name || "Sem cliente";
+      const isObligationTask = obligationTaskSources.has(normalizeText(task.integration_source));
+      const unassigned = !isObligationTask && !normalizeText(task.assignee);
 
       const taskNotifications: PriorityNotification[] = [];
 
@@ -146,3 +219,64 @@ export const buildPriorityNotifications = (tasks: TaskNotificationRow[]): Priori
 
   return notifications;
 };
+
+export const buildTaskEventNotifications = (
+  comments: TaskEventNotificationRow[],
+  currentUserId?: string | null,
+): PriorityNotification[] =>
+  comments
+    .filter((comment) => comment.task && comment.user_id !== currentUserId)
+    .flatMap((comment) => {
+      const task = comment.task;
+      if (!task) return [];
+
+      const payload = parseJsonRecord(comment.content);
+      const clientLabel = task.client_name || "Sem cliente";
+
+      if (payload?.type === "task_sector_added") {
+        const sectors = getPayloadSectors(payload);
+        return [
+          {
+            id: `task-${comment.task_id}-sector-added-${comment.id}`,
+            taskId: comment.task_id,
+            title: `Setor adicionado: ${task.title}`,
+            description: `${clientLabel} - ${sectors.length > 0 ? sectors.join(", ") : "novo setor vinculado"}`,
+            priority: "media" as const,
+            kind: "sector_added" as const,
+            createdAt: comment.created_at,
+          },
+        ];
+      }
+
+      if (isInternalCommentPayload(payload)) {
+        const text = getPayloadText(payload);
+        return [
+          {
+            id: `task-${comment.task_id}-internal-${comment.id}`,
+            taskId: comment.task_id,
+            title: `Novo andamento interno: ${task.title}`,
+            description: text || `${clientLabel} - arquivo interno anexado`,
+            priority: "media" as const,
+            kind: "internal_message" as const,
+            createdAt: comment.created_at,
+          },
+        ];
+      }
+
+      if (isClientChatPayload(payload) || !payload) {
+        const text = payload ? getPayloadText(payload) : comment.content.trim();
+        return [
+          {
+            id: `task-${comment.task_id}-client-chat-${comment.id}`,
+            taskId: comment.task_id,
+            title: `Nova mensagem no chat do cliente: ${task.title}`,
+            description: text || `${clientLabel} - arquivo anexado ao chat do cliente`,
+            priority: "media" as const,
+            kind: "client_chat" as const,
+            createdAt: comment.created_at,
+          },
+        ];
+      }
+
+      return [];
+    });

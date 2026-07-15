@@ -395,8 +395,8 @@ export default function CalendarioPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(310px,340px)_minmax(0,1fr)]">
-          <div className="h-fit min-w-0 rounded-xl border bg-card p-5 shadow-sm">
+        <div className="grid gap-5 lg:grid-cols-[minmax(430px,0.9fr)_minmax(0,1.1fr)]">
+          <div className="h-fit min-w-0 rounded-xl border bg-card p-6 shadow-sm">
             <div className="flex justify-center overflow-hidden">
             <Calendar
               mode="single"
@@ -412,22 +412,22 @@ export default function CalendarioPage() {
                 hasEvents: "bg-primary/10 text-primary font-semibold",
                 hasObligations: "ring-2 ring-orange-500 ring-inset",
               }}
-              className="w-full max-w-[292px] p-0"
+              className="w-full p-0"
               classNames={{
-                month: "w-full space-y-4",
-                caption: "relative flex items-center justify-center px-10 pt-0",
+                month: "w-full space-y-5",
+                caption: "relative flex items-center justify-center px-12 pt-0 text-base font-semibold",
                 nav_button_previous: "absolute left-0",
                 nav_button_next: "absolute right-0",
                 table: "w-full border-collapse",
                 head_row: "grid grid-cols-7",
-                head_cell: "flex h-8 items-center justify-center rounded-md text-[0.8rem] font-normal text-muted-foreground",
-                row: "grid grid-cols-7 gap-0.5",
-                cell: "relative flex h-10 items-center justify-center p-0 text-center text-sm",
-                day: "h-9 w-9 rounded-lg p-0 font-normal aria-selected:opacity-100",
+                head_cell: "flex h-11 items-center justify-center rounded-md text-[0.85rem] font-normal text-muted-foreground",
+                row: "grid grid-cols-7 gap-2",
+                cell: "relative flex h-14 items-center justify-center p-0 text-center text-sm",
+                day: "h-12 w-12 rounded-xl p-0 text-sm font-normal aria-selected:opacity-100",
               }}
             />
             </div>
-            <div className="mt-5 space-y-2 border-t pt-4 text-xs text-muted-foreground">
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-4 text-xs text-muted-foreground">
               <p>Legenda:</p>
               <p><span className="inline-block h-2 w-2 rounded-full bg-primary mr-1.5" /> Dia com evento</p>
               <p><span className="inline-block h-2 w-2 rounded-full bg-orange-500 mr-1.5" /> Dia com obrigação</p>
@@ -448,11 +448,11 @@ export default function CalendarioPage() {
               </div>
 
               {loading ? (
-                <div className="flex min-h-[220px] justify-center p-8">
+                <div className="flex min-h-[180px] justify-center p-8">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>
               ) : selectedDayEvents.length === 0 ? (
-                <div className="flex min-h-[220px] flex-col items-center justify-center p-8 text-center">
+                <div className="flex min-h-[180px] flex-col items-center justify-center p-6 text-center">
                   <CalendarDays className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                   <p className="font-medium">Sem registros neste dia</p>
                   <p className="text-sm text-muted-foreground mt-1">

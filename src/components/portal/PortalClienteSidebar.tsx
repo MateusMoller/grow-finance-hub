@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardList, History, LayoutDashboard, Settings2, Upload } from "lucide-react";
+import { ClipboardList, History, LayoutDashboard, Settings2, Upload } from "lucide-react";
 import growIcon from "@/assets/grow-icon.png";
 import {
   Sidebar,
@@ -12,7 +12,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-export type PortalTab = "overview" | "requests" | "request-history" | "uploads" | "manual" | "settings";
+export type PortalTab = "overview" | "requests" | "request-history" | "uploads" | "settings";
 
 interface PortalClienteSidebarProps {
   activeTab: PortalTab;
@@ -46,7 +46,6 @@ const menuSections: PortalMenuSection[] = [
   {
     label: "Conta",
     items: [
-      { key: "manual", title: "Manual do usuário", icon: BookOpen },
       { key: "settings", title: "Configuracoes", icon: Settings2 },
     ],
   },

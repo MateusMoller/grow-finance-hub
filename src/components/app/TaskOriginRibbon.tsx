@@ -13,14 +13,14 @@ export function TaskOriginRibbon({ requestId, integrationSource, className }: Ta
 
   return (
     <div
-      className={cn("pointer-events-none absolute right-3 top-0 z-10 opacity-75 transition-opacity group-hover:opacity-95", className)}
+      className={cn("pointer-events-none absolute right-3 top-0 z-10 opacity-50 transition-opacity group-hover:opacity-80", className)}
       aria-label={meta.label}
       title={meta.label}
     >
       <div className="relative">
         <div
           className={cn(
-            "h-7 w-3.5 rounded-b-[3px] bg-gradient-to-b shadow-[0_4px_10px_rgba(15,23,42,0.06)] ring-1 ring-black/5",
+            "h-5 w-2.5 rounded-b-[2px] bg-gradient-to-b shadow-[0_3px_8px_rgba(15,23,42,0.05)] ring-1 ring-black/5",
             meta.ribbonClass,
           )}
           style={{ clipPath: "polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%)" }}

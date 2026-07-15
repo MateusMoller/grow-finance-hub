@@ -46,6 +46,7 @@ interface TaskDetailSheetProps {
   onEditTask?: (taskId: string) => void;
   onCommentCountChange?: (taskId: string, count: number) => void;
   onAttachmentCountChange?: (taskId: string, count: number) => void;
+  onHistory?: (taskId: string, action: string, details?: string) => void;
   actorName?: string;
   historyEntries?: ChangeHistoryEntry[];
 }
@@ -150,6 +151,7 @@ export function TaskDetailSheet({
   onEditTask,
   onCommentCountChange,
   onAttachmentCountChange,
+  onHistory,
   actorName,
   historyEntries = [],
 }: TaskDetailSheetProps) {
@@ -196,7 +198,7 @@ export function TaskDetailSheet({
     if (!task) return;
     const normalizedComment = comment.trim();
     if (!normalizedComment) {
-      toast.error("Escreva um comentario antes de enviar.");
+      toast.error("Escreva um comentário antes de enviar.");
       return;
     }
 
@@ -211,6 +213,7 @@ export function TaskDetailSheet({
     setComments(nextComments);
     saveTaskLocalData(task.id, nextComments, attachments);
     setComment("");
+    onHistory?.(task.id, "Comentario adicionado", normalizedComment.slice(0, 160));
     toast.success("Comentario enviado.");
   };
 
@@ -232,6 +235,13 @@ export function TaskDetailSheet({
     setAttachments(nextAttachments);
     saveTaskLocalData(task.id, comments, nextAttachments);
     event.target.value = "";
+    onHistory?.(
+      task.id,
+      selectedFiles.length === 1 ? "Anexo adicionado" : "Anexos adicionados",
+      Array.from(selectedFiles)
+        .map((file) => file.name)
+        .join(", "),
+    );
     toast.success(
       selectedFiles.length === 1
         ? "Anexo adicionado com sucesso."
@@ -265,8 +275,8 @@ export function TaskDetailSheet({
               <span className="text-sm font-medium">{task.client || "Sem cliente"}</span>
             </div>
             <div className="space-y-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" /> Responsavel</span>
-              <span className="text-sm font-medium">{task.assignee || "Sem responsavel"}</span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" /> Responsável</span>
+              <span className="text-sm font-medium">{task.assignee || "Sem responsável"}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Setor</span>
@@ -364,7 +374,7 @@ export function TaskDetailSheet({
             </span>
             {sortedComments.length === 0 ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground mb-4">
-                Nenhum comentario registrado.
+                Nenhum comentário registrado.
               </div>
             ) : (
               <div className="space-y-3 mb-4">
@@ -393,7 +403,7 @@ export function TaskDetailSheet({
             )}
             <div className="flex gap-2">
               <Textarea
-                placeholder="Escrever comentario..."
+                placeholder="Escrever comentário..."
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 className="text-sm min-h-[60px]"
@@ -407,10 +417,10 @@ export function TaskDetailSheet({
           <Separator />
 
           <div>
-            <h3 className="text-sm font-semibold mb-3">Histórico de alteracoes</h3>
+            <h3 className="text-sm font-semibold mb-3">Histórico de alterações</h3>
             {historyEntries.length === 0 ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                Nenhuma alteracao registrada.
+                Nenhuma alteração registrada.
               </div>
             ) : (
               <div className="space-y-2">
@@ -458,4 +468,3 @@ export function TaskDetailSheet({
     </Sheet>
   );
 }
-

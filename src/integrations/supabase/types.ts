@@ -5020,6 +5020,7 @@ export type Database = {
         Args: { _organization_id: string };
         Returns: {
           display_name: string;
+          sector_code: string | null;
           user_id: string;
         }[];
       };

@@ -93,12 +93,24 @@ const userToForm = (user: ManagedUser): UserAccessInput => ({
   changeReason: "",
 });
 
+const isHiddenSystemUser = (user: ManagedUser) => {
+  const displayName = (user.display_name || "").trim().toLowerCase();
+  const email = (user.email || "").trim().toLowerCase();
+  return (
+    displayName.startsWith("grow docume") ||
+    displayName.startsWith("grow bot") ||
+    email.startsWith("grow.docume") ||
+    email.startsWith("growbot") ||
+    email.startsWith("grow.bot")
+  );
+};
+
 export default function UsuariosPage() {
   const { effectiveAccess, currentOrganizationId, refreshAccess } = useAuth();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [filters, setFilters] = useState<Omit<UserFilters, "search">>({
-    role: "all",
+    role: "colaborador",
     sectorCode: "all",
     status: "all",
     moduleKey: "all",
@@ -123,6 +135,10 @@ export default function UsuariosPage() {
 
   const isAdmin = effectiveAccess?.primaryRole === "admin";
   const totalPages = Math.max(1, Math.ceil((usersQuery.data?.total || 0) / filters.pageSize));
+  const visibleUsers = useMemo(
+    () => (usersQuery.data?.items || []).filter((managedUser) => !isHiddenSystemUser(managedUser)),
+    [usersQuery.data?.items],
+  );
 
   const openCreate = () => {
     setForm(emptyForm());
@@ -279,10 +295,10 @@ export default function UsuariosPage() {
             <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin" /></div>
           ) : usersQuery.isError ? (
             <div className="p-8 text-sm text-destructive">Não foi possível carregar os usuários.</div>
-          ) : (usersQuery.data?.items || []).length === 0 ? (
+          ) : visibleUsers.length === 0 ? (
             <div className="p-8 text-sm text-muted-foreground">Nenhum usuário encontrado.</div>
           ) : (
-            usersQuery.data?.items.map((managedUser) => (
+            visibleUsers.map((managedUser) => (
               <div key={managedUser.user_id} className="grid grid-cols-[minmax(220px,1.4fr)_150px_160px_minmax(220px,1fr)_92px] gap-4 border-b px-4 py-4 text-sm last:border-b-0">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{managedUser.display_name || "Sem nome"}</p>
@@ -313,7 +329,7 @@ export default function UsuariosPage() {
         </div>
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">{usersQuery.data?.total || 0} usuários</span>
+          <span className="text-muted-foreground">{visibleUsers.length} usuários</span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" disabled={filters.page <= 1} onClick={() => setFilters((current) => ({ ...current, page: current.page - 1 }))}><ChevronLeft className="h-4 w-4" /></Button>
             <span>{filters.page} de {totalPages}</span>
