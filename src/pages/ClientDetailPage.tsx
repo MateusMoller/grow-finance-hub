@@ -2614,20 +2614,20 @@ export default function ClientDetailPage() {
         onChange={handleFileUpload}
       />
 
-      <div className="space-y-6 max-w-5xl">
+      <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/app/clientes")}>
+        <div className="flex items-center gap-4 rounded-2xl border bg-card/80 p-4 shadow-sm">
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate("/app/clientes")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
             <Building2 className="h-6 w-6 text-primary" />
           </div>
-          <div className="flex-1">
-            <h1 className="font-heading text-xl font-bold">{client.name}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-heading text-2xl font-bold tracking-tight">{client.name}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               {client.cnpj && <span className="text-sm text-muted-foreground">{client.cnpj}</span>}
-              <Badge variant="outline" className={`text-xs border-0 ${statusColors[client.status || ""] || "bg-muted"}`}>
+              <Badge variant="outline" className={`border-0 px-2.5 text-xs ${statusColors[client.status || ""] || "bg-muted"}`}>
                 {client.status}
               </Badge>
             </div>
@@ -2636,27 +2636,36 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="info">Dados Gerais</TabsTrigger>
-            <TabsTrigger value="dados_cadastrais">Dados Cadastrais</TabsTrigger>
-            <TabsTrigger value="obrigações">Obrigações</TabsTrigger>
-            <TabsTrigger value="pendencias">Pendências</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-muted/60 p-1 sm:grid-cols-4">
+            <TabsTrigger value="info" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Dados Gerais</TabsTrigger>
+            <TabsTrigger value="dados_cadastrais" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Dados Cadastrais</TabsTrigger>
+            <TabsTrigger value="obrigações" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Obrigações</TabsTrigger>
+            <TabsTrigger value="pendencias" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Pendências</TabsTrigger>
           </TabsList>
 
           {/* General Info */}
           <TabsContent value="info" className="space-y-4">
-            <div className="rounded-xl border bg-card p-6 space-y-4">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> Informações do Cliente
-              </h3>
-              <div className="flex justify-end">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+              <div className="flex flex-col gap-4 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold">Informações do Cliente</h3>
+                    <p className="text-xs text-muted-foreground">Dados principais, contato, inscrições e endereço operacional.</p>
+                  </div>
+                </div>
+                <label className="flex w-fit items-center gap-2 rounded-full border bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm">
                   <Switch checked={autoSaveGeneralInfo} onCheckedChange={setAutoSaveGeneralInfo} />
                   Salvar automático
                 </label>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" onBlurCapture={queueAutoSaveGeneralInfo}>
+              <div
+                className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2 [&_input]:h-11 [&_input]:rounded-xl [&_input]:bg-muted/30 [&_select]:h-11 [&_select]:rounded-xl [&_select]:bg-muted/30 [&_textarea]:rounded-xl [&_textarea]:bg-muted/30"
+                onBlurCapture={queueAutoSaveGeneralInfo}
+              >
                 <div className="space-y-1.5">
                   <Label className="text-xs">Razão Social</Label>
                   <Input
@@ -2687,13 +2696,13 @@ export default function ClientDetailPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="shrink-0"
+                      className="h-11 shrink-0 rounded-xl px-4"
                       onClick={() => void handleCnpjLookup()}
                       disabled={searchingCnpj}
                     >
                       {searchingCnpj ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Buscar CNPJ"}
                     </Button>
-                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => void handleCopyRawCnpj()}>
+                    <Button type="button" variant="outline" size="sm" className="h-11 shrink-0 rounded-xl px-4" onClick={() => void handleCopyRawCnpj()}>
                       <Copy className="h-3.5 w-3.5 mr-1" />
                       Copiar
                     </Button>
@@ -2721,9 +2730,9 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-xs">Classificacao de Atividade</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
+                  <div className="grid grid-cols-1 gap-2 rounded-2xl border bg-muted/20 p-2 sm:grid-cols-3">
                     {clientBusinessProfileOptions.map((profile) => (
-                      <label key={profile.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <label key={profile.key} className="flex cursor-pointer items-center gap-3 rounded-xl border border-transparent bg-background/70 px-3 py-3 text-sm transition-colors hover:border-primary/20 hover:bg-background">
                         <Checkbox
                           checked={selectedBusinessProfiles.includes(profile.key)}
                           onCheckedChange={() => toggleBusinessProfile(profile.key)}
@@ -2816,7 +2825,7 @@ export default function ClientDetailPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="shrink-0"
+                      className="h-11 shrink-0 rounded-xl px-4"
                       onClick={() => void handleCepLookup(getGeneralInfoFieldValue("cep"))}
                       disabled={searchingCep}
                     >
@@ -2904,7 +2913,7 @@ export default function ClientDetailPage() {
                   <Label className="text-xs">Observações</Label>
                   <Textarea value={clientForm.notes || ""} onChange={(e) => setClientForm((p) => ({ ...p, notes: e.target.value }))} rows={3} />
                 </div>
-                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                <div className="space-y-2 rounded-2xl border bg-muted/20 px-4 py-4 md:col-span-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Acesso ao portal do cliente</p>
@@ -2937,7 +2946,7 @@ export default function ClientDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="md:col-span-2 rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+                <div className="space-y-2 rounded-2xl border bg-muted/20 px-4 py-4 md:col-span-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">Enviar WhatsApp automático ao concluir obrigações</p>
@@ -2967,8 +2976,8 @@ export default function ClientDetailPage() {
                   )}
                 </div>
               </div>
-              <div className="flex justify-end">
-                <Button onClick={saveClientInfo} disabled={saving}>
+              <div className="flex justify-end border-t bg-muted/10 px-5 py-4">
+                <Button className="rounded-xl px-5" onClick={saveClientInfo} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
                   Salvar Informações (opcional)
                 </Button>

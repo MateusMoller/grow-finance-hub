@@ -7,9 +7,37 @@ import { useInternalChatNotifications } from "@/hooks/useInternalChatNotificatio
 import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { canAccessModule } from "@/lib/userPermissions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Download, FileText, Loader2, MessageSquare, Palette, Paperclip, Send, ShieldCheck, UserRound, Users, X } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ClipboardList,
+  Download,
+  FileText,
+  Loader2,
+  MessageSquare,
+  Palette,
+  Paperclip,
+  Reply,
+  Send,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -18,6 +46,7 @@ type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name" | "avatar_
 type ChatDensity = "compact" | "comfortable";
 type ChatBackground = "grid" | "plain" | "soft";
 type ChatBubbleTone = "green" | "blue" | "slate";
+type ReferencePickerType = "task" | "client";
 
 interface InternalMessage extends InternalChatMessageRow {
   profile?: ProfileRow | null;
@@ -34,12 +63,57 @@ type ActiveChat = { type: "group" } | { type: "direct"; targetUserId: string };
 interface InternalChatAttachment {
   type: "internal_chat_attachment";
   text: string;
+  reply?: InternalChatReplyData | null;
+  reference?: InternalChatReferenceData | null;
   file: {
     name: string;
     path: string;
     size: number;
     contentType: string;
   };
+}
+
+interface InternalChatReferenceData {
+  kind: ReferencePickerType;
+  id: string;
+  title: string;
+  subtitle: string;
+  url: string;
+}
+
+interface InternalChatReference {
+  type: "internal_chat_reference";
+  text: string;
+  reply?: InternalChatReplyData | null;
+  reference: InternalChatReferenceData;
+}
+
+interface InternalChatReplyData {
+  messageId: string;
+  senderName: string;
+  preview: string;
+  createdAt: string;
+}
+
+interface InternalChatReply {
+  type: "internal_chat_reply";
+  text: string;
+  reply: InternalChatReplyData;
+}
+
+interface TaskReferenceOption {
+  id: string;
+  title: string;
+  clientName: string | null;
+  status: string | null;
+  dueDate: string | null;
+}
+
+interface ClientReferenceOption {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  regime: string | null;
 }
 
 const formatMessageTime = (dateString: string) => {
@@ -76,6 +150,17 @@ const isHiddenSystemUser = (name: string | null | undefined) => {
   return normalized.startsWith("grow docume") || normalized.startsWith("grow bot");
 };
 
+const isInternalChatReplyData = (value: unknown): value is InternalChatReplyData => {
+  if (!value || typeof value !== "object") return false;
+  const reply = value as Partial<InternalChatReplyData>;
+  return (
+    typeof reply.messageId === "string" &&
+    typeof reply.senderName === "string" &&
+    typeof reply.preview === "string" &&
+    typeof reply.createdAt === "string"
+  );
+};
+
 const parseInternalChatAttachment = (content: string): InternalChatAttachment | null => {
   try {
     const parsed = JSON.parse(content) as Partial<InternalChatAttachment>;
@@ -91,6 +176,8 @@ const parseInternalChatAttachment = (content: string): InternalChatAttachment | 
     return {
       type: "internal_chat_attachment",
       text: typeof parsed.text === "string" ? parsed.text : "",
+      reply: isInternalChatReplyData(parsed.reply) ? parsed.reply : null,
+      reference: isInternalChatReferenceData(parsed.reference) ? parsed.reference : null,
       file: {
         name: parsed.file.name,
         path: parsed.file.path,
@@ -101,6 +188,82 @@ const parseInternalChatAttachment = (content: string): InternalChatAttachment | 
   } catch {
     return null;
   }
+};
+
+const isInternalChatReferenceData = (value: unknown): value is InternalChatReferenceData => {
+  if (!value || typeof value !== "object") return false;
+  const reference = value as Partial<InternalChatReferenceData>;
+  return (
+    (reference.kind === "task" || reference.kind === "client") &&
+    typeof reference.id === "string" &&
+    typeof reference.title === "string" &&
+    typeof reference.url === "string"
+  );
+};
+
+const parseInternalChatReference = (content: string): InternalChatReference | null => {
+  try {
+    const parsed = JSON.parse(content) as Partial<InternalChatReference>;
+    if (parsed.type !== "internal_chat_reference" || !isInternalChatReferenceData(parsed.reference)) {
+      return null;
+    }
+
+    return {
+      type: "internal_chat_reference",
+      text: typeof parsed.text === "string" ? parsed.text : "",
+      reply: isInternalChatReplyData(parsed.reply) ? parsed.reply : null,
+      reference: {
+        ...parsed.reference,
+        subtitle: typeof parsed.reference.subtitle === "string" ? parsed.reference.subtitle : "",
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
+const parseInternalChatReply = (content: string): InternalChatReply | null => {
+  try {
+    const parsed = JSON.parse(content) as Partial<InternalChatReply>;
+    if (parsed.type !== "internal_chat_reply" || !isInternalChatReplyData(parsed.reply)) {
+      return null;
+    }
+
+    return {
+      type: "internal_chat_reply",
+      text: typeof parsed.text === "string" ? parsed.text : "",
+      reply: parsed.reply,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const getInternalMessageReplyPreview = (message: InternalMessage) => {
+  const attachment = parseInternalChatAttachment(message.content);
+  if (attachment) {
+    const text = attachment.text.trim();
+    if (text) return text;
+    if (attachment.reference?.title) {
+      return `${attachment.reference.kind === "task" ? "Tarefa" : "Cliente"}: ${attachment.reference.title}`;
+    }
+    return `Anexo: ${attachment.file.name}`;
+  }
+
+  const referenceMessage = parseInternalChatReference(message.content);
+  if (referenceMessage) {
+    const text = referenceMessage.text.trim();
+    if (text) return text;
+    return `${referenceMessage.reference.kind === "task" ? "Tarefa" : "Cliente"}: ${referenceMessage.reference.title}`;
+  }
+
+  const replyMessage = parseInternalChatReply(message.content);
+  if (replyMessage) {
+    const text = replyMessage.text.trim();
+    return text || `Resposta a ${replyMessage.reply.senderName}`;
+  }
+
+  return message.content.trim() || "Mensagem";
 };
 
 const formatFileSize = (bytes: number) => {
@@ -166,6 +329,72 @@ function ChatAvatar({
   );
 }
 
+function ChatReferenceCard({
+  reference,
+  compact = false,
+  onRemove,
+}: {
+  reference: InternalChatReferenceData;
+  compact?: boolean;
+  onRemove?: () => void;
+}) {
+  const Icon = reference.kind === "task" ? ClipboardList : Building2;
+
+  return (
+    <div className={`flex items-center gap-2 rounded-xl border bg-background/80 px-3 ${compact ? "py-2" : "py-2.5"} text-left shadow-sm`}>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold">
+          {reference.kind === "task" ? "Tarefa" : "Cliente"}: {reference.title}
+        </p>
+        {reference.subtitle ? (
+          <p className="truncate text-[11px] text-muted-foreground">{reference.subtitle}</p>
+        ) : null}
+      </div>
+      {onRemove ? (
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRemove}>
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ChatReplyPreview({
+  reply,
+  compact = false,
+  onRemove,
+}: {
+  reply: InternalChatReplyData;
+  compact?: boolean;
+  onRemove?: () => void;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-xl border-l-4 border-primary/60 bg-background/75 px-3 ${
+        compact ? "py-2" : "py-2.5"
+      } text-left`}
+    >
+      <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold text-primary">
+          Respondendo {reply.senderName}
+        </p>
+        <p className="line-clamp-2 text-xs text-muted-foreground">
+          {reply.preview}
+        </p>
+      </div>
+      {onRemove ? (
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRemove}>
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ChatInternoPage() {
   const { user, role, roles, currentOrganizationId, effectiveAccess, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<InternalMessage[]>([]);
@@ -175,6 +404,13 @@ export default function ChatInternoPage() {
   const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedReply, setSelectedReply] = useState<InternalChatReplyData | null>(null);
+  const [selectedReference, setSelectedReference] = useState<InternalChatReferenceData | null>(null);
+  const [referencePickerType, setReferencePickerType] = useState<ReferencePickerType | null>(null);
+  const [referenceSearch, setReferenceSearch] = useState("");
+  const [referenceLoading, setReferenceLoading] = useState(false);
+  const [taskReferenceOptions, setTaskReferenceOptions] = useState<TaskReferenceOption[]>([]);
+  const [clientReferenceOptions, setClientReferenceOptions] = useState<ClientReferenceOption[]>([]);
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
   const [showCustomization, setShowCustomization] = useState(false);
   const [chatDensity, setChatDensity] = useState<ChatDensity>(() =>
@@ -190,7 +426,6 @@ export default function ChatInternoPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const {
     summaries: conversationSummaries,
-    unreadCount: internalChatUnreadCount,
     markConversationRead,
     refresh: refreshConversationSummaries,
   } = useInternalChatNotifications();
@@ -397,6 +632,10 @@ export default function ChatInternoPage() {
   }, [activeChat, contacts]);
 
   useEffect(() => {
+    setSelectedReply(null);
+  }, [activeChat]);
+
+  useEffect(() => {
     saveChatPreference(user?.id, "density", chatDensity);
   }, [chatDensity, user?.id]);
 
@@ -411,7 +650,9 @@ export default function ChatInternoPage() {
   const handleSendMessage = async () => {
     const text = newMessage.trim();
     const file = selectedFile;
-    if ((!text && !file) || !user || !currentOrganizationId) return;
+    const reference = selectedReference;
+    const reply = selectedReply;
+    if ((!text && !file && !reference) || !user || !currentOrganizationId) return;
 
     setSending(true);
     let content = text;
@@ -434,6 +675,8 @@ export default function ChatInternoPage() {
       content = JSON.stringify({
         type: "internal_chat_attachment",
         text,
+        reply,
+        reference,
         file: {
           name: file.name,
           path: filePath,
@@ -441,6 +684,19 @@ export default function ChatInternoPage() {
           contentType: file.type || "application/octet-stream",
         },
       } satisfies InternalChatAttachment);
+    } else if (reference) {
+      content = JSON.stringify({
+        type: "internal_chat_reference",
+        text,
+        reply,
+        reference,
+      } satisfies InternalChatReference);
+    } else if (reply) {
+      content = JSON.stringify({
+        type: "internal_chat_reply",
+        text,
+        reply,
+      } satisfies InternalChatReply);
     }
 
     const payload =
@@ -474,6 +730,8 @@ export default function ChatInternoPage() {
 
     setNewMessage("");
     setSelectedFile(null);
+    setSelectedReply(null);
+    setSelectedReference(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     void fetchMessages();
     void refreshConversationSummaries();
@@ -492,6 +750,84 @@ export default function ChatInternoPage() {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
+  const openReferencePicker = async (type: ReferencePickerType) => {
+    setReferencePickerType(type);
+    setReferenceSearch("");
+    setReferenceLoading(true);
+
+    if (type === "task") {
+      let query = supabase
+        .from("kanban_tasks")
+        .select("id, title, client_name, status, due_date")
+        .order("updated_at", { ascending: false })
+        .limit(120);
+
+      if (currentOrganizationId) {
+        query = query.eq("organization_id", currentOrganizationId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        toast.error("Nao foi possivel carregar tarefas ativas.");
+        setTaskReferenceOptions([]);
+      } else {
+        const activeTasks = ((data || []) as Array<{
+          id: string;
+          title: string;
+          client_name: string | null;
+          status: string | null;
+          due_date: string | null;
+        }>).filter((task) => !["done", "archived", "Concluido", "Concluído"].includes(String(task.status || "")));
+
+        setTaskReferenceOptions(
+          activeTasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            clientName: task.client_name,
+            status: task.status,
+            dueDate: task.due_date,
+          })),
+        );
+      }
+    } else {
+      let query = supabase
+        .from("clients")
+        .select("id, name, cnpj, regime")
+        .eq("status", "Ativo")
+        .order("name", { ascending: true })
+        .limit(160);
+
+      if (currentOrganizationId) {
+        query = query.eq("organization_id", currentOrganizationId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        toast.error("Nao foi possivel carregar clientes ativos.");
+        setClientReferenceOptions([]);
+      } else {
+        setClientReferenceOptions((data || []) as ClientReferenceOption[]);
+      }
+    }
+
+    setReferenceLoading(false);
+  };
+
+  const handleSelectReference = (reference: InternalChatReferenceData) => {
+    setSelectedReference(reference);
+    setReferencePickerType(null);
+    setReferenceSearch("");
+  };
+
+  const handleReplyToMessage = (message: InternalMessage, senderName: string) => {
+    setSelectedReply({
+      messageId: message.id,
+      senderName,
+      preview: getInternalMessageReplyPreview(message),
+      createdAt: message.created_at,
+    });
+  };
+
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -499,10 +835,26 @@ export default function ChatInternoPage() {
     }
   };
 
-  const totalUsers = contacts.length + (user ? 1 : 0);
   const participantsInCurrentChat = useMemo(
     () => new Set(messages.map((message) => message.user_id)).size,
     [messages],
+  );
+  const normalizedReferenceSearch = referenceSearch.trim().toLowerCase();
+  const filteredTaskReferenceOptions = useMemo(
+    () =>
+      taskReferenceOptions.filter((task) => {
+        if (!normalizedReferenceSearch) return true;
+        return `${task.title} ${task.clientName || ""} ${task.status || ""}`.toLowerCase().includes(normalizedReferenceSearch);
+      }),
+    [normalizedReferenceSearch, taskReferenceOptions],
+  );
+  const filteredClientReferenceOptions = useMemo(
+    () =>
+      clientReferenceOptions.filter((client) => {
+        if (!normalizedReferenceSearch) return true;
+        return `${client.name} ${client.cnpj || ""} ${client.regime || ""}`.toLowerCase().includes(normalizedReferenceSearch);
+      }),
+    [clientReferenceOptions, normalizedReferenceSearch],
   );
 
   const chatTitle =
@@ -546,24 +898,10 @@ export default function ChatInternoPage() {
           <div>
             <h1 className="font-heading text-2xl font-bold">Chat Interno</h1>
             <p className="text-sm text-muted-foreground">
-              Grupo geral da equipe e conversas pessoais entre usuários.
+              Canais internos e conversas diretas da equipe.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary" className="gap-1.5">
-              <MessageSquare className="h-3.5 w-3.5" /> {messages.length} mensagens
-            </Badge>
-            {internalChatUnreadCount > 0 ? (
-              <Badge variant="destructive" className="gap-1.5">
-                {internalChatUnreadCount} não lida(s)
-              </Badge>
-            ) : null}
-            <Badge variant="outline" className="gap-1.5">
-              <Users className="h-3.5 w-3.5" /> {totalUsers} usuários internos
-            </Badge>
-            <Badge variant="outline" className="gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5" /> So equipe interna
-            </Badge>
             <Button
               type="button"
               variant="outline"
@@ -633,9 +971,6 @@ export default function ChatInternoPage() {
           <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
             <div className="border-b bg-muted/30 px-4 py-4">
               <p className="text-sm font-semibold">Conversas</p>
-              <p className="text-xs leading-5 text-muted-foreground">
-                Canais internos e conversas diretas da equipe.
-              </p>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -793,6 +1128,9 @@ export default function ChatInternoPage() {
                   {messages.map((message) => {
                     const isOwn = message.user_id === user?.id;
                     const attachment = parseInternalChatAttachment(message.content);
+                    const referenceMessage = attachment ? null : parseInternalChatReference(message.content);
+                    const replyMessage = attachment || referenceMessage ? null : parseInternalChatReply(message.content);
+                    const embeddedReply = attachment?.reply || referenceMessage?.reply || replyMessage?.reply || null;
                     const senderName =
                       message.profile?.display_name?.trim() ||
                       (isOwn ? "Voce" : `Usuário ${message.user_id.slice(0, 6)}`);
@@ -823,12 +1161,34 @@ export default function ChatInternoPage() {
                             <p className="text-xs font-semibold text-muted-foreground">
                               {activeChat.type === "group" ? senderName : isOwn ? "Você" : senderName}
                             </p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {formatMessageTime(message.created_at)}
-                            </p>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                className="rounded-full px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground"
+                                onClick={() =>
+                                  handleReplyToMessage(
+                                    message,
+                                    activeChat.type === "group" ? senderName : isOwn ? "Voce" : senderName,
+                                  )
+                                }
+                              >
+                                Responder
+                              </button>
+                              <p className="text-[10px] text-muted-foreground">
+                                {formatMessageTime(message.created_at)}
+                              </p>
+                            </div>
                           </div>
+                          {embeddedReply ? (
+                            <div className="mb-2">
+                              <ChatReplyPreview reply={embeddedReply} compact />
+                            </div>
+                          ) : null}
                           {attachment ? (
                             <div className="space-y-2">
+                              {attachment.reference ? (
+                                <ChatReferenceCard reference={attachment.reference} compact />
+                              ) : null}
                               {attachment.text && (
                                 <p className="whitespace-pre-wrap break-words text-sm leading-6">
                                   {attachment.text}
@@ -855,6 +1215,19 @@ export default function ChatInternoPage() {
                                 <Download className="h-3.5 w-3.5 shrink-0" />
                               </button>
                             </div>
+                          ) : referenceMessage ? (
+                            <div className="space-y-2">
+                              <ChatReferenceCard reference={referenceMessage.reference} compact />
+                              {referenceMessage.text ? (
+                                <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                                  {referenceMessage.text}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : replyMessage ? (
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                              {replyMessage.text}
+                            </p>
                           ) : (
                             <p className="whitespace-pre-wrap break-words text-sm leading-6">
                               {message.content}
@@ -873,6 +1246,15 @@ export default function ChatInternoPage() {
             <div className="border-t bg-card px-4 py-3">
               <div className="flex items-end gap-2 rounded-2xl bg-muted/50 p-2">
                 <div className="min-w-0 flex-1">
+                  {selectedReply && (
+                    <div className="mb-2">
+                      <ChatReplyPreview
+                        reply={selectedReply}
+                        compact
+                        onRemove={() => setSelectedReply(null)}
+                      />
+                    </div>
+                  )}
                   {selectedFile && (
                     <div className="mb-2 flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-xs shadow-sm">
                       <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
@@ -897,6 +1279,15 @@ export default function ChatInternoPage() {
                       </Button>
                     </div>
                   )}
+                  {selectedReference && (
+                    <div className="mb-2">
+                      <ChatReferenceCard
+                        reference={selectedReference}
+                        compact
+                        onRemove={() => setSelectedReference(null)}
+                      />
+                    </div>
+                  )}
                   <Textarea
                     rows={1}
                     value={newMessage}
@@ -915,23 +1306,40 @@ export default function ChatInternoPage() {
                   className="hidden"
                   onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-11 shrink-0 rounded-full bg-background"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={sending}
-                  aria-label="Anexar arquivo"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 rounded-full bg-background"
+                      disabled={sending}
+                      aria-label="Adicionar anexo ou referencia"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                      <Paperclip className="mr-2 h-4 w-4" />
+                      Anexar arquivo
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void openReferencePicker("task")}>
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                      Referenciar tarefa ativa
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void openReferencePicker("client")}>
+                      <Building2 className="mr-2 h-4 w-4" />
+                      Referenciar cliente ativo
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   type="button"
                   size="icon"
                   className="h-11 w-11 shrink-0 rounded-full"
                   onClick={() => void handleSendMessage()}
-                  disabled={sending || (!newMessage.trim() && !selectedFile)}
+                  disabled={sending || (!newMessage.trim() && !selectedFile && !selectedReference)}
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
@@ -939,6 +1347,101 @@ export default function ChatInternoPage() {
             </div>
           </section>
         </div>
+
+        <Dialog open={referencePickerType !== null} onOpenChange={(open) => !open && setReferencePickerType(null)}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>
+                {referencePickerType === "task" ? "Referenciar tarefa ativa" : "Referenciar cliente ativo"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Input
+                value={referenceSearch}
+                onChange={(event) => setReferenceSearch(event.target.value)}
+                placeholder={referencePickerType === "task" ? "Buscar por tarefa, cliente ou status..." : "Buscar por cliente, CNPJ ou regime..."}
+                className="h-11 rounded-xl"
+              />
+
+              <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                {referenceLoading ? (
+                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Carregando referencias...
+                  </div>
+                ) : referencePickerType === "task" ? (
+                  filteredTaskReferenceOptions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                      Nenhuma tarefa ativa encontrada.
+                    </div>
+                  ) : (
+                    filteredTaskReferenceOptions.map((task) => {
+                      const reference: InternalChatReferenceData = {
+                        kind: "task",
+                        id: task.id,
+                        title: task.title,
+                        subtitle: [task.clientName, task.status, task.dueDate ? `Prazo ${task.dueDate}` : null]
+                          .filter(Boolean)
+                          .join(" · "),
+                        url: `/app/tarefas?task=${encodeURIComponent(task.id)}`,
+                      };
+
+                      return (
+                        <button
+                          key={task.id}
+                          type="button"
+                          className="flex w-full items-center gap-3 rounded-xl border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/50"
+                          onClick={() => handleSelectReference(reference)}
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <ClipboardList className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{task.title}</p>
+                            <p className="truncate text-xs text-muted-foreground">{reference.subtitle || "Tarefa ativa"}</p>
+                          </div>
+                          <Check className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      );
+                    })
+                  )
+                ) : filteredClientReferenceOptions.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                    Nenhum cliente ativo encontrado.
+                  </div>
+                ) : (
+                  filteredClientReferenceOptions.map((client) => {
+                    const reference: InternalChatReferenceData = {
+                      kind: "client",
+                      id: client.id,
+                      title: client.name,
+                      subtitle: [client.cnpj, client.regime].filter(Boolean).join(" · "),
+                      url: `/app/clientes/${encodeURIComponent(client.id)}`,
+                    };
+
+                    return (
+                      <button
+                        key={client.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-xl border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/50"
+                        onClick={() => handleSelectReference(reference)}
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{client.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{reference.subtitle || "Cliente ativo"}</p>
+                        </div>
+                        <Check className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

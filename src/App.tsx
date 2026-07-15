@@ -23,7 +23,6 @@ const CalendarioPage = lazy(() => import("./pages/CalendarioPage"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const ClientDetailPage = lazy(() => import("./pages/ClientDetailPage"));
 const TaskWorkspacePage = lazy(() => import("./pages/TaskWorkspacePage"));
-const FormulariosPage = lazy(() => import("./pages/FormulariosPage"));
 const CRMPage = lazy(() => import("./pages/CRMPage"));
 const ChatInternoPage = lazy(() => import("./pages/ChatInternoPage"));
 const RelatoriosPage = lazy(() => import("./pages/RelatoriosPage"));
@@ -166,7 +165,6 @@ const App = () => (
                   <Route path="/app/clientes" element={<ProtectedRoute scope="internal"><ClientsPage /></ProtectedRoute>} />
                   <Route path="/app/clientes/:id" element={<ProtectedRoute scope="internal"><ClientDetailPage /></ProtectedRoute>} />
                   <Route path="/app/tarefas" element={<ProtectedRoute scope="internal" feature="tarefas"><TaskWorkspacePage /></ProtectedRoute>} />
-                  <Route path="/app/formularios" element={<ProtectedRoute scope="internal"><FormulariosPage /></ProtectedRoute>} />
                   <Route path="/app/processos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                   <Route path="/app/documentos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                   <Route path="/app/crm" element={<ProtectedRoute scope="internal" feature="crm"><CRMPage /></ProtectedRoute>} />
@@ -176,7 +174,6 @@ const App = () => (
                   <Route path="/app/relatorios" element={<ProtectedRoute scope="internal" feature="relatorios"><RelatoriosPage /></ProtectedRoute>} />
                   <Route path="/app/obrigacoes" element={<ProtectedRoute scope="internal" feature="obrigacoes"><ObrigacoesPage /></ProtectedRoute>} />
                   <Route path="/app/econtinuo" element={<ProtectedRoute scope="internal"><Navigate to="/app/obrigacoes?tab=documentos" replace /></ProtectedRoute>} />
-                  <Route path="/app/acessorias" element={<ProtectedRoute scope="internal"><Navigate to="/app/obrigacoes" replace /></ProtectedRoute>} />
                   <Route path="/app/notificacoes" element={<ProtectedRoute scope="internal"><NotificacoesPage /></ProtectedRoute>} />
                   <Route path="/app/configuracoes" element={<ProtectedRoute scope="internal"><ConfiguracoesPage /></ProtectedRoute>} />
                   <Route path="/app/solicitacoes" element={<ProtectedRoute scope="internal"><Navigate to="/app/tarefas" replace /></ProtectedRoute>} />

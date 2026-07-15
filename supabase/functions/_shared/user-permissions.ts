@@ -10,25 +10,21 @@ export const SECTOR_CODES = [
 ] as const;
 export const MODULE_KEYS = [
   "dashboard",
-  "portal",
   "clientes",
   "cadastrar_clientes",
   "obrigacoes",
   "ia",
   "whatsapp",
-  "acessorias",
   "robo_documentos",
   "crm",
   "chat_interno",
   "calendario",
   "tarefas",
-  "formularios",
   "relatorios",
   "notificacoes",
   "usuarios",
   "newsletter",
   "sugestoes",
-  "manual",
   "configuracoes",
 ] as const;
 

@@ -80,8 +80,8 @@ export function ProtectedRoute({
     return <Navigate to={hasClientAccess ? "/app/portal" : "/app/login"} replace />;
   }
 
-  if (scope === "portal" && !hasInternalAccess && !hasClientAccess) {
-    return <Navigate to="/app/login" replace />;
+  if (scope === "portal" && !hasClientAccess) {
+    return <Navigate to={hasInternalAccess ? "/app/tarefas" : "/app/login"} replace />;
   }
 
   if (adminOnly && !isAdmin) {

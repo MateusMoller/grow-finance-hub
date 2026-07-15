@@ -37,7 +37,6 @@ const settingSections: { id: SettingSectionId; title: string; description: strin
 const notificationLabels = [
   { key: "assignedTasks", title: "Novas tarefas atribuidas", desc: "Quando uma tarefa for atribuida a voce" },
   { key: "dueSoon", title: "Prazo proximo", desc: "Alerta de vencimento" },
-  { key: "newForms", title: "Novos formularios", desc: "Quando cliente enviar formulario" },
   { key: "newLeads", title: "Novos leads", desc: "Quando lead for capturado" },
   { key: "dailyEmail", title: "Resumo diario por e-mail", desc: "Resumo de eventos diarios" },
 ] as const;
@@ -78,7 +77,6 @@ export default function ConfiguracoesPage() {
   const [notificationSettings, setNotificationSettings] = useState({
     assignedTasks: true,
     dueSoon: true,
-    newForms: true,
     newLeads: true,
     dailyEmail: true,
   });
@@ -143,7 +141,6 @@ export default function ConfiguracoesPage() {
     setNotificationSettings({
       assignedTasks: typeof settings.notify_assigned_tasks === "boolean" ? settings.notify_assigned_tasks : true,
       dueSoon: typeof settings.notify_due_soon === "boolean" ? settings.notify_due_soon : true,
-      newForms: typeof settings.notify_new_forms === "boolean" ? settings.notify_new_forms : true,
       newLeads: typeof settings.notify_new_leads === "boolean" ? settings.notify_new_leads : true,
       dailyEmail: typeof settings.notify_daily_email === "boolean" ? settings.notify_daily_email : true,
     });
@@ -244,7 +241,6 @@ export default function ConfiguracoesPage() {
     const { error } = await upsertUserSettings({
       notify_assigned_tasks: notificationSettings.assignedTasks,
       notify_due_soon: notificationSettings.dueSoon,
-      notify_new_forms: notificationSettings.newForms,
       notify_new_leads: notificationSettings.newLeads,
       notify_daily_email: notificationSettings.dailyEmail,
     });

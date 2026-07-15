@@ -81,8 +81,32 @@ const conversationTargetForMessage = (message: InternalChatMessageSummaryRow, cu
 
 const parseAttachmentPreview = (content: string) => {
   try {
-    const parsed = JSON.parse(content) as { type?: string; text?: unknown; file?: { name?: unknown } };
+    const parsed = JSON.parse(content) as {
+      type?: string;
+      text?: unknown;
+      file?: { name?: unknown };
+      reference?: { kind?: unknown; title?: unknown };
+      reply?: { senderName?: unknown; preview?: unknown };
+    };
+
+    if (parsed.type === "internal_chat_reply") {
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      const preview = typeof parsed.reply?.preview === "string" ? parsed.reply.preview : "mensagem";
+      return text || `Resposta: ${preview}`;
+    }
+
+    if (parsed.type === "internal_chat_reference" && typeof parsed.reference?.title === "string") {
+      const kind = parsed.reference.kind === "task" ? "Tarefa" : "Cliente";
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      return text || `${kind}: ${parsed.reference.title}`;
+    }
+
     if (parsed.type !== "internal_chat_attachment") return null;
+    if (typeof parsed.reference?.title === "string") {
+      const kind = parsed.reference.kind === "task" ? "Tarefa" : "Cliente";
+      return `${kind}: ${parsed.reference.title}`;
+    }
+
     const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
     const fileName = typeof parsed.file?.name === "string" ? parsed.file.name : "arquivo";
     return text || `Anexo: ${fileName}`;
