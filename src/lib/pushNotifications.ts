@@ -10,6 +10,12 @@ type GrowWindow = Window & {
 };
 
 export type PushPermissionState = NotificationPermission | "unsupported";
+export type PushUnsupportedReason =
+  | "server"
+  | "insecure_context"
+  | "missing_service_worker"
+  | "missing_push_manager"
+  | "missing_notification_api";
 
 export interface PushSubscriptionStatus {
   supported: boolean;
@@ -17,6 +23,7 @@ export interface PushSubscriptionStatus {
   permission: PushPermissionState;
   subscribed: boolean;
   endpoint: string | null;
+  unsupportedReason: PushUnsupportedReason | null;
 }
 
 const normalizeConfigValue = (value: unknown) => {
@@ -97,6 +104,10 @@ const buildPushActivationError = (error: unknown) => {
   const { name, message } = readErrorDetails(error);
   const normalized = `${name} ${message}`.toLowerCase();
 
+  if (normalized.includes("secure") || normalized.includes("insecure")) {
+    return new Error("Push exige HTTPS ou um ambiente local confiavel, como localhost/127.0.0.1.");
+  }
+
   if (normalized.includes("push service error") || normalized.includes("registration failed")) {
     return new Error(
       "Falha ao registrar no servico de push do navegador. Verifique a conexao, as permissoes de notificacao do navegador/sistema e tente novamente.",
@@ -132,16 +143,62 @@ const buildApplicationServerKey = (publicKey: string) => {
   return key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength);
 };
 
-export const isPushSupported = () =>
-  typeof window !== "undefined" &&
-  window.isSecureContext &&
-  "serviceWorker" in navigator &&
-  "PushManager" in window &&
-  "Notification" in window;
+const isLocalTrustedHost = () => {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.endsWith(".localhost");
+};
+
+export const getPushSupportInfo = (): { supported: boolean; reason: PushUnsupportedReason | null } => {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return { supported: false, reason: "server" };
+  }
+
+  if (!("Notification" in window)) {
+    return { supported: false, reason: "missing_notification_api" };
+  }
+
+  if (!("serviceWorker" in navigator)) {
+    return { supported: false, reason: "missing_service_worker" };
+  }
+
+  const hasPushManager =
+    "PushManager" in window ||
+    (typeof ServiceWorkerRegistration !== "undefined" && "pushManager" in ServiceWorkerRegistration.prototype);
+
+  if (!hasPushManager) {
+    return { supported: false, reason: "missing_push_manager" };
+  }
+
+  if (!window.isSecureContext && !isLocalTrustedHost()) {
+    return { supported: false, reason: "insecure_context" };
+  }
+
+  return { supported: true, reason: null };
+};
+
+export const getPushUnsupportedMessage = (reason: PushUnsupportedReason | null) => {
+  if (reason === "insecure_context") {
+    return "Push exige HTTPS ou localhost/127.0.0.1. Abra o sistema em um endereco seguro para ativar.";
+  }
+  if (reason === "missing_service_worker") {
+    return "Este navegador nao disponibilizou service worker para este site.";
+  }
+  if (reason === "missing_push_manager") {
+    return "Este navegador nao disponibilizou Web Push neste ambiente.";
+  }
+  if (reason === "missing_notification_api") {
+    return "Este navegador nao possui API de notificacoes.";
+  }
+  return "Push nao suportado neste navegador.";
+};
+
+export const isPushSupported = () => getPushSupportInfo().supported;
 
 const ensureServiceWorkerRegistration = async () => {
-  if (!isPushSupported()) {
-    throw new Error("Push notifications nao sao suportadas neste navegador.");
+  const support = getPushSupportInfo();
+  if (!support.supported) {
+    throw new Error(getPushUnsupportedMessage(support.reason));
   }
 
   if (!isFunctionalPwaRoute(window.location.pathname)) {
@@ -229,13 +286,16 @@ export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatu
     void resolveWebPushPublicKey().catch(() => undefined);
   }
 
-  if (!isPushSupported()) {
+  const support = getPushSupportInfo();
+
+  if (!support.supported) {
     return {
       supported: false,
       hasPublicKey,
       permission: "unsupported",
       subscribed: false,
       endpoint: null,
+      unsupportedReason: support.reason,
     };
   }
 
@@ -256,6 +316,7 @@ export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatu
     permission: Notification.permission,
     subscribed: Boolean(subscription),
     endpoint: subscription?.endpoint || null,
+    unsupportedReason: null,
   };
 };
 

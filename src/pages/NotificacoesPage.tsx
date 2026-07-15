@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
 import {
   disablePushOnCurrentDevice,
+  getPushUnsupportedMessage,
   getPushSubscriptionStatus,
   subscribePushOnCurrentDevice,
   syncPushSubscriptionOnServer,
@@ -78,6 +79,7 @@ export default function NotificacoesPage() {
     permission: "unsupported",
     subscribed: false,
     endpoint: null,
+    unsupportedReason: null,
   });
   const [pushActionLoading, setPushActionLoading] = useState<"enable" | "disable" | null>(null);
 
@@ -126,7 +128,7 @@ export default function NotificacoesPage() {
   }, [filter, notifications]);
 
   const pushStatusLabel = useMemo(() => {
-    if (!pushStatus.supported) return "Push nao suportado neste navegador.";
+    if (!pushStatus.supported) return getPushUnsupportedMessage(pushStatus.unsupportedReason);
     if (!pushStatus.hasPublicKey) return "Chave publica VAPID sera carregada ao ativar.";
     if (pushStatus.permission === "denied") return "Permissao bloqueada no navegador.";
     if (pushStatus.permission !== "granted") return "Permissao ainda nao concedida.";

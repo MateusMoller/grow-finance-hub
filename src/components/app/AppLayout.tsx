@@ -29,6 +29,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { usePriorityNotifications } from "@/hooks/usePriorityNotifications";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -153,6 +154,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     notificationSignal,
     latestRealtimeNotifications,
   } = usePriorityNotifications();
+  const {
+    unreadCount: internalChatUnreadCount,
+    notificationSignal: internalChatNotificationSignal,
+    latestRealtimeMessages: latestInternalChatMessages,
+  } = useInternalChatNotifications();
 
   const navigate = useNavigate();
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
@@ -228,6 +234,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [notificationSignal, playNotificationSound]);
 
   useEffect(() => {
+    if (internalChatNotificationSignal === 0) return;
+
+    void playNotificationSound().catch(() => {
+      // Browsers can block autoplay until user interaction; fail silently.
+    });
+  }, [internalChatNotificationSignal, playNotificationSound]);
+
+  useEffect(() => {
     if (notificationSignal === 0 || latestRealtimeNotifications.length === 0) return;
     if (!canUseBrowserNotifications()) return;
 
@@ -298,6 +312,66 @@ export function AppLayout({ children }: { children: ReactNode }) {
       },
     ).catch(() => undefined);
   }, [latestRealtimeNotifications, navigate, notificationSignal]);
+
+  useEffect(() => {
+    if (internalChatNotificationSignal === 0 || latestInternalChatMessages.length === 0) return;
+    if (!canUseBrowserNotifications()) return;
+
+    const requestPermissionFromToast = () => {
+      localStorage.setItem(browserNotificationPromptKey, "true");
+      void Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          toast.success("Notificacoes do navegador ativadas.");
+        } else if (permission === "denied") {
+          toast.error("Notificacoes bloqueadas no navegador.");
+        }
+      });
+    };
+
+    if (Notification.permission === "default") {
+      const alreadyPrompted = localStorage.getItem(browserNotificationPromptKey) === "true";
+      if (!alreadyPrompted) {
+        toast("Ative as notificacoes do navegador", {
+          description: "Assim as mensagens do chat aparecem no canto da tela mesmo com o sistema em segundo plano.",
+          action: {
+            label: "Ativar",
+            onClick: requestPermissionFromToast,
+          },
+          duration: 10000,
+        });
+      }
+      return;
+    }
+
+    if (Notification.permission !== "granted") return;
+
+    const firstMessage = latestInternalChatMessages[0];
+    const overflowCount = latestInternalChatMessages.length - 1;
+    const title =
+      overflowCount > 0
+        ? `${latestInternalChatMessages.length} novas mensagens`
+        : firstMessage.title;
+    const body =
+      overflowCount > 0
+        ? `${firstMessage.title}. E mais ${overflowCount} mensagem(ns).`
+        : firstMessage.body;
+    const targetUrl = "/app/chat-interno";
+
+    void showBrowserNotification(
+      title,
+      {
+        body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        tag: overflowCount > 0 ? `grow-internal-chat-${internalChatNotificationSignal}` : firstMessage.id,
+        renotify: true,
+        data: { url: targetUrl },
+      },
+      () => {
+        navigate(targetUrl);
+      },
+    ).catch(() => undefined);
+  }, [internalChatNotificationSignal, latestInternalChatMessages, navigate]);
 
   useEffect(() => {
     return () => {
@@ -500,7 +574,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AppSidebar footerControls={sidebarFooterControls} />
+        <AppSidebar
+          footerControls={sidebarFooterControls}
+          internalChatUnreadCount={internalChatUnreadCount}
+        />
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">

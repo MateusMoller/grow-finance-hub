@@ -36,7 +36,14 @@ import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { routeFeatureMap } from "@/lib/organizationFeatures";
 import { canAccessModule, resolveRouteModule } from "@/lib/userPermissions";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
+
+interface SidebarItem {
+  title: string;
+  url: string;
+  icon: ComponentType<{ className?: string }>;
+  badgeCount?: number;
+}
 
 const mainItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
@@ -58,7 +65,7 @@ const systemItems = [
   { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
 ];
 
-function SidebarSection({ label, items }: { label: string; items: typeof mainItems }) {
+function SidebarSection({ label, items }: { label: string; items: SidebarItem[] }) {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
 
@@ -95,7 +102,12 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
                       <item.icon className="mr-2 h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {!collapsed && <span className="min-w-0 flex-1 truncate">{item.title}</span>}
+                      {item.badgeCount && item.badgeCount > 0 ? (
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground">
+                          {item.badgeCount > 99 ? "99+" : item.badgeCount}
+                        </span>
+                      ) : null}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -108,7 +120,13 @@ function SidebarSection({ label, items }: { label: string; items: typeof mainIte
   );
 }
 
-export function AppSidebar({ footerControls }: { footerControls?: ReactNode }) {
+export function AppSidebar({
+  footerControls,
+  internalChatUnreadCount = 0,
+}: {
+  footerControls?: ReactNode;
+  internalChatUnreadCount?: number;
+}) {
   const { state } = useSidebar();
   const { role, roles, effectiveAccess } = useAuth();
   const { isFeatureEnabled } = useOrganizationSettings();
@@ -150,7 +168,11 @@ export function AppSidebar({ footerControls }: { footerControls?: ReactNode }) {
 
   const visibleMainItems = featureFilteredMainItems;
 
-  const visibleOperationalItems = featureFilteredOperationalItems;
+  const visibleOperationalItems = featureFilteredOperationalItems.map((item) =>
+    item.url === "/app/chat-interno"
+      ? { ...item, badgeCount: internalChatUnreadCount }
+      : item,
+  );
 
   const visibleSystemItems = systemItems.filter((item) => {
     const feature = routeFeatureMap[item.url];

@@ -3,6 +3,7 @@ import { AppLayout } from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
+import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -123,12 +124,34 @@ export default function ChatInternoPage() {
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    summaries: conversationSummaries,
+    unreadCount: internalChatUnreadCount,
+    markConversationRead,
+    refresh: refreshConversationSummaries,
+  } = useInternalChatNotifications();
 
   const activeRoles = useMemo(() => normalizeRoles(roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
   const canAccess = hasAnyInternalRole(activeRoles);
   const activeDirectUser = activeChat.type === "direct"
     ? contacts.find((contact) => contact.userId === activeChat.targetUserId) || null
     : null;
+  const conversationSummaryMap = useMemo(
+    () => new Map(conversationSummaries.map((summary) => [summary.key, summary])),
+    [conversationSummaries],
+  );
+  const groupConversationSummary = conversationSummaryMap.get("group") || null;
+  const sortedContacts = useMemo(
+    () =>
+      [...contacts].sort((left, right) => {
+        const leftSummary = conversationSummaryMap.get(`direct:${left.userId}`);
+        const rightSummary = conversationSummaryMap.get(`direct:${right.userId}`);
+        const byLastMessage = (rightSummary?.lastMessageAt || "").localeCompare(leftSummary?.lastMessageAt || "");
+        if (byLastMessage !== 0) return byLastMessage;
+        return left.displayName.localeCompare(right.displayName, "pt-BR");
+      }),
+    [contacts, conversationSummaryMap],
+  );
 
   const fetchContacts = useCallback(async () => {
     if (!user?.id) {
@@ -279,6 +302,12 @@ export default function ChatInternoPage() {
   }, [messages]);
 
   useEffect(() => {
+    if (!messages.length) return;
+    const conversationKey = activeChat.type === "group" ? "group" : `direct:${activeChat.targetUserId}`;
+    markConversationRead(conversationKey, messages[messages.length - 1]?.created_at);
+  }, [activeChat, markConversationRead, messages]);
+
+  useEffect(() => {
     if (activeChat.type !== "direct") return;
     const exists = contacts.some((contact) => contact.userId === activeChat.targetUserId);
     if (exists) return;
@@ -353,6 +382,7 @@ export default function ChatInternoPage() {
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     void fetchMessages();
+    void refreshConversationSummaries();
   };
 
   const handleDownloadAttachment = async (filePath: string) => {
@@ -429,6 +459,11 @@ export default function ChatInternoPage() {
             <Badge variant="secondary" className="gap-1.5">
               <MessageSquare className="h-3.5 w-3.5" /> {messages.length} mensagens
             </Badge>
+            {internalChatUnreadCount > 0 ? (
+              <Badge variant="destructive" className="gap-1.5">
+                {internalChatUnreadCount} não lida(s)
+              </Badge>
+            ) : null}
             <Badge variant="outline" className="gap-1.5">
               <Users className="h-3.5 w-3.5" /> {totalUsers} usuários internos
             </Badge>
@@ -461,9 +496,27 @@ export default function ChatInternoPage() {
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <Users className="h-4 w-4" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">Grupo Geral</p>
-                    <p className="text-xs text-muted-foreground">Canal único da equipe</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold">Grupo Geral</p>
+                      {groupConversationSummary?.lastMessageAt ? (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {formatMessageTime(groupConversationSummary.lastMessageAt)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between gap-2">
+                      <p className="truncate text-xs text-muted-foreground">
+                        {groupConversationSummary
+                          ? `${groupConversationSummary.lastSenderName}: ${groupConversationSummary.lastMessagePreview}`
+                          : "Canal único da equipe"}
+                      </p>
+                      {groupConversationSummary?.unreadCount ? (
+                        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                          {groupConversationSummary.unreadCount > 99 ? "99+" : groupConversationSummary.unreadCount}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </button>
@@ -482,10 +535,11 @@ export default function ChatInternoPage() {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  {contacts.map((contact) => {
+                  {sortedContacts.map((contact) => {
                     const isActive =
                       activeChat.type === "direct" &&
                       activeChat.targetUserId === contact.userId;
+                    const summary = conversationSummaryMap.get(`direct:${contact.userId}`);
 
                     return (
                       <button
@@ -504,9 +558,27 @@ export default function ChatInternoPage() {
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                             {initialsFromName(contact.displayName)}
                           </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{contact.displayName}</p>
-                            <p className="text-xs text-muted-foreground">Conversa pessoal</p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium">{contact.displayName}</p>
+                              {summary?.lastMessageAt ? (
+                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                  {formatMessageTime(summary.lastMessageAt)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-0.5 flex items-center justify-between gap-2">
+                              <p className="truncate text-xs text-muted-foreground">
+                                {summary
+                                  ? `${summary.lastSenderName}: ${summary.lastMessagePreview}`
+                                  : "Conversa pessoal"}
+                              </p>
+                              {summary?.unreadCount ? (
+                                <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                                  {summary.unreadCount > 99 ? "99+" : summary.unreadCount}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       </button>
