@@ -5,6 +5,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
+import { canAccessModule } from "@/lib/userPermissions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -113,7 +114,7 @@ const sanitizeStorageFileName = (name: string) =>
     .slice(0, 120) || "arquivo";
 
 export default function ChatInternoPage() {
-  const { user, role, roles, currentOrganizationId, loading: authLoading } = useAuth();
+  const { user, role, roles, currentOrganizationId, effectiveAccess, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<InternalMessage[]>([]);
   const [contacts, setContacts] = useState<InternalUser[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
@@ -132,7 +133,9 @@ export default function ChatInternoPage() {
   } = useInternalChatNotifications();
 
   const activeRoles = useMemo(() => normalizeRoles(roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
-  const canAccess = hasAnyInternalRole(activeRoles);
+  const canAccess = effectiveAccess
+    ? canAccessModule(effectiveAccess, "chat_interno")
+    : hasAnyInternalRole(activeRoles);
   const activeDirectUser = activeChat.type === "direct"
     ? contacts.find((contact) => contact.userId === activeChat.targetUserId) || null
     : null;

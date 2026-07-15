@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
+import { canAccessModule } from "@/lib/userPermissions";
 
 type ChatType = "group" | "direct";
 
@@ -110,15 +112,19 @@ export const markInternalChatConversationRead = (
 };
 
 export function useInternalChatNotifications() {
-  const { user, currentOrganizationId } = useAuth();
+  const { user, role, roles, currentOrganizationId, effectiveAccess } = useAuth();
   const [summaries, setSummaries] = useState<InternalChatConversationSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [notificationSignal, setNotificationSignal] = useState(0);
   const [latestRealtimeMessages, setLatestRealtimeMessages] = useState<InternalChatRealtimeMessage[]>([]);
   const unreadMessageIdsRef = useRef<Set<string>>(new Set());
+  const activeRoles = useMemo(() => normalizeRoles(roles.length > 0 ? roles : role ? [role] : []), [role, roles]);
+  const canUseInternalChat = effectiveAccess
+    ? canAccessModule(effectiveAccess, "chat_interno")
+    : hasAnyInternalRole(activeRoles);
 
   const refresh = useCallback(async (source: RefreshSource = "manual") => {
-    if (!user?.id) {
+    if (!user?.id || !canUseInternalChat) {
       setSummaries([]);
       setLatestRealtimeMessages([]);
       return;
@@ -212,14 +218,14 @@ export function useInternalChatNotifications() {
     } else {
       setLatestRealtimeMessages([]);
     }
-  }, [currentOrganizationId, user?.id]);
+  }, [canUseInternalChat, currentOrganizationId, user?.id]);
 
   useEffect(() => {
     void refresh("initial");
   }, [refresh]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !canUseInternalChat) return;
 
     const channel = supabase
       .channel(`internal-chat-notifications-${user.id}`)
@@ -239,7 +245,7 @@ export function useInternalChatNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refresh, user?.id]);
+  }, [canUseInternalChat, refresh, user?.id]);
 
   const unreadCount = useMemo(
     () => summaries.reduce((total, summary) => total + summary.unreadCount, 0),
