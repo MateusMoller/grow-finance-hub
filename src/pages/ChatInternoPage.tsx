@@ -9,12 +9,15 @@ import { canAccessModule } from "@/lib/userPermissions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Download, FileText, Loader2, MessageSquare, Paperclip, Send, ShieldCheck, UserRound, Users, X } from "lucide-react";
+import { Download, FileText, Loader2, MessageSquare, Palette, Paperclip, Send, ShieldCheck, UserRound, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
 type InternalChatMessageRow = Tables<"internal_chat_messages">;
-type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name">;
+type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name" | "avatar_url">;
+type ChatDensity = "compact" | "comfortable";
+type ChatBackground = "grid" | "plain" | "soft";
+type ChatBubbleTone = "green" | "blue" | "slate";
 
 interface InternalMessage extends InternalChatMessageRow {
   profile?: ProfileRow | null;
@@ -23,6 +26,7 @@ interface InternalMessage extends InternalChatMessageRow {
 interface InternalUser {
   userId: string;
   displayName: string;
+  avatarUrl: string | null;
 }
 
 type ActiveChat = { type: "group" } | { type: "direct"; targetUserId: string };
@@ -113,6 +117,55 @@ const sanitizeStorageFileName = (name: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 120) || "arquivo";
 
+const chatPreferenceKey = (userId: string | undefined, key: string) => `grow-internal-chat-${key}-${userId || "anon"}`;
+
+const readChatPreference = <T extends string>(userId: string | undefined, key: string, fallback: T, allowed: readonly T[]) => {
+  if (typeof window === "undefined") return fallback;
+  const stored = localStorage.getItem(chatPreferenceKey(userId, key));
+  return allowed.includes(stored as T) ? (stored as T) : fallback;
+};
+
+const saveChatPreference = (userId: string | undefined, key: string, value: string) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(chatPreferenceKey(userId, key), value);
+};
+
+const ownBubbleToneClass: Record<ChatBubbleTone, string> = {
+  green: "bg-[#dcf8c6] text-slate-900",
+  blue: "bg-sky-100 text-slate-950 dark:bg-sky-900/40 dark:text-sky-50",
+  slate: "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950",
+};
+
+const chatBackgroundClass: Record<ChatBackground, string> = {
+  grid: "bg-muted/20 [background-image:linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] [background-size:28px_28px]",
+  plain: "bg-muted/10",
+  soft: "bg-gradient-to-b from-muted/20 to-background",
+};
+
+function ChatAvatar({
+  name,
+  avatarUrl,
+  size = "md",
+  className = "",
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const sizeClass = size === "sm" ? "h-7 w-7 text-[10px]" : size === "lg" ? "h-11 w-11 text-sm" : "h-10 w-10 text-xs";
+
+  return (
+    <div className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted font-semibold text-muted-foreground ${sizeClass} ${className}`}>
+      {avatarUrl ? (
+        <img src={avatarUrl} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        initialsFromName(name)
+      )}
+    </div>
+  );
+}
+
 export default function ChatInternoPage() {
   const { user, role, roles, currentOrganizationId, effectiveAccess, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<InternalMessage[]>([]);
@@ -123,6 +176,16 @@ export default function ChatInternoPage() {
   const [newMessage, setNewMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
+  const [showCustomization, setShowCustomization] = useState(false);
+  const [chatDensity, setChatDensity] = useState<ChatDensity>(() =>
+    readChatPreference(user?.id, "density", "comfortable", ["compact", "comfortable"] as const),
+  );
+  const [chatBackground, setChatBackground] = useState<ChatBackground>(() =>
+    readChatPreference(user?.id, "background", "grid", ["grid", "plain", "soft"] as const),
+  );
+  const [chatBubbleTone, setChatBubbleTone] = useState<ChatBubbleTone>(() =>
+    readChatPreference(user?.id, "bubble", "green", ["green", "blue", "slate"] as const),
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const {
@@ -175,12 +238,28 @@ export default function ChatInternoPage() {
       return;
     }
 
-    const users = ((data || []) as Array<{ user_id: string; display_name: string | null }>)
-      .filter((item) => item.user_id !== user.id && !isHiddenSystemUser(item.display_name))
-      .map((item) => ({
-        userId: item.user_id,
-        displayName: resolveDisplayName(item.display_name, `Usuário ${item.user_id.slice(0, 6)}`),
-      }));
+    const baseUsers = ((data || []) as Array<{ user_id: string; display_name: string | null }>)
+      .filter((item) => item.user_id !== user.id && !isHiddenSystemUser(item.display_name));
+    const userIds = baseUsers.map((item) => item.user_id);
+    let profileMap = new Map<string, ProfileRow>();
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, avatar_url")
+        .in("user_id", userIds);
+
+      profileMap = new Map(((profiles || []) as ProfileRow[]).map((profile) => [profile.user_id, profile]));
+    }
+
+    const users = baseUsers.map((item) => ({
+      userId: item.user_id,
+      displayName: resolveDisplayName(
+        profileMap.get(item.user_id)?.display_name || item.display_name,
+        `Usuario ${item.user_id.slice(0, 6)}`,
+      ),
+      avatarUrl: profileMap.get(item.user_id)?.avatar_url || null,
+    }));
 
     setContacts(users);
     setLoadingContacts(false);
@@ -239,7 +318,7 @@ export default function ChatInternoPage() {
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, display_name")
+        .select("user_id, display_name, avatar_url")
         .in("user_id", userIds);
 
       profileMap = new Map(
@@ -316,6 +395,18 @@ export default function ChatInternoPage() {
     if (exists) return;
     setActiveChat({ type: "group" });
   }, [activeChat, contacts]);
+
+  useEffect(() => {
+    saveChatPreference(user?.id, "density", chatDensity);
+  }, [chatDensity, user?.id]);
+
+  useEffect(() => {
+    saveChatPreference(user?.id, "background", chatBackground);
+  }, [chatBackground, user?.id]);
+
+  useEffect(() => {
+    saveChatPreference(user?.id, "bubble", chatBubbleTone);
+  }, [chatBubbleTone, user?.id]);
 
   const handleSendMessage = async () => {
     const text = newMessage.trim();
@@ -473,8 +564,70 @@ export default function ChatInternoPage() {
             <Badge variant="outline" className="gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5" /> So equipe interna
             </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 rounded-full px-3 text-xs"
+              onClick={() => setShowCustomization((current) => !current)}
+            >
+              <Palette className="h-3.5 w-3.5" />
+              Personalizar
+            </Button>
           </div>
         </div>
+
+        {showCustomization && (
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-muted-foreground">Mensagens</span>
+                {(["comfortable", "compact"] as ChatDensity[]).map((item) => (
+                  <Button
+                    key={item}
+                    type="button"
+                    variant={chatDensity === item ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 rounded-full px-3 text-xs"
+                    onClick={() => setChatDensity(item)}
+                  >
+                    {item === "comfortable" ? "Confortavel" : "Compacta"}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-muted-foreground">Fundo</span>
+                {(["grid", "plain", "soft"] as ChatBackground[]).map((item) => (
+                  <Button
+                    key={item}
+                    type="button"
+                    variant={chatBackground === item ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 rounded-full px-3 text-xs"
+                    onClick={() => setChatBackground(item)}
+                  >
+                    {item === "grid" ? "Grade" : item === "plain" ? "Limpo" : "Suave"}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-muted-foreground">Minha cor</span>
+                {(["green", "blue", "slate"] as ChatBubbleTone[]).map((item) => (
+                  <Button
+                    key={item}
+                    type="button"
+                    variant={chatBubbleTone === item ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 rounded-full px-3 text-xs"
+                    onClick={() => setChatBubbleTone(item)}
+                  >
+                    {item === "green" ? "Verde" : item === "blue" ? "Azul" : "Escura"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
@@ -558,9 +711,7 @@ export default function ChatInternoPage() {
                         }
                       >
                         <div className="flex items-center gap-2">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                            {initialsFromName(contact.displayName)}
-                          </div>
+                          <ChatAvatar name={contact.displayName} avatarUrl={contact.avatarUrl} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                               <p className="truncate text-sm font-medium">{contact.displayName}</p>
@@ -595,13 +746,17 @@ export default function ChatInternoPage() {
           <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                <div className="relative">
                   {activeChat.type === "group" ? (
-                    <Users className="h-5 w-5" />
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                      <Users className="h-5 w-5" />
+                    </div>
                   ) : (
-                    <span className="text-sm font-semibold">
-                      {initialsFromName(activeDirectUser?.displayName || "Usuário")}
-                    </span>
+                    <ChatAvatar
+                      name={activeDirectUser?.displayName || "Usuario"}
+                      avatarUrl={activeDirectUser?.avatarUrl}
+                      size="lg"
+                    />
                   )}
                   <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-emerald-500" />
                 </div>
@@ -619,7 +774,7 @@ export default function ChatInternoPage() {
               </Badge>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-4 py-5 [background-image:linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] [background-size:28px_28px]">
+            <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-5 ${chatDensity === "compact" ? "space-y-2" : "space-y-4"} ${chatBackgroundClass[chatBackground]}`}>
               {loadingMessages ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -650,14 +805,17 @@ export default function ChatInternoPage() {
                         className={`flex items-end gap-2 ${isOwn ? "justify-end" : "justify-start"}`}
                       >
                         {!isOwn && (
-                          <div className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-card text-[10px] font-semibold text-muted-foreground shadow-sm">
-                            {initialsFromName(senderName)}
-                          </div>
+                          <ChatAvatar
+                            name={senderName}
+                            avatarUrl={message.profile?.avatar_url}
+                            size="sm"
+                            className="mb-1 bg-card shadow-sm"
+                          />
                         )}
                         <div
-                          className={`max-w-[92%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[72%] ${
+                          className={`max-w-[92%] rounded-2xl px-4 shadow-sm sm:max-w-[72%] ${chatDensity === "compact" ? "py-2" : "py-2.5"} ${
                             isOwn
-                              ? "rounded-br-md bg-[#dcf8c6] text-slate-900"
+                              ? `rounded-br-md ${ownBubbleToneClass[chatBubbleTone]}`
                               : "rounded-bl-md bg-card text-card-foreground"
                           }`}
                         >
