@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 
 type InternalChatMessageRow = Tables<"internal_chat_messages">;
 type ProfileRow = Pick<Tables<"profiles">, "user_id" | "display_name" | "avatar_url">;
@@ -339,9 +340,8 @@ function ChatReferenceCard({
   onRemove?: () => void;
 }) {
   const Icon = reference.kind === "task" ? ClipboardList : Building2;
-
-  return (
-    <div className={`flex items-center gap-2 rounded-xl border bg-background/80 px-3 ${compact ? "py-2" : "py-2.5"} text-left shadow-sm`}>
+  const content = (
+    <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
       </div>
@@ -353,11 +353,30 @@ function ChatReferenceCard({
           <p className="truncate text-[11px] text-muted-foreground">{reference.subtitle}</p>
         ) : null}
       </div>
-      {onRemove ? (
+    </>
+  );
+  const className = `flex items-center gap-2 rounded-xl border bg-background/80 px-3 ${
+    compact ? "py-2" : "py-2.5"
+  } text-left shadow-sm transition-colors ${
+    onRemove ? "" : "hover:border-primary/40 hover:bg-background"
+  }`;
+
+  if (!onRemove) {
+    return (
+      <Link to={reference.url} className={className} aria-label={`Abrir ${reference.kind === "task" ? "tarefa" : "cliente"} ${reference.title}`}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={className}>
+      {content}
+      <div className="shrink-0">
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRemove}>
           <X className="h-3.5 w-3.5" />
         </Button>
-      ) : null}
+      </div>
     </div>
   );
 }
