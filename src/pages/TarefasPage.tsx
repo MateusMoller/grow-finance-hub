@@ -15,7 +15,6 @@ import {
   Loader2,
   Check,
   ChevronsUpDown,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -75,6 +74,12 @@ import {
   recordTaskHistoryEntry,
   type ChangeHistoryEntry,
 } from "@/lib/changeHistory";
+import {
+  createTaskRelations,
+  deleteTaskRelation,
+  loadRelatedTasks,
+  type RelatedTaskSummary,
+} from "@/lib/taskRelations";
 
 interface TaskSubtask {
   title: string;
@@ -284,10 +289,14 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [relatedSourceTask, setRelatedSourceTask] = useState<Task | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [relationsVersion, setRelationsVersion] = useState(0);
   const [selectedTaskHistory, setSelectedTaskHistory] = useState<
     ChangeHistoryEntry[]
+  >([]);
+  const [selectedTaskRelations, setSelectedTaskRelations] = useState<
+    RelatedTaskSummary[]
   >([]);
   const [newTask, setNewTask] = useState({
     title: "",
@@ -366,6 +375,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     const params = new URLSearchParams(location.search);
     if (params.get("create") !== "1") return;
 
+    setRelatedSourceTask(null);
     setCreateOpen(true);
     params.delete("create");
     const nextSearch = params.toString();
@@ -501,6 +511,38 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     };
   }, [currentOrganizationId, historyVersion, selectedTask?.id]);
 
+  useEffect(() => {
+    if (!currentOrganizationId || !selectedTask?.id) {
+      setSelectedTaskRelations([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadRelations = async () => {
+      try {
+        const relations = await loadRelatedTasks(
+          currentOrganizationId,
+          selectedTask.id,
+        );
+        if (!cancelled) setSelectedTaskRelations(relations);
+      } catch (error) {
+        if (!cancelled) {
+          setSelectedTaskRelations([]);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Não foi possível carregar tarefas relacionadas.",
+          );
+        }
+      }
+    };
+
+    void loadRelations();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganizationId, relationsVersion, selectedTask?.id]);
+
   const handleSubtaskToggle = (taskId: string, subtaskIndex: number) => {
     if (!subtasksAvailable) {
       toast.warning("Subtarefas não estão disponíveis no banco atual.");
@@ -619,9 +661,40 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     }
 
     void registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
+    if (relatedSourceTask) {
+      if (!currentOrganizationId) {
+        toast.warning("Tarefa criada, mas a relação não foi salva por falta de organização ativa.");
+      } else {
+        try {
+          await createTaskRelations({
+            organizationId: currentOrganizationId,
+            sourceTaskId: createdTask.id,
+            targetTaskIds: [relatedSourceTask.id],
+            createdBy: user?.id,
+          });
+          void registerTaskHistory(
+            createdTask.id,
+            "Tarefa relacionada criada",
+            relatedSourceTask.title,
+          );
+          void registerTaskHistory(
+            relatedSourceTask.id,
+            "Tarefa relacionada criada",
+            createdTask.title,
+          );
+          setRelationsVersion((prev) => prev + 1);
+        } catch (relationError) {
+          toast.warning(
+            relationError instanceof Error
+              ? `Tarefa criada, mas a relação não foi salva: ${relationError.message}`
+              : "Tarefa criada, mas a relação não foi salva.",
+          );
+        }
+      }
+    }
 
     setCreateOpen(false);
-    setNewSubtaskTitle("");
+    setRelatedSourceTask(null);
     setNewTask({
       title: "",
       description: "",
@@ -651,22 +724,51 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     }
   }, [clients, selectedCompany]);
 
-  const handleAddDraftSubtask = () => {
-    const title = newSubtaskTitle.trim();
-    if (!title) return;
-
-    setNewTask((prev) => ({
-      ...prev,
-      subtasks: [...prev.subtasks, { title, done: false }],
-    }));
-    setNewSubtaskTitle("");
+  const handleRemoveRelatedTask = async (relationId: string) => {
+    const relation = selectedTaskRelations.find(
+      (item) => item.relationId === relationId,
+    );
+    try {
+      await deleteTaskRelation(relationId);
+      if (selectedTask?.id) {
+        void registerTaskHistory(
+          selectedTask.id,
+          "Relação removida",
+          relation?.title,
+        );
+      }
+      setRelationsVersion((prev) => prev + 1);
+      toast.success("Relação removida.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível remover a relação.",
+      );
+    }
   };
 
-  const handleRemoveDraftSubtask = (index: number) => {
-    setNewTask((prev) => ({
-      ...prev,
-      subtasks: prev.subtasks.filter((_, itemIndex) => itemIndex !== index),
-    }));
+  const handleCreateRelatedTask = (sourceTaskId: string) => {
+    const sourceTask = tasks.find((task) => task.id === sourceTaskId);
+    if (!sourceTask) {
+      toast.error("Tarefa de origem não encontrada.");
+      return;
+    }
+
+    setRelatedSourceTask(sourceTask);
+    setSheetOpen(false);
+    setCreateOpen(true);
+  };
+
+  const handleOpenRelatedTask = (taskId: string) => {
+    const relatedTask = tasks.find((task) => task.id === taskId);
+    if (!relatedTask) {
+      toast.error("Tarefa relacionada não encontrada.");
+      return;
+    }
+
+    setSelectedTask(relatedTask);
+    setSheetOpen(true);
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -766,7 +868,13 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                 Gestão completa de tarefas da equipe
               </p>
             </div>
-            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+            <Button
+              className="gap-2"
+              onClick={() => {
+                setRelatedSourceTask(null);
+                setCreateOpen(true);
+              }}
+            >
               <Plus className="h-4 w-4" /> Nova Tarefa
             </Button>
           </div>
@@ -976,16 +1084,39 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
         onHistory={(taskId, action, details) => {
           void registerTaskHistory(taskId, action, details);
         }}
+        onOpenRelatedTask={handleOpenRelatedTask}
+        onRemoveRelatedTask={(relationId) => {
+          void handleRemoveRelatedTask(relationId);
+        }}
+        onCreateRelatedTask={handleCreateRelatedTask}
         actorName={actorLabel}
         historyEntries={selectedTaskHistory}
+        relatedTasks={selectedTaskRelations}
       />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setRelatedSourceTask(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Nova Tarefa</DialogTitle>
+            <DialogTitle>
+              {relatedSourceTask ? "Nova tarefa relacionada" : "Nova Tarefa"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {relatedSourceTask && (
+              <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                Esta tarefa será relacionada a{" "}
+                <span className="font-medium text-foreground">
+                  {relatedSourceTask.title}
+                </span>
+                . A relação é apenas informativa e não bloqueia o fluxo.
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Título *</Label>
               <Input
@@ -1008,56 +1139,6 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   }))
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Subtarefas</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Ex: Conferir pendências do cliente"
-                  value={newSubtaskTitle}
-                  onChange={(event) => setNewSubtaskTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      handleAddDraftSubtask();
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleAddDraftSubtask}
-                  disabled={!newSubtaskTitle.trim()}
-                >
-                  Adicionar
-                </Button>
-              </div>
-              {newTask.subtasks.length > 0 ? (
-                <div className="space-y-1.5 rounded-lg border p-2">
-                  {newTask.subtasks.map((subtask, index) => (
-                    <div
-                      key={`${subtask.title}-${index}`}
-                      className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5"
-                    >
-                      <span className="text-sm">{subtask.title}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => handleRemoveDraftSubtask(index)}
-                        aria-label={`Remover subtarefa ${index + 1}`}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Nenhuma subtarefa adicionada.
-                </p>
-              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -1233,7 +1314,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
               variant="outline"
               onClick={() => {
                 setCreateOpen(false);
-                setNewSubtaskTitle("");
+                setRelatedSourceTask(null);
                 setNewTask({
                   title: "",
                   description: "",

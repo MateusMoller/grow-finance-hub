@@ -59,6 +59,11 @@ interface InternalUser {
   avatarUrl: string | null;
 }
 
+interface InternalChatPresence {
+  user_id?: string;
+  online_at?: string;
+}
+
 type ActiveChat = { type: "group" } | { type: "direct"; targetUserId: string };
 
 interface InternalChatAttachment {
@@ -282,6 +287,15 @@ const sanitizeStorageFileName = (name: string) =>
     .slice(0, 120) || "arquivo";
 
 const chatPreferenceKey = (userId: string | undefined, key: string) => `grow-internal-chat-${key}-${userId || "anon"}`;
+const duplicateKeyErrorCode = "23505";
+
+const createClientMessageId = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+};
 
 const readChatPreference = <T extends string>(userId: string | undefined, key: string, fallback: T, allowed: readonly T[]) => {
   if (typeof window === "undefined") return fallback;
@@ -431,6 +445,7 @@ export default function ChatInternoPage() {
   const [taskReferenceOptions, setTaskReferenceOptions] = useState<TaskReferenceOption[]>([]);
   const [clientReferenceOptions, setClientReferenceOptions] = useState<ClientReferenceOption[]>([]);
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(() => new Set());
   const [showCustomization, setShowCustomization] = useState(false);
   const [chatDensity, setChatDensity] = useState<ChatDensity>(() =>
     readChatPreference(user?.id, "density", "comfortable", ["compact", "comfortable"] as const),
@@ -443,6 +458,7 @@ export default function ChatInternoPage() {
   );
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sendInFlightRef = useRef(false);
   const {
     summaries: conversationSummaries,
     markConversationRead,
@@ -456,6 +472,7 @@ export default function ChatInternoPage() {
   const activeDirectUser = activeChat.type === "direct"
     ? contacts.find((contact) => contact.userId === activeChat.targetUserId) || null
     : null;
+  const isActiveDirectUserOnline = activeChat.type === "direct" && onlineUserIds.has(activeChat.targetUserId);
   const conversationSummaryMap = useMemo(
     () => new Map(conversationSummaries.map((summary) => [summary.key, summary])),
     [conversationSummaries],
@@ -633,6 +650,55 @@ export default function ChatInternoPage() {
   }, [canAccess, fetchMessages, user?.id]);
 
   useEffect(() => {
+    if (!canAccess || !user?.id) {
+      setOnlineUserIds(new Set());
+      return;
+    }
+
+    const channelName = `internal-chat-presence-${currentOrganizationId || "global"}`;
+    const channel = supabase.channel(channelName, {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    });
+
+    const syncOnlineUsers = () => {
+      const state = channel.presenceState<InternalChatPresence>();
+      const nextOnlineUserIds = new Set<string>();
+
+      Object.values(state).forEach((presences) => {
+        presences.forEach((presence) => {
+          if (presence.user_id) {
+            nextOnlineUserIds.add(presence.user_id);
+          }
+        });
+      });
+
+      setOnlineUserIds(nextOnlineUserIds);
+    };
+
+    channel
+      .on("presence", { event: "sync" }, syncOnlineUsers)
+      .on("presence", { event: "join" }, syncOnlineUsers)
+      .on("presence", { event: "leave" }, syncOnlineUsers)
+      .subscribe((status) => {
+        if (status !== "SUBSCRIBED") return;
+        void channel.track({
+          user_id: user.id,
+          online_at: new Date().toISOString(),
+        } satisfies InternalChatPresence);
+      });
+
+    return () => {
+      setOnlineUserIds(new Set());
+      void channel.untrack();
+      supabase.removeChannel(channel);
+    };
+  }, [canAccess, currentOrganizationId, user?.id]);
+
+  useEffect(() => {
     if (!messages.length) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -667,13 +733,17 @@ export default function ChatInternoPage() {
   }, [chatBubbleTone, user?.id]);
 
   const handleSendMessage = async () => {
+    if (sendInFlightRef.current) return;
+
     const text = newMessage.trim();
     const file = selectedFile;
     const reference = selectedReference;
     const reply = selectedReply;
     if ((!text && !file && !reference) || !user || !currentOrganizationId) return;
 
+    sendInFlightRef.current = true;
     setSending(true);
+    const clientMessageId = createClientMessageId();
     let content = text;
     let uploadedPath: string | null = null;
 
@@ -685,6 +755,7 @@ export default function ChatInternoPage() {
         .upload(filePath, file);
 
       if (uploadError) {
+        sendInFlightRef.current = false;
         setSending(false);
         toast.error(`Não foi possível anexar o arquivo: ${uploadError.message}`);
         return;
@@ -726,6 +797,7 @@ export default function ChatInternoPage() {
           chat_type: "group",
           recipient_user_id: null,
           organization_id: currentOrganizationId,
+          client_message_id: clientMessageId,
         }
         : {
             user_id: user.id,
@@ -733,13 +805,16 @@ export default function ChatInternoPage() {
             chat_type: "direct",
             recipient_user_id: activeChat.targetUserId,
             organization_id: currentOrganizationId,
+            client_message_id: clientMessageId,
           };
 
     const { error } = await supabase.from("internal_chat_messages").insert(payload);
+    const duplicateMessage = error?.code === duplicateKeyErrorCode;
 
+    sendInFlightRef.current = false;
     setSending(false);
 
-    if (error) {
+    if (error && !duplicateMessage) {
       if (uploadedPath) {
         void supabase.storage.from("internal-chat-files").remove([uploadedPath]);
       }
@@ -1065,7 +1140,15 @@ export default function ChatInternoPage() {
                         }
                       >
                         <div className="flex items-center gap-2">
-                          <ChatAvatar name={contact.displayName} avatarUrl={contact.avatarUrl} />
+                          <div className="relative shrink-0">
+                            <ChatAvatar name={contact.displayName} avatarUrl={contact.avatarUrl} />
+                            {onlineUserIds.has(contact.userId) ? (
+                              <span
+                                className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-emerald-500"
+                                aria-label="Usuário online"
+                              />
+                            ) : null}
+                          </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                               <p className="truncate text-sm font-medium">{contact.displayName}</p>
@@ -1112,7 +1195,12 @@ export default function ChatInternoPage() {
                       size="lg"
                     />
                   )}
-                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-emerald-500" />
+                  {isActiveDirectUserOnline ? (
+                    <span
+                      className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card bg-emerald-500"
+                      aria-label="Usuário online"
+                    />
+                  ) : null}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{chatTitle}</p>
@@ -1312,6 +1400,7 @@ export default function ChatInternoPage() {
                     value={newMessage}
                     onChange={(event) => setNewMessage(event.target.value)}
                     onKeyDown={handleInputKeyDown}
+                    disabled={sending}
                     placeholder={inputPlaceholder}
                     className="max-h-32 min-h-11 resize-none rounded-xl border-0 bg-background px-4 py-3 shadow-sm focus-visible:ring-1"
                   />

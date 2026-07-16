@@ -17,9 +17,13 @@ import {
   Send,
   Edit,
   Trash2,
+  ExternalLink,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
+import type { RelatedTaskSummary } from "@/lib/taskRelations";
 
 interface Task {
   id: string;
@@ -47,8 +51,12 @@ interface TaskDetailSheetProps {
   onCommentCountChange?: (taskId: string, count: number) => void;
   onAttachmentCountChange?: (taskId: string, count: number) => void;
   onHistory?: (taskId: string, action: string, details?: string) => void;
+  onOpenRelatedTask?: (taskId: string) => void;
+  onRemoveRelatedTask?: (relationId: string) => void;
+  onCreateRelatedTask?: (sourceTaskId: string) => void;
   actorName?: string;
   historyEntries?: ChangeHistoryEntry[];
+  relatedTasks?: RelatedTaskSummary[];
 }
 
 const priorityConfig: Record<string, { color: string; bg: string }> = {
@@ -152,8 +160,12 @@ export function TaskDetailSheet({
   onCommentCountChange,
   onAttachmentCountChange,
   onHistory,
+  onOpenRelatedTask,
+  onRemoveRelatedTask,
+  onCreateRelatedTask,
   actorName,
   historyEntries = [],
+  relatedTasks = [],
 }: TaskDetailSheetProps) {
   const [comment, setComment] = useState("");
   const [comments, setComments] = useState<TaskCommentItem[]>([]);
@@ -299,26 +311,95 @@ export function TaskDetailSheet({
 
           <Separator />
 
+          {task.subtasks.length > 0 && (
+            <>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-semibold">Subtarefas</span>
+                  <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} concluídas</span>
+                </div>
+                <Progress value={subtaskPct} className="h-2 mb-3" />
+                <div className="space-y-2">
+                  {task.subtasks.map((subtask, index) => (
+                    <label
+                      key={`${task.id}-${index}`}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                    >
+                      <Checkbox
+                        checked={subtask.done}
+                        onCheckedChange={() => onSubtaskToggle?.(task.id, index)}
+                      />
+                      <span className={`text-sm ${subtask.done ? "line-through text-muted-foreground" : ""}`}>{subtask.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+            </>
+          )}
+
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold">Subtarefas</span>
-              <span className="text-xs text-muted-foreground">{subtaskDone}/{task.subtasks.length} concluídas</span>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold flex items-center gap-2">
+                <Link2 className="h-4 w-4" /> Tarefas relacionadas ({relatedTasks.length})
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 text-xs"
+                onClick={() => task && onCreateRelatedTask?.(task.id)}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                Criar tarefa relacionada
+              </Button>
             </div>
-            <Progress value={subtaskPct} className="h-2 mb-3" />
-            <div className="space-y-2">
-              {task.subtasks.map((subtask, index) => (
-                <label
-                  key={`${task.id}-${index}`}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                >
-                  <Checkbox
-                    checked={subtask.done}
-                    onCheckedChange={() => onSubtaskToggle?.(task.id, index)}
-                  />
-                  <span className={`text-sm ${subtask.done ? "line-through text-muted-foreground" : ""}`}>{subtask.title}</span>
-                </label>
-              ))}
-            </div>
+            {relatedTasks.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                Nenhuma tarefa relacionada. Relações são apenas informativas e não bloqueiam o fluxo da tarefa.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {relatedTasks.map((relatedTask) => (
+                  <div
+                    key={relatedTask.relationId}
+                    className="flex items-center gap-3 rounded-lg border p-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {relatedTask.title}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                        <span>{relatedTask.clientName || "Sem cliente"}</span>
+                        {relatedTask.status && <span>• {relatedTask.status}</span>}
+                        {relatedTask.priority && <span>• {relatedTask.priority}</span>}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => onOpenRelatedTask?.(relatedTask.taskId)}
+                      aria-label={`Abrir tarefa relacionada ${relatedTask.title}`}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => onRemoveRelatedTask?.(relatedTask.relationId)}
+                      aria-label={`Remover relação com ${relatedTask.title}`}
+                    >
+                      <Unlink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <Separator />

@@ -15,11 +15,11 @@ export const SECTOR_CODES = [
 export type SectorCode = (typeof SECTOR_CODES)[number];
 
 export const SECTOR_LABELS: Record<SectorCode, string> = {
-  contabil: "ContÃ¡bil",
+  contabil: "Contábil",
   fiscal: "Fiscal",
   departamento_pessoal: "Departamento Pessoal",
   comercial: "Comercial",
-  societario: "SocietÃ¡rio",
+  societario: "Societário",
   geral: "Geral",
 };
 
@@ -48,20 +48,20 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   dashboard: "Dashboard",
   clientes: "Clientes",
   cadastrar_clientes: "Cadastrar clientes",
-  obrigacoes: "ObrigaÃ§Ãµes",
+  obrigacoes: "Obrigações",
   ia: "IA",
   whatsapp: "WhatsApp",
-  robo_documentos: "RobÃ´ de documentos",
+  robo_documentos: "Robô de documentos",
   crm: "Vendas",
   chat_interno: "Chat interno",
-  calendario: "CalendÃ¡rio",
+  calendario: "Calendário",
   tarefas: "Tarefas",
-  relatorios: "RelatÃ³rios",
-  notificacoes: "NotificaÃ§Ãµes",
-  usuarios: "UsuÃ¡rios",
+  relatorios: "Relatórios",
+  notificacoes: "Notificações",
+  usuarios: "Usuários",
   newsletter: "Newsletter",
-  sugestoes: "SugestÃµes",
-  configuracoes: "ConfiguraÃ§Ãµes",
+  sugestoes: "Sugestões",
+  configuracoes: "Configurações",
 };
 
 export const DEFAULT_COLLABORATOR_MODULES: readonly ModuleKey[] = ["tarefas"];

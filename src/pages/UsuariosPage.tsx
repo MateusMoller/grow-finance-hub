@@ -441,7 +441,7 @@ export default function UsuariosPage() {
             <div className="space-y-3 border-t pt-4">
               <div>
                 <Label>Módulos</Label>
-                <p className="text-xs text-muted-foreground">Tarefas é obrigatório. Os demais acessos são explícitos.</p>
+                <p className="text-xs text-muted-foreground">O módulo Tarefas é obrigatório. Os demais acessos são explícitos.</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                 {collaboratorModules.map((moduleKey) => (

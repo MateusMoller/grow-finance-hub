@@ -13,6 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectLabel,
   SelectTrigger,
@@ -35,10 +36,13 @@ import {
   Download,
   FileText,
   FolderOpen,
+  ExternalLink,
   Loader2,
+  Link2,
   MessageSquare,
   Paperclip,
   Send,
+  Unlink,
   User,
   X,
 } from "lucide-react";
@@ -51,6 +55,7 @@ import {
   type TaskAssigneeOption,
 } from "@/lib/taskAssignees";
 import { normalizeSectorCode, type SectorCode } from "@/lib/userPermissions";
+import type { RelatedTaskSummary } from "@/lib/taskRelations";
 
 export type KanbanStatus =
   "backlog" | "todo" | "doing" | "review" | "done" | "archived";
@@ -137,7 +142,11 @@ interface KanbanTaskDetailSheetProps {
   onSave: (taskId: string, updates: SavePayload) => Promise<void>;
   onSubtaskToggle?: (taskId: string, subtaskIndex: number) => void;
   onHistory?: (taskId: string, action: string, details?: string) => void;
+  onOpenRelatedTask?: (taskId: string) => void;
+  onRemoveRelatedTask?: (relationId: string) => void;
+  onCreateRelatedTask?: (sourceTaskId: string) => void;
   historyEntries?: ChangeHistoryEntry[];
+  relatedTasks?: RelatedTaskSummary[];
 }
 
 const statusLabels: Record<KanbanStatus, string> = {
@@ -240,7 +249,11 @@ export function KanbanTaskDetailSheet({
   onSave,
   onSubtaskToggle,
   onHistory,
+  onOpenRelatedTask,
+  onRemoveRelatedTask,
+  onCreateRelatedTask,
   historyEntries = [],
+  relatedTasks = [],
 }: KanbanTaskDetailSheetProps) {
   const { user, currentOrganizationId } = useAuth();
   const [form, setForm] = useState({
@@ -837,15 +850,17 @@ export function KanbanTaskDetailSheet({
                         Sem responsável
                       </SelectItem>
                       {filteredAssigneeOptions.length > 0 && (
-                        <SelectLabel className="px-2 text-xs font-medium text-muted-foreground">
-                          Responsáveis dos setores selecionados
-                        </SelectLabel>
+                        <SelectGroup>
+                          <SelectLabel className="px-2 text-xs font-medium text-muted-foreground">
+                            Responsáveis dos setores selecionados
+                          </SelectLabel>
+                          {filteredAssigneeOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {formatTaskAssigneeLabel(option)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       )}
-                      {filteredAssigneeOptions.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          {formatTaskAssigneeLabel(option)}
-                        </SelectItem>
-                      ))}
                       {form.sectors.length === 0 && (
                         <SelectItem value="select-sector-first" disabled>
                           Selecione um setor primeiro
@@ -931,6 +946,75 @@ export function KanbanTaskDetailSheet({
                   </div>
                 </div>
               )}
+
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Link2 className="h-4 w-4" />
+                    Tarefas relacionadas
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {relatedTasks.length}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1 text-xs"
+                      onClick={() => onCreateRelatedTask?.(task.id)}
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      Criar tarefa relacionada
+                    </Button>
+                  </div>
+                </div>
+                {relatedTasks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma tarefa relacionada. Relações são apenas informativas e não bloqueiam status, revisão ou conclusão.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {relatedTasks.map((relatedTask) => (
+                      <div
+                        key={relatedTask.relationId}
+                        className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">
+                            {relatedTask.title}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                            <span>{relatedTask.clientName || "Sem cliente"}</span>
+                            {relatedTask.status && <span>• {relatedTask.status}</span>}
+                            {relatedTask.priority && <span>• {relatedTask.priority}</span>}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => onOpenRelatedTask?.(relatedTask.taskId)}
+                          aria-label={`Abrir tarefa relacionada ${relatedTask.title}`}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => onRemoveRelatedTask?.(relatedTask.relationId)}
+                          aria-label={`Remover relação com ${relatedTask.title}`}
+                        >
+                          <Unlink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
                 </CollapsibleContent>
               </Collapsible>
 

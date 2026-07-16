@@ -2651,6 +2651,7 @@ export type Database = {
       internal_chat_messages: {
         Row: {
           chat_type: string;
+          client_message_id: string | null;
           content: string;
           created_at: string;
           id: string;
@@ -2661,6 +2662,7 @@ export type Database = {
         };
         Insert: {
           chat_type?: string;
+          client_message_id?: string | null;
           content: string;
           created_at?: string;
           id?: string;
@@ -2671,6 +2673,7 @@ export type Database = {
         };
         Update: {
           chat_type?: string;
+          client_message_id?: string | null;
           content?: string;
           created_at?: string;
           id?: string;
