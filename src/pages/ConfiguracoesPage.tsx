@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { motion } from "framer-motion";
 import {
   Bell,
@@ -321,6 +322,7 @@ export default function ConfiguracoesPage() {
     <AppLayout>
       <div className="space-y-6 max-w-5xl">
         <div>
+          <ModuleContextPill icon={Shield} label="Preferências do sistema" />
           <h1 className="font-heading text-2xl font-bold">Configuracoes</h1>
           <p className="text-sm text-muted-foreground">Gerencie seu perfil e preferencias do sistema</p>
         </div>

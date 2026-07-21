@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -336,6 +337,7 @@ export default function SugestoesPage() {
       <div className="max-w-5xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
+            <ModuleContextPill icon={Lightbulb} label="Melhorias internas" />
             <h1 className="font-heading text-2xl font-bold">Sugestoes de melhoria</h1>
             <p className="text-sm text-muted-foreground">
               Envie melhorias para o admin. Cada envio gera uma pendencia e um registro desta solicitação.

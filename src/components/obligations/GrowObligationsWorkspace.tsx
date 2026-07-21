@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1874,7 +1875,7 @@ export function GrowObligationsWorkspace({
         <div className="absolute right-8 top-6 h-24 w-24 rounded-full bg-primary/5 blur-2xl" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 space-y-3">
-            <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.28em]">Grow Native</Badge>
+            <ModuleContextPill icon={FileSpreadsheet} label="Obrigações padrão" />
             <div className="space-y-1">
               <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigações Grow</h1>
               <p className="max-w-3xl text-sm text-muted-foreground">

@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -188,6 +189,7 @@ export default function NotificacoesPage() {
         <section className="rounded-xl border bg-card px-4 py-4 shadow-sm sm:px-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 space-y-1">
+              <ModuleContextPill icon={Bell} label="Central de alertas" className="mb-1" />
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-heading text-2xl font-bold tracking-tight">Notificacoes</h1>
                 {unreadCount > 0 && (

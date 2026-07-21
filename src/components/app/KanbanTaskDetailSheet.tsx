@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageBubble } from "@/components/whatsapp/MessageBubble";
 import { MessageComposer } from "@/components/whatsapp/MessageComposer";
@@ -162,18 +162,18 @@ const statusLabels: Record<KanbanStatus, string> = {
   backlog: "Backlog",
   todo: "A Fazer",
   doing: "Em Andamento",
-  review: "Em RevisÃ£o",
-  done: "ConcluÃ­do",
+  review: "Em Revisão",
+  done: "Concluído",
   archived: "Arquivado",
 };
 
-const priorityOptions = ["Urgente", "Alta", "MÃ©dia", "Baixa"];
+const priorityOptions = ["Urgente", "Alta", "Média", "Baixa"];
 const sectorOptions = [
-  "ContÃ¡bil",
+  "Contábil",
   "Fiscal",
   "Departamento Pessoal",
   "Comercial",
-  "SocietÃ¡rio",
+  "Societário",
   "Geral",
 ];
 
@@ -219,7 +219,7 @@ const parseSectorAddedMessage = (content: string): TaskSectorAddedMessage | null
     if (parsed.type !== "task_sector_added") return null;
     return {
       type: "task_sector_added",
-      text: typeof parsed.text === "string" ? parsed.text : "Setor adicionado Ã  tarefa.",
+      text: typeof parsed.text === "string" ? parsed.text : "Setor adicionado à tarefa.",
       sectors: Array.isArray(parsed.sectors)
         ? parsed.sectors.filter((sector): sector is string => typeof sector === "string")
         : [],
@@ -236,7 +236,7 @@ const isInternalTaskComment = (content: string) => {
 };
 
 const formatFileSize = (bytes: number) => {
-  if (!bytes) return "Tamanho nÃ£o informado";
+  if (!bytes) return "Tamanho não informado";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
@@ -293,7 +293,7 @@ export function KanbanTaskDetailSheet({
     client_name: "",
     assignee: "",
     assigned_to_user_id: "",
-    priority: "MÃ©dia",
+    priority: "Média",
     sectors: [] as string[],
     status: "backlog" as KanbanStatus,
     due_date: "",
@@ -353,7 +353,7 @@ export function KanbanTaskDetailSheet({
       ]);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar a mensagem pelo WhatsApp.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar a mensagem pelo WhatsApp.");
     },
   });
 
@@ -368,7 +368,7 @@ export function KanbanTaskDetailSheet({
       ]);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar o arquivo pelo WhatsApp.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar o arquivo pelo WhatsApp.");
     },
   });
 
@@ -382,7 +382,7 @@ export function KanbanTaskDetailSheet({
       client_name: task.client_name || "",
       assignee: task.assignee || "",
       assigned_to_user_id: task.assigned_to_user_id || "",
-      priority: task.priority || "MÃ©dia",
+      priority: task.priority || "Média",
       sectors,
       status: task.status,
       due_date: task.due_date || "",
@@ -407,7 +407,7 @@ export function KanbanTaskDetailSheet({
       } catch {
         if (!cancelled) {
           setAssigneeOptions([]);
-          toast.error("NÃ£o foi possÃ­vel carregar os responsÃ¡veis.");
+          toast.error("Não foi possível carregar os responsáveis.");
         }
       }
     };
@@ -456,7 +456,7 @@ export function KanbanTaskDetailSheet({
       .order("created_at", { ascending: true });
 
     if (error) {
-      toast.error("NÃ£o foi possÃ­vel carregar o chat da tarefa.");
+      toast.error("Não foi possível carregar o chat da tarefa.");
       setTaskComments([]);
       setLoadingComments(false);
       return;
@@ -616,7 +616,7 @@ export function KanbanTaskDetailSheet({
       .from("client-documents")
       .createSignedUrl(filePath, 60);
     if (error || !data?.signedUrl) {
-      toast.error("NÃ£o foi possÃ­vel gerar o link do anexo.");
+      toast.error("Não foi possível gerar o link do anexo.");
       return;
     }
     window.open(data.signedUrl, "_blank");
@@ -641,7 +641,7 @@ export function KanbanTaskDetailSheet({
 
       if (uploadError) {
         setSendingInternalComment(false);
-        toast.error("NÃ£o foi possÃ­vel anexar o arquivo.");
+        toast.error("Não foi possível anexar o arquivo.");
         return;
       }
 
@@ -668,7 +668,7 @@ export function KanbanTaskDetailSheet({
     setSendingInternalComment(false);
 
     if (error) {
-      toast.error("NÃ£o foi possÃ­vel registrar o andamento da tarefa.");
+      toast.error("Não foi possível registrar o andamento da tarefa.");
       return;
     }
 
@@ -688,9 +688,9 @@ export function KanbanTaskDetailSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <Tabs defaultValue="informacoes" className="space-y-4">
           <TabsList className="sticky top-0 z-20 grid w-full grid-cols-3 bg-muted/90 backdrop-blur">
-            <TabsTrigger value="informacoes">InformaÃ§Ãµes</TabsTrigger>
+            <TabsTrigger value="informacoes">Informações</TabsTrigger>
             <TabsTrigger value="chat">Cliente</TabsTrigger>
-            <TabsTrigger value="historico">HistÃ³rico</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
           </TabsList>
 
         <SheetHeader className="pb-4">
@@ -704,7 +704,7 @@ export function KanbanTaskDetailSheet({
                 <Building2 className="h-3 w-3" /> Cliente
               </span>
               <span className="text-sm font-medium">
-                {form.client_name || "NÃ£o informado"}
+                {form.client_name || "Não informado"}
               </span>
             </div>
             <div className="space-y-1">
@@ -722,7 +722,7 @@ export function KanbanTaskDetailSheet({
                 <User className="h-3 w-3" /> Criada por
               </span>
               <span className="text-xs text-muted-foreground">
-                {creatorName || (task.created_by ? "UsuÃ¡rio registrado" : "NÃ£o informado")}
+                {creatorName || (task.created_by ? "Usuário registrado" : "Não informado")}
               </span>
             </div>
           </div>
@@ -777,8 +777,8 @@ export function KanbanTaskDetailSheet({
                     <SelectItem value="backlog">Backlog</SelectItem>
                     <SelectItem value="todo">A Fazer</SelectItem>
                     <SelectItem value="doing">Em Andamento</SelectItem>
-                    <SelectItem value="review">Em RevisÃ£o</SelectItem>
-                    <SelectItem value="done">ConcluÃ­do</SelectItem>
+                    <SelectItem value="review">Em Revisão</SelectItem>
+                    <SelectItem value="done">Concluído</SelectItem>
                     {canArchive && (
                       <SelectItem value="archived">Arquivado</SelectItem>
                     )}
@@ -833,7 +833,7 @@ export function KanbanTaskDetailSheet({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>ResponsÃ¡vel</Label>
+                  <Label>Responsável</Label>
                   <Select
                     value={form.assigned_to_user_id || "unassigned"}
                     onValueChange={(value) => {
@@ -849,16 +849,16 @@ export function KanbanTaskDetailSheet({
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sem responsÃ¡vel" />
+                      <SelectValue placeholder="Sem responsável" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">
-                        Sem responsÃ¡vel
+                        Sem responsável
                       </SelectItem>
                       {filteredAssigneeOptions.length > 0 && (
                         <SelectGroup>
                           <SelectLabel className="px-2 text-xs font-medium text-muted-foreground">
-                            ResponsÃ¡veis dos setores selecionados
+                            Responsáveis dos setores selecionados
                           </SelectLabel>
                           {filteredAssigneeOptions.map((option) => (
                             <SelectItem key={option.id} value={option.id}>
@@ -875,7 +875,7 @@ export function KanbanTaskDetailSheet({
                       {form.sectors.length > 0 &&
                         filteredAssigneeOptions.length === 0 && (
                           <SelectItem value="no-sector-assignees" disabled>
-                            Nenhum responsÃ¡vel nos setores selecionados
+                            Nenhum responsável nos setores selecionados
                           </SelectItem>
                         )}
                     </SelectContent>
@@ -884,7 +884,7 @@ export function KanbanTaskDetailSheet({
               </div>
 
               <div className="space-y-2">
-                <Label>Setores (seleÃ§Ã£o mÃºltipla)</Label>
+                <Label>Setores (seleção múltipla)</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
                   {sectorOptions.map((sector) => (
                     <label
@@ -902,7 +902,7 @@ export function KanbanTaskDetailSheet({
               </div>
 
               <div className="space-y-2">
-                <Label>DescriÃ§Ã£o</Label>
+                <Label>Descrição</Label>
                 <Textarea
                   rows={4}
                   value={form.description}
@@ -921,7 +921,7 @@ export function KanbanTaskDetailSheet({
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Empresas (subtarefas)</Label>
                     <span className="text-xs text-muted-foreground">
-                      {subtaskDone}/{task.subtasks.length} concluÃ­das (
+                      {subtaskDone}/{task.subtasks.length} concluídas (
                       {subtaskPct}%)
                     </span>
                   </div>
@@ -980,7 +980,7 @@ export function KanbanTaskDetailSheet({
                 </div>
                 {relatedTasks.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    Nenhuma tarefa relacionada. RelaÃ§Ãµes sÃ£o apenas informativas e nÃ£o bloqueiam status, revisÃ£o ou conclusÃ£o.
+                    Nenhuma tarefa relacionada. Relações são apenas informativas e não bloqueiam status, revisão ou conclusão.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -1015,7 +1015,7 @@ export function KanbanTaskDetailSheet({
                           size="icon"
                           className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
                           onClick={() => onRemoveRelatedTask?.(relatedTask.relationId)}
-                          aria-label={`Remover relaÃ§Ã£o com ${relatedTask.title}`}
+                          aria-label={`Remover relação com ${relatedTask.title}`}
                         >
                           <Unlink className="h-4 w-4" />
                         </Button>
@@ -1031,7 +1031,7 @@ export function KanbanTaskDetailSheet({
                     Andamento
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    ComunicaÃ§Ã£o interna da equipe vinculada a esta tarefa. Use este espaÃ§o para registrar decisÃµes, contexto operacional e arquivos internos.
+                    Comunicação interna da equipe vinculada a esta tarefa. Use este espaço para registrar decisões, contexto operacional e arquivos internos.
                   </p>
                 </div>
 
@@ -1057,7 +1057,7 @@ export function KanbanTaskDetailSheet({
                       const sectorMessage = parseSectorAddedMessage(comment.content);
                       const displayName =
                         comment.profile?.display_name?.trim() ||
-                        (isOwn ? "VocÃª" : "Equipe");
+                        (isOwn ? "Você" : "Equipe");
                       const text = attachment?.text || internalMessage?.text || sectorMessage?.text || "";
 
                       return (
@@ -1186,7 +1186,7 @@ export function KanbanTaskDetailSheet({
                     </Button>
                   </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    ComunicaÃ§Ã£o interna. Enter para enviar. Shift+Enter para nova linha.
+                    Comunicação interna. Enter para enviar. Shift+Enter para nova linha.
                   </p>
                 </div>
               </div>
@@ -1207,7 +1207,7 @@ export function KanbanTaskDetailSheet({
                 {!task.client_name ? (
                   <div className="flex h-[360px] items-center justify-center p-4 text-center">
                     <p className="max-w-xs text-sm text-muted-foreground">
-                      Esta tarefa ainda nao possui cliente vinculado. Informe o cliente nos detalhes da tarefa para exibir o WhatsApp.
+                      Esta tarefa ainda não possui cliente vinculado. Informe o cliente nos detalhes da tarefa para exibir o WhatsApp.
                     </p>
                   </div>
                 ) : whatsappLoading ? (
@@ -1217,13 +1217,13 @@ export function KanbanTaskDetailSheet({
                 ) : !taskClientQuery.data ? (
                   <div className="flex h-[360px] items-center justify-center p-4 text-center">
                     <p className="max-w-xs text-sm text-muted-foreground">
-                      Nao encontrei um cliente ativo com este nome no cadastro. Ajuste o cliente da tarefa para conectar ao WhatsApp.
+                      Não encontrei um cliente ativo com este nome no cadastro. Ajuste o cliente da tarefa para conectar ao WhatsApp.
                     </p>
                   </div>
                 ) : !whatsappConversation ? (
                   <div className="flex h-[360px] items-center justify-center p-4 text-center">
                     <p className="max-w-xs text-sm text-muted-foreground">
-                      Este cliente ainda nao possui conversa WhatsApp vinculada. Vincule uma conversa no modulo WhatsApp para usar este chat aqui.
+                      Este cliente ainda não possui conversa WhatsApp vinculada. Vincule uma conversa no modulo WhatsApp para usar este chat aqui.
                     </p>
                   </div>
                 ) : (
@@ -1295,4 +1295,3 @@ export function KanbanTaskDetailSheet({
     </Sheet>
   );
 }
-

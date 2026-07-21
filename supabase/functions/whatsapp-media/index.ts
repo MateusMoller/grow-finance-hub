@@ -16,6 +16,21 @@ async function loadConversation(supabaseAdmin: SupabaseAdmin, conversationId: st
   return data;
 }
 
+async function loadSenderDisplayName(supabaseAdmin: SupabaseAdmin, userId: string, organizationId: string) {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("display_name")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  return asString(data?.display_name) || "Equipe Grow";
+}
+
+const formatOutboundCaptionForClient = (caption: string, senderDisplayName: string) => {
+  const senderLabel = senderDisplayName === "Equipe Grow" ? senderDisplayName : `${senderDisplayName} - Grow`;
+  return caption.trim() ? `*${senderLabel}:*\n${caption.trim()}` : `*${senderLabel}:*`;
+};
+
 async function prepareUpload(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const conversationId = asString(body.conversationId);
   const clientMessageId = asString(body.clientMessageId);
@@ -115,12 +130,13 @@ async function finalizeUpload(supabaseAdmin: SupabaseAdmin, userId: string, body
   const conversation = asRecord(attachment.conversation);
   const contact = asRecord(conversation.contact);
   const message = asRecord(attachment.message);
+  const senderDisplayName = await loadSenderDisplayName(supabaseAdmin, userId, attachment.organization_id);
   const providerResult = await dispatchWhatsAppMediaMessage({
     toPhone: asString(contact.phone_number),
     file: storedFile,
     fileName: attachment.file_name,
     contentType: attachment.content_type,
-    caption: asString(message.body) || null,
+    caption: formatOutboundCaptionForClient(asString(message.body), senderDisplayName),
   });
   const now = new Date().toISOString();
 
@@ -147,7 +163,7 @@ async function finalizeUpload(supabaseAdmin: SupabaseAdmin, userId: string, body
     event_type: "attachment_sent",
     actor_user_id: userId,
     provider_event_id: providerResult.providerMessageId,
-    details: { storage_path: attachment.storage_path, provider_media_id: providerResult.providerMediaId },
+    details: { storage_path: attachment.storage_path, provider_media_id: providerResult.providerMediaId, sender_display_name: senderDisplayName },
   });
 
   return { ok: true };

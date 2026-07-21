@@ -17,8 +17,8 @@ const TASK_SECTORS_BY_ROLE: Record<string, string[]> = {
 
 const normalizeTaskSectorToken = (value: string | null | undefined) => {
   const normalized = String(value || "")
-    .replace(/ContÃƒÆ’Ã‚Â¡bil|ContÃƒÂ¡bil|ContÃ¡bil/gi, "Contabil")
-    .replace(/SocietÃƒÆ’Ã‚Â¡rio|SocietÃƒÂ¡rio|SocietÃ¡rio/gi, "Societario")
+    .replace(/Cont\u00c3\u0192\u00c2\u00a1bil|Cont\u00c3\u00a1bil|Contábil/gi, "Contabil")
+    .replace(/Societ\u00c3\u0192\u00c2\u00a1rio|Societ\u00c3\u00a1rio|Societário/gi, "Societario")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -35,11 +35,12 @@ const normalizeTaskSectorToken = (value: string | null | undefined) => {
 
 export const normalizeTaskSectorLabel = (value: string | null | undefined) => {
   const token = normalizeTaskSectorToken(value);
-  if (token === "contabil") return "Contabil";
+  if (token === "contabil") return "Contábil";
   if (token === "fiscal") return "Fiscal";
   if (token === "departamento_pessoal") return "Departamento Pessoal";
   if (token === "commercial") return "Comercial";
-  if (token === "societario") return "Societario";
+  if (token === "societário") return "Societário";
+  if (token === "societario") return "Societário";
   if (token === "geral") return "Geral";
   return String(value || "Geral").trim() || "Geral";
 };

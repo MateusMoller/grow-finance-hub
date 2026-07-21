@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { clientSegmentOptions } from "@/lib/clientSegments";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -509,6 +510,7 @@ export default function ClientsPage() {
                 <Users className="h-6 w-6" />
               </div>
               <div>
+                <ModuleContextPill icon={Users} label="Base de clientes" />
                 <h1 className="font-heading text-2xl font-bold">Clientes</h1>
                 <p className="text-sm text-muted-foreground">
                   Base cadastral da operação, acessos de portal e dados fiscais.

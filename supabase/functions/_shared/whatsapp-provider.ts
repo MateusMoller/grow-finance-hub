@@ -218,18 +218,27 @@ export async function dispatchWhatsAppTextMessage(args: {
   toPhone: string;
   body: string;
   clientMessageId: string;
+  replyToProviderMessageId?: string | null;
 }) {
   const config = loadProviderConfig();
-  const payload = await postProviderMessageWithRecipientFallback(config.phoneNumberId, args.toPhone, (phone) => ({
-    messaging_product: "whatsapp",
-    recipient_type: "individual",
-    to: phone,
-    type: "text",
-    text: {
-      preview_url: false,
-      body: args.body,
-    },
-  }));
+  const payload = await postProviderMessageWithRecipientFallback(config.phoneNumberId, args.toPhone, (phone) => {
+    const messagePayload: Record<string, unknown> = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: phone,
+      type: "text",
+      text: {
+        preview_url: false,
+        body: args.body,
+      },
+    };
+
+    if (args.replyToProviderMessageId) {
+      messagePayload.context = { message_id: args.replyToProviderMessageId };
+    }
+
+    return messagePayload;
+  });
 
   const messageId = providerMessageId(payload);
   if (!messageId) throw new Error("whatsapp_provider_missing_message_id");

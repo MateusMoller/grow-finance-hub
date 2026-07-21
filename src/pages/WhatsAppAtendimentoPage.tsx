@@ -3,10 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
+import { MessageCircle } from "lucide-react";
 import {
   ConversationList,
   ConversationPanel,
 } from "@/components/whatsapp";
+import type { WhatsAppBubbleTone, WhatsAppChatBackground, WhatsAppChatDensity } from "@/components/whatsapp/appearance";
 import type { WhatsAppQuickTaskDraft } from "@/components/whatsapp/ConversationHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { useWhatsAppConversations, whatsappConversationKeys } from "@/hooks/useWhatsAppConversations";
@@ -24,6 +27,14 @@ const createClientMessageId = () =>
     ? crypto.randomUUID()
     : `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const whatsappPreferenceKey = (key: string) => `grow-whatsapp-chat-${key}`;
+
+const loadWhatsAppPreference = <T extends string>(key: string, fallback: T, allowed: readonly T[]) => {
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(whatsappPreferenceKey(key));
+  return allowed.includes(stored as T) ? (stored as T) : fallback;
+};
+
 export default function WhatsAppAtendimentoPage() {
   const queryClient = useQueryClient();
   const { currentOrganizationId, user } = useAuth();
@@ -33,6 +44,15 @@ export default function WhatsAppAtendimentoPage() {
     status: "all",
     unread: false,
   });
+  const [chatDensity, setChatDensity] = useState<WhatsAppChatDensity>(() =>
+    loadWhatsAppPreference("density", "confortavel", ["compacta", "confortavel"] as const),
+  );
+  const [chatBackground, setChatBackground] = useState<WhatsAppChatBackground>(() =>
+    loadWhatsAppPreference("background", "classico", ["classico", "limpo", "suave"] as const),
+  );
+  const [bubbleTone, setBubbleTone] = useState<WhatsAppBubbleTone>(() =>
+    loadWhatsAppPreference("bubble", "verde", ["verde", "azul", "neutro"] as const),
+  );
 
   const selectedConversationId = searchParams.get("conversation");
   const conversationsQuery = useWhatsAppConversations(filters);
@@ -70,6 +90,18 @@ export default function WhatsAppAtendimentoPage() {
   useWhatsAppRealtime(selectedConversationId);
 
   useEffect(() => {
+    window.localStorage.setItem(whatsappPreferenceKey("density"), chatDensity);
+  }, [chatDensity]);
+
+  useEffect(() => {
+    window.localStorage.setItem(whatsappPreferenceKey("background"), chatBackground);
+  }, [chatBackground]);
+
+  useEffect(() => {
+    window.localStorage.setItem(whatsappPreferenceKey("bubble"), bubbleTone);
+  }, [bubbleTone]);
+
+  useEffect(() => {
     if (!selectedConversationId) return;
     void markWhatsAppConversationRead(selectedConversationId)
       .then(() => queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }))
@@ -91,8 +123,16 @@ export default function WhatsAppAtendimentoPage() {
   };
 
   const sendTextMutation = useMutation({
-    mutationFn: ({ text, clientMessageId }: { text: string; clientMessageId: string }) =>
-      sendWhatsAppTextMessage(selectedConversationId || "", text, clientMessageId),
+    mutationFn: ({
+      text,
+      clientMessageId,
+      replyToProviderMessageId,
+    }: {
+      text: string;
+      clientMessageId: string;
+      replyToProviderMessageId?: string | null;
+    }) =>
+      sendWhatsAppTextMessage(selectedConversationId || "", text, clientMessageId, replyToProviderMessageId),
     onSuccess: () => {
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }),
@@ -100,7 +140,7 @@ export default function WhatsAppAtendimentoPage() {
       ]);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar a mensagem.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar a mensagem.");
     },
   });
 
@@ -115,7 +155,7 @@ export default function WhatsAppAtendimentoPage() {
       ]);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Nao foi possivel anexar o arquivo.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível anexar o arquivo.");
     },
   });
 
@@ -125,13 +165,13 @@ export default function WhatsAppAtendimentoPage() {
       toast.success("Cliente vinculado à conversa.");
       void queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel vincular o cliente."),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Não foi possível vincular o cliente."),
   });
 
   const quickTaskMutation = useMutation({
     mutationFn: async (draft: WhatsAppQuickTaskDraft) => {
       if (!currentOrganizationId || !selectedConversation) {
-        throw new Error("Conversa ou organizacao ativa nao encontrada.");
+        throw new Error("Conversa ou organização ativa não encontrada.");
       }
       return createWhatsAppQuickTask({
         organizationId: currentOrganizationId,
@@ -158,22 +198,30 @@ export default function WhatsAppAtendimentoPage() {
         queryClient.invalidateQueries({ queryKey: whatsappMessageKeys.conversation(selectedConversationId) }),
       ]);
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel criar a tarefa."),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Não foi possível criar a tarefa."),
   });
 
   const isSending = sendTextMutation.isPending || sendFileMutation.isPending;
 
   return (
     <AppLayout>
-      <div className="flex h-[calc(100svh-5.75rem)] w-full max-w-none flex-col overflow-hidden rounded-2xl border bg-[#f0f2f5] shadow-sm">
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[18.5rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]">
+      <div className="flex h-[calc(100svh-5.25rem)] w-full max-w-none flex-col gap-2">
+        <ModuleContextPill icon={MessageCircle} label="Atendimento WhatsApp" className="mb-0 ml-1" />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-[#f0f2f5] shadow-sm lg:rounded-none">
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
           <ConversationList
             conversations={conversations}
             activeId={selectedConversationId}
             loading={conversationsQuery.isLoading}
             search={filters.search || ""}
+            chatDensity={chatDensity}
+            chatBackground={chatBackground}
+            bubbleTone={bubbleTone}
             onSearchChange={updateSearch}
             onSelect={selectConversation}
+            onChatDensityChange={setChatDensity}
+            onChatBackgroundChange={setChatBackground}
+            onBubbleToneChange={setBubbleTone}
           />
           <ConversationPanel
             conversation={selectedConversation}
@@ -183,8 +231,15 @@ export default function WhatsAppAtendimentoPage() {
             activeClients={activeClientsQuery.data || []}
             clientLinking={linkClientMutation.isPending}
             quickTaskCreating={quickTaskMutation.isPending}
-            onSendText={async (text) => {
-              await sendTextMutation.mutateAsync({ text, clientMessageId: createClientMessageId() });
+            chatDensity={chatDensity}
+            chatBackground={chatBackground}
+            bubbleTone={bubbleTone}
+            onSendText={async (text, replyReference) => {
+              await sendTextMutation.mutateAsync({
+                text,
+                clientMessageId: createClientMessageId(),
+                replyToProviderMessageId: replyReference?.providerMessageId || null,
+              });
             }}
             onSendFile={async (file) => {
               await sendFileMutation.mutateAsync({ file, clientMessageId: createClientMessageId() });
@@ -192,6 +247,7 @@ export default function WhatsAppAtendimentoPage() {
             onLinkClient={(clientId) => linkClientMutation.mutate(clientId)}
             onCreateQuickTask={(draft) => quickTaskMutation.mutate(draft)}
           />
+        </div>
         </div>
       </div>
     </AppLayout>

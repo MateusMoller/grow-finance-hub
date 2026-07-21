@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -452,6 +453,7 @@ export default function NewsletterAdminPage() {
       <div className="max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <ModuleContextPill icon={Newspaper} label="Comunicação externa" />
             <h1 className="font-heading text-2xl font-bold">Newsletter</h1>
             <p className="text-sm text-muted-foreground">
               Crie conteudos, publique no site e dispare e-mails automaticamente para os assinantes.

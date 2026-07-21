@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -1051,34 +1052,35 @@ export default function CRMPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-7xl">
-        <div className="flex items-center justify-between">
+      <div className="max-w-none space-y-5 px-1">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Vendas</h1>
-            <p className="text-sm text-muted-foreground">
+            <ModuleContextPill icon={TrendingUp} label="Pipeline comercial" />
+            <h1 className="font-heading text-3xl font-bold tracking-tight">Vendas</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Controle de negociacoes e pipeline comercial ({leads.length} cadastradas)
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              size="sm"
+              className="h-11 rounded-xl"
               onClick={() => void queryClient.invalidateQueries({ queryKey: leadsQueryKey })}
               disabled={loadingLeads}
             >
-              {loadingLeads ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              {loadingLeads ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Atualizar
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              className="h-11 rounded-xl"
               onClick={() => setActiveStageFilter("all")}
               disabled={!hasActiveFilter}
             >
-              <Filter className="h-4 w-4 mr-1" /> Limpar filtro
+              <Filter className="mr-2 h-4 w-4" /> Limpar filtro
             </Button>
-            <Button size="sm" onClick={openCreateDialog}>
-              <Plus className="h-4 w-4 mr-1" /> Nova Negociacao
+            <Button className="h-11 rounded-xl px-5 shadow-sm" onClick={openCreateDialog}>
+              <Plus className="mr-2 h-4 w-4" /> Nova Negociacao
             </Button>
           </div>
         </div>
@@ -1089,38 +1091,47 @@ export default function CRMPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {salesMetrics.map((metric, index) => (
                 <motion.div
                   key={metric.label}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.06 }}
-                  className="rounded-xl border bg-card p-5"
+                  className="rounded-2xl border bg-card p-5 shadow-sm transition-colors hover:bg-muted/10"
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted-foreground">{metric.label}</span>
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <metric.icon className="h-5 w-5" />
+                    </div>
                     <span
-                      className={`text-xs font-medium flex items-center gap-0.5 ${
-                        metric.trend === "up" ? "text-primary" : "text-destructive"
-                      }`}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium",
+                        metric.trend === "up"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-red-50 text-destructive",
+                      )}
                     >
                       {metric.trend === "up" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                       {metric.change}
                     </span>
                   </div>
-                  <div className="font-heading text-2xl font-bold">{metric.value}</div>
+                  <span className="text-xs font-medium text-muted-foreground">{metric.label}</span>
+                  <div className="mt-1 font-heading text-3xl font-bold tracking-tight">{metric.value}</div>
                 </motion.div>
               ))}
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-6">
-              <div className="rounded-xl border bg-card p-5">
+            <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+              <div className="rounded-2xl border bg-card p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-2">
                   <h2 className="font-heading font-semibold flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" /> Metas do mes
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Target className="h-4 w-4" />
+                    </span>
+                    Metas do mes
                   </h2>
-                  <Button variant="outline" size="sm" onClick={openGoalsDialog}>
+                  <Button variant="outline" size="sm" className="rounded-xl" onClick={openGoalsDialog}>
                     Cadastrar metas
                   </Button>
                 </div>
@@ -1136,51 +1147,54 @@ export default function CRMPage() {
                           </p>
                         </div>
                       </div>
-                      <Progress value={goal.pct} className="h-2" />
+                      <Progress value={goal.pct} className="h-2.5" />
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="lg:col-span-2 rounded-xl border bg-card">
-                <div className="p-5 border-b flex items-center justify-between">
+              <div className="rounded-2xl border bg-card shadow-sm">
+                <div className="flex items-center justify-between border-b px-5 py-4">
                   <h2 className="font-heading font-semibold">Top negociacoes por valor</h2>
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                  <Button variant="ghost" size="sm" className="gap-1 rounded-full text-xs">
                     {metrics.filteredCount}/{metrics.totalCount} <ArrowRight className="h-3 w-3" />
                   </Button>
                 </div>
                 <div className="divide-y">
                   {metrics.topNegotiations.length === 0 ? (
-                    <div className="p-8 text-center text-sm text-muted-foreground">
+                    <div className="flex min-h-52 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                        <DollarSign className="h-6 w-6" />
+                      </div>
                       Nenhuma negociacao encontrada para o filtro selecionado.
                     </div>
                   ) : (
                     metrics.topNegotiations.map((lead, index) => (
                       <div
                         key={lead.id}
-                        className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer"
+                        className="flex cursor-pointer items-center justify-between gap-4 p-4 transition-colors hover:bg-muted/30"
                         onClick={() => {
                           setSelectedLead(lead);
                           setSheetOpen(true);
                         }}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
                             {index + 1}
                           </div>
-                          <div>
-                            <div className="text-sm font-medium">{lead.name}</div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold">{lead.name}</div>
                             <div className="text-xs text-muted-foreground">
                               {lead.contact || "Sem contato"} - {lead.stage}
                             </div>
                             {isSiteLeadSource(lead.source) && (
-                              <Badge variant="secondary" className="mt-1 text-[10px]">
+                              <Badge variant="secondary" className="mt-1 rounded-full text-[10px]">
                                 {SITE_LEAD_TAG}
                               </Badge>
                             )}
                           </div>
                         </div>
-                        <span className="text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
+                        <span className="shrink-0 text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
                       </div>
                     ))
                   )}
@@ -1188,8 +1202,8 @@ export default function CRMPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border bg-card">
-              <div className="p-5 border-b">
+            <div className="rounded-2xl border bg-card shadow-sm">
+              <div className="border-b px-5 py-4">
                 <h2 className="font-heading font-semibold">Leads captados via site</h2>
                 <p className="text-xs text-muted-foreground mt-1">
                   Novos contatos recebidos pelos formulários institucionais
@@ -1197,14 +1211,14 @@ export default function CRMPage() {
               </div>
               <div className="divide-y">
                 {siteCapturedLeads.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-muted-foreground">
+                  <div className="flex min-h-28 items-center justify-center p-8 text-center text-sm text-muted-foreground">
                     Nenhum lead com origem de captação via site no filtro atual.
                   </div>
                 ) : (
                   siteCapturedLeads.map((lead) => (
                     <div
                       key={lead.id}
-                      className="p-4 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                      className="flex cursor-pointer items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/30"
                       onClick={() => {
                         setSelectedLead(lead);
                         setSheetOpen(true);
@@ -1212,16 +1226,16 @@ export default function CRMPage() {
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium truncate">{lead.name}</p>
-                          <Badge variant="secondary" className="text-[10px]">
+                          <p className="truncate text-sm font-semibold">{lead.name}</p>
+                          <Badge variant="secondary" className="rounded-full text-[10px]">
                             {SITE_LEAD_TAG}
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
                           {lead.contact || "Sem contato"} {lead.email ? `- ${lead.email}` : ""}
                         </p>
                       </div>
-                      <div className="text-xs text-muted-foreground shrink-0">
+                      <div className="shrink-0 text-xs text-muted-foreground">
                         {new Date(lead.createdAt).toLocaleDateString("pt-BR")}
                       </div>
                     </div>
@@ -1239,7 +1253,7 @@ export default function CRMPage() {
                   </span>
                 )}
               </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {stageSummary.map((stage, index) => (
                   <motion.div
                     key={stage.label}
@@ -1247,7 +1261,7 @@ export default function CRMPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     className={cn(
-                      "rounded-xl border bg-card p-5 hover:shadow-md transition-all relative cursor-pointer",
+                      "relative cursor-pointer rounded-2xl border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
                       activeStageFilter === stage.label && "border-primary bg-primary/5 shadow-md",
                     )}
                     onClick={() =>
@@ -1255,15 +1269,15 @@ export default function CRMPage() {
                     }
                   >
                     {(stage.label === "Negociacao" || stage.label === "Proposta Enviada") && (
-                      <Badge className="absolute top-3 right-3 bg-primary/10 text-primary border-0 gap-1">
+                      <Badge className="absolute right-3 top-3 gap-1 rounded-full border-0 bg-primary/10 text-primary">
                         <Star className="h-3 w-3" /> Quente
                       </Badge>
                     )}
-                    <div className={`h-10 w-10 rounded-lg ${stage.color} flex items-center justify-center mb-3`}>
+                    <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${stage.color}`}>
                       <Users className="h-5 w-5 text-white" />
                     </div>
-                    <h3 className="font-medium">{stage.label}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">{stage.count} negociacao(oes)</p>
+                    <h3 className="font-semibold">{stage.label}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{stage.count} negociacao(oes)</p>
                   </motion.div>
                 ))}
               </div>

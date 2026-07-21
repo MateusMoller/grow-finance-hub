@@ -7,11 +7,13 @@ import {
   Plus,
   Search,
   ShieldAlert,
+  ShieldCheck,
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,6 +70,23 @@ const statusLabels: Record<UserStatus, string> = {
 };
 
 const collaboratorModules = MODULE_KEYS.filter((moduleKey) => moduleKey !== "usuarios");
+
+const initialsFromName = (name: string | null | undefined) => {
+  const parts = (name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return "US";
+  return parts.map((part) => part[0]).join("").toUpperCase();
+};
+
+const statusBadgeClass: Record<UserStatus, string> = {
+  active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  pending: "border-amber-200 bg-amber-50 text-amber-700",
+  suspended: "border-orange-200 bg-orange-50 text-orange-700",
+  inactive: "border-slate-200 bg-slate-100 text-slate-500",
+};
 
 const emptyForm = (): UserAccessInput => ({
   displayName: "",
@@ -228,25 +247,26 @@ export default function UsuariosPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-7xl space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="max-w-none space-y-5 px-1">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
           <div>
-            <h1 className="font-heading text-2xl font-bold">Usuários e permissões</h1>
-            <p className="text-sm text-muted-foreground">
+            <ModuleContextPill icon={ShieldCheck} label="Controle de acesso" />
+            <h1 className="font-heading text-3xl font-bold tracking-tight">Usuários e permissões</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Papéis, setores, módulos e empresas vinculadas.
             </p>
           </div>
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} className="h-11 rounded-xl px-5 shadow-sm">
             <Plus className="mr-2 h-4 w-4" />
             Novo usuário
           </Button>
         </div>
 
-        <div className="grid gap-3 border-y py-4 md:grid-cols-6">
+        <div className="grid gap-3 rounded-2xl border bg-card/70 p-3 shadow-sm md:grid-cols-6">
           <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="h-11 rounded-xl border-muted bg-background pl-9"
               placeholder="Buscar por nome ou e-mail"
               value={search}
               onChange={(event) => {
@@ -256,28 +276,28 @@ export default function UsuariosPage() {
             />
           </div>
           <Select value={filters.role} onValueChange={(role) => setFilters((current) => ({ ...current, role: role as UserFilters["role"], page: 1 }))}>
-            <SelectTrigger><SelectValue placeholder="Papel" /></SelectTrigger>
+            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Papel" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os papéis</SelectItem>
               {PRIMARY_ROLES.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.status} onValueChange={(status) => setFilters((current) => ({ ...current, status: status as UserFilters["status"], page: 1 }))}>
-            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
               {USER_STATUSES.map((status) => <SelectItem key={status} value={status}>{statusLabels[status]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.sectorCode} onValueChange={(sectorCode) => setFilters((current) => ({ ...current, sectorCode: sectorCode as UserFilters["sectorCode"], page: 1 }))}>
-            <SelectTrigger><SelectValue placeholder="Setor" /></SelectTrigger>
+            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Setor" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os setores</SelectItem>
               {SECTOR_CODES.map((sector) => <SelectItem key={sector} value={sector}>{SECTOR_LABELS[sector]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.moduleKey} onValueChange={(moduleKey) => setFilters((current) => ({ ...current, moduleKey: moduleKey as UserFilters["moduleKey"], page: 1 }))}>
-            <SelectTrigger><SelectValue placeholder="Módulo" /></SelectTrigger>
+            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Módulo" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os módulos</SelectItem>
               {MODULE_KEYS.map((moduleKey) => (
@@ -287,8 +307,8 @@ export default function UsuariosPage() {
           </Select>
         </div>
 
-        <div className="overflow-hidden rounded-lg border">
-          <div className="grid grid-cols-[minmax(220px,1.4fr)_150px_160px_minmax(220px,1fr)_92px] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">
+        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+          <div className="grid grid-cols-[minmax(260px,1.45fr)_140px_170px_minmax(260px,1fr)_96px] gap-4 border-b bg-muted/30 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <span>Usuário</span><span>Papel</span><span>Setor / status</span><span>Acesso</span><span className="text-right">Ações</span>
           </div>
           {usersQuery.isLoading ? (
@@ -299,29 +319,49 @@ export default function UsuariosPage() {
             <div className="p-8 text-sm text-muted-foreground">Nenhum usuário encontrado.</div>
           ) : (
             visibleUsers.map((managedUser) => (
-              <div key={managedUser.user_id} className="grid grid-cols-[minmax(220px,1.4fr)_150px_160px_minmax(220px,1fr)_92px] gap-4 border-b px-4 py-4 text-sm last:border-b-0">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{managedUser.display_name || "Sem nome"}</p>
-                  <p className="truncate text-xs text-muted-foreground">{managedUser.email}</p>
+              <div key={managedUser.user_id} className="grid grid-cols-[minmax(260px,1.45fr)_140px_170px_minmax(260px,1fr)_96px] items-center gap-4 border-b px-5 py-4 text-sm transition-colors last:border-b-0 hover:bg-muted/20">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/10">
+                    {initialsFromName(managedUser.display_name || managedUser.email)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{managedUser.display_name || "Sem nome"}</p>
+                    <p className="truncate text-xs text-muted-foreground">{managedUser.email}</p>
+                  </div>
                 </div>
-                <div><Badge variant="outline">{roleLabels[managedUser.primary_role]}</Badge></div>
                 <div>
-                  <p>{managedUser.sector_code ? SECTOR_LABELS[managedUser.sector_code] : "-"}</p>
-                  <p className="text-xs text-muted-foreground">{statusLabels[managedUser.status]}</p>
-                  {managedUser.requires_access_review && <Badge variant="destructive" className="mt-1">Revisar</Badge>}
+                  <Badge variant={managedUser.primary_role === "admin" ? "default" : "outline"} className="rounded-full px-2.5">
+                    {roleLabels[managedUser.primary_role]}
+                  </Badge>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {managedUser.primary_role === "admin" && <Badge>Todos os módulos</Badge>}
+                <div>
+                  <p className="font-medium">{managedUser.sector_code ? SECTOR_LABELS[managedUser.sector_code] : "-"}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className={`rounded-full px-2 py-0 text-[11px] ${statusBadgeClass[managedUser.status]}`}>
+                      {statusLabels[managedUser.status]}
+                    </Badge>
+                    {managedUser.requires_access_review && <Badge variant="destructive" className="rounded-full px-2 py-0 text-[11px]">Revisar</Badge>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {managedUser.primary_role === "admin" && <Badge className="rounded-full">Todos os módulos</Badge>}
                   {managedUser.enabled_modules.slice(0, 4).map((moduleKey) => (
-                    <Badge key={moduleKey} variant="secondary">{MODULE_LABELS[moduleKey]}</Badge>
+                    <Badge key={moduleKey} variant="secondary" className="rounded-full px-2.5 py-1 text-xs">{MODULE_LABELS[moduleKey]}</Badge>
                   ))}
                   {managedUser.linked_clients.slice(0, 3).map((client) => (
-                    <Badge key={client.client_id} variant="secondary">{client.name}</Badge>
+                    <Badge key={client.client_id} variant="secondary" className="max-w-40 rounded-full px-2.5 py-1 text-xs">
+                      <span className="truncate">{client.name}</span>
+                    </Badge>
                   ))}
+                  {Math.max(0, managedUser.enabled_modules.length - 4) + Math.max(0, managedUser.linked_clients.length - 3) > 0 && (
+                    <Badge variant="outline" className="rounded-full px-2.5 py-1 text-xs">
+                      +{Math.max(0, managedUser.enabled_modules.length - 4) + Math.max(0, managedUser.linked_clients.length - 3)}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" title="Editar" onClick={() => openEdit(managedUser)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" title="Desativar" disabled={managedUser.status === "inactive"} onClick={() => void deactivate(managedUser)}><UserX className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" title="Editar" onClick={() => openEdit(managedUser)}><Pencil className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:text-destructive" title="Desativar" disabled={managedUser.status === "inactive"} onClick={() => void deactivate(managedUser)}><UserX className="h-4 w-4" /></Button>
                 </div>
               </div>
             ))

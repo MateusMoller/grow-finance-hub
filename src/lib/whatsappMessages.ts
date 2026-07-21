@@ -26,6 +26,7 @@ export async function listWhatsAppMessages(conversationId: string, page = 0, pag
       conversation_id,
       direction,
       sender_user_id,
+      provider_message_id,
       message_type,
       body,
       safe_preview,
@@ -45,13 +46,19 @@ export async function listWhatsAppMessages(conversationId: string, page = 0, pag
   return [...((data || []) as WhatsAppMessage[])].reverse();
 }
 
-export async function sendWhatsAppTextMessage(conversationId: string, body: string, clientMessageId: string) {
+export async function sendWhatsAppTextMessage(
+  conversationId: string,
+  body: string,
+  clientMessageId: string,
+  replyToProviderMessageId?: string | null,
+) {
   const { data, error } = await db.functions.invoke("whatsapp-send-message", {
     body: {
       action: "send_text",
       conversationId,
       body,
       clientMessageId,
+      replyToProviderMessageId,
     },
   });
   if (error) await throwDetailedFunctionError(error);

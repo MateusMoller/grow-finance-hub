@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Building2,
+  ChevronDown,
   Check,
   ClipboardList,
   Download,
@@ -990,6 +992,7 @@ export default function ChatInternoPage() {
       <div className="mx-auto flex h-[calc(100svh-5.25rem)] min-h-[600px] w-full max-w-none flex-col gap-3 px-0 sm:px-1">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
+            <ModuleContextPill icon={MessageSquare} label="Comunicação interna" className="mb-1" />
             <h1 className="font-heading text-xl font-bold leading-tight">Chat Interno</h1>
             <p className="text-xs text-muted-foreground sm:text-sm">
               Canais internos e conversas diretas da equipe.
@@ -1061,24 +1064,24 @@ export default function ChatInternoPage() {
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <div className="border-b bg-muted/30 px-4 py-3">
-              <p className="text-sm font-semibold">Conversas</p>
+        <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
+          <aside className="flex min-h-0 flex-col overflow-hidden border-r bg-card">
+            <div className="border-b bg-muted/30 px-3 py-2.5">
+              <p className="text-[15px] font-semibold">Conversas</p>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-card">
               <button
                 type="button"
-                className={`mb-2.5 w-full rounded-2xl border p-2.5 text-left transition-all ${
+                className={`w-full border-b px-3 py-0 text-left transition ${
                   activeChat.type === "group"
-                    ? "border-primary/40 bg-primary/10 shadow-sm"
-                    : "border-transparent bg-muted/30 hover:bg-muted"
+                    ? "bg-muted/60"
+                    : "hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
                 }`}
                 onClick={() => setActiveChat({ type: "group" })}
               >
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                <div className="flex min-h-[4.55rem] items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <Users className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1106,7 +1109,7 @@ export default function ChatInternoPage() {
                 </div>
               </button>
 
-              <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="border-b px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Conversas pessoais
               </div>
 
@@ -1119,7 +1122,7 @@ export default function ChatInternoPage() {
                   Nenhum outro usuário interno encontrado.
                 </div>
               ) : (
-                <div className="space-y-1.5">
+                <div>
                   {sortedContacts.map((contact) => {
                     const isActive =
                       activeChat.type === "direct" &&
@@ -1130,16 +1133,16 @@ export default function ChatInternoPage() {
                       <button
                         key={contact.userId}
                         type="button"
-                        className={`w-full rounded-2xl border p-2.5 text-left transition-all ${
+                        className={`w-full border-b px-3 py-0 text-left transition ${
                           isActive
-                            ? "border-primary/40 bg-primary/10 shadow-sm"
-                            : "border-transparent hover:bg-muted"
+                            ? "bg-muted/60"
+                            : "hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
                         }`}
                         onClick={() =>
                           setActiveChat({ type: "direct", targetUserId: contact.userId })
                         }
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-h-[4.55rem] items-center gap-3">
                           <div className="relative shrink-0">
                             <ChatAvatar name={contact.displayName} avatarUrl={contact.avatarUrl} />
                             {onlineUserIds.has(contact.userId) ? (
@@ -1180,8 +1183,8 @@ export default function ChatInternoPage() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2.5">
+          <section className="flex min-h-0 flex-col overflow-hidden bg-card">
+            <div className="flex min-h-[3.9rem] flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="relative">
                   {activeChat.type === "group" ? (
@@ -1216,7 +1219,7 @@ export default function ChatInternoPage() {
               </Badge>
             </div>
 
-            <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-4 ${chatDensity === "compact" ? "space-y-2" : "space-y-3"} ${chatBackgroundClass[chatBackground]}`}>
+            <div className={`min-h-0 flex-1 overflow-y-auto px-4 sm:px-7 ${chatDensity === "compact" ? "space-y-1.5 py-3 sm:py-4" : "space-y-2 py-4 sm:py-5"} ${chatBackgroundClass[chatBackground]}`}>
               {loadingMessages ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1247,7 +1250,7 @@ export default function ChatInternoPage() {
                         key={message.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`flex items-end gap-2 ${isOwn ? "justify-end" : "justify-start"}`}
+                        className={`group/message flex items-end gap-2 ${isOwn ? "justify-end" : "justify-start"}`}
                       >
                         {!isOwn && (
                           <ChatAvatar
@@ -1258,32 +1261,57 @@ export default function ChatInternoPage() {
                           />
                         )}
                         <div
-                          className={`max-w-[92%] rounded-2xl px-4 shadow-sm sm:max-w-[72%] ${chatDensity === "compact" ? "py-2" : "py-2.5"} ${
+                          className={`relative max-w-[min(78%,38rem)] rounded-lg px-2.5 text-sm shadow-[0_1px_0.5px_rgba(15,23,42,0.13)] ${chatDensity === "compact" ? "py-1.5" : "py-2"} ${
                             isOwn
-                              ? `rounded-br-md ${ownBubbleToneClass[chatBubbleTone]}`
-                              : "rounded-bl-md bg-card text-card-foreground"
+                              ? `rounded-tr-none ${ownBubbleToneClass[chatBubbleTone]}`
+                              : "rounded-tl-none bg-card text-card-foreground"
                           }`}
                         >
+                          <span
+                            className={`absolute top-0 h-3 w-3 ${
+                              isOwn
+                                ? `-right-1.5 ${ownBubbleToneClass[chatBubbleTone].split(" ")[0]} [clip-path:polygon(0_0,100%_0,0_100%)]`
+                                : "-left-1.5 bg-card [clip-path:polygon(0_0,100%_0,100%_100%)]"
+                            }`}
+                          />
                           <div className="mb-1 flex items-center justify-between gap-3">
                             <p className="text-xs font-semibold text-muted-foreground">
                               {activeChat.type === "group" ? senderName : isOwn ? "Você" : senderName}
                             </p>
                             <div className="flex shrink-0 items-center gap-2">
-                              <button
-                                type="button"
-                                className="rounded-full px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground"
-                                onClick={() =>
-                                  handleReplyToMessage(
-                                    message,
-                                    activeChat.type === "group" ? senderName : isOwn ? "Voce" : senderName,
-                                  )
-                                }
-                              >
-                                Responder
-                              </button>
                               <p className="text-[10px] text-muted-foreground">
                                 {formatMessageTime(message.created_at)}
                               </p>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="Opções da mensagem"
+                                    className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 text-muted-foreground opacity-0 shadow-sm transition hover:bg-background hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/30 group-hover/message:opacity-100"
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align={isOwn ? "end" : "start"} className="w-40">
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleReplyToMessage(
+                                        message,
+                                        activeChat.type === "group" ? senderName : isOwn ? "Você" : senderName,
+                                      )
+                                    }
+                                  >
+                                    <Reply className="mr-2 h-4 w-4" />
+                                    Responder
+                                  </DropdownMenuItem>
+                                  {attachment ? (
+                                    <DropdownMenuItem onClick={() => handleDownloadAttachment(attachment.file.path)}>
+                                      <Download className="mr-2 h-4 w-4" />
+                                      Baixar arquivo
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                           {embeddedReply ? (
@@ -1350,64 +1378,53 @@ export default function ChatInternoPage() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="border-t bg-card px-4 py-2.5">
-              <div className="flex items-end gap-2 rounded-2xl bg-muted/50 p-2">
-                <div className="min-w-0 flex-1">
-                  {selectedReply && (
-                    <div className="mb-2">
-                      <ChatReplyPreview
-                        reply={selectedReply}
-                        compact
-                        onRemove={() => setSelectedReply(null)}
-                      />
-                    </div>
-                  )}
-                  {selectedFile && (
-                    <div className="mb-2 flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-xs shadow-sm">
-                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate font-medium">
-                        {selectedFile.name}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {formatFileSize(selectedFile.size)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          setSelectedFile(null);
-                          if (fileInputRef.current) fileInputRef.current.value = "";
-                        }}
-                        aria-label="Remover anexo"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                  {selectedReference && (
-                    <div className="mb-2">
-                      <ChatReferenceCard
-                        reference={selectedReference}
-                        compact
-                        onRemove={() => setSelectedReference(null)}
-                      />
-                    </div>
-                  )}
-                  <Textarea
-                    rows={1}
-                    value={newMessage}
-                    onChange={(event) => setNewMessage(event.target.value)}
-                    onKeyDown={handleInputKeyDown}
-                    disabled={sending}
-                    placeholder={inputPlaceholder}
-                    className="max-h-28 min-h-10 resize-none rounded-xl border-0 bg-background px-4 py-2.5 shadow-sm focus-visible:ring-1"
-                  />
-                  <p className="mt-0.5 px-1 text-[10px] text-muted-foreground">
-                    Enter envia. Shift+Enter quebra linha.
-                  </p>
-                </div>
+            <div className="border-t bg-card px-4 py-3">
+              <div className="mx-auto max-w-[58rem]">
+                {selectedReply && (
+                  <div className="mb-2">
+                    <ChatReplyPreview
+                      reply={selectedReply}
+                      compact
+                      onRemove={() => setSelectedReply(null)}
+                    />
+                  </div>
+                )}
+                {selectedFile && (
+                  <div className="mb-2 flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-xs shadow-sm">
+                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {selectedFile.name}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {formatFileSize(selectedFile.size)}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      aria-label="Remover anexo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
+                {selectedReference && (
+                  <div className="mb-2">
+                    <ChatReferenceCard
+                      reference={selectedReference}
+                      compact
+                      onRemove={() => setSelectedReference(null)}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="mx-auto max-w-[58rem]">
+                <div className="flex items-end gap-2 rounded-[1.65rem] bg-background px-2 py-1.5 shadow-sm ring-1 ring-black/5 transition focus-within:ring-primary/30">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1442,15 +1459,28 @@ export default function ChatInternoPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                <Textarea
+                  rows={1}
+                  value={newMessage}
+                  onChange={(event) => setNewMessage(event.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  disabled={sending}
+                  placeholder={inputPlaceholder}
+                  className="max-h-28 min-h-10 flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-sm shadow-none focus-visible:ring-0"
+                />
                 <Button
                   type="button"
                   size="icon"
-                  className="h-10 w-10 shrink-0 rounded-full"
+                  className="h-10 w-10 shrink-0 rounded-full shadow-sm"
                   onClick={() => void handleSendMessage()}
                   disabled={sending || (!newMessage.trim() && !selectedFile && !selectedReference)}
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
+              </div>
+                <p className="mt-1.5 px-4 text-[10px] text-muted-foreground">
+                  Enter envia. Shift+Enter quebra linha.
+                </p>
               </div>
             </div>
           </section>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -370,6 +371,7 @@ export default function CalendarioPage() {
       <div className="mx-auto w-full max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <ModuleContextPill icon={CalendarDays} label="Agenda operacional" />
             <h1 className="font-heading text-2xl font-bold">Calendário</h1>
             <p className="text-sm text-muted-foreground">
               Cadastre eventos, obrigações e acompanhe prazos da operação.

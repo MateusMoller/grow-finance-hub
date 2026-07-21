@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import {
   KanbanTaskDetailSheet,
   type KanbanStatus,
@@ -41,7 +42,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { invokeGrowObligations } from "@/lib/growObligations";
 import { motion } from "framer-motion";
-import { Archive, CalendarDays, Check, ChevronsUpDown, Filter, Loader2, Plus } from "lucide-react";
+import { Archive, CalendarDays, Check, ChevronsUpDown, Filter, KanbanSquare, Loader2, Plus } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -109,11 +110,11 @@ const sectors = [
 ];
 
 const taskSectorOptions = [
-  "Contabil",
+  "Contábil",
   "Fiscal",
   "Departamento Pessoal",
   "Comercial",
-  "Societario",
+  "Societário",
   "Geral",
 ];
 
@@ -127,17 +128,17 @@ const priorityDot: Record<string, string> = {
 
 const normalizeSector = (value: string) =>
   value
-    .replace("ContÃ¡bil", "Contábil")
-    .replace("ContÃƒÂ¡bil", "Contábil")
-    .replace("SocietÃ¡rio", "Societário")
-    .replace("SocietÃƒÂ¡rio", "Societário")
+    .replace("Cont\u00c3\u00a1bil", "Contábil")
+    .replace("Cont\u00c3\u0192\u00c2\u00a1bil", "Contábil")
+    .replace("Societ\u00c3\u00a1rio", "Societário")
+    .replace("Societ\u00c3\u0192\u00c2\u00a1rio", "Societário")
     .trim();
 
 const normalizePriority = (value: string) =>
   value
-    .replace("MÃ©dia", "Média")
-    .replace("MÃƒÂ©dia", "Média")
-    .replace("MÃƒÆ’Ã‚Â©dia", "Média")
+    .replace("M\u00c3\u00a9dia", "Média")
+    .replace("M\u00c3\u0192\u00c2\u00a9dia", "Média")
+    .replace("M\u00c3\u0192\u00c6\u2019\u00c3\u00a2\u20ac\u0161\u00c3\u201a\u00c2\u00a9dia", "Média")
     .trim();
 
 const normalizeText = (value: string) =>
@@ -344,7 +345,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
     const targetTask = tasks.find((task) => task.id === taskId);
     if (!targetTask) {
-      toast.error("Tarefa da notificacao nao encontrada.");
+      toast.error("Tarefa da notificação não encontrada.");
       params.delete("task");
       const nextSearch = params.toString();
       navigate(
@@ -808,7 +809,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
           ...(currentOrganizationId ? { organization_id: currentOrganizationId } : {}),
         });
         if (commentError) {
-          toast.error("Tarefa salva, mas nao foi possivel notificar o novo setor.");
+          toast.error("Tarefa salva, mas não foi possível notificar o novo setor.");
         }
       }
     }
@@ -864,7 +865,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     }
 
     if (!canCreateTaskInSector(newTask.sector, effectiveAccess)) {
-      toast.error("Voce nao tem permissao para criar tarefas neste setor");
+      toast.error("Você não tem permissão para criar tarefas neste setor");
       return;
     }
 
@@ -875,7 +876,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         )
       : null;
     if (newTask.client_name.trim() && !selectedClient) {
-      toast.error("Cliente invalido. Selecione um cliente da lista");
+      toast.error("Cliente inválido. Selecione um cliente da lista");
       return;
     }
 
@@ -1059,6 +1060,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
           {!embedded && (
             <div className="flex items-center justify-between">
               <div>
+                <ModuleContextPill icon={KanbanSquare} label="Quadro Kanban" />
                 <h1 className="font-heading text-2xl font-bold">Kanban</h1>
                 <p className="text-sm text-muted-foreground">
                   Gestão visual de demandas
@@ -1615,4 +1617,3 @@ function KanbanCard({
     </motion.div>
   );
 }
-

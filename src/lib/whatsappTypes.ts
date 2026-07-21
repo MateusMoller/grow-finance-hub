@@ -73,6 +73,7 @@ export interface WhatsAppMessage {
   conversation_id: string;
   direction: WhatsAppMessageDirection;
   sender_user_id: string | null;
+  provider_message_id: string | null;
   message_type: WhatsAppMessageType;
   body: string | null;
   safe_preview: string | null;

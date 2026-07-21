@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -159,7 +160,7 @@ const statusConfig: Record<
 
 const sectors = [
   "Todos",
-  "Contabil",
+  "Contábil",
   "Fiscal",
   "Departamento Pessoal",
   "Comercial",
@@ -192,6 +193,9 @@ const normalizePriority = (value: string): Task["priority"] => {
   if (normalized.includes("baixa")) return "Baixa";
   return "Media";
 };
+
+const formatPriorityLabel = (priority: string) =>
+  priority === "Media" ? "Média" : priority;
 
 const deriveStatus = (
   status: string,
@@ -302,7 +306,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     title: "",
     description: "",
     client: "",
-    sector: "Contabil",
+    sector: "Contábil",
     assignee: "",
     assignedToUserId: "",
     priority: "Media" as Task["priority"],
@@ -598,7 +602,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     }
 
     if (!canCreateTaskInSector(newTask.sector, effectiveAccess)) {
-      toast.error("Voce nao tem permissao para criar tarefas neste setor");
+      toast.error("Você não tem permissão para criar tarefas neste setor");
       return;
     }
 
@@ -609,7 +613,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
         )
       : null;
     if (newTask.client.trim() && !selectedClient) {
-      toast.error("Cliente invalido. Selecione um cliente da lista");
+      toast.error("Cliente inválido. Selecione um cliente da lista");
       return;
     }
 
@@ -799,9 +803,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
     setSelectedTask((prev) => (prev?.id === taskId ? null : prev));
     setSheetOpen(false);
-    void registerTaskHistory(taskId, "Tarefa excluida", taskToDelete.title);
+    void registerTaskHistory(taskId, "Tarefa excluída", taskToDelete.title);
 
-    toast.success("Tarefa excluida", {
+    toast.success("Tarefa excluída", {
       action: {
         label: "Desfazer",
         onClick: () => {
@@ -863,6 +867,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
         {!embedded && (
           <div className="flex items-center justify-between">
             <div>
+              <ModuleContextPill icon={CheckCircle2} label="Operação diária" />
               <h1 className="font-heading text-2xl font-bold">Tarefas</h1>
               <p className="text-sm text-muted-foreground">
                 Gestão completa de tarefas da equipe
@@ -1009,7 +1014,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                             variant="outline"
                             className={`border-0 text-[11px] ${priorityCfg.color} ${priorityCfg.bg}`}
                           >
-                            {task.priority}
+                            {formatPriorityLabel(task.priority)}
                           </Badge>
                           <Badge
                             variant="outline"
@@ -1290,7 +1295,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   }
                 >
                   {["Urgente", "Alta", "Media", "Baixa"].map((priority) => (
-                    <option key={priority}>{priority}</option>
+                    <option key={priority} value={priority}>
+                      {formatPriorityLabel(priority)}
+                    </option>
                   ))}
                 </select>
               </div>

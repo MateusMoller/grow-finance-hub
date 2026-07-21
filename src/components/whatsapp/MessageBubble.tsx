@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, FileText, Image as ImageIcon, Mic, Pause, Play, RefreshCw, Video } from "lucide-react";
+import { ChevronDown, Download, FileText, Image as ImageIcon, Mic, Pause, Play, RefreshCw, Reply, Video } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { bubbleToneClass, type WhatsAppBubbleTone } from "@/components/whatsapp/appearance";
+import { whatsAppReplyReferenceFor, type WhatsAppReplyReference } from "@/lib/whatsappMessagePreview";
 import { getWhatsAppAttachmentUrl } from "@/lib/whatsappMedia";
 import type { WhatsAppAttachment, WhatsAppMessage } from "@/lib/whatsappTypes";
 
@@ -37,7 +46,17 @@ const formatSeconds = (value: number) => {
 
 const waveformBars = [12, 16, 22, 13, 27, 18, 30, 20, 14, 25, 32, 16, 22, 28, 18, 12, 26, 34, 20, 15, 24, 29, 17, 22, 31, 19, 14, 26, 33, 21, 16, 24];
 
-function AudioVoiceNote({ signedUrl, contactInitials, outbound }: { signedUrl: string; contactInitials: string; outbound: boolean }) {
+function AudioVoiceNote({
+  signedUrl,
+  contactInitials,
+  outbound,
+  bubbleTone,
+}: {
+  signedUrl: string;
+  contactInitials: string;
+  outbound: boolean;
+  bubbleTone: WhatsAppBubbleTone;
+}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLSpanElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -48,6 +67,7 @@ function AudioVoiceNote({ signedUrl, contactInitials, outbound }: { signedUrl: s
   const emptyBarClass = outbound ? "bg-[#8fd8bf]" : "bg-slate-300";
   const filledBarClass = outbound ? "bg-[#00a884]" : "bg-slate-600";
   const displayedLeftTime = currentTime > 0 || isPlaying ? formatSeconds(currentTime) : formatSeconds(duration);
+  const tone = bubbleToneClass[bubbleTone];
 
   const togglePlayback = () => {
     const audio = audioRef.current;
@@ -75,12 +95,12 @@ function AudioVoiceNote({ signedUrl, contactInitials, outbound }: { signedUrl: s
   };
 
   return (
-    <div className="flex w-[21rem] max-w-full items-center gap-2.5 rounded-lg px-1 py-0.5 text-slate-700">
+    <div className="flex w-[20rem] max-w-full items-center gap-2.5 rounded-lg px-0.5 py-0.5 text-[#111b21]">
       <button
         type="button"
         onClick={togglePlayback}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#54656f] transition hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[#00a884]/30"
-        aria-label={isPlaying ? "Pausar audio" : "Reproduzir audio"}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#54656f] transition hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[#00a884]/30"
+        aria-label={isPlaying ? "Pausar áudio" : "Reproduzir áudio"}
       >
         {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
       </button>
@@ -97,7 +117,7 @@ function AudioVoiceNote({ signedUrl, contactInitials, outbound }: { signedUrl: s
             seekToClientX(event.clientX);
           }}
           className="flex h-8 w-full cursor-pointer items-center rounded-md px-0.5 focus:outline-none focus:ring-2 focus:ring-[#00a884]/25"
-          aria-label="Avancar ou voltar no audio"
+          aria-label="Avançar ou voltar no áudio"
         >
           <span ref={waveformRef} className="relative flex h-full w-full items-center justify-between">
             {waveformBars.map((height, index) => {
@@ -122,7 +142,7 @@ function AudioVoiceNote({ signedUrl, contactInitials, outbound }: { signedUrl: s
         </div>
       </div>
       <div className="relative shrink-0">
-        <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-100 to-teal-200 text-sm font-bold text-emerald-950 shadow-sm ring-2 ring-white">
+        <span className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-sm font-bold shadow-sm ring-2 ring-white ${tone.audioAvatar}`}>
           {contactInitials}
         </span>
         <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-[#00a884]" />
@@ -142,7 +162,19 @@ function AudioVoiceNote({ signedUrl, contactInitials, outbound }: { signedUrl: s
   );
 }
 
-function AttachmentPreview({ attachment, time, contactInitials, outbound }: { attachment: WhatsAppAttachment; time: string; contactInitials: string; outbound: boolean }) {
+function AttachmentPreview({
+  attachment,
+  time,
+  contactInitials,
+  outbound,
+  bubbleTone,
+}: {
+  attachment: WhatsAppAttachment;
+  time: string;
+  contactInitials: string;
+  outbound: boolean;
+  bubbleTone: WhatsAppBubbleTone;
+}) {
   const type = baseMimeType(attachment.content_type);
   const isAudio = type.startsWith("audio/");
   const isImage = type.startsWith("image/");
@@ -154,15 +186,15 @@ function AttachmentPreview({ attachment, time, contactInitials, outbound }: { at
     enabled: canOpen,
     staleTime: 4 * 60 * 1000,
   });
-  const label = attachment.file_name || (isAudio ? "Audio recebido" : "Arquivo");
+  const label = attachment.file_name || (isAudio ? "Áudio recebido" : "Arquivo");
   const status = statusLabel(attachment.status);
 
   if (isImage && data?.signedUrl) {
     return (
       <Dialog>
         <DialogTrigger asChild>
-          <button type="button" className="group relative block overflow-hidden rounded-md bg-black/5 text-left transition hover:brightness-95">
-            <img src={data.signedUrl} alt={label} className="max-h-80 w-80 max-w-full object-cover" loading="lazy" />
+          <button type="button" className="group relative block overflow-hidden rounded-lg bg-black/5 text-left transition hover:brightness-95">
+            <img src={data.signedUrl} alt={label} className="max-h-80 w-[19rem] max-w-full object-cover" loading="lazy" />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent px-2 pb-1.5 pt-9 text-white">
               <span className="min-w-0 truncate text-xs drop-shadow">{label}</span>
               <span className="shrink-0 text-[10px] drop-shadow">{time}</span>
@@ -171,7 +203,7 @@ function AttachmentPreview({ attachment, time, contactInitials, outbound }: { at
         </DialogTrigger>
         <DialogContent className="max-w-[min(96vw,64rem)] border-white/10 bg-slate-950 p-3 text-white">
           <DialogTitle className="sr-only">{label}</DialogTitle>
-          <DialogDescription className="sr-only">Pre-visualizacao da imagem recebida pelo WhatsApp.</DialogDescription>
+          <DialogDescription className="sr-only">Pré-visualização da imagem recebida pelo WhatsApp.</DialogDescription>
           <img src={data.signedUrl} alt={label} className="max-h-[82vh] w-full rounded-lg object-contain" />
           <a href={data.signedUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15">
             <Download className="h-4 w-4" />
@@ -184,8 +216,8 @@ function AttachmentPreview({ attachment, time, contactInitials, outbound }: { at
 
   if (isVideo && data?.signedUrl) {
     return (
-      <div className="relative overflow-hidden rounded-md bg-black">
-        <video controls preload="metadata" src={data.signedUrl} className="max-h-72 w-80 max-w-full bg-black" />
+      <div className="relative overflow-hidden rounded-lg bg-black">
+        <video controls preload="metadata" src={data.signedUrl} className="max-h-72 w-[19rem] max-w-full bg-black" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent px-2 pb-1.5 pt-8 text-white">
           <span className="flex min-w-0 items-center gap-1.5 truncate text-xs drop-shadow">
             <Video className="h-3.5 w-3.5 shrink-0" />
@@ -198,11 +230,11 @@ function AttachmentPreview({ attachment, time, contactInitials, outbound }: { at
   }
 
   if (isAudio && data?.signedUrl) {
-    return <AudioVoiceNote signedUrl={data.signedUrl} contactInitials={contactInitials} outbound={outbound} />;
+    return <AudioVoiceNote signedUrl={data.signedUrl} contactInitials={contactInitials} outbound={outbound} bubbleTone={bubbleTone} />;
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md bg-black/5 p-2 text-xs">
+    <div className="flex items-center gap-2 rounded-lg bg-black/5 p-2 text-xs">
       {isAudio ? <Mic className="h-4 w-4" /> : isImage ? <ImageIcon className="h-4 w-4" /> : isVideo ? <Video className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {data?.signedUrl ? (
@@ -217,24 +249,103 @@ function AttachmentPreview({ attachment, time, contactInitials, outbound }: { at
   );
 }
 
-export function MessageBubble({ message, contactInitials }: { message: WhatsAppMessage; contactInitials: string }) {
+export function MessageBubble({
+  message,
+  contactInitials,
+  bubbleTone = "verde",
+  compact = false,
+  onReply,
+}: {
+  message: WhatsAppMessage;
+  contactInitials: string;
+  bubbleTone?: WhatsAppBubbleTone;
+  compact?: boolean;
+  onReply?: (message: WhatsAppReplyReference) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const outbound = message.direction === "outbound";
   const failed = message.delivery_status === "failed" || Boolean(message.blocked_reason);
   const time = formatTime(message);
   const hasAttachments = Boolean(message.attachments?.length);
+  const tone = bubbleToneClass[bubbleTone];
+  const downloadableAttachment = message.attachments?.find(
+    (attachment) => Boolean(attachment.storage_path) && ["stored", "sent"].includes(attachment.status),
+  );
+  const downloadLabel = downloadableAttachment?.file_name || "mídia";
+  const downloadQuery = useQuery({
+    queryKey: ["whatsapp", "attachment-url", downloadableAttachment?.id || "none", "menu-download"],
+    queryFn: () => getWhatsAppAttachmentUrl(downloadableAttachment?.id || ""),
+    enabled: menuOpen && Boolean(downloadableAttachment),
+    staleTime: 4 * 60 * 1000,
+  });
 
   return (
-    <div className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
+    <div className={`group/message flex ${outbound ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[min(76%,42rem)] rounded-lg px-2.5 py-1.5 shadow-sm ${
-          outbound ? "rounded-br-sm bg-[#d9fdd3] text-slate-900" : "rounded-bl-sm bg-white text-slate-900"
-        } ${failed ? "ring-1 ring-destructive/40" : ""}`}
+        className={`relative max-w-[min(78%,38rem)] rounded-lg px-2.5 text-[#111b21] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] ${
+          compact ? "py-1" : "py-1.5"
+        } ${outbound ? `rounded-tr-none ${tone.outbound}` : "rounded-tl-none bg-white"} ${failed ? "ring-1 ring-destructive/40" : ""}`}
       >
-        {message.body && <p className="whitespace-pre-wrap px-1 text-[15px] leading-relaxed">{message.body}</p>}
+        <span
+          className={`absolute top-0 h-3 w-3 ${
+            outbound
+              ? `-right-1.5 ${tone.tail} [clip-path:polygon(0_0,100%_0,0_100%)]`
+              : "-left-1.5 bg-white [clip-path:polygon(0_0,100%_0,100%_100%)]"
+          }`}
+        />
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Opções da mensagem"
+              className={`absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full text-[#667781] opacity-0 shadow-sm transition group-hover/message:opacity-100 focus:opacity-100 ${
+                outbound ? tone.outbound : "bg-white"
+              } hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-[#00a884]/30`}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align={outbound ? "end" : "start"} className="w-44">
+            <DropdownMenuItem onSelect={() => onReply?.(whatsAppReplyReferenceFor(message))}>
+              <Reply className="mr-2 h-4 w-4" />
+              Responder
+            </DropdownMenuItem>
+            {downloadableAttachment && (
+              <>
+                <DropdownMenuSeparator />
+                {downloadQuery.data?.signedUrl ? (
+                  <DropdownMenuItem asChild>
+                    <a href={downloadQuery.data.signedUrl} download={downloadLabel} target="_blank" rel="noreferrer">
+                      <Download className="mr-2 h-4 w-4" />
+                      Baixar mídia
+                    </a>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem disabled>
+                    <Download className="mr-2 h-4 w-4" />
+                    Preparando...
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {message.body && (
+          <p className={`whitespace-pre-wrap break-words px-1 pr-12 ${compact ? "text-[14px] leading-[1.4]" : "text-[14.5px] leading-[1.45]"}`}>
+            {message.body}
+          </p>
+        )}
         {message.attachments?.map((attachment) => (
-          <AttachmentPreview key={attachment.id} attachment={attachment} time={time} contactInitials={contactInitials} outbound={outbound} />
+          <AttachmentPreview
+            key={attachment.id}
+            attachment={attachment}
+            time={time}
+            contactInitials={contactInitials}
+            outbound={outbound}
+            bubbleTone={bubbleTone}
+          />
         ))}
-        <div className={`mt-0.5 items-center justify-end gap-1 px-1 text-[10px] text-slate-500 ${hasAttachments && !failed ? "hidden" : "flex"}`}>
+        <div className={`mt-0.5 items-center justify-end gap-1 px-1 text-[10px] text-[#667781] ${hasAttachments && !failed ? "hidden" : "flex"}`}>
           {failed && <RefreshCw className="h-3 w-3 text-destructive" />}
           {(failed || message.delivery_status === "queued" || message.delivery_status === "sending") && (
             <span>{message.blocked_reason || message.failure_reason || message.delivery_status}</span>

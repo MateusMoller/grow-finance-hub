@@ -3,6 +3,7 @@ import { AlertCircle, Columns3, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { ReportDatasetSelector } from "@/components/reports/ReportDatasetSelector";
 import { ReportFilterSummary } from "@/components/reports/ReportFilterSummary";
 import { ReportExportControls } from "@/components/reports/ReportExportControls";
@@ -215,6 +216,7 @@ export default function RelatoriosPage() {
       <div className="max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
+            <ModuleContextPill icon={Columns3} label="Dados gerenciais" />
             <h1 className="font-heading text-2xl font-bold">Relatorios</h1>
             <p className="text-sm text-muted-foreground">
               Preview governado por base, filtros, permissao e classificacao de dados.

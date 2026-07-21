@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -409,6 +410,7 @@ export default function DashboardPage() {
     <AppLayout>
       <div className="space-y-6 max-w-7xl">
         <div>
+          <ModuleContextPill icon={KanbanSquare} label="Visão operacional" />
           <h1 className="font-heading text-2xl font-bold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {isAdmin

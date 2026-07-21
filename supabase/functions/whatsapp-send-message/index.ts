@@ -10,11 +10,11 @@ const ticketNumberForTask = (taskId: string) => taskId.replaceAll("-", "").slice
 const ticketCreatedMessage = (task: { id: string; title: string; assignee?: string | null }) => [
   "*Ticket de atendimento criado*",
   "",
-  `*Numero do ticket:* #${ticketNumberForTask(task.id)}`,
-  `*Titulo:* ${task.title}`,
-  `*Responsavel:* ${asString(task.assignee) || "Equipe Grow"}`,
+  `*Número do ticket:* #${ticketNumberForTask(task.id)}`,
+  `*Título:* ${task.title}`,
+  `*Responsável:* ${asString(task.assignee) || "Equipe Grow"}`,
   "",
-  "Recebemos sua solicitacao e nossa equipe dara continuidade ao atendimento por este ticket.",
+  "Recebemos sua solicitação e nossa equipe dará continuidade ao atendimento por este ticket.",
 ].join("\n");
 
 const normalizeContextMessages = (value: unknown) => {
@@ -52,14 +52,32 @@ async function loadConversation(supabaseAdmin: SupabaseAdmin, conversationId: st
   return data;
 }
 
+async function loadSenderDisplayName(supabaseAdmin: SupabaseAdmin, userId: string, organizationId: string) {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("display_name")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  return asString(data?.display_name) || "Equipe Grow";
+}
+
+const formatOutboundTextForClient = (text: string, senderDisplayName: string) => {
+  const senderLabel = senderDisplayName === "Equipe Grow" ? senderDisplayName : `${senderDisplayName} - Grow`;
+  return `*${senderLabel}:*\n${text}`;
+};
+
 async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const conversationId = asString(body.conversationId);
   const text = asString(body.body);
   const clientMessageId = asString(body.clientMessageId);
+  const replyToProviderMessageId = asString(body.replyToProviderMessageId) || null;
   if (!conversationId || !text || !clientMessageId) throw new Error("invalid_send_payload");
 
   const conversation = await loadConversation(supabaseAdmin, conversationId);
   await assertWhatsAppModuleAccess(supabaseAdmin, userId, conversation.organization_id);
+  const senderDisplayName = await loadSenderDisplayName(supabaseAdmin, userId, conversation.organization_id);
+  const providerText = formatOutboundTextForClient(text, senderDisplayName);
 
   const blockedReason = !isActiveWindowOpen(conversation.active_window_expires_at)
     ? "active_window_closed"
@@ -99,8 +117,9 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
 
   const providerResult = await dispatchWhatsAppTextMessage({
     toPhone: conversation.contact.phone_number,
-    body: text,
+    body: providerText,
     clientMessageId,
+    replyToProviderMessageId,
   }).catch(async (error) => {
     const failureReason = error instanceof Error ? error.message : "whatsapp_provider_failed";
     const { data: failedMessage, error: insertError } = await supabaseAdmin.from("whatsapp_messages").upsert({
@@ -164,9 +183,10 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
     organization_id: conversation.organization_id,
     conversation_id: conversation.id,
     message_id: message.id,
-    event_type: "outbound_sent",
-    actor_user_id: userId,
-    provider_event_id: providerResult.providerMessageId,
+      event_type: "outbound_sent",
+      actor_user_id: userId,
+      provider_event_id: providerResult.providerMessageId,
+      details: { sender_display_name: senderDisplayName, reply_to_provider_message_id: replyToProviderMessageId },
   });
 
   return { ok: true, message };
@@ -289,8 +309,9 @@ async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, bod
     "Criada a partir do atendimento WhatsApp.",
     conversation.contact?.phone_number ? `Contato: ${conversation.contact.phone_number}` : null,
   ].filter(Boolean);
+  const quickTaskIntegrationId = `quick:${conversation.id}:${clientMessageId}`;
 
-  const { data: task, error: taskError } = await supabaseAdmin
+  const { data: insertedTask, error: taskError } = await supabaseAdmin
     .from("kanban_tasks")
     .insert({
       organization_id: conversation.organization_id,
@@ -306,18 +327,37 @@ async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, bod
       assigned_to_user_id: userId,
       assignee: assigneeName,
       integration_source: "whatsapp",
-      integration_task_id: conversation.id,
+      integration_task_id: quickTaskIntegrationId,
       integration_payload: {
         source: "whatsapp_conversation",
         conversation_id: conversation.id,
+        quick_task_client_message_id: clientMessageId,
         contact_phone: conversation.contact?.phone_number || null,
         context_messages: contextMessages,
       },
     })
     .select("id, title, assigned_to_user_id, assignee")
     .single();
+  let task = insertedTask;
   if (taskError || !task) {
-    throw new Error(errorMessage(taskError, "quick_task_creation_failed"));
+    const isDuplicateIntegrationKey =
+      taskError?.code === "23505" &&
+      asString(taskError?.message).includes("kanban_tasks_integration_source_task_id_key");
+
+    if (isDuplicateIntegrationKey) {
+      const { data: existingTask, error: existingTaskError } = await supabaseAdmin
+        .from("kanban_tasks")
+        .select("id, title, assigned_to_user_id, assignee")
+        .eq("integration_source", "whatsapp")
+        .eq("integration_task_id", quickTaskIntegrationId)
+        .maybeSingle();
+      if (existingTaskError || !existingTask) {
+        throw new Error(errorMessage(existingTaskError || taskError, "quick_task_creation_failed"));
+      }
+      task = existingTask;
+    } else {
+      throw new Error(errorMessage(taskError, "quick_task_creation_failed"));
+    }
   }
 
   const { error: auditError } = await supabaseAdmin.rpc("record_operational_audit_log", {

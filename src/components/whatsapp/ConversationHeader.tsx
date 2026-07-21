@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ExternalLink, Link2, Loader2, Plus, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { isWhatsAppWindowActive, type WhatsAppConversationStatus, type WhatsAppConversationSummary, type WhatsAppMessage } from "@/lib/whatsappTypes";
+import { isWhatsAppWindowActive, type WhatsAppConversationSummary, type WhatsAppMessage } from "@/lib/whatsappTypes";
 
 export type WhatsAppClientLinkOption = {
   id: string;
@@ -47,15 +47,15 @@ export type WhatsAppQuickTaskContextMessage = {
 };
 
 const taskSectorOptions = [
-  "Contabil",
+  "Contábil",
   "Fiscal",
   "Departamento Pessoal",
   "Comercial",
-  "Societario",
+  "Societário",
   "Geral",
 ];
 
-const taskPriorityOptions = ["Baixa", "MÃ©dia", "Alta"];
+const taskPriorityOptions = ["Baixa", "Média", "Alta"];
 
 const initialsFor = (name: string) =>
   name
@@ -65,13 +65,6 @@ const initialsFor = (name: string) =>
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "WA";
-
-const statusLabel = (status: WhatsAppConversationStatus) => {
-  if (status === "resolved") return "Resolvida";
-  if (status === "pending_client") return "Aguardando cliente";
-  if (status === "in_attendance") return "Em atendimento";
-  return "Aberta";
-};
 
 const formatContextMessageTime = (value: string) => {
   const date = new Date(value);
@@ -88,8 +81,8 @@ const messagePreview = (message: WhatsAppMessage) => {
   const text = (message.body || message.safe_preview || "").trim();
   if (text) return text;
   if (message.message_type === "image") return "Imagem";
-  if (message.message_type === "audio") return "Audio";
-  if (message.message_type === "video") return "Video";
+  if (message.message_type === "audio") return "Áudio";
+  if (message.message_type === "video") return "Vídeo";
   if (message.message_type === "document") return "Documento";
   return "Mensagem";
 };
@@ -119,7 +112,7 @@ export function ConversationHeader({
     title: "",
     description: "",
     sector: "Geral",
-    priority: "MÃ©dia",
+    priority: "Média",
     contextMessages: [],
   });
   const normalizedClientSearch = clientSearch.trim().toLowerCase();
@@ -139,7 +132,7 @@ export function ConversationHeader({
     conversation.client_name ||
     conversation.contact?.display_name ||
     conversation.contact?.profile_name ||
-    "Contato nao identificado";
+    "Contato não identificado";
   const windowActive = isWhatsAppWindowActive(conversation.active_window_expires_at);
   const contextMessageOptions = messages
     .filter((message) => message.delivery_status !== "failed")
@@ -169,21 +162,21 @@ export function ConversationHeader({
       title: "",
       description: "",
       sector: "Geral",
-      priority: "MÃ©dia",
+      priority: "Média",
       contextMessages: [],
     });
   };
 
   return (
-    <div className="flex min-h-[4.25rem] items-center justify-between border-b border-slate-200 bg-[#f0f2f5] px-4 py-2">
+    <div className="flex min-h-[3.9rem] items-center justify-between border-b border-[#d1d7db] bg-[#f0f2f5] px-4 py-2">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-teal-200 text-sm font-semibold text-emerald-900">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dfe5e7] text-sm font-semibold text-[#54656f]">
           {initialsFor(name)}
         </span>
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-slate-900">{name}</h2>
-          <p className="truncate text-xs text-slate-500">
-            {conversation.contact?.phone_number || "Sem telefone"} - {windowActive ? "janela ativa" : "janela fechada"} - {statusLabel(conversation.status)}
+          <h2 className="truncate text-[15px] font-semibold text-[#111b21]">{name}</h2>
+          <p className="truncate text-xs text-[#667781]">
+            {conversation.contact?.phone_number || "Sem telefone"} - {windowActive ? "janela ativa" : "janela fechada"}
           </p>
         </div>
       </div>
@@ -191,16 +184,16 @@ export function ConversationHeader({
         <Button
           variant="ghost"
           size="sm"
-          className="h-9 rounded-full px-3 text-slate-600 hover:bg-white"
+          className="h-9 rounded-full px-3 text-[#54656f] hover:bg-white/80 hover:text-[#111b21]"
           onClick={() => setQuickTaskOpen(true)}
           disabled={quickTaskCreating}
-          aria-label="Criar tarefa rÃ¡pida"
+          aria-label="Criar tarefa rápida"
         >
           {quickTaskCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
           Tarefa
         </Button>
         {conversation.client_id ? (
-          <Button variant="ghost" size="sm" className="h-9 rounded-full px-3 text-slate-600 hover:bg-white" onClick={() => navigate(`/app/clientes/${conversation.client_id}`)} aria-label="Abrir cliente vinculado">
+          <Button variant="ghost" size="sm" className="h-9 rounded-full px-3 text-[#54656f] hover:bg-white/80 hover:text-[#111b21]" onClick={() => navigate(`/app/clientes/${conversation.client_id}`)} aria-label="Abrir cliente vinculado">
             <ExternalLink className="mr-2 h-4 w-4" /> Cliente
           </Button>
         ) : (
@@ -211,13 +204,13 @@ export function ConversationHeader({
                 className="inline-flex h-9 items-center rounded-full bg-amber-100 px-3 text-xs font-medium text-amber-800 transition hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={clientLinking}
               >
-                <Link2 className="mr-1 h-3.5 w-3.5" /> NÃ£o vinculado
+                <Link2 className="mr-1 h-3.5 w-3.5" /> Não vinculado
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-96 rounded-xl p-0">
               <div className="border-b p-3">
                 <p className="text-sm font-semibold text-slate-900">Vincular cliente</p>
-                <p className="text-xs text-slate-500">Selecione um cliente ativo jÃ¡ cadastrado.</p>
+                <p className="text-xs text-slate-500">Selecione um cliente ativo já cadastrado.</p>
                 <div className="relative mt-3">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -263,11 +256,11 @@ export function ConversationHeader({
       <Dialog open={quickTaskOpen} onOpenChange={setQuickTaskOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Criar tarefa rÃ¡pida</DialogTitle>
+            <DialogTitle>Criar tarefa rápida</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label htmlFor="whatsapp-quick-task-title">TÃ­tulo</Label>
+              <Label htmlFor="whatsapp-quick-task-title">Título</Label>
               <Input
                 id="whatsapp-quick-task-title"
                 value={quickTask.title}
@@ -276,12 +269,12 @@ export function ConversationHeader({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="whatsapp-quick-task-description">DescriÃ§Ã£o</Label>
+              <Label htmlFor="whatsapp-quick-task-description">Descrição</Label>
               <Textarea
                 id="whatsapp-quick-task-description"
                 value={quickTask.description}
                 onChange={(event) => setQuickTask((current) => ({ ...current, description: event.target.value }))}
-                placeholder="Contexto rÃ¡pido da conversa"
+                placeholder="Contexto rápido da conversa"
                 className="min-h-24 resize-none"
               />
             </div>
@@ -290,35 +283,50 @@ export function ConversationHeader({
                 <Label>Contexto da conversa</Label>
                 <span className="text-xs text-slate-500">{quickTask.contextMessages.length} selecionada(s)</span>
               </div>
-              <div className="max-h-56 overflow-y-auto rounded-xl border bg-slate-50 p-2">
+              <div className="max-h-64 overflow-y-auto rounded-xl border bg-[#efeae2] p-3">
                 {contextMessageOptions.length === 0 ? (
                   <p className="rounded-lg px-3 py-6 text-center text-sm text-slate-500">
-                    Nenhuma mensagem disponivel para anexar como contexto.
+                    Nenhuma mensagem disponível para anexar como contexto.
                   </p>
                 ) : (
-                  <div className="grid gap-2">
+                  <div className="grid gap-3">
                     {contextMessageOptions.map((message) => {
                       const selected = selectedContextIds.has(message.id);
+                      const isClientMessage = message.direction === "inbound";
                       return (
                         <button
                           key={message.id}
                           type="button"
-                          className={`flex w-full items-start gap-3 rounded-lg border px-3 py-2 text-left transition ${
-                            selected ? "border-emerald-300 bg-emerald-50" : "border-transparent bg-white hover:border-slate-200"
+                          className={`group flex w-full items-center gap-2 text-left transition ${
+                            isClientMessage ? "justify-start" : "justify-end"
                           }`}
                           onClick={() => toggleContextMessage(message)}
                         >
-                          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                            selected ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white"
+                          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                            selected ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white/85 group-hover:border-slate-400"
                           }`}>
                             {selected ? <Check className="h-3.5 w-3.5" /> : null}
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                              <span>{message.direction === "inbound" ? "Cliente" : "Equipe"}</span>
-                              <span>{formatContextMessageTime(message.created_at)}</span>
+                          <span
+                            className={`min-w-0 max-w-[86%] rounded-2xl border px-3 py-2 shadow-sm transition ${
+                              isClientMessage
+                                ? selected
+                                  ? "border-emerald-300 bg-emerald-50"
+                                  : "border-white bg-white hover:border-slate-200"
+                                : selected
+                                  ? "border-emerald-300 bg-emerald-100"
+                                  : "border-[#d9fdd3] bg-[#d9fdd3] hover:border-emerald-200"
+                            }`}
+                          >
+                            <span className="mb-1 flex items-center justify-between gap-3 text-[11px] font-medium">
+                              <span className={isClientMessage ? "text-slate-600" : "text-emerald-800"}>
+                                {isClientMessage ? "Cliente" : "Equipe interna"}
+                              </span>
+                              <span className="shrink-0 text-slate-500">{formatContextMessageTime(message.created_at)}</span>
                             </span>
-                            <span className="mt-1 block line-clamp-2 text-sm text-slate-800">{messagePreview(message)}</span>
+                            <span className="block line-clamp-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-900">
+                              {messagePreview(message)}
+                            </span>
                           </span>
                         </button>
                       );
@@ -363,7 +371,7 @@ export function ConversationHeader({
               </div>
             </div>
             <p className="text-xs text-slate-500">
-              A tarefa serÃ¡ criada em A Fazer e vinculada ao cliente da conversa quando houver cliente associado.
+              A tarefa será criada em A Fazer e vinculada ao cliente da conversa quando houver cliente associado.
             </p>
           </div>
           <DialogFooter>

@@ -1,4 +1,5 @@
 ﻿import { AppLayout } from "@/components/app/AppLayout";
+import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { KanbanSquare, LayoutList, Plus } from "lucide-react";
@@ -63,6 +64,7 @@ export default function TaskWorkspacePage() {
         <section className="border-b border-border/70 pb-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-1">
+              <ModuleContextPill icon={KanbanSquare} label="Operação diária" />
               <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">
                 Tarefas
               </h1>
