@@ -1,0 +1,43 @@
+{
+  "inbound_text": {
+    "organization_id": "00000000-0000-0000-0000-000000000000",
+    "message": {
+      "id": "wamid.fixture.text.1",
+      "from": "5551999999999",
+      "timestamp": "1784217600",
+      "type": "text",
+      "text": { "body": "Ola, preciso de atendimento." }
+    }
+  },
+  "duplicate_text": {
+    "organization_id": "00000000-0000-0000-0000-000000000000",
+    "message": {
+      "id": "wamid.fixture.text.1",
+      "from": "5551999999999",
+      "timestamp": "1784217600",
+      "type": "text",
+      "text": { "body": "Ola, preciso de atendimento." }
+    }
+  },
+  "delivery_status": {
+    "status": {
+      "id": "local-fixture",
+      "status": "delivered"
+    }
+  },
+  "inbound_media": {
+    "organization_id": "00000000-0000-0000-0000-000000000000",
+    "message": {
+      "id": "wamid.fixture.media.1",
+      "from": "5551999999999",
+      "timestamp": "1784217601",
+      "type": "document",
+      "document": {
+        "id": "media-fixture",
+        "filename": "guia.pdf",
+        "mime_type": "application/pdf",
+        "file_size": 120000
+      }
+    }
+  }
+}

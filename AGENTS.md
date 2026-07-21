@@ -62,5 +62,5 @@ Adaptacao ao Grow Finance Hub:
 
 <!-- SPECKIT START -->
 Current Spec Kit feature plan:
-`specs/007-default-obligations/plan.md`
+`specs/008-whatsapp-client-chat/plan.md`
 <!-- SPECKIT END -->

@@ -6,12 +6,14 @@ import type { Tables } from "@/integrations/supabase/types";
 import {
   buildPriorityNotifications,
   buildTaskEventNotifications,
+  buildWhatsAppNotifications,
   clearReadNotifications,
   getReadNotificationIds,
   markAllNotificationsRead,
   markNotificationRead,
   type PriorityNotification,
   type TaskEventNotificationRow,
+  type WhatsAppNotificationRow,
 } from "@/lib/priorityNotifications";
 import { getTaskCompetence, matchesSelectedCompany, matchesSelectedCompetence } from "@/lib/globalFilters";
 
@@ -19,6 +21,16 @@ type TaskNotificationRow = Pick<
   Tables<"kanban_tasks">,
   "id" | "title" | "due_date" | "status" | "assignee" | "client_name" | "created_at" | "created_by" | "updated_at" | "integration_source"
 >;
+
+type LooseSupabaseQuery<T> = PromiseLike<{ data: T | null; error: Error | null }> & {
+  select: (columns: string) => LooseSupabaseQuery<T>;
+  order: (column: string, options?: Record<string, unknown>) => LooseSupabaseQuery<T>;
+  limit: (count: number) => LooseSupabaseQuery<T>;
+};
+
+const looseSupabase = supabase as unknown as {
+  from: <T = unknown>(table: string) => LooseSupabaseQuery<T>;
+};
 
 export interface NotificationWithRead extends PriorityNotification {
   read: boolean;
@@ -46,7 +58,7 @@ export function usePriorityNotifications() {
     }
 
     setLoading(true);
-    const [tasksResponse, commentsResponse] = await Promise.all([
+    const [tasksResponse, commentsResponse, whatsappResponse] = await Promise.all([
       supabase
         .from("kanban_tasks")
         .select("id, title, due_date, status, assignee, assigned_to_user_id, client_name, created_at, created_by, updated_at, integration_source")
@@ -57,6 +69,11 @@ export function usePriorityNotifications() {
         .select("id, task_id, user_id, content, created_at, task:kanban_tasks(id, title, client_name, due_date, created_at)")
         .order("created_at", { ascending: false })
         .limit(1000),
+      looseSupabase
+        .from("whatsapp_conversation_notifications")
+        .select("id, conversation_id, notification_type, title, body, created_at")
+        .order("created_at", { ascending: false })
+        .limit(500),
     ]);
 
     const scopedTasks = ((tasksResponse.data || []) as TaskNotificationRow[]).filter(
@@ -80,6 +97,7 @@ export function usePriorityNotifications() {
     const built = [
       ...buildPriorityNotifications(scopedTasks, user.id),
       ...buildTaskEventNotifications(scopedComments, user.id),
+      ...buildWhatsAppNotifications(((whatsappResponse.data || []) as WhatsAppNotificationRow[])),
     ]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .map((notification) => ({
@@ -133,6 +151,17 @@ export function usePriorityNotifications() {
           event: "*",
           schema: "public",
           table: "kanban_task_comments",
+        },
+        () => {
+          void refresh("realtime");
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "whatsapp_conversation_notifications",
         },
         () => {
           void refresh("realtime");

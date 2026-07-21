@@ -8,9 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   CalendarDays,
-  User,
   Building2,
-  FolderOpen,
   Paperclip,
   MessageSquare,
   Tag,
@@ -58,24 +56,6 @@ interface TaskDetailSheetProps {
   historyEntries?: ChangeHistoryEntry[];
   relatedTasks?: RelatedTaskSummary[];
 }
-
-const priorityConfig: Record<string, { color: string; bg: string }> = {
-  Urgente: { color: "text-destructive", bg: "bg-destructive/10" },
-  Alta: { color: "text-orange-600", bg: "bg-orange-100 dark:bg-orange-900/20" },
-  Media: { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  "Média": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  Baixa: { color: "text-muted-foreground", bg: "bg-muted" },
-};
-
-const statusConfig: Record<string, { color: string; bg: string }> = {
-  Pendente: { color: "text-muted-foreground", bg: "bg-muted" },
-  "Em andamento": { color: "text-primary", bg: "bg-primary/10" },
-  "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  "Em revisão": { color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/20" },
-  Concluído: { color: "text-primary", bg: "bg-primary/10" },
-  "Concluído": { color: "text-primary", bg: "bg-primary/10" },
-  Atrasado: { color: "text-destructive", bg: "bg-destructive/10" },
-};
 
 interface TaskCommentItem {
   id: string;
@@ -265,17 +245,10 @@ export function TaskDetailSheet({
 
   const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
   const subtaskPct = task.subtasks.length ? Math.round((subtaskDone / task.subtasks.length) * 100) : 0;
-  const priority = priorityConfig[task.priority] || priorityConfig.Media;
-  const status = statusConfig[task.status] || statusConfig.Pendente;
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="pb-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className={`text-xs border-0 ${priority.color} ${priority.bg}`}>{task.priority}</Badge>
-            <Badge variant="outline" className={`text-xs border-0 ${status.color} ${status.bg}`}>{task.status}</Badge>
-          </div>
           <SheetTitle className="text-lg">{task.title}</SheetTitle>
           <p className="text-sm text-muted-foreground">{task.description}</p>
         </SheetHeader>
@@ -285,14 +258,6 @@ export function TaskDetailSheet({
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Cliente</span>
               <span className="text-sm font-medium">{task.client || "Sem cliente"}</span>
-            </div>
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" /> Responsável</span>
-              <span className="text-sm font-medium">{task.assignee || "Sem responsável"}</span>
-            </div>
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Setor</span>
-              <span className="text-sm font-medium">{task.sector}</span>
             </div>
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Prazo</span>

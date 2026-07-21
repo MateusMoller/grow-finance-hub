@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MessageBubble } from "@/components/whatsapp/MessageBubble";
+import { MessageComposer } from "@/components/whatsapp/MessageComposer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,7 +38,6 @@ import {
   ChevronDown,
   Download,
   FileText,
-  FolderOpen,
   ExternalLink,
   Loader2,
   Link2,
@@ -48,6 +50,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeHistoryEntry } from "@/lib/changeHistory";
+import { whatsappConversationKeys } from "@/hooks/useWhatsAppConversations";
+import { useWhatsAppMessages, whatsappMessageKeys } from "@/hooks/useWhatsAppMessages";
+import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import {
   formatTaskAssigneeLabel,
@@ -56,6 +61,10 @@ import {
 } from "@/lib/taskAssignees";
 import { normalizeSectorCode, type SectorCode } from "@/lib/userPermissions";
 import type { RelatedTaskSummary } from "@/lib/taskRelations";
+import { listWhatsAppConversations } from "@/lib/whatsappConversations";
+import { sendWhatsAppAttachment } from "@/lib/whatsappMedia";
+import { sendWhatsAppTextMessage } from "@/lib/whatsappMessages";
+import type { WhatsAppConversationSummary } from "@/lib/whatsappTypes";
 
 export type KanbanStatus =
   "backlog" | "todo" | "doing" | "review" | "done" | "archived";
@@ -153,18 +162,18 @@ const statusLabels: Record<KanbanStatus, string> = {
   backlog: "Backlog",
   todo: "A Fazer",
   doing: "Em Andamento",
-  review: "Em Revisão",
-  done: "Concluído",
+  review: "Em RevisÃ£o",
+  done: "ConcluÃ­do",
   archived: "Arquivado",
 };
 
-const priorityOptions = ["Urgente", "Alta", "Média", "Baixa"];
+const priorityOptions = ["Urgente", "Alta", "MÃ©dia", "Baixa"];
 const sectorOptions = [
-  "Contábil",
+  "ContÃ¡bil",
   "Fiscal",
   "Departamento Pessoal",
   "Comercial",
-  "Societário",
+  "SocietÃ¡rio",
   "Geral",
 ];
 
@@ -210,7 +219,7 @@ const parseSectorAddedMessage = (content: string): TaskSectorAddedMessage | null
     if (parsed.type !== "task_sector_added") return null;
     return {
       type: "task_sector_added",
-      text: typeof parsed.text === "string" ? parsed.text : "Setor adicionado à tarefa.",
+      text: typeof parsed.text === "string" ? parsed.text : "Setor adicionado Ã  tarefa.",
       sectors: Array.isArray(parsed.sectors)
         ? parsed.sectors.filter((sector): sector is string => typeof sector === "string")
         : [],
@@ -227,7 +236,7 @@ const isInternalTaskComment = (content: string) => {
 };
 
 const formatFileSize = (bytes: number) => {
-  if (!bytes) return "Tamanho não informado";
+  if (!bytes) return "Tamanho nÃ£o informado";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
@@ -239,6 +248,28 @@ const sanitizeStorageFileName = (name: string) =>
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 120) || "arquivo";
+
+const createClientMessageId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `task-wa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const initialsFor = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "WA";
+
+const getWhatsAppConversationName = (conversation: WhatsAppConversationSummary | null, fallback: string) =>
+  conversation?.client_name ||
+  conversation?.contact?.display_name ||
+  conversation?.contact?.profile_name ||
+  conversation?.contact?.phone_number ||
+  fallback ||
+  "Cliente";
 
 export function KanbanTaskDetailSheet({
   task,
@@ -256,21 +287,19 @@ export function KanbanTaskDetailSheet({
   relatedTasks = [],
 }: KanbanTaskDetailSheetProps) {
   const { user, currentOrganizationId } = useAuth();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState({
     description: "",
     client_name: "",
     assignee: "",
     assigned_to_user_id: "",
-    priority: "Média",
+    priority: "MÃ©dia",
     sectors: [] as string[],
     status: "backlog" as KanbanStatus,
     due_date: "",
   });
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [sendingComment, setSendingComment] = useState(false);
-  const [newComment, setNewComment] = useState("");
-  const [selectedCommentFile, setSelectedCommentFile] = useState<File | null>(null);
   const [sendingInternalComment, setSendingInternalComment] = useState(false);
   const [newInternalComment, setNewInternalComment] = useState("");
   const [selectedInternalFile, setSelectedInternalFile] = useState<File | null>(null);
@@ -279,10 +308,69 @@ export function KanbanTaskDetailSheet({
   const [assigneeOptions, setAssigneeOptions] = useState<TaskAssigneeOption[]>(
     [],
   );
-  const commentsBottomRef = useRef<HTMLDivElement | null>(null);
-  const commentFileInputRef = useRef<HTMLInputElement | null>(null);
   const internalCommentsBottomRef = useRef<HTMLDivElement | null>(null);
   const internalFileInputRef = useRef<HTMLInputElement | null>(null);
+  const whatsappMessagesBottomRef = useRef<HTMLDivElement | null>(null);
+  const taskClientName = task?.client_name?.trim() || "";
+
+  const taskClientQuery = useQuery({
+    queryKey: ["task-whatsapp-client", currentOrganizationId, taskClientName],
+    enabled: open && Boolean(currentOrganizationId && taskClientName),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("organization_id", currentOrganizationId)
+        .eq("status", "Ativo")
+        .eq("name", taskClientName)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data as { id: string; name: string } | null;
+    },
+  });
+
+  const whatsappConversationQuery = useQuery({
+    queryKey: ["task-whatsapp-conversation", taskClientQuery.data?.id || null],
+    enabled: open && Boolean(taskClientQuery.data?.id),
+    queryFn: async () => {
+      const conversations = await listWhatsAppConversations({ clientId: taskClientQuery.data?.id || "" }, 0, 1);
+      return conversations[0] || null;
+    },
+  });
+  const whatsappConversation = whatsappConversationQuery.data || null;
+  const whatsappConversationId = whatsappConversation?.id || null;
+  const whatsappMessagesQuery = useWhatsAppMessages(whatsappConversationId);
+  useWhatsAppRealtime(whatsappConversationId);
+
+  const sendWhatsAppTextMutation = useMutation({
+    mutationFn: ({ text, clientMessageId }: { text: string; clientMessageId: string }) =>
+      sendWhatsAppTextMessage(whatsappConversationId || "", text, clientMessageId),
+    onSuccess: () => {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }),
+        queryClient.invalidateQueries({ queryKey: whatsappMessageKeys.conversation(whatsappConversationId) }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar a mensagem pelo WhatsApp.");
+    },
+  });
+
+  const sendWhatsAppFileMutation = useMutation({
+    mutationFn: ({ file, clientMessageId }: { file: File; clientMessageId: string }) =>
+      sendWhatsAppAttachment(whatsappConversationId || "", file, "", clientMessageId),
+    onSuccess: () => {
+      toast.success("Arquivo enviado para o WhatsApp.");
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }),
+        queryClient.invalidateQueries({ queryKey: whatsappMessageKeys.conversation(whatsappConversationId) }),
+      ]);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar o arquivo pelo WhatsApp.");
+    },
+  });
 
   useEffect(() => {
     if (!task) return;
@@ -294,17 +382,14 @@ export function KanbanTaskDetailSheet({
       client_name: task.client_name || "",
       assignee: task.assignee || "",
       assigned_to_user_id: task.assigned_to_user_id || "",
-      priority: task.priority || "Média",
+      priority: task.priority || "MÃ©dia",
       sectors,
       status: task.status,
       due_date: task.due_date || "",
     });
     setDetailsOpen(false);
-    setSelectedCommentFile(null);
     setSelectedInternalFile(null);
     setNewInternalComment("");
-    setNewComment("");
-    if (commentFileInputRef.current) commentFileInputRef.current.value = "";
     if (internalFileInputRef.current) internalFileInputRef.current.value = "";
   }, [task]);
 
@@ -322,7 +407,7 @@ export function KanbanTaskDetailSheet({
       } catch {
         if (!cancelled) {
           setAssigneeOptions([]);
-          toast.error("Não foi possível carregar os responsáveis.");
+          toast.error("NÃ£o foi possÃ­vel carregar os responsÃ¡veis.");
         }
       }
     };
@@ -371,7 +456,7 @@ export function KanbanTaskDetailSheet({
       .order("created_at", { ascending: true });
 
     if (error) {
-      toast.error("Não foi possível carregar o chat da tarefa.");
+      toast.error("NÃ£o foi possÃ­vel carregar o chat da tarefa.");
       setTaskComments([]);
       setLoadingComments(false);
       return;
@@ -437,9 +522,12 @@ export function KanbanTaskDetailSheet({
   }, [fetchTaskComments, open, task?.id]);
 
   useEffect(() => {
-    commentsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     internalCommentsBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [taskComments.length]);
+
+  useEffect(() => {
+    whatsappMessagesBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [whatsappMessagesQuery.data?.length, whatsappConversationId]);
 
   const selectedSectorCodes = useMemo<SectorCode[]>(
     () =>
@@ -483,12 +571,17 @@ export function KanbanTaskDetailSheet({
   }, [assigneeOptions, form.assigned_to_user_id, selectedSectorCodeSet]);
 
   if (!task) return null;
-  const clientTaskComments = taskComments.filter((comment) => !isInternalTaskComment(comment.content));
   const internalTaskComments = taskComments.filter((comment) => isInternalTaskComment(comment.content));
   const subtaskDone = task.subtasks.filter((subtask) => subtask.done).length;
   const subtaskPct = task.subtasks.length
     ? Math.round((subtaskDone / task.subtasks.length) * 100)
     : 0;
+  const whatsappMessages = whatsappMessagesQuery.data || [];
+  const whatsappSending = sendWhatsAppTextMutation.isPending || sendWhatsAppFileMutation.isPending;
+  const whatsappContactInitials = initialsFor(
+    getWhatsAppConversationName(whatsappConversation, task.client_name || ""),
+  );
+  const whatsappLoading = taskClientQuery.isLoading || whatsappConversationQuery.isLoading || whatsappMessagesQuery.isLoading;
 
   const toggleSector = (sector: string) => {
     setForm((prev) => {
@@ -523,68 +616,10 @@ export function KanbanTaskDetailSheet({
       .from("client-documents")
       .createSignedUrl(filePath, 60);
     if (error || !data?.signedUrl) {
-      toast.error("Não foi possível gerar o link do anexo.");
+      toast.error("NÃ£o foi possÃ­vel gerar o link do anexo.");
       return;
     }
     window.open(data.signedUrl, "_blank");
-  };
-
-  const handleSendTaskComment = async () => {
-    const text = newComment.trim();
-    const file = selectedCommentFile;
-    if (!task?.id || !user?.id || (!text && !file)) return;
-
-    setSendingComment(true);
-    let content = text;
-
-    if (file) {
-      const filePath = `${user.id}/task-chat/${task.id}/${Date.now()}-${sanitizeStorageFileName(file.name)}`;
-      const { error: uploadError } = await supabase.storage
-        .from("client-documents")
-        .upload(filePath, file);
-
-      if (uploadError) {
-        setSendingComment(false);
-        toast.error("Não foi possível anexar o arquivo.");
-        return;
-      }
-
-      content = JSON.stringify({
-        type: "task_chat_attachment",
-        text,
-        file: {
-          name: file.name,
-          path: filePath,
-          size: file.size,
-          contentType: file.type || "application/octet-stream",
-        },
-      } satisfies TaskCommentAttachment);
-    }
-
-    const { error } = await supabase.from("kanban_task_comments").insert({
-      task_id: task.id,
-      user_id: user.id,
-      content,
-      ...(currentOrganizationId
-        ? { organization_id: currentOrganizationId }
-        : {}),
-    });
-    setSendingComment(false);
-
-    if (error) {
-      toast.error("Não foi possível enviar a mensagem da tarefa.");
-      return;
-    }
-
-    setNewComment("");
-    setSelectedCommentFile(null);
-    if (commentFileInputRef.current) commentFileInputRef.current.value = "";
-    onHistory?.(
-      task.id,
-      file ? "Mensagem/anexo enviado ao chat do cliente" : "Mensagem enviada ao chat do cliente",
-      text || file?.name,
-    );
-    void fetchTaskComments();
   };
 
   const handleSendInternalTaskComment = async () => {
@@ -606,7 +641,7 @@ export function KanbanTaskDetailSheet({
 
       if (uploadError) {
         setSendingInternalComment(false);
-        toast.error("Não foi possível anexar o arquivo.");
+        toast.error("NÃ£o foi possÃ­vel anexar o arquivo.");
         return;
       }
 
@@ -633,7 +668,7 @@ export function KanbanTaskDetailSheet({
     setSendingInternalComment(false);
 
     if (error) {
-      toast.error("Não foi possível registrar o andamento da tarefa.");
+      toast.error("NÃ£o foi possÃ­vel registrar o andamento da tarefa.");
       return;
     }
 
@@ -650,19 +685,15 @@ export function KanbanTaskDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <Tabs defaultValue="informacoes" className="space-y-4">
+          <TabsList className="sticky top-0 z-20 grid w-full grid-cols-3 bg-muted/90 backdrop-blur">
+            <TabsTrigger value="informacoes">InformaÃ§Ãµes</TabsTrigger>
+            <TabsTrigger value="chat">Cliente</TabsTrigger>
+            <TabsTrigger value="historico">HistÃ³rico</TabsTrigger>
+          </TabsList>
+
         <SheetHeader className="pb-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="text-xs border-0 bg-muted">
-              {form.priority}
-            </Badge>
-            <Badge
-              variant="outline"
-              className="text-xs border-0 bg-primary/10 text-primary"
-            >
-              {statusLabels[form.status]}
-            </Badge>
-          </div>
           <SheetTitle className="text-lg">{task.title}</SheetTitle>
         </SheetHeader>
 
@@ -673,25 +704,7 @@ export function KanbanTaskDetailSheet({
                 <Building2 className="h-3 w-3" /> Cliente
               </span>
               <span className="text-sm font-medium">
-                {form.client_name || "Não informado"}
-              </span>
-            </div>
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <User className="h-3 w-3" /> Responsável
-              </span>
-              <span className="text-sm font-medium">
-                {form.assignee || "Não informado"}
-              </span>
-            </div>
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <FolderOpen className="h-3 w-3" /> Setores
-              </span>
-              <span className="text-sm font-medium">
-                {form.sectors.length > 0
-                  ? form.sectors.join(", ")
-                  : "Não informado"}
+                {form.client_name || "NÃ£o informado"}
               </span>
             </div>
             <div className="space-y-1">
@@ -709,25 +722,18 @@ export function KanbanTaskDetailSheet({
                 <User className="h-3 w-3" /> Criada por
               </span>
               <span className="text-xs text-muted-foreground">
-                {creatorName || (task.created_by ? "Usuário registrado" : "Não informado")}
+                {creatorName || (task.created_by ? "UsuÃ¡rio registrado" : "NÃ£o informado")}
               </span>
             </div>
           </div>
 
           <Separator />
 
-          <Tabs defaultValue="informacoes" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="informacoes">Informações</TabsTrigger>
-              <TabsTrigger value="chat">Chat</TabsTrigger>
-              <TabsTrigger value="historico">Histórico</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="informacoes" className="space-y-4">
+            <TabsContent value="informacoes" className="flex flex-col gap-4">
               <Collapsible
                 open={detailsOpen}
                 onOpenChange={setDetailsOpen}
-                className="rounded-lg border bg-muted/20"
+                className="order-1 rounded-lg border bg-muted/20"
               >
                 <CollapsibleTrigger asChild>
                   <button
@@ -771,8 +777,8 @@ export function KanbanTaskDetailSheet({
                     <SelectItem value="backlog">Backlog</SelectItem>
                     <SelectItem value="todo">A Fazer</SelectItem>
                     <SelectItem value="doing">Em Andamento</SelectItem>
-                    <SelectItem value="review">Em Revisão</SelectItem>
-                    <SelectItem value="done">Concluído</SelectItem>
+                    <SelectItem value="review">Em RevisÃ£o</SelectItem>
+                    <SelectItem value="done">ConcluÃ­do</SelectItem>
                     {canArchive && (
                       <SelectItem value="archived">Arquivado</SelectItem>
                     )}
@@ -827,7 +833,7 @@ export function KanbanTaskDetailSheet({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Responsável</Label>
+                  <Label>ResponsÃ¡vel</Label>
                   <Select
                     value={form.assigned_to_user_id || "unassigned"}
                     onValueChange={(value) => {
@@ -843,16 +849,16 @@ export function KanbanTaskDetailSheet({
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Sem responsável" />
+                      <SelectValue placeholder="Sem responsÃ¡vel" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">
-                        Sem responsável
+                        Sem responsÃ¡vel
                       </SelectItem>
                       {filteredAssigneeOptions.length > 0 && (
                         <SelectGroup>
                           <SelectLabel className="px-2 text-xs font-medium text-muted-foreground">
-                            Responsáveis dos setores selecionados
+                            ResponsÃ¡veis dos setores selecionados
                           </SelectLabel>
                           {filteredAssigneeOptions.map((option) => (
                             <SelectItem key={option.id} value={option.id}>
@@ -869,7 +875,7 @@ export function KanbanTaskDetailSheet({
                       {form.sectors.length > 0 &&
                         filteredAssigneeOptions.length === 0 && (
                           <SelectItem value="no-sector-assignees" disabled>
-                            Nenhum responsável nos setores selecionados
+                            Nenhum responsÃ¡vel nos setores selecionados
                           </SelectItem>
                         )}
                     </SelectContent>
@@ -878,7 +884,7 @@ export function KanbanTaskDetailSheet({
               </div>
 
               <div className="space-y-2">
-                <Label>Setores (seleção múltipla)</Label>
+                <Label>Setores (seleÃ§Ã£o mÃºltipla)</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
                   {sectorOptions.map((sector) => (
                     <label
@@ -896,7 +902,7 @@ export function KanbanTaskDetailSheet({
               </div>
 
               <div className="space-y-2">
-                <Label>Descrição</Label>
+                <Label>DescriÃ§Ã£o</Label>
                 <Textarea
                   rows={4}
                   value={form.description}
@@ -915,7 +921,7 @@ export function KanbanTaskDetailSheet({
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Empresas (subtarefas)</Label>
                     <span className="text-xs text-muted-foreground">
-                      {subtaskDone}/{task.subtasks.length} concluídas (
+                      {subtaskDone}/{task.subtasks.length} concluÃ­das (
                       {subtaskPct}%)
                     </span>
                   </div>
@@ -947,7 +953,10 @@ export function KanbanTaskDetailSheet({
                 </div>
               )}
 
-              <div className="space-y-3 rounded-lg border p-3">
+                </CollapsibleContent>
+              </Collapsible>
+
+              <div className="order-2 space-y-3 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Link2 className="h-4 w-4" />
@@ -971,7 +980,7 @@ export function KanbanTaskDetailSheet({
                 </div>
                 {relatedTasks.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    Nenhuma tarefa relacionada. Relações são apenas informativas e não bloqueiam status, revisão ou conclusão.
+                    Nenhuma tarefa relacionada. RelaÃ§Ãµes sÃ£o apenas informativas e nÃ£o bloqueiam status, revisÃ£o ou conclusÃ£o.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -986,8 +995,8 @@ export function KanbanTaskDetailSheet({
                           </div>
                           <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                             <span>{relatedTask.clientName || "Sem cliente"}</span>
-                            {relatedTask.status && <span>• {relatedTask.status}</span>}
-                            {relatedTask.priority && <span>• {relatedTask.priority}</span>}
+                            {relatedTask.status && <span>â€¢ {relatedTask.status}</span>}
+                            {relatedTask.priority && <span>â€¢ {relatedTask.priority}</span>}
                           </div>
                         </div>
                         <Button
@@ -1006,7 +1015,7 @@ export function KanbanTaskDetailSheet({
                           size="icon"
                           className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
                           onClick={() => onRemoveRelatedTask?.(relatedTask.relationId)}
-                          aria-label={`Remover relação com ${relatedTask.title}`}
+                          aria-label={`Remover relaÃ§Ã£o com ${relatedTask.title}`}
                         >
                           <Unlink className="h-4 w-4" />
                         </Button>
@@ -1015,27 +1024,24 @@ export function KanbanTaskDetailSheet({
                   </div>
                 )}
               </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              <div className="rounded-lg border">
+              <div className="order-3 rounded-lg border">
                 <div className="border-b px-3 py-2">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <MessageSquare className="h-4 w-4" />
                     Andamento
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Comunicação interna da equipe vinculada a esta tarefa. Use este espaço para registrar decisões, contexto operacional e arquivos internos.
+                    ComunicaÃ§Ã£o interna da equipe vinculada a esta tarefa. Use este espaÃ§o para registrar decisÃµes, contexto operacional e arquivos internos.
                   </p>
                 </div>
 
-                <div className="max-h-[420px] min-h-[260px] space-y-3 overflow-y-auto p-4">
+                <div className="h-[clamp(360px,52vh,640px)] space-y-3 overflow-y-auto p-4">
                   {loadingComments ? (
-                    <div className="flex h-[240px] items-center justify-center">
+                    <div className="flex h-full min-h-[320px] items-center justify-center">
                       <Loader2 className="h-5 w-5 animate-spin text-primary" />
                     </div>
                   ) : internalTaskComments.length === 0 ? (
-                    <div className="flex h-[240px] items-center justify-center text-center">
+                    <div className="flex h-full min-h-[320px] items-center justify-center text-center">
                       <div>
                         <MessageSquare className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">
@@ -1051,7 +1057,7 @@ export function KanbanTaskDetailSheet({
                       const sectorMessage = parseSectorAddedMessage(comment.content);
                       const displayName =
                         comment.profile?.display_name?.trim() ||
-                        (isOwn ? "Você" : "Equipe");
+                        (isOwn ? "VocÃª" : "Equipe");
                       const text = attachment?.text || internalMessage?.text || sectorMessage?.text || "";
 
                       return (
@@ -1180,188 +1186,76 @@ export function KanbanTaskDetailSheet({
                     </Button>
                   </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    Comunicação interna. Enter para enviar. Shift+Enter para nova linha.
+                    ComunicaÃ§Ã£o interna. Enter para enviar. Shift+Enter para nova linha.
                   </p>
                 </div>
               </div>
             </TabsContent>
 
             <TabsContent value="chat" className="space-y-4">
-              <div className="rounded-lg border">
+              <div className="overflow-hidden rounded-lg border">
                 <div className="border-b px-3 py-2">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <MessageSquare className="h-4 w-4" />
-                    Chat da tarefa
+                    WhatsApp do cliente
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Use este chat apenas para alinhamentos e arquivos de tarefas relacionadas ao cliente.
+                    Esta aba mostra a conversa real do WhatsApp vinculada ao cliente desta tarefa.
                   </p>
                 </div>
 
-                <div className="max-h-[320px] min-h-[220px] space-y-3 overflow-y-auto p-3">
-                  {loadingComments ? (
-                    <div className="flex h-[180px] items-center justify-center">
-                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    </div>
-                  ) : clientTaskComments.length === 0 ? (
-                    <div className="flex h-[180px] items-center justify-center text-center">
-                      <div>
-                        <MessageSquare className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">
-                          Nenhuma mensagem nesta tarefa.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    clientTaskComments.map((comment) => {
-                      const isOwn = comment.user_id === user?.id;
-                      const attachment = parseTaskCommentAttachment(comment.content);
-                      const displayName =
-                        comment.profile?.display_name?.trim() ||
-                        (isOwn ? "Você" : "Equipe");
-
-                      return (
-                        <div
-                          key={comment.id}
-                          className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
-                        >
-                          <div
-                            className={`max-w-[86%] rounded-2xl px-3 py-2 ${isOwn ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"}`}
-                          >
-                            <div className="mb-1 flex items-center justify-between gap-3">
-                              <span className="text-xs font-semibold opacity-80">
-                                {displayName}
-                              </span>
-                              <span
-                                className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                              >
-                                {new Date(comment.created_at).toLocaleString(
-                                  "pt-BR",
-                                  {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  },
-                                )}
-                              </span>
-                            </div>
-                            {attachment ? (
-                              <div className="space-y-2">
-                                {attachment.text && (
-                                  <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                                    {attachment.text}
-                                  </p>
-                                )}
-                                <button
-                                  type="button"
-                                  className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                                    isOwn
-                                      ? "border-primary-foreground/25 bg-primary-foreground/10 hover:bg-primary-foreground/15"
-                                      : "border-border bg-background hover:bg-muted/70"
-                                  }`}
-                                  onClick={() => handleDownloadAttachment(attachment.file.path)}
-                                >
-                                  <FileText className="h-4 w-4 shrink-0" />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate font-medium">
-                                      {attachment.file.name}
-                                    </span>
-                                    <span className="block opacity-70">
-                                      {formatFileSize(attachment.file.size)}
-                                    </span>
-                                  </span>
-                                  <Download className="h-3.5 w-3.5 shrink-0" />
-                                </button>
-                              </div>
-                            ) : (
-                              <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                                {comment.content}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                  <div ref={commentsBottomRef} />
-                </div>
-
-                <div className="border-t p-3">
-                  {selectedCommentFile && (
-                    <div className="mb-2 flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
-                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">
-                        {selectedCommentFile.name}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {formatFileSize(selectedCommentFile.size)}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          setSelectedCommentFile(null);
-                          if (commentFileInputRef.current) commentFileInputRef.current.value = "";
-                        }}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                  <input
-                    ref={commentFileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={(event) => setSelectedCommentFile(event.target.files?.[0] || null)}
-                  />
-                  <div className="flex items-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-10 w-10 shrink-0"
-                      onClick={() => commentFileInputRef.current?.click()}
-                      disabled={sendingComment}
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
-                    <Textarea
-                      rows={2}
-                      value={newComment}
-                      onChange={(event) => setNewComment(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          void handleSendTaskComment();
-                        }
-                      }}
-                      placeholder="Escreva uma mensagem sobre esta tarefa..."
-                      className="resize-none text-sm"
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      className="h-10 w-10 shrink-0"
-                      onClick={() => void handleSendTaskComment()}
-                      disabled={sendingComment || (!newComment.trim() && !selectedCommentFile)}
-                    >
-                      {sendingComment ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )}
-                    </Button>
+                {!task.client_name ? (
+                  <div className="flex h-[360px] items-center justify-center p-4 text-center">
+                    <p className="max-w-xs text-sm text-muted-foreground">
+                      Esta tarefa ainda nao possui cliente vinculado. Informe o cliente nos detalhes da tarefa para exibir o WhatsApp.
+                    </p>
                   </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    Enter para enviar. Shift+Enter para nova linha.
-                  </p>
-                </div>
+                ) : whatsappLoading ? (
+                  <div className="flex h-[360px] items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                ) : !taskClientQuery.data ? (
+                  <div className="flex h-[360px] items-center justify-center p-4 text-center">
+                    <p className="max-w-xs text-sm text-muted-foreground">
+                      Nao encontrei um cliente ativo com este nome no cadastro. Ajuste o cliente da tarefa para conectar ao WhatsApp.
+                    </p>
+                  </div>
+                ) : !whatsappConversation ? (
+                  <div className="flex h-[360px] items-center justify-center p-4 text-center">
+                    <p className="max-w-xs text-sm text-muted-foreground">
+                      Este cliente ainda nao possui conversa WhatsApp vinculada. Vincule uma conversa no modulo WhatsApp para usar este chat aqui.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-[clamp(360px,48vh,560px)] space-y-3 overflow-y-auto bg-[#efeae2] bg-[radial-gradient(circle_at_1px_1px,rgba(15,23,42,0.08)_1px,transparent_0)] bg-[size:22px_22px] p-4">
+                      {whatsappMessages.length === 0 ? (
+                        <div className="flex h-full min-h-[280px] items-center justify-center text-center">
+                          <p className="rounded-lg bg-white/80 px-4 py-2 text-sm text-slate-500 shadow-sm">
+                            Nenhuma mensagem registrada nesta conversa.
+                          </p>
+                        </div>
+                      ) : (
+                        whatsappMessages.map((message) => (
+                          <MessageBubble key={message.id} message={message} contactInitials={whatsappContactInitials} />
+                        ))
+                      )}
+                      <div ref={whatsappMessagesBottomRef} />
+                    </div>
+                    <MessageComposer
+                      conversation={whatsappConversation}
+                      sending={whatsappSending}
+                      onSendText={async (text) => {
+                        await sendWhatsAppTextMutation.mutateAsync({ text, clientMessageId: createClientMessageId() });
+                      }}
+                      onSendFile={async (file) => {
+                        await sendWhatsAppFileMutation.mutateAsync({ file, clientMessageId: createClientMessageId() });
+                      }}
+                    />
+                  </>
+                )}
               </div>
             </TabsContent>
-
             <TabsContent value="historico" className="space-y-3">
               {historyEntries.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -1384,7 +1278,6 @@ export function KanbanTaskDetailSheet({
                 ))
               )}
             </TabsContent>
-          </Tabs>
 
           <Separator />
 
@@ -1397,7 +1290,9 @@ export function KanbanTaskDetailSheet({
             </Button>
           </div>
         </div>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );
 }
+

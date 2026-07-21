@@ -23,6 +23,7 @@ export const routeFeatureMap: Record<string, OrganizationFeatureKey> = {
   "/app/obrigacoes": "obrigacoes",
   "/app/econtinuo": "obrigacoes",
   "/app/crm": "crm",
+  "/app/whatsapp": "whatsapp",
   "/app/calendario": "calendario",
   "/app/tarefas": "tarefas",
   "/app/kanban": "tarefas",

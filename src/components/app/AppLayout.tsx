@@ -118,6 +118,7 @@ const buildQuickLinks = (
     { title: "Tarefas", url: "/app/tarefas" },
     { title: "Clientes", url: "/app/clientes" },
     { title: "Vendas", url: "/app/crm" },
+    { title: "WhatsApp", url: "/app/whatsapp" },
     { title: "Chat Interno", url: "/app/chat-interno" },
     { title: "Relatórios", url: "/app/relatorios" },
     { title: "Obrigações", url: "/app/obrigacoes" },
@@ -295,7 +296,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     const targetUrl =
       overflowCount > 0
         ? "/app/notificacoes"
-        : `/app/tarefas?task=${encodeURIComponent(firstNotification.taskId)}`;
+        : firstNotification.id.startsWith("whatsapp-")
+          ? `/app/whatsapp?conversation=${encodeURIComponent(firstNotification.taskId)}`
+          : `/app/tarefas?task=${encodeURIComponent(firstNotification.taskId)}`;
 
     void showBrowserNotification(
       title,
@@ -544,7 +547,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     className="flex cursor-pointer items-start gap-2 py-2"
                     onClick={() => {
                       markAsRead(notification.id);
-                      navigate(`/app/tarefas?task=${encodeURIComponent(notification.taskId)}`);
+                      const targetUrl = notification.id.startsWith("whatsapp-")
+                        ? `/app/whatsapp?conversation=${encodeURIComponent(notification.taskId)}`
+                        : `/app/tarefas?task=${encodeURIComponent(notification.taskId)}`;
+                      navigate(targetUrl);
                     }}
                   >
                     <KindIcon className={`mt-0.5 h-4 w-4 ${priorityClass}`} />

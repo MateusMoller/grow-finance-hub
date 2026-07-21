@@ -176,7 +176,10 @@ export default function NotificacoesPage() {
 
   const openNotificationTask = (notificationId: string, taskId: string) => {
     markAsRead(notificationId);
-    navigate(`/app/tarefas?task=${encodeURIComponent(taskId)}`);
+    const targetUrl = notificationId.startsWith("whatsapp-")
+      ? `/app/whatsapp?conversation=${encodeURIComponent(taskId)}`
+      : `/app/tarefas?task=${encodeURIComponent(taskId)}`;
+    navigate(targetUrl);
   };
 
   return (

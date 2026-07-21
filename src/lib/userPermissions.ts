@@ -72,6 +72,7 @@ export const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   "/app/obrigacoes": "obrigacoes",
   "/app/econtinuo": "obrigacoes",
   "/app/crm": "crm",
+  "/app/whatsapp": "whatsapp",
   "/app/chat-interno": "chat_interno",
   "/app/calendario": "calendario",
   "/app/tarefas": "tarefas",

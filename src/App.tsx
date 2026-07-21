@@ -24,6 +24,7 @@ const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const ClientDetailPage = lazy(() => import("./pages/ClientDetailPage"));
 const TaskWorkspacePage = lazy(() => import("./pages/TaskWorkspacePage"));
 const CRMPage = lazy(() => import("./pages/CRMPage"));
+const WhatsAppAtendimentoPage = lazy(() => import("./pages/WhatsAppAtendimentoPage"));
 const ChatInternoPage = lazy(() => import("./pages/ChatInternoPage"));
 const RelatoriosPage = lazy(() => import("./pages/RelatoriosPage"));
 const ObrigacoesPage = lazy(() => import("./pages/ObrigacoesPage"));
@@ -168,6 +169,7 @@ const App = () => (
                   <Route path="/app/processos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                   <Route path="/app/documentos" element={<ProtectedRoute scope="internal"><Navigate to="/app" replace /></ProtectedRoute>} />
                   <Route path="/app/crm" element={<ProtectedRoute scope="internal" feature="crm"><CRMPage /></ProtectedRoute>} />
+                  <Route path="/app/whatsapp" element={<ProtectedRoute scope="internal" feature="whatsapp"><WhatsAppAtendimentoPage /></ProtectedRoute>} />
                   <Route path="/app/chat-interno" element={<ProtectedRoute scope="internal"><ChatInternoPage /></ProtectedRoute>} />
                   <Route path="/app/newsletter" element={<ProtectedRoute scope="internal" feature="newsletter"><NewsletterAdminPage /></ProtectedRoute>} />
                   <Route path="/app/comercial" element={<ProtectedRoute scope="internal"><Navigate to="/app/crm" replace /></ProtectedRoute>} />

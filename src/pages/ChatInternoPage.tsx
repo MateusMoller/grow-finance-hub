@@ -987,11 +987,11 @@ export default function ChatInternoPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto flex h-[calc(100vh-7.5rem)] min-h-[640px] w-full max-w-none flex-col space-y-5 px-1 sm:px-2 xl:px-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-heading text-2xl font-bold">Chat Interno</h1>
-            <p className="text-sm text-muted-foreground">
+      <div className="mx-auto flex h-[calc(100svh-5.25rem)] min-h-[600px] w-full max-w-none flex-col gap-3 px-0 sm:px-1">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="font-heading text-xl font-bold leading-tight">Chat Interno</h1>
+            <p className="text-xs text-muted-foreground sm:text-sm">
               Canais internos e conversas diretas da equipe.
             </p>
           </div>
@@ -1000,7 +1000,7 @@ export default function ChatInternoPage() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 gap-1.5 rounded-full px-3 text-xs"
+              className="h-8 gap-1.5 rounded-full px-3 text-xs"
               onClick={() => setShowCustomization((current) => !current)}
             >
               <Palette className="h-3.5 w-3.5" />
@@ -1061,16 +1061,16 @@ export default function ChatInternoPage() {
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <div className="border-b bg-muted/30 px-4 py-4">
+            <div className="border-b bg-muted/30 px-4 py-3">
               <p className="text-sm font-semibold">Conversas</p>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
               <button
                 type="button"
-                className={`mb-3 w-full rounded-2xl border p-3 text-left transition-all ${
+                className={`mb-2.5 w-full rounded-2xl border p-2.5 text-left transition-all ${
                   activeChat.type === "group"
                     ? "border-primary/40 bg-primary/10 shadow-sm"
                     : "border-transparent bg-muted/30 hover:bg-muted"
@@ -1078,7 +1078,7 @@ export default function ChatInternoPage() {
                 onClick={() => setActiveChat({ type: "group" })}
               >
                 <div className="flex items-center gap-2">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <Users className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1181,12 +1181,12 @@ export default function ChatInternoPage() {
           </aside>
 
           <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2.5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="relative">
                   {activeChat.type === "group" ? (
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                      <Users className="h-5 w-5" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                      <Users className="h-4 w-4" />
                     </div>
                   ) : (
                     <ChatAvatar
@@ -1211,12 +1211,12 @@ export default function ChatInternoPage() {
                   </p>
                 </div>
               </div>
-              <Badge variant="outline" className="gap-1.5">
+              <Badge variant="outline" className="h-7 gap-1.5 rounded-full px-2.5 text-xs">
                 <UserRound className="h-3.5 w-3.5" /> {participantsInCurrentChat} participante(s)
               </Badge>
             </div>
 
-            <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-5 ${chatDensity === "compact" ? "space-y-2" : "space-y-4"} ${chatBackgroundClass[chatBackground]}`}>
+            <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-4 ${chatDensity === "compact" ? "space-y-2" : "space-y-3"} ${chatBackgroundClass[chatBackground]}`}>
               {loadingMessages ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1350,7 +1350,7 @@ export default function ChatInternoPage() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="border-t bg-card px-4 py-3">
+            <div className="border-t bg-card px-4 py-2.5">
               <div className="flex items-end gap-2 rounded-2xl bg-muted/50 p-2">
                 <div className="min-w-0 flex-1">
                   {selectedReply && (
@@ -1402,9 +1402,9 @@ export default function ChatInternoPage() {
                     onKeyDown={handleInputKeyDown}
                     disabled={sending}
                     placeholder={inputPlaceholder}
-                    className="max-h-32 min-h-11 resize-none rounded-xl border-0 bg-background px-4 py-3 shadow-sm focus-visible:ring-1"
+                    className="max-h-28 min-h-10 resize-none rounded-xl border-0 bg-background px-4 py-2.5 shadow-sm focus-visible:ring-1"
                   />
-                  <p className="mt-1 px-1 text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 px-1 text-[10px] text-muted-foreground">
                     Enter envia. Shift+Enter quebra linha.
                   </p>
                 </div>
@@ -1420,7 +1420,7 @@ export default function ChatInternoPage() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-11 w-11 shrink-0 rounded-full bg-background"
+                      className="h-10 w-10 shrink-0 rounded-full bg-background"
                       disabled={sending}
                       aria-label="Adicionar anexo ou referencia"
                     >
@@ -1445,7 +1445,7 @@ export default function ChatInternoPage() {
                 <Button
                   type="button"
                   size="icon"
-                  className="h-11 w-11 shrink-0 rounded-full"
+                  className="h-10 w-10 shrink-0 rounded-full"
                   onClick={() => void handleSendMessage()}
                   disabled={sending || (!newMessage.trim() && !selectedFile && !selectedReference)}
                 >

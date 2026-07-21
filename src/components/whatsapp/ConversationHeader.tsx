@@ -1,0 +1,381 @@
+﻿import { useMemo, useState } from "react";
+import { Check, ExternalLink, Link2, Loader2, Plus, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { isWhatsAppWindowActive, type WhatsAppConversationStatus, type WhatsAppConversationSummary, type WhatsAppMessage } from "@/lib/whatsappTypes";
+
+export type WhatsAppClientLinkOption = {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  contact: string | null;
+  phone: string | null;
+};
+
+export type WhatsAppQuickTaskDraft = {
+  title: string;
+  description: string;
+  sector: string;
+  priority: string;
+  contextMessages: WhatsAppQuickTaskContextMessage[];
+};
+
+export type WhatsAppQuickTaskContextMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  body: string;
+  messageType: string;
+  createdAt: string;
+};
+
+const taskSectorOptions = [
+  "Contabil",
+  "Fiscal",
+  "Departamento Pessoal",
+  "Comercial",
+  "Societario",
+  "Geral",
+];
+
+const taskPriorityOptions = ["Baixa", "MÃ©dia", "Alta"];
+
+const initialsFor = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "WA";
+
+const statusLabel = (status: WhatsAppConversationStatus) => {
+  if (status === "resolved") return "Resolvida";
+  if (status === "pending_client") return "Aguardando cliente";
+  if (status === "in_attendance") return "Em atendimento";
+  return "Aberta";
+};
+
+const formatContextMessageTime = (value: string) => {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+};
+
+const messagePreview = (message: WhatsAppMessage) => {
+  const text = (message.body || message.safe_preview || "").trim();
+  if (text) return text;
+  if (message.message_type === "image") return "Imagem";
+  if (message.message_type === "audio") return "Audio";
+  if (message.message_type === "video") return "Video";
+  if (message.message_type === "document") return "Documento";
+  return "Mensagem";
+};
+
+export function ConversationHeader({
+  conversation,
+  messages,
+  onLinkClient,
+  onCreateQuickTask,
+  activeClients,
+  clientLinking,
+  quickTaskCreating,
+}: {
+  conversation: WhatsAppConversationSummary | null;
+  messages: WhatsAppMessage[];
+  onLinkClient?: (clientId: string) => void;
+  onCreateQuickTask?: (draft: WhatsAppQuickTaskDraft) => void;
+  activeClients: WhatsAppClientLinkOption[];
+  clientLinking?: boolean;
+  quickTaskCreating?: boolean;
+}) {
+  const navigate = useNavigate();
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+  const [quickTaskOpen, setQuickTaskOpen] = useState(false);
+  const [quickTask, setQuickTask] = useState<WhatsAppQuickTaskDraft>({
+    title: "",
+    description: "",
+    sector: "Geral",
+    priority: "MÃ©dia",
+    contextMessages: [],
+  });
+  const normalizedClientSearch = clientSearch.trim().toLowerCase();
+  const filteredClients = useMemo(() => {
+    if (!normalizedClientSearch) return activeClients.slice(0, 40);
+    return activeClients
+      .filter((client) =>
+        [client.name, client.cnpj, client.contact, client.phone]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedClientSearch)),
+      )
+      .slice(0, 40);
+  }, [activeClients, normalizedClientSearch]);
+  if (!conversation) return null;
+
+  const name =
+    conversation.client_name ||
+    conversation.contact?.display_name ||
+    conversation.contact?.profile_name ||
+    "Contato nao identificado";
+  const windowActive = isWhatsAppWindowActive(conversation.active_window_expires_at);
+  const contextMessageOptions = messages
+    .filter((message) => message.delivery_status !== "failed")
+    .slice(-30)
+    .reverse();
+  const selectedContextIds = new Set(quickTask.contextMessages.map((message) => message.id));
+  const toggleContextMessage = (message: WhatsAppMessage) => {
+    const contextMessage: WhatsAppQuickTaskContextMessage = {
+      id: message.id,
+      direction: message.direction,
+      body: messagePreview(message),
+      messageType: message.message_type,
+      createdAt: message.created_at,
+    };
+    setQuickTask((current) => ({
+      ...current,
+      contextMessages: selectedContextIds.has(message.id)
+        ? current.contextMessages.filter((item) => item.id !== message.id)
+        : [...current.contextMessages, contextMessage],
+    }));
+  };
+  const submitQuickTask = () => {
+    if (!quickTask.title.trim()) return;
+    onCreateQuickTask?.(quickTask);
+    setQuickTaskOpen(false);
+    setQuickTask({
+      title: "",
+      description: "",
+      sector: "Geral",
+      priority: "MÃ©dia",
+      contextMessages: [],
+    });
+  };
+
+  return (
+    <div className="flex min-h-[4.25rem] items-center justify-between border-b border-slate-200 bg-[#f0f2f5] px-4 py-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-teal-200 text-sm font-semibold text-emerald-900">
+          {initialsFor(name)}
+        </span>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-slate-900">{name}</h2>
+          <p className="truncate text-xs text-slate-500">
+            {conversation.contact?.phone_number || "Sem telefone"} - {windowActive ? "janela ativa" : "janela fechada"} - {statusLabel(conversation.status)}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 rounded-full px-3 text-slate-600 hover:bg-white"
+          onClick={() => setQuickTaskOpen(true)}
+          disabled={quickTaskCreating}
+          aria-label="Criar tarefa rÃ¡pida"
+        >
+          {quickTaskCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+          Tarefa
+        </Button>
+        {conversation.client_id ? (
+          <Button variant="ghost" size="sm" className="h-9 rounded-full px-3 text-slate-600 hover:bg-white" onClick={() => navigate(`/app/clientes/${conversation.client_id}`)} aria-label="Abrir cliente vinculado">
+            <ExternalLink className="mr-2 h-4 w-4" /> Cliente
+          </Button>
+        ) : (
+          <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-full bg-amber-100 px-3 text-xs font-medium text-amber-800 transition hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={clientLinking}
+              >
+                <Link2 className="mr-1 h-3.5 w-3.5" /> NÃ£o vinculado
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-96 rounded-xl p-0">
+              <div className="border-b p-3">
+                <p className="text-sm font-semibold text-slate-900">Vincular cliente</p>
+                <p className="text-xs text-slate-500">Selecione um cliente ativo jÃ¡ cadastrado.</p>
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={clientSearch}
+                    onChange={(event) => setClientSearch(event.target.value)}
+                    placeholder="Buscar por nome, CNPJ ou telefone"
+                    className="h-9 rounded-lg pl-9 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="max-h-80 overflow-y-auto p-2">
+                {filteredClients.length === 0 ? (
+                  <p className="rounded-lg px-3 py-6 text-center text-sm text-slate-500">Nenhum cliente ativo encontrado.</p>
+                ) : (
+                  filteredClients.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                      onClick={() => {
+                        onLinkClient?.(client.id);
+                        setClientPopoverOpen(false);
+                        setClientSearch("");
+                      }}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-semibold text-emerald-800">
+                        {initialsFor(client.name)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-slate-900">{client.name}</span>
+                        <span className="block truncate text-xs text-slate-500">
+                          {[client.cnpj, client.contact || client.phone].filter(Boolean).join(" - ") || "Cliente ativo"}
+                        </span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
+      <Dialog open={quickTaskOpen} onOpenChange={setQuickTaskOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Criar tarefa rÃ¡pida</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="whatsapp-quick-task-title">TÃ­tulo</Label>
+              <Input
+                id="whatsapp-quick-task-title"
+                value={quickTask.title}
+                onChange={(event) => setQuickTask((current) => ({ ...current, title: event.target.value }))}
+                placeholder="Ex: Retornar contato do cliente"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="whatsapp-quick-task-description">DescriÃ§Ã£o</Label>
+              <Textarea
+                id="whatsapp-quick-task-description"
+                value={quickTask.description}
+                onChange={(event) => setQuickTask((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Contexto rÃ¡pido da conversa"
+                className="min-h-24 resize-none"
+              />
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Contexto da conversa</Label>
+                <span className="text-xs text-slate-500">{quickTask.contextMessages.length} selecionada(s)</span>
+              </div>
+              <div className="max-h-56 overflow-y-auto rounded-xl border bg-slate-50 p-2">
+                {contextMessageOptions.length === 0 ? (
+                  <p className="rounded-lg px-3 py-6 text-center text-sm text-slate-500">
+                    Nenhuma mensagem disponivel para anexar como contexto.
+                  </p>
+                ) : (
+                  <div className="grid gap-2">
+                    {contextMessageOptions.map((message) => {
+                      const selected = selectedContextIds.has(message.id);
+                      return (
+                        <button
+                          key={message.id}
+                          type="button"
+                          className={`flex w-full items-start gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                            selected ? "border-emerald-300 bg-emerald-50" : "border-transparent bg-white hover:border-slate-200"
+                          }`}
+                          onClick={() => toggleContextMessage(message)}
+                        >
+                          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                            selected ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white"
+                          }`}>
+                            {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                              <span>{message.direction === "inbound" ? "Cliente" : "Equipe"}</span>
+                              <span>{formatContextMessageTime(message.created_at)}</span>
+                            </span>
+                            <span className="mt-1 block line-clamp-2 text-sm text-slate-800">{messagePreview(message)}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                Selecione manualmente as mensagens que explicam o contexto da tarefa.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Setor</Label>
+                <Select value={quickTask.sector} onValueChange={(sector) => setQuickTask((current) => ({ ...current, sector }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskSectorOptions.map((sector) => (
+                      <SelectItem key={sector} value={sector}>
+                        {sector}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Prioridade</Label>
+                <Select value={quickTask.priority} onValueChange={(priority) => setQuickTask((current) => ({ ...current, priority }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskPriorityOptions.map((priority) => (
+                      <SelectItem key={priority} value={priority}>
+                        {priority}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              A tarefa serÃ¡ criada em A Fazer e vinculada ao cliente da conversa quando houver cliente associado.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickTaskOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={submitQuickTask} disabled={!quickTask.title.trim() || quickTaskCreating}>
+              {quickTaskCreating ? "Criando..." : "Criar tarefa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

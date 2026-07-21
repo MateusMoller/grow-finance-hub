@@ -21,6 +21,10 @@
     "robot:install-task": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/grow-document-robot/scripts/install-windows-task.ps1",
     "robot:start": "node tools/grow-document-robot/dist/index.js tools/grow-document-robot/runtime/config.local.json",
     "robot:uninstall-task": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/grow-document-robot/scripts/uninstall-windows-task.ps1",
+    "whatsapp:webhook:check": "node scripts/whatsapp-subscribe-app-webhook.mjs",
+    "whatsapp:webhook:subscribe": "node scripts/whatsapp-subscribe-app-webhook.mjs --subscribe",
+    "whatsapp:waba:check": "node scripts/whatsapp-subscribe-waba.mjs",
+    "whatsapp:waba:subscribe": "node scripts/whatsapp-subscribe-waba.mjs --subscribe",
     "test": "vitest run",
     "test:watch": "vitest"
   },

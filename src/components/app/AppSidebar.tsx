@@ -7,6 +7,7 @@ import {
   TrendingUp,
   ClipboardList,
   Newspaper,
+  MessageCircle,
   MessagesSquare,
   UserCog,
   Lightbulb,
@@ -54,6 +55,7 @@ const mainItems = [
 
 const operationalItems = [
   { title: "Vendas", url: "/app/crm", icon: TrendingUp },
+  { title: "WhatsApp", url: "/app/whatsapp", icon: MessageCircle },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },

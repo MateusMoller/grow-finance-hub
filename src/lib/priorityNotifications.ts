@@ -73,6 +73,15 @@ export interface TaskEventNotificationRow {
   } | null;
 }
 
+export interface WhatsAppNotificationRow {
+  id: string;
+  conversation_id: string;
+  notification_type: "new_message" | "assigned" | "send_failed";
+  title: string;
+  body: string | null;
+  created_at: string;
+}
+
 const parseJsonRecord = (value: string): Record<string, unknown> | null => {
   try {
     const parsed = JSON.parse(value);
@@ -280,3 +289,14 @@ export const buildTaskEventNotifications = (
 
       return [];
     });
+
+export const buildWhatsAppNotifications = (rows: WhatsAppNotificationRow[]): PriorityNotification[] =>
+  rows.map((row) => ({
+    id: `whatsapp-${row.id}`,
+    taskId: row.conversation_id,
+    title: row.title,
+    description: row.body || "Nova atualizacao no atendimento WhatsApp",
+    priority: row.notification_type === "send_failed" ? "alta" : "media",
+    kind: "client_chat",
+    createdAt: row.created_at,
+  }));
