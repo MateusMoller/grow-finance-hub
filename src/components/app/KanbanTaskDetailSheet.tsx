@@ -271,6 +271,17 @@ const getWhatsAppConversationName = (conversation: WhatsAppConversationSummary |
   fallback ||
   "Cliente";
 
+const formatTaskWhatsAppMessage = (task: KanbanTaskItem, attendantName: string, body: string) => {
+  const taskCode = task.id.slice(0, 8).toUpperCase();
+  return [
+    `*Tarefa relacionada* #${taskCode}`,
+    `*Titulo:* ${task.title}`,
+    `*Atendente:* ${attendantName}`,
+    "",
+    body.trim(),
+  ].join("\n");
+};
+
 export function KanbanTaskDetailSheet({
   task,
   open,
@@ -305,6 +316,7 @@ export function KanbanTaskDetailSheet({
   const [selectedInternalFile, setSelectedInternalFile] = useState<File | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
+  const [whatsappAttendantName, setWhatsappAttendantName] = useState<string | null>(null);
   const [assigneeOptions, setAssigneeOptions] = useState<TaskAssigneeOption[]>(
     [],
   );
@@ -441,6 +453,40 @@ export function KanbanTaskDetailSheet({
       cancelled = true;
     };
   }, [open, task?.created_by]);
+
+  useEffect(() => {
+    if (!open || !user?.id) {
+      setWhatsappAttendantName(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadAttendantName = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!cancelled) {
+        const metadataName =
+          typeof user.user_metadata?.display_name === "string"
+            ? user.user_metadata.display_name
+            : typeof user.user_metadata?.full_name === "string"
+              ? user.user_metadata.full_name
+              : typeof user.user_metadata?.name === "string"
+                ? user.user_metadata.name
+                : null;
+
+        setWhatsappAttendantName(data?.display_name?.trim() || metadataName?.trim() || user.email || "Equipe Grow");
+      }
+    };
+
+    void loadAttendantName();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, user]);
 
   const fetchTaskComments = useCallback(async () => {
     if (!task?.id) {
@@ -1246,7 +1292,11 @@ export function KanbanTaskDetailSheet({
                       conversation={whatsappConversation}
                       sending={whatsappSending}
                       onSendText={async (text) => {
-                        await sendWhatsAppTextMutation.mutateAsync({ text, clientMessageId: createClientMessageId() });
+                        if (!task) return;
+                        await sendWhatsAppTextMutation.mutateAsync({
+                          text: formatTaskWhatsAppMessage(task, whatsappAttendantName || "Equipe Grow", text),
+                          clientMessageId: createClientMessageId(),
+                        });
                       }}
                       onSendFile={async (file) => {
                         await sendWhatsAppFileMutation.mutateAsync({ file, clientMessageId: createClientMessageId() });

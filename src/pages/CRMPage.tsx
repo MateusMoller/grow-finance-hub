@@ -1,43 +1,64 @@
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, CheckCircle2, Clock, DollarSign, Filter, Loader2, Plus, Settings2, TrendingUp } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/app/AppLayout";
 import { ModuleContextPill } from "@/components/app/ModuleContextPill";
-import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { SalesOpportunityDialog, type SalesOpportunityFormState } from "@/components/app/SalesOpportunityDialog";
+import { SalesOpportunityDetailSheet } from "@/components/app/SalesOpportunityDetailSheet";
 import {
-  TrendingUp,
-  DollarSign,
-  Target,
-  Users,
-  ArrowUpRight,
-  ArrowDownRight,
-  ArrowRight,
-  Star,
-  CheckCircle2,
-  Clock,
-  Plus,
-  Filter,
-  Loader2,
-} from "lucide-react";
+  SalesPipelineSettingsDialog,
+  type SalesOfferFormState,
+  type SalesStageFormState,
+} from "@/components/app/SalesPipelineSettingsDialog";
+import { SalesPipelineMetrics } from "@/components/app/SalesPipelineMetrics";
+import { SalesPipelineBoard, type SalesPipelineCard, type SalesPipelineStage } from "@/components/app/SalesPipelineBoard";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { LeadDetailSheet } from "@/components/app/LeadDetailSheet";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import { matchesSelectedCompany, matchesSelectedCompetence, normalizeCompetence } from "@/lib/globalFilters";
-import { useAuth } from "@/hooks/useAuth";
-import { addHistoryEntry, getEntityHistory, type ChangeHistoryEntry } from "@/lib/changeHistory";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
-import { SITE_LEAD_TAG, isSiteLeadSource } from "@/lib/siteLeadCapture";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { normalizeCompetence } from "@/lib/globalFilters";
 import { recordOperationalAuditLog } from "@/lib/operationalAudit";
+import {
+  calculateSalesMetrics,
+  canManageSalesSettings,
+  createSalesAuditMetadata,
+  findSalesDuplicateWarnings,
+  formatSalesCurrency,
+  isLostSalesStage,
+  isOpenSalesStage,
+  isWonSalesStage,
+  normalizeSalesStage,
+  parseSalesCurrency,
+  validateSalesCatalogSelection,
+  type SalesActivityType,
+  type SalesCatalogCategory,
+  type SalesMetricOpportunity,
+  type SalesRecurrenceType,
+} from "@/lib/salesPipeline";
+import {
+  archiveSalesOpportunity,
+  createSalesActivity,
+  fetchSalesActivities,
+  fetchSalesCatalogOffers,
+  fetchSalesCommercialLeads,
+  fetchSalesClients,
+  fetchSalesOpportunities,
+  fetchSalesPipelineStages,
+  fetchSalesUsers,
+  saveSalesOffer,
+  saveSalesCommercialLead,
+  saveSalesOpportunity,
+  saveSalesStage,
+  winNewClientOpportunity,
+  type SalesCatalogOfferRow,
+  type SalesOpportunityRow,
+  type SalesPipelineStageRow,
+} from "@/lib/salesPipelineData";
 
-const stageOrder = [
+const fallbackStageNames = [
   "Oportunidade Nova",
   "Contato Iniciado",
   "Diagnostico",
@@ -48,1432 +69,844 @@ const stageOrder = [
   "Fechado Perdido",
 ] as const;
 
-type PipelineStage = (typeof stageOrder)[number];
-
-interface Lead {
-  id: string;
-  name: string;
-  contact: string;
-  email: string;
-  phone: string;
-  value: string;
-  stage: PipelineStage;
-  daysInStage: number;
-  competence: string;
-  source: string;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface LeadFormState {
-  name: string;
-  contact: string;
-  email: string;
-  phone: string;
-  value: string;
-  stage: PipelineStage;
-  competence: string;
-  source: string;
-  notes: string;
-}
-
-interface CrmGoals {
-  wonRevenue: number;
-  wonDeals: number;
-  conversionRate: number;
-}
-
-interface GoalFormState {
-  wonRevenue: string;
-  wonDeals: string;
-  conversionRate: string;
-}
-
-type SiteLeadRow = Tables<"site_leads">;
-type CrmLeadRow = Tables<"crm_leads">;
-type CrmGoalRow = Tables<"crm_goals">;
-
-const stageColors: Record<PipelineStage, string> = {
-  "Oportunidade Nova": "bg-muted-foreground",
-  "Contato Iniciado": "bg-primary/60",
-  Diagnostico: "bg-primary",
-  "Reuniao Agendada": "bg-amber-500",
-  "Proposta Enviada": "bg-blue-500",
-  Negociacao: "bg-purple-500",
-  "Fechado Ganho": "bg-emerald-500",
-  "Fechado Perdido": "bg-destructive/60",
+const saleTypeLabels: Record<SalesCatalogCategory, string> = {
+  service: "Servico contabil",
+  product: "Produto",
+  consulting: "Consultoria",
+  automation: "Automacao",
+  system: "Sistema",
+  other: "Outro",
 };
 
-const toCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
-
-const parseCurrency = (value: string) => {
-  const numeric = value
-    .replace(/[^\d,.-]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const parsed = Number(numeric);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const parseNumericInput = (value: string) => {
-  const sanitized = value.replace(/[^\d,.-]/g, "").trim();
-  if (!sanitized) return Number.NaN;
-
-  const normalized = sanitized.includes(",")
-    ? sanitized.replace(/\./g, "").replace(",", ".")
-    : sanitized;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-};
-
-const isOpenStage = (stage: PipelineStage) => stage !== "Fechado Ganho" && stage !== "Fechado Perdido";
-const createLeadId = () => `lead-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const getCurrentCompetence = () => normalizeCompetence(new Date().toISOString()) || "2026-03";
-const buildLeadStorageKey = (userId: string) => `grow-crm-leads-${userId}`;
-const buildGoalStorageKey = (userId: string) => `grow-crm-goals-${userId}`;
-const siteLeadPrefix = "site-lead-";
-const buildSiteLeadId = (siteLeadId: string) => `${siteLeadPrefix}${siteLeadId}`;
-const extractSiteLeadId = (leadId: string) =>
-  leadId.startsWith(siteLeadPrefix) ? leadId.slice(siteLeadPrefix.length) : null;
-const crmLeadPrefix = "crm-lead-";
-const buildCrmLeadId = (leadId: string) => `${crmLeadPrefix}${leadId}`;
-const extractCrmLeadId = (leadId: string) =>
-  leadId.startsWith(crmLeadPrefix) ? leadId.slice(crmLeadPrefix.length) : null;
-const localLeadPrefix = "local-";
-const buildLocalLeadId = (leadId: string) => `${localLeadPrefix}${leadId}`;
-
-const defaultGoals: CrmGoals = {
-  wonRevenue: 25000,
-  wonDeals: 8,
-  conversionRate: 40,
-};
-
-const createGoalFormState = (goals: CrmGoals): GoalFormState => ({
-  wonRevenue: String(goals.wonRevenue),
-  wonDeals: String(goals.wonDeals),
-  conversionRate: String(goals.conversionRate),
-});
-
-const normalizeStage = (value: unknown): PipelineStage => {
-  if (typeof value !== "string") return "Oportunidade Nova";
-  if (stageOrder.includes(value as PipelineStage)) return value as PipelineStage;
-  return "Oportunidade Nova";
-};
-
-const createEmptyLeadForm = (selectedCompetence?: string | null): LeadFormState => ({
-  name: "",
+const emptyOpportunityForm = (stage?: SalesPipelineStageRow | null): SalesOpportunityFormState => ({
+  title: "",
+  clientMode: "existing",
+  clientId: "",
   contact: "",
   email: "",
   phone: "",
-  value: "",
-  stage: "Oportunidade Nova",
-  competence: normalizeCompetence(selectedCompetence) || getCurrentCompetence(),
-  source: "Site",
+  saleType: "service",
+  offerId: "",
+  otherOfferDescription: "",
+  estimatedValue: "",
+  recurrenceType: "recurring",
+  probability: "25",
+  stageId: stage?.id || "",
+  stage: stage?.name || "Oportunidade Nova",
+  status: "active",
+  source: "Comercial",
+  competence: normalizeCompetence(new Date().toISOString()) || "2026-07",
+  expectedCloseDate: "",
+  ownerUserId: "",
   notes: "",
+  lossReason: "",
 });
 
-const sanitizeLead = (value: unknown): Lead | null => {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as Record<string, unknown>;
-
-  const id = String(raw.id || "").trim();
-  const name = String(raw.name || "").trim();
-  if (!id || !name) return null;
-
-  const competence = normalizeCompetence(raw.competence ? String(raw.competence) : null) || getCurrentCompetence();
-  const amount = parseCurrency(String(raw.value || "0"));
-  const createdAt = raw.createdAt ? String(raw.createdAt) : new Date().toISOString();
-  const updatedAt = raw.updatedAt ? String(raw.updatedAt) : createdAt;
-
-  return {
-    id,
-    name,
-    contact: String(raw.contact || "").trim(),
-    email: String(raw.email || "").trim(),
-    phone: String(raw.phone || "").trim(),
-    value: toCurrency(amount),
-    stage: normalizeStage(raw.stage),
-    daysInStage: Math.max(0, Number(raw.daysInStage) || 0),
-    competence,
-    source: String(raw.source || "").trim(),
-    notes: String(raw.notes || "").trim(),
-    createdAt,
-    updatedAt,
-  };
-};
-
-const sanitizeGoalValue = (value: unknown, fallback: number) => {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
-  if (typeof value === "string") {
-    const parsed = parseNumericInput(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return fallback;
-};
-
-const sanitizeGoals = (value: unknown): CrmGoals => {
-  if (!value || typeof value !== "object") return defaultGoals;
-  const raw = value as Record<string, unknown>;
-
-  const wonRevenue = Math.round(sanitizeGoalValue(raw.wonRevenue, defaultGoals.wonRevenue));
-  const wonDeals = Math.max(1, Math.round(sanitizeGoalValue(raw.wonDeals, defaultGoals.wonDeals)));
-  const conversionRate = Math.min(
-    100,
-    Math.max(1, Math.round(sanitizeGoalValue(raw.conversionRate, defaultGoals.conversionRate))),
-  );
-
-  return { wonRevenue, wonDeals, conversionRate };
-};
-
-const readStoredGoals = (userId: string): CrmGoals => {
-  if (!userId) return defaultGoals;
-  const raw = localStorage.getItem(buildGoalStorageKey(userId));
-  if (!raw) return defaultGoals;
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return sanitizeGoals(parsed);
-  } catch {
-    return defaultGoals;
-  }
-};
-
-const readStoredLeads = (userId: string): Lead[] => {
-  if (!userId) return [];
-  const raw = localStorage.getItem(buildLeadStorageKey(userId));
-  if (!raw) return [];
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    const payload = Array.isArray(parsed)
-      ? parsed
-      : parsed &&
-          typeof parsed === "object" &&
-          Array.isArray((parsed as { leads?: unknown[] }).leads)
-        ? ((parsed as { leads?: unknown[] }).leads || [])
-        : [];
-
-    return payload
-      .map((item) => sanitizeLead(item))
-      .filter((item): item is Lead => Boolean(item))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  } catch {
-    return [];
-  }
-};
-
-const writeStoredLeads = (userId: string, leads: Lead[]) => {
-  if (!userId) return;
-  localStorage.setItem(buildLeadStorageKey(userId), JSON.stringify(leads));
-};
-
-const writeStoredGoals = (userId: string, goals: CrmGoals) => {
-  if (!userId) return;
-  localStorage.setItem(buildGoalStorageKey(userId), JSON.stringify(goals));
-};
-
-const mapSiteLeadToLead = (siteLead: SiteLeadRow): Lead => {
-  const createdAt = siteLead.created_at;
-  const createdTimestamp = new Date(createdAt).getTime();
-  const daysInStage =
-    Number.isNaN(createdTimestamp) ? 0 : Math.max(0, Math.floor((Date.now() - createdTimestamp) / 86400000));
-  const competence = normalizeCompetence(createdAt) || getCurrentCompetence();
-  const source = siteLead.source_tag || SITE_LEAD_TAG;
-  const normalizedCompany = (siteLead.company_name || "").trim();
-  const normalizedName = (siteLead.full_name || "").trim();
-  const normalizedPhone = (siteLead.phone || "").trim();
-  const normalizedMessage = (siteLead.message || "").trim();
-  const notesParts = [
-    siteLead.origin_page ? `Lead captado pelo site (${siteLead.origin_page}).` : "Lead captado pelo site.",
-    normalizedPhone ? `Telefone informado: ${normalizedPhone}` : "",
-    normalizedMessage ? `Mensagem: ${normalizedMessage}` : "",
-  ].filter(Boolean);
-
-  return {
-    id: buildSiteLeadId(siteLead.id),
-    name: normalizedCompany || normalizedName || "Lead captado via site",
-    contact: normalizedName,
-    email: siteLead.email,
-    phone: normalizedPhone,
-    value: toCurrency(0),
-    stage: "Oportunidade Nova",
-    daysInStage,
-    competence,
-    source,
-    notes: notesParts.join("\n"),
-    createdAt,
-    updatedAt: createdAt,
-  };
-};
-
-const mapCrmLeadToLead = (lead: CrmLeadRow): Lead => {
-  const createdAt = String(lead.created_at || new Date().toISOString());
-  const updatedAt = String(lead.updated_at || createdAt);
-  const updatedTimestamp = new Date(updatedAt).getTime();
-  const daysInStage = Number.isNaN(updatedTimestamp)
-    ? 0
-    : Math.max(0, Math.floor((Date.now() - updatedTimestamp) / 86400000));
-
-  return {
-    id: buildCrmLeadId(String(lead.id)),
-    name: String(lead.name || "").trim(),
-    contact: String(lead.contact || "").trim(),
-    email: String(lead.email || "").trim(),
-    phone: String(lead.phone || "").trim(),
-    value: toCurrency(Number(lead.estimated_value || 0)),
-    stage: normalizeStage(lead.stage),
-    daysInStage,
-    competence: normalizeCompetence(lead.competence ? String(lead.competence) : null) || getCurrentCompetence(),
-    source: String(lead.source || "").trim(),
-    notes: String(lead.notes || "").trim(),
-    createdAt,
-    updatedAt,
-  };
-};
-
-const mapGoalRowToGoals = (goal: CrmGoalRow | null | undefined): CrmGoals => {
-  if (!goal) return defaultGoals;
-  return sanitizeGoals({
-    wonRevenue: Number(goal.won_revenue || defaultGoals.wonRevenue),
-    wonDeals: Number(goal.won_deals || defaultGoals.wonDeals),
-    conversionRate: Number(goal.conversion_rate || defaultGoals.conversionRate),
-  });
-};
-
-const buildCrmLeadPayload = (
-  lead: Omit<Lead, "id" | "createdAt" | "updatedAt" | "daysInStage">,
-  organizationId: string,
-  userId: string,
-) => ({
-  organization_id: organizationId,
-  name: lead.name,
-  contact: lead.contact || null,
-  email: lead.email || null,
-  phone: lead.phone || null,
-  estimated_value: parseCurrency(lead.value),
-  stage: lead.stage,
-  competence: lead.competence,
-  source: lead.source || null,
-  notes: lead.notes || null,
-  updated_by: userId,
+const emptyStageForm = (position = 1): SalesStageFormState => ({
+  name: "",
+  position: String(position),
+  color: "#4f556f",
+  isActive: true,
 });
+
+const emptyOfferForm = (): SalesOfferFormState => ({
+  name: "",
+  category: "service",
+  defaultRecurrenceType: "recurring",
+  defaultValue: "",
+  description: "",
+  isActive: true,
+});
+
+const mapOfferRow = (offer: SalesCatalogOfferRow) => ({
+  id: offer.id,
+  name: offer.name,
+  category: offer.category,
+  defaultRecurrenceType: offer.default_recurrence_type,
+  defaultValue: offer.default_value,
+  description: offer.description,
+  isActive: offer.is_active,
+});
+
+const getOpportunityStatus = (opportunity: SalesOpportunityRow): "active" | "won" | "lost" | "archived" => {
+  if (opportunity.status) return opportunity.status;
+  const stage = normalizeSalesStage(opportunity.stage);
+  if (isWonSalesStage(stage)) return "won";
+  if (isLostSalesStage(stage)) return "lost";
+  return "active";
+};
+
+const opportunityToForm = (
+  opportunity: SalesOpportunityRow,
+  stages: SalesPipelineStageRow[],
+): SalesOpportunityFormState => {
+  const stage = stages.find((item) => item.id === opportunity.stage_id) || stages.find((item) => item.name === opportunity.stage);
+
+  return {
+    id: opportunity.id,
+    title: opportunity.name,
+    clientMode: opportunity.client_id ? "existing" : "new",
+    clientId: opportunity.client_id || "",
+    contact: opportunity.contact || "",
+    email: opportunity.email || "",
+    phone: opportunity.phone || "",
+    saleType: opportunity.sale_type || "service",
+    offerId: opportunity.offer_id || "",
+    otherOfferDescription: opportunity.other_offer_description || "",
+    estimatedValue: String(opportunity.estimated_value || ""),
+    recurrenceType: opportunity.recurrence_type || "recurring",
+    probability: String(opportunity.probability || 0),
+    stageId: stage?.id || "",
+    stage: stage?.name || opportunity.stage,
+    status: getOpportunityStatus(opportunity),
+    source: opportunity.source || "",
+    competence: opportunity.competence,
+    expectedCloseDate: opportunity.expected_close_date || "",
+    ownerUserId: opportunity.owner_user_id || "",
+    notes: opportunity.notes || "",
+    lossReason: opportunity.loss_reason || "",
+  };
+};
+
+const getDaysSince = (date: string) => {
+  const created = new Date(date).getTime();
+  if (!Number.isFinite(created)) return 0;
+  return Math.max(0, Math.floor((Date.now() - created) / 86_400_000));
+};
 
 export default function CRMPage() {
-  const { user, currentOrganizationId } = useAuth();
   const queryClient = useQueryClient();
-  const { selectedCompany, selectedCompetence } = useGlobalFilters();
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
-  const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
-  const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
-  const [leadForm, setLeadForm] = useState<LeadFormState>(createEmptyLeadForm());
-  const [goalForm, setGoalForm] = useState<GoalFormState>(createGoalFormState(defaultGoals));
-  const [activeStageFilter, setActiveStageFilter] = useState<PipelineStage | "all">("all");
-  const [historyVersion, setHistoryVersion] = useState(0);
-  const [selectedLeadHistory, setSelectedLeadHistory] = useState<ChangeHistoryEntry[]>([]);
+  const { user, currentOrganizationId, role, allRoles, enabledModules, roleLoaded } = useAuth();
+  const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [saleTypeFilter, setSaleTypeFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
+  const [opportunityForm, setOpportunityForm] = useState<SalesOpportunityFormState>(emptyOpportunityForm());
+  const [stageForm, setStageForm] = useState<SalesStageFormState>(emptyStageForm());
+  const [offerForm, setOfferForm] = useState<SalesOfferFormState>(emptyOfferForm());
+  const [activityTitle, setActivityTitle] = useState("");
+  const [activityBody, setActivityBody] = useState("");
+  const [activityType, setActivityType] = useState<SalesActivityType>("note");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [lossReason, setLossReason] = useState("");
 
-  const actorLabel = user?.email || "Usuário";
-  const isEditing = Boolean(editingLeadId);
-  const crmQueryKey = useMemo(
-    () => ["crm", currentOrganizationId, user?.id] as const,
-    [currentOrganizationId, user?.id],
+  const canAccessSales = enabledModules.includes("crm") || role === "admin" || role === "manager" || role === "commercial";
+  const canManageSettings = canManageSalesSettings(role, allRoles);
+  const baseQueryKey = useMemo(() => ["sales-pipeline", currentOrganizationId] as const, [currentOrganizationId]);
+
+  const stagesQuery = useQuery({
+    queryKey: [...baseQueryKey, "stages"],
+    enabled: Boolean(currentOrganizationId && canAccessSales),
+    queryFn: async () => fetchSalesPipelineStages(supabase, currentOrganizationId || ""),
+  });
+
+  const offersQuery = useQuery({
+    queryKey: [...baseQueryKey, "offers"],
+    enabled: Boolean(currentOrganizationId && canAccessSales),
+    queryFn: async () => fetchSalesCatalogOffers(supabase, currentOrganizationId || ""),
+  });
+
+  const clientsQuery = useQuery({
+    queryKey: [...baseQueryKey, "clients"],
+    enabled: Boolean(currentOrganizationId && canAccessSales),
+    queryFn: async () => fetchSalesClients(supabase, currentOrganizationId || ""),
+  });
+
+  const usersQuery = useQuery({
+    queryKey: [...baseQueryKey, "users"],
+    enabled: Boolean(currentOrganizationId && canAccessSales),
+    queryFn: async () => fetchSalesUsers(supabase, currentOrganizationId || ""),
+  });
+
+  const commercialLeadsQuery = useQuery({
+    queryKey: [...baseQueryKey, "commercial-leads"],
+    enabled: Boolean(currentOrganizationId && canAccessSales),
+    queryFn: async () => fetchSalesCommercialLeads(supabase, currentOrganizationId || ""),
+  });
+
+  const opportunitiesQuery = useQuery({
+    queryKey: [...baseQueryKey, "opportunities"],
+    enabled: Boolean(currentOrganizationId && canAccessSales),
+    queryFn: async () => fetchSalesOpportunities(supabase, currentOrganizationId || ""),
+  });
+
+  const activitiesQuery = useQuery({
+    queryKey: [...baseQueryKey, "activities", selectedOpportunityId],
+    enabled: Boolean(currentOrganizationId && selectedOpportunityId && canAccessSales),
+    queryFn: async () => fetchSalesActivities(supabase, currentOrganizationId || "", selectedOpportunityId || ""),
+  });
+
+  const stages = useMemo(() => {
+    if (stagesQuery.data?.length) return stagesQuery.data;
+    return fallbackStageNames.map((name, index) => ({
+      id: name,
+      organization_id: currentOrganizationId || "local",
+      name,
+      position: index + 1,
+      color: "#4f556f",
+      is_won: name === "Fechado Ganho",
+      is_lost: name === "Fechado Perdido",
+      is_system_default: true,
+      is_active: true,
+      created_by: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+  }, [currentOrganizationId, stagesQuery.data]);
+
+  const offers = useMemo(() => (offersQuery.data || []).map(mapOfferRow), [offersQuery.data]);
+  const clients = useMemo(() => clientsQuery.data || [], [clientsQuery.data]);
+  const commercialLeads = useMemo(() => commercialLeadsQuery.data || [], [commercialLeadsQuery.data]);
+  const users = useMemo(() => usersQuery.data || [], [usersQuery.data]);
+  const opportunities = useMemo(() => opportunitiesQuery.data || [], [opportunitiesQuery.data]);
+  const selectedOpportunity = opportunities.find((item) => item.id === selectedOpportunityId) || null;
+  const selectedStage = stages.find((stage) => stage.id === opportunityForm.stageId) || stages[0] || null;
+
+  useEffect(() => {
+    if (!selectedOpportunityId) return;
+    if (!opportunities.some((item) => item.id === selectedOpportunityId)) {
+      setSelectedOpportunityId(null);
+      setDetailOpen(false);
+    }
+  }, [opportunities, selectedOpportunityId]);
+
+  const duplicateWarnings = useMemo(
+    () =>
+      findSalesDuplicateWarnings(
+        {
+          email: opportunityForm.email,
+          phone: opportunityForm.phone,
+        },
+        [
+          ...clients.map((client) => ({
+            id: client.id,
+            name: client.name,
+            cnpj: client.cnpj,
+            email: client.email,
+            phone: client.phone,
+            source: "client" as const,
+          })),
+          ...commercialLeads.map((lead) => ({
+            id: lead.id,
+            name: lead.name,
+            email: lead.email,
+            phone: lead.phone,
+            source: "lead" as const,
+          })),
+        ],
+      ),
+    [clients, commercialLeads, opportunityForm.email, opportunityForm.phone],
   );
-  const leadsQueryKey = useMemo(() => [...crmQueryKey, "leads"] as const, [crmQueryKey]);
-  const goalsQueryKey = useMemo(() => [...crmQueryKey, "goals"] as const, [crmQueryKey]);
 
-  const leadsQuery = useQuery({
-    queryKey: leadsQueryKey,
-    enabled: Boolean(user?.id),
-    queryFn: async () => {
-      if (!user?.id) return [];
-      if (!currentOrganizationId) return readStoredLeads(user.id);
+  const filteredOpportunities = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return opportunities.filter((opportunity) => {
+      const status = getOpportunityStatus(opportunity);
+      const offer = offers.find((item) => item.id === opportunity.offer_id);
+      const client = clients.find((item) => item.id === opportunity.client_id);
+      const haystack = [
+        opportunity.name,
+        opportunity.contact,
+        opportunity.email,
+        opportunity.phone,
+        opportunity.source,
+        opportunity.other_offer_description,
+        offer?.name,
+        client?.name,
+        client?.cnpj,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-      const [crmLeadRes, siteLeadRes] = await Promise.all([
-        supabase
-          .from("crm_leads")
-          .select("*")
-          .eq("organization_id", currentOrganizationId)
-          .order("updated_at", { ascending: false }),
-        supabase
-          .from("site_leads")
-          .select("*")
-          .eq("organization_id", currentOrganizationId)
-          .order("created_at", { ascending: false }),
-      ]);
-
-      if (crmLeadRes.error) throw crmLeadRes.error;
-      if (siteLeadRes.error) throw siteLeadRes.error;
-
-      const crmRows = (crmLeadRes.data || []) as CrmLeadRow[];
-      const overriddenSiteLeadIds = new Set(
-        crmRows
-          .filter((lead) => lead.external_source === "site_leads" && lead.external_id)
-          .map((lead) => String(lead.external_id)),
+      return (
+        (!normalizedSearch || haystack.includes(normalizedSearch)) &&
+        (stageFilter === "all" || opportunity.stage === stageFilter || opportunity.stage_id === stageFilter) &&
+        (statusFilter === "all" || status === statusFilter) &&
+        (ownerFilter === "all" || opportunity.owner_user_id === ownerFilter) &&
+        (saleTypeFilter === "all" || opportunity.sale_type === saleTypeFilter) &&
+        (clientFilter === "all" || opportunity.client_id === clientFilter)
       );
-      const crmLeads = crmRows.map(mapCrmLeadToLead);
-      const siteLeads = ((siteLeadRes.data || []) as SiteLeadRow[])
-        .filter((siteLead) => !overriddenSiteLeadIds.has(String(siteLead.id)))
-        .map(mapSiteLeadToLead);
-      return [...crmLeads, ...siteLeads].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    },
-  });
-
-  const goalsQuery = useQuery({
-    queryKey: goalsQueryKey,
-    enabled: Boolean(user?.id),
-    queryFn: async () => {
-      if (!user?.id) return defaultGoals;
-      if (!currentOrganizationId) return readStoredGoals(user.id);
-
-      const { data, error } = await supabase
-        .from("crm_goals")
-        .select("*")
-        .eq("organization_id", currentOrganizationId)
-        .eq("competence", "default")
-        .maybeSingle();
-
-      if (error) throw error;
-      return mapGoalRowToGoals(data as CrmGoalRow | null);
-    },
-  });
-
-  const leads = useMemo(() => leadsQuery.data || [], [leadsQuery.data]);
-  const loadingLeads = leadsQuery.isLoading || leadsQuery.isFetching;
-  const crmGoals = goalsQuery.data || defaultGoals;
-
-  const registerLeadHistory = (leadId: string, action: string, details?: string) => {
-    if (!user?.id) return;
-    addHistoryEntry(user.id, {
-      entityType: "crm",
-      entityId: leadId,
-      action,
-      details,
-      actor: actorLabel,
     });
-    setHistoryVersion((prev) => prev + 1);
+  }, [clients, offers, opportunities, search, stageFilter, statusFilter, ownerFilter, saleTypeFilter, clientFilter]);
+
+  const metricItems = useMemo<SalesMetricOpportunity[]>(
+    () =>
+      filteredOpportunities.map((opportunity) => ({
+        id: opportunity.id,
+        stage: normalizeSalesStage(opportunity.stage),
+        status: getOpportunityStatus(opportunity),
+        estimatedValue: Number(opportunity.estimated_value) || 0,
+        recurrenceType: opportunity.recurrence_type || "recurring",
+        saleType: opportunity.sale_type || "service",
+        offerId: opportunity.offer_id,
+        otherOfferDescription: opportunity.other_offer_description,
+        daysInStage: getDaysSince(opportunity.updated_at),
+      })),
+    [filteredOpportunities],
+  );
+
+  const metrics = useMemo(() => calculateSalesMetrics(metricItems), [metricItems]);
+
+  const metricCards = useMemo(
+    () => [
+      {
+        label: "Pipeline ativo",
+        value: formatSalesCurrency(metrics.activeValue),
+        change: `${metrics.activeCount} oportunidades`,
+        trend: "up" as const,
+        icon: DollarSign,
+      },
+      {
+        label: "Fechadas com ganho",
+        value: formatSalesCurrency(metrics.wonValue),
+        change: `${metrics.wonCount} ganhas`,
+        trend: "up" as const,
+        icon: CheckCircle2,
+      },
+      {
+        label: "Conversao",
+        value: `${metrics.conversionRate}%`,
+        change: `${metrics.lostCount} perdidas`,
+        trend: metrics.conversionRate >= 40 ? ("up" as const) : ("down" as const),
+        icon: TrendingUp,
+      },
+      {
+        label: "Receita recorrente",
+        value: formatSalesCurrency(metrics.recurringValue),
+        change: `${formatSalesCurrency(metrics.oneTimeValue)} avulso`,
+        trend: "neutral" as const,
+        icon: Clock,
+      },
+    ],
+    [metrics],
+  );
+
+  const boardStages = useMemo<SalesPipelineStage[]>(
+    () =>
+      stages
+        .filter((stage) => stage.is_active || opportunities.some((opportunity) => opportunity.stage === stage.name || opportunity.stage_id === stage.id))
+        .map((stage) => ({
+          id: stage.id,
+          name: stage.name,
+          color: stage.color,
+          isActive: stage.is_active,
+          opportunities: filteredOpportunities
+            .filter((opportunity) => opportunity.stage_id === stage.id || opportunity.stage === stage.name)
+            .map((opportunity) => {
+              const client = clients.find((item) => item.id === opportunity.client_id);
+              const offer = offers.find((item) => item.id === opportunity.offer_id);
+              return {
+                id: opportunity.id,
+                title: opportunity.name,
+                contact: opportunity.contact,
+                clientName: client?.name || (opportunity.client_id ? "Cliente vinculado" : "Lead comercial"),
+                value: Number(opportunity.estimated_value) || 0,
+                probability: opportunity.probability,
+                expectedCloseDate: opportunity.expected_close_date,
+                offerLabel: offer?.name || opportunity.other_offer_description || saleTypeLabels[opportunity.sale_type || "service"],
+              } satisfies SalesPipelineCard;
+            }),
+        })),
+    [clients, filteredOpportunities, offers, opportunities, stages],
+  );
+
+  const invalidateSales = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: [...baseQueryKey, "opportunities"] }),
+      queryClient.invalidateQueries({ queryKey: [...baseQueryKey, "activities"] }),
+      queryClient.invalidateQueries({ queryKey: [...baseQueryKey, "offers"] }),
+      queryClient.invalidateQueries({ queryKey: [...baseQueryKey, "stages"] }),
+      queryClient.invalidateQueries({ queryKey: [...baseQueryKey, "clients"] }),
+      queryClient.invalidateQueries({ queryKey: [...baseQueryKey, "commercial-leads"] }),
+    ]);
   };
 
-  useEffect(() => {
-    setGoalForm(createGoalFormState(crmGoals));
-  }, [crmGoals]);
-
-  const importLocalCrmMutation = useMutation({
-    mutationFn: async () => {
-      if (!user?.id || !currentOrganizationId) return;
-
-      const storedLeads = readStoredLeads(user.id);
-      const storedGoals = readStoredGoals(user.id);
-      const importedAt = new Date().toISOString();
-
-      if (storedLeads.length > 0) {
-        const rows = storedLeads.map((lead) => ({
-          ...buildCrmLeadPayload(lead, currentOrganizationId, user.id),
-          external_source: "localStorage",
-          external_id: lead.id,
-          created_by: user.id,
-          created_at: lead.createdAt || importedAt,
-          updated_at: lead.updatedAt || importedAt,
-        }));
-
-        const { error } = await supabase
-          .from("crm_leads")
-          .upsert(rows, { onConflict: "organization_id,external_source,external_id" });
-
-        if (error) throw error;
+  const saveOpportunityMutation = useMutation({
+    mutationFn: async (form: SalesOpportunityFormState) => {
+      if (!currentOrganizationId) throw new Error("Organizacao ativa nao encontrada.");
+      if (!form.title.trim()) throw new Error("Informe o titulo da oportunidade.");
+      if (!validateSalesCatalogSelection({
+        offerId: form.offerId || null,
+        category: form.saleType,
+        otherOfferDescription: form.otherOfferDescription,
+      })) {
+        throw new Error('Informe a descricao quando a oferta for "Outro".');
       }
 
-      const { error: goalError } = await supabase.from("crm_goals").upsert(
-        {
-          organization_id: currentOrganizationId,
-          competence: "default",
-          won_revenue: storedGoals.wonRevenue,
-          won_deals: storedGoals.wonDeals,
-          conversion_rate: storedGoals.conversionRate,
-          created_by: user.id,
-          updated_by: user.id,
-        },
-        { onConflict: "organization_id,competence" },
-      );
-
-      if (goalError) throw goalError;
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: leadsQueryKey }),
-        queryClient.invalidateQueries({ queryKey: goalsQueryKey }),
-      ]);
-    },
-  });
-
-  useEffect(() => {
-    if (!user?.id || !currentOrganizationId || importLocalCrmMutation.isPending) return;
-    const importFlagKey = `grow-crm-imported-${currentOrganizationId}-${user.id}`;
-    if (localStorage.getItem(importFlagKey)) return;
-    if (readStoredLeads(user.id).length === 0 && !localStorage.getItem(buildGoalStorageKey(user.id))) {
-      localStorage.setItem(importFlagKey, "1");
-      return;
-    }
-
-    void importLocalCrmMutation.mutateAsync()
-      .then(() => {
-        localStorage.setItem(importFlagKey, "1");
-        toast.success("Dados antigos de vendas importados para o Supabase.");
-      })
-      .catch((error: unknown) => {
-        toast.error(error instanceof Error ? error.message : "Não foi possível importar os dados antigos de vendas.");
-      });
-  }, [currentOrganizationId, importLocalCrmMutation, user?.id]);
-  useEffect(() => {
-    if (!selectedLead?.id) return;
-    const freshLead = leads.find((lead) => lead.id === selectedLead.id);
-    if (!freshLead) {
-      setSelectedLead(null);
-      setSheetOpen(false);
-      return;
-    }
-    if (freshLead !== selectedLead) {
-      setSelectedLead(freshLead);
-    }
-  }, [leads, selectedLead]);
-
-  useEffect(() => {
-    if (!user?.id || !selectedLead?.id) {
-      setSelectedLeadHistory([]);
-      return;
-    }
-
-    setSelectedLeadHistory(getEntityHistory(user.id, "crm", selectedLead.id, 12));
-  }, [historyVersion, selectedLead?.id, user?.id]);
-
-  const scopedLeads = useMemo(
-    () =>
-      leads.filter(
-        (lead) =>
-          matchesSelectedCompany(lead.name, selectedCompany) &&
-          matchesSelectedCompetence(lead.competence, selectedCompetence),
-      ),
-    [leads, selectedCompany, selectedCompetence],
-  );
-
-  const filteredLeads = useMemo(
-    () =>
-      activeStageFilter === "all"
-        ? scopedLeads
-        : scopedLeads.filter((lead) => lead.stage === activeStageFilter),
-    [scopedLeads, activeStageFilter],
-  );
-
-  const metrics = useMemo(() => {
-    const allLeadsByValue = scopedLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
-    const valueByLead = filteredLeads.map((lead) => ({ ...lead, amount: parseCurrency(lead.value) }));
-    const openLeads = valueByLead.filter((lead) => isOpenStage(lead.stage));
-    const wonLeads = valueByLead.filter((lead) => lead.stage === "Fechado Ganho");
-    const lostLeads = valueByLead.filter((lead) => lead.stage === "Fechado Perdido");
-    const proposalLeads = valueByLead.filter(
-      (lead) => lead.stage === "Proposta Enviada" || lead.stage === "Negociacao",
-    );
-
-    const openRevenue = openLeads.reduce((sum, lead) => sum + lead.amount, 0);
-    const wonRevenue = wonLeads.reduce((sum, lead) => sum + lead.amount, 0);
-    const avgTicket =
-      valueByLead.length > 0
-        ? valueByLead.reduce((sum, lead) => sum + lead.amount, 0) / valueByLead.length
-        : 0;
-    const closedTotal = wonLeads.length + lostLeads.length;
-    const conversionRate = closedTotal > 0 ? Math.round((wonLeads.length / closedTotal) * 100) : 0;
-    const avgDaysInStage =
-      openLeads.length > 0
-        ? Math.round(openLeads.reduce((sum, lead) => sum + lead.daysInStage, 0) / openLeads.length)
-        : 0;
-
-    const goals = [
-      {
-        label: "Meta de receita ganha",
-        targetLabel: toCurrency(crmGoals.wonRevenue),
-        currentLabel: toCurrency(wonRevenue),
-        pct:
-          crmGoals.wonRevenue > 0
-            ? Math.min(100, Math.round((wonRevenue / crmGoals.wonRevenue) * 100))
-            : 0,
-      },
-      {
-        label: "Meta de negociacoes ganhas",
-        targetLabel: String(crmGoals.wonDeals),
-        currentLabel: String(wonLeads.length),
-        pct:
-          crmGoals.wonDeals > 0
-            ? Math.min(100, Math.round((wonLeads.length / crmGoals.wonDeals) * 100))
-            : 0,
-      },
-      {
-        label: "Meta de conversão",
-        targetLabel: `${crmGoals.conversionRate}%`,
-        currentLabel: `${conversionRate}%`,
-        pct:
-          crmGoals.conversionRate > 0
-            ? Math.min(100, Math.round((conversionRate / crmGoals.conversionRate) * 100))
-            : 0,
-      },
-    ];
-
-    const stageStats = stageOrder.map((stage) => {
-      const items = allLeadsByValue.filter((lead) => lead.stage === stage);
-      const amount = items.reduce((sum, lead) => sum + lead.amount, 0);
-      return { stage, count: items.length, amount };
-    });
-
-    const topNegotiations = [...valueByLead].sort((a, b) => b.amount - a.amount).slice(0, 5);
-
-    return {
-      openLeads,
-      wonLeads,
-      lostLeads,
-      proposalLeads,
-      openRevenue,
-      wonRevenue,
-      avgTicket,
-      conversionRate,
-      avgDaysInStage,
-      goals,
-      stageStats,
-      topNegotiations,
-      filteredCount: valueByLead.length,
-      totalCount: allLeadsByValue.length,
-    };
-  }, [crmGoals, filteredLeads, scopedLeads]);
-
-  const stageSummary = metrics.stageStats.map((item) => ({
-    label: item.stage,
-    count: item.count,
-    color: stageColors[item.stage],
-  }));
-  const hasActiveFilter = activeStageFilter !== "all";
-  const siteCapturedLeads = useMemo(
-    () => filteredLeads.filter((lead) => isSiteLeadSource(lead.source)).slice(0, 8),
-    [filteredLeads],
-  );
-
-  const salesMetrics = [
-    {
-      label: "Pipeline ativo",
-      value: toCurrency(metrics.openRevenue),
-      change: `${metrics.openLeads.length} negociacoes`,
-      trend: "up" as const,
-      icon: DollarSign,
-    },
-    {
-      label: "Fechados com ganho",
-      value: String(metrics.wonLeads.length),
-      change: `${metrics.conversionRate}% conversao`,
-      trend: metrics.conversionRate >= 40 ? ("up" as const) : ("down" as const),
-      icon: CheckCircle2,
-    },
-    {
-      label: "Ticket medio",
-      value: toCurrency(metrics.avgTicket),
-      change: `${metrics.avgDaysInStage} dias em media`,
-      trend: "up" as const,
-      icon: TrendingUp,
-    },
-    {
-      label: "Propostas em andamento",
-      value: String(metrics.proposalLeads.length),
-      change: `${metrics.lostLeads.length} perdidas`,
-      trend: metrics.proposalLeads.length >= metrics.lostLeads.length ? ("up" as const) : ("down" as const),
-      icon: Clock,
-    },
-  ];
-
-  const saveLeadMutation = useMutation({
-    mutationFn: async ({
-      lead,
-      leadId,
-      externalSource,
-      externalId,
-    }: {
-      lead: Omit<Lead, "id" | "createdAt" | "updatedAt" | "daysInStage">;
-      leadId?: string | null;
-      externalSource?: string | null;
-      externalId?: string | null;
-    }) => {
-      if (!user?.id) throw new Error("Usuário não autenticado.");
-      if (!currentOrganizationId) {
-        const now = new Date().toISOString();
-        const existingLeads = readStoredLeads(user.id);
-        const previousLead = leadId ? existingLeads.find((item) => item.id === leadId) : null;
-        const nextLead: Lead = {
-          ...lead,
-          id: leadId || createLeadId(),
-          createdAt: previousLead?.createdAt || now,
-          updatedAt: now,
-          daysInStage: previousLead?.daysInStage || 0,
-        };
-
-        writeStoredLeads(
-          user.id,
-          [nextLead, ...existingLeads.filter((item) => item.id !== nextLead.id)].sort((a, b) =>
-            b.updatedAt.localeCompare(a.updatedAt),
-          ),
-        );
-        return nextLead;
-      }
-
+      const stage = stages.find((item) => item.id === form.stageId) || selectedStage;
+      const commercialLead =
+        form.clientMode === "new"
+          ? await saveSalesCommercialLead(supabase, {
+              id: selectedOpportunity?.commercial_lead_id || null,
+              organization_id: currentOrganizationId,
+              name: form.title.trim(),
+              contact: form.contact.trim() || null,
+              email: form.email.trim() || null,
+              phone: form.phone.trim() || null,
+              source: form.source.trim() || null,
+              notes: form.notes.trim() || null,
+              created_by: user?.id || null,
+            })
+          : null;
       const payload = {
-        ...buildCrmLeadPayload(lead, currentOrganizationId, user.id),
-        ...(leadId ? { id: leadId } : {}),
-        ...(externalSource && externalId ? { external_source: externalSource, external_id: externalId } : {}),
-        created_by: user.id,
+        id: form.id,
+        organization_id: currentOrganizationId,
+        name: form.title.trim(),
+        contact: form.contact.trim() || null,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        estimated_value: parseSalesCurrency(form.estimatedValue),
+        client_id: form.clientMode === "existing" && form.clientId ? form.clientId : null,
+        commercial_lead_id: commercialLead?.id || null,
+        stage_id: stage?.id || null,
+        stage: stage?.name || form.stage || "Oportunidade Nova",
+        status: form.status,
+        sale_type: form.saleType,
+        offer_id: form.offerId || null,
+        other_offer_description: form.saleType === "other" ? form.otherOfferDescription.trim() : null,
+        recurrence_type: form.recurrenceType,
+        probability: Math.max(0, Math.min(100, Number(form.probability) || 0)),
+        source: form.source.trim() || null,
+        competence: normalizeCompetence(form.competence) || form.competence,
+        expected_close_date: form.expectedCloseDate || null,
+        owner_user_id: form.ownerUserId || null,
+        notes: form.notes.trim() || null,
+        loss_reason: form.lossReason.trim() || null,
+        updated_by: user?.id || null,
+        created_by: form.id ? undefined : user?.id || null,
       };
 
-      const query = externalSource && externalId
-        ? supabase
-            .from("crm_leads")
-            .upsert(payload, { onConflict: "organization_id,external_source,external_id" })
-        : supabase.from("crm_leads").upsert(payload);
-
-      const { data, error } = await query.select("*").single();
-
-      if (error) throw error;
-      return mapCrmLeadToLead(data as CrmLeadRow);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: leadsQueryKey });
-    },
-  });
-
-  const deleteLeadMutation = useMutation({
-    mutationFn: async (leadId: string) => {
-      if (!currentOrganizationId && user?.id) {
-        writeStoredLeads(user.id, readStoredLeads(user.id).filter((lead) => lead.id !== leadId));
-        return;
-      }
-
-      const crmLeadId = extractCrmLeadId(leadId);
-      const siteLeadId = extractSiteLeadId(leadId);
-
-      if (crmLeadId) {
-        const { error } = await supabase.from("crm_leads").delete().eq("id", crmLeadId);
-        if (error) throw error;
-        return;
-      }
-
-      if (siteLeadId) {
-        const { error } = await supabase.from("site_leads").delete().eq("id", siteLeadId);
-        if (error) throw error;
-      }
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: leadsQueryKey });
-    },
-  });
-
-  const saveGoalsMutation = useMutation({
-    mutationFn: async (goals: CrmGoals) => {
-      if (!user?.id) throw new Error("Usuário não autenticado.");
-      if (!currentOrganizationId) {
-        writeStoredGoals(user.id, goals);
-        return;
-      }
-
-      const { error } = await supabase.from("crm_goals").upsert(
-        {
-          organization_id: currentOrganizationId,
-          competence: "default",
-          won_revenue: goals.wonRevenue,
-          won_deals: goals.wonDeals,
-          conversion_rate: goals.conversionRate,
-          created_by: user.id,
-          updated_by: user.id,
-        },
-        { onConflict: "organization_id,competence" },
-      );
-
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: goalsQueryKey });
-    },
-  });
-
-  const openGoalsDialog = () => {
-    setGoalForm(createGoalFormState(crmGoals));
-    setGoalsDialogOpen(true);
-  };
-
-  const handleSaveGoals = async () => {
-    const wonRevenue = parseNumericInput(goalForm.wonRevenue);
-    const wonDeals = parseNumericInput(goalForm.wonDeals);
-    const conversionRate = parseNumericInput(goalForm.conversionRate);
-
-    if (!Number.isFinite(wonRevenue) || wonRevenue <= 0) {
-      toast.error("Informe uma meta de receita valida.");
-      return;
-    }
-
-    if (!Number.isFinite(wonDeals) || wonDeals <= 0) {
-      toast.error("Informe uma meta valida para negociacoes ganhas.");
-      return;
-    }
-
-    if (!Number.isFinite(conversionRate) || conversionRate <= 0 || conversionRate > 100) {
-      toast.error("A meta de conversão deve ficar entre 1% e 100%.");
-      return;
-    }
-
-    const nextGoals: CrmGoals = {
-      wonRevenue: Math.round(wonRevenue),
-      wonDeals: Math.max(1, Math.round(wonDeals)),
-      conversionRate: Math.round(conversionRate),
-    };
-
-    try {
-      await saveGoalsMutation.mutateAsync(nextGoals);
+      const saved = await saveSalesOpportunity(supabase, payload);
+      await createSalesActivity(supabase, {
+        organizationId: currentOrganizationId,
+        opportunityId: saved.id,
+        actorUserId: user?.id,
+        activityType: form.id ? "system" : "note",
+        title: form.id ? "Oportunidade atualizada" : "Oportunidade criada",
+        body: form.notes || null,
+        metadata: createSalesAuditMetadata(form.id ? "sales_opportunity_updated" : "sales_opportunity_created", null, payload),
+      });
       await recordOperationalAuditLog({
         organizationId: currentOrganizationId,
-        action: "crm_goals_updated",
-        entityType: "crm_goals",
-        metadata: {
-          wonRevenue: nextGoals.wonRevenue,
-          wonDeals: nextGoals.wonDeals,
-          conversionRate: nextGoals.conversionRate,
-        },
+        action: form.id ? "sales_opportunity_updated" : "sales_opportunity_created",
+        entityType: "crm_leads",
+        entityId: saved.id,
+        metadata: payload,
       });
-      setGoalForm(createGoalFormState(nextGoals));
-      setGoalsDialogOpen(false);
-      toast.success("Metas de vendas atualizadas.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as metas de vendas.");
-    }
-  };
+      return saved;
+    },
+    onSuccess: async (saved) => {
+      await invalidateSales();
+      setSelectedOpportunityId(saved.id);
+      setDialogOpen(false);
+      toast.success("Oportunidade salva.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel salvar a oportunidade."),
+  });
+
+  const addActivityMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentOrganizationId || !selectedOpportunityId) throw new Error("Oportunidade nao selecionada.");
+      if (!activityTitle.trim()) throw new Error("Informe o titulo da atividade.");
+      return createSalesActivity(supabase, {
+        organizationId: currentOrganizationId,
+        opportunityId: selectedOpportunityId,
+        actorUserId: user?.id,
+        activityType,
+        title: activityTitle.trim(),
+        body: activityBody.trim() || null,
+        dueAt: followUpDate || null,
+      });
+    },
+    onSuccess: async () => {
+      setActivityTitle("");
+      setActivityBody("");
+      setFollowUpDate("");
+      await invalidateSales();
+      toast.success("Atividade registrada.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel registrar a atividade."),
+  });
+
+  const closeMutation = useMutation({
+    mutationFn: async ({ status, reason }: { status: "won" | "lost" | "active"; reason?: string }) => {
+      if (!selectedOpportunity || !currentOrganizationId) throw new Error("Oportunidade nao selecionada.");
+      if (status === "lost" && !reason?.trim()) throw new Error("Informe o motivo da perda.");
+      if (status === "won" && !selectedOpportunity.client_id) {
+        const result = await winNewClientOpportunity(supabase, selectedOpportunity.id);
+        await recordOperationalAuditLog({
+          organizationId: currentOrganizationId,
+          action: "sales_opportunity_won_new_client",
+          entityType: "crm_leads",
+          entityId: selectedOpportunity.id,
+          metadata: { result },
+        });
+        return selectedOpportunity;
+      }
+
+      const stage = stages.find((item) =>
+        status === "won" ? item.is_won || item.name === "Fechado Ganho" : status === "lost" ? item.is_lost || item.name === "Fechado Perdido" : item.name === "Oportunidade Nova",
+      );
+
+      const saved = await saveSalesOpportunity(supabase, {
+        id: selectedOpportunity.id,
+        organization_id: currentOrganizationId,
+        name: selectedOpportunity.name,
+        contact: selectedOpportunity.contact,
+        email: selectedOpportunity.email,
+        phone: selectedOpportunity.phone,
+        estimated_value: Number(selectedOpportunity.estimated_value) || 0,
+        client_id: selectedOpportunity.client_id,
+        commercial_lead_id: selectedOpportunity.commercial_lead_id,
+        stage_id: stage?.id || selectedOpportunity.stage_id,
+        stage: stage?.name || selectedOpportunity.stage,
+        status,
+        sale_type: selectedOpportunity.sale_type,
+        offer_id: selectedOpportunity.offer_id,
+        other_offer_description: selectedOpportunity.other_offer_description,
+        recurrence_type: selectedOpportunity.recurrence_type,
+        probability: selectedOpportunity.probability,
+        source: selectedOpportunity.source,
+        competence: selectedOpportunity.competence,
+        expected_close_date: selectedOpportunity.expected_close_date,
+        owner_user_id: selectedOpportunity.owner_user_id,
+        notes: selectedOpportunity.notes,
+        loss_reason: status === "lost" ? reason?.trim() || null : null,
+        won_at: status === "won" ? new Date().toISOString() : null,
+        lost_at: status === "lost" ? new Date().toISOString() : null,
+        updated_by: user?.id || null,
+      });
+
+      await createSalesActivity(supabase, {
+        organizationId: currentOrganizationId,
+        opportunityId: selectedOpportunity.id,
+        actorUserId: user?.id,
+        activityType: "stage_change",
+        title: status === "won" ? "Oportunidade ganha" : status === "lost" ? "Oportunidade perdida" : "Oportunidade reaberta",
+        body: reason || null,
+        metadata: createSalesAuditMetadata("sales_opportunity_status_changed", { status: selectedOpportunity.status }, { status }),
+      });
+
+      await recordOperationalAuditLog({
+        organizationId: currentOrganizationId,
+        action: "sales_opportunity_status_changed",
+        entityType: "crm_leads",
+        entityId: selectedOpportunity.id,
+        metadata: { status, reason },
+      });
+      return saved;
+    },
+    onSuccess: async () => {
+      setLossReason("");
+      await invalidateSales();
+      toast.success("Status da oportunidade atualizado.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel atualizar o status."),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedOpportunity) throw new Error("Oportunidade nao selecionada.");
+      return archiveSalesOpportunity(supabase, selectedOpportunity.id, user?.id);
+    },
+    onSuccess: async () => {
+      setDetailOpen(false);
+      setSelectedOpportunityId(null);
+      await invalidateSales();
+      toast.success("Oportunidade arquivada.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel arquivar."),
+  });
+
+  const saveStageMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentOrganizationId) throw new Error("Organizacao ativa nao encontrada.");
+      if (!stageForm.name.trim()) throw new Error("Informe o nome da etapa.");
+      return saveSalesStage(supabase, {
+        id: stageForm.id,
+        organization_id: currentOrganizationId,
+        name: stageForm.name.trim(),
+        position: Math.max(1, Number(stageForm.position) || stages.length + 1),
+        color: stageForm.color || "#4f556f",
+        is_active: stageForm.isActive,
+        created_by: stageForm.id ? undefined : user?.id || null,
+      });
+    },
+    onSuccess: async () => {
+      setStageForm(emptyStageForm(stages.length + 1));
+      await invalidateSales();
+      toast.success("Etapa salva.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel salvar a etapa."),
+  });
+
+  const saveOfferMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentOrganizationId) throw new Error("Organizacao ativa nao encontrada.");
+      if (!offerForm.name.trim()) throw new Error("Informe o nome da oferta.");
+      return saveSalesOffer(supabase, {
+        id: offerForm.id,
+        organization_id: currentOrganizationId,
+        name: offerForm.name.trim(),
+        category: offerForm.category,
+        default_recurrence_type: offerForm.defaultRecurrenceType,
+        default_value: offerForm.defaultValue ? parseSalesCurrency(offerForm.defaultValue) : null,
+        description: offerForm.description.trim() || null,
+        is_active: offerForm.isActive,
+        created_by: offerForm.id ? undefined : user?.id || null,
+      });
+    },
+    onSuccess: async () => {
+      setOfferForm(emptyOfferForm());
+      await invalidateSales();
+      toast.success("Oferta salva.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel salvar a oferta."),
+  });
 
   const openCreateDialog = () => {
-    setEditingLeadId(null);
-    setLeadForm(createEmptyLeadForm(selectedCompetence));
-    setFormOpen(true);
+    setOpportunityForm(emptyOpportunityForm(stages.find((item) => item.is_active) || stages[0]));
+    setDialogOpen(true);
   };
 
-  const openEditDialog = (leadId: string) => {
-    const lead = leads.find((item) => item.id === leadId);
-    if (!lead) return;
-
-    setEditingLeadId(lead.id);
-    setLeadForm({
-      name: lead.name,
-      contact: lead.contact,
-      email: lead.email,
-      phone: lead.phone,
-      value: lead.value,
-      stage: lead.stage,
-      competence: lead.competence,
-      source: lead.source,
-      notes: lead.notes,
-    });
-    setFormOpen(true);
+  const openEditDialog = () => {
+    if (!selectedOpportunity) return;
+    setOpportunityForm(opportunityToForm(selectedOpportunity, stages));
+    setDialogOpen(true);
   };
 
-  const handleStageChange = async (leadId: string, newStage: string) => {
-    const stage = newStage as PipelineStage;
-    const lead = leads.find((item) => item.id === leadId);
-    if (!lead || lead.stage === stage) return;
-
-    if (stage === "Fechado Perdido") {
-      const confirmed = window.confirm(
-        `Confirmar mudanca para "Fechado Perdido" na negociacao "${lead.name}"?`,
-      );
-      if (!confirmed) return;
-    }
-
-    const previousStage = lead.stage;
-    const crmLeadId = extractCrmLeadId(leadId);
-    const siteLeadId = extractSiteLeadId(leadId);
-
-    try {
-      await saveLeadMutation.mutateAsync({
-        lead: { ...lead, stage },
-        leadId: crmLeadId,
-        externalSource: siteLeadId ? "site_leads" : null,
-        externalId: siteLeadId,
-      });
-      registerLeadHistory(leadId, "Etapa alterada", `${previousStage} -> ${stage}`);
-      toast.success(`Negociação movida para "${newStage}"`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível alterar a etapa.");
-    }
+  const openOpportunity = (card: SalesPipelineCard) => {
+    setSelectedOpportunityId(card.id);
+    setDetailOpen(true);
   };
 
-  const handleSaveLead = async () => {
-    const name = leadForm.name.trim();
-    if (!name) {
-      toast.error("Nome da empresa e obrigatorio");
-      return;
-    }
+  const loading =
+    stagesQuery.isLoading ||
+    offersQuery.isLoading ||
+    clientsQuery.isLoading ||
+    opportunitiesQuery.isLoading ||
+    commercialLeadsQuery.isLoading;
+  const saving =
+    saveOpportunityMutation.isPending ||
+    addActivityMutation.isPending ||
+    closeMutation.isPending ||
+    archiveMutation.isPending ||
+    saveStageMutation.isPending ||
+    saveOfferMutation.isPending;
 
-    const amount = parseCurrency(leadForm.value);
-    if (amount <= 0) {
-      toast.error("Informe um valor estimado valido");
-      return;
-    }
-
-    const email = leadForm.email.trim();
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error("Informe um e-mail valido");
-      return;
-    }
-
-    const competence = normalizeCompetence(leadForm.competence) || getCurrentCompetence();
-    const now = new Date().toISOString();
-    const payload = {
-      name,
-      contact: leadForm.contact.trim(),
-      email,
-      phone: leadForm.phone.trim(),
-      value: toCurrency(amount),
-      stage: leadForm.stage,
-      competence,
-      source: leadForm.source.trim(),
-      notes: leadForm.notes.trim(),
-      updatedAt: now,
-    };
-
-    if (editingLeadId) {
-      const previousLead = leads.find((lead) => lead.id === editingLeadId);
-      if (!previousLead) {
-        toast.error("Negociação não encontrada");
-        return;
-      }
-
-      try {
-        const siteLeadId = extractSiteLeadId(editingLeadId);
-        const savedLead = await saveLeadMutation.mutateAsync({
-          lead: { ...previousLead, ...payload },
-          leadId: extractCrmLeadId(editingLeadId),
-          externalSource: siteLeadId ? "site_leads" : null,
-          externalId: siteLeadId,
-        });
-        await recordOperationalAuditLog({
-          organizationId: currentOrganizationId,
-          action: "crm_lead_updated",
-          entityType: "crm_lead",
-          entityId: extractCrmLeadId(savedLead.id),
-          metadata: { name: savedLead.name, stage: savedLead.stage },
-        });
-        registerLeadHistory(editingLeadId, "Negociação atualizada", previousLead.name);
-        toast.success("Negociação atualizada com sucesso");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Não foi possível salvar a negociação.");
-        return;
-      }
-    } else {
-      const createdLead: Lead = {
-        id: buildLocalLeadId(createLeadId()),
-        ...payload,
-        daysInStage: 0,
-        createdAt: now,
-      };
-
-      try {
-        const savedLead = await saveLeadMutation.mutateAsync({ lead: createdLead });
-        await recordOperationalAuditLog({
-          organizationId: currentOrganizationId,
-          action: "crm_lead_created",
-          entityType: "crm_lead",
-          entityId: extractCrmLeadId(savedLead.id),
-          metadata: { name: savedLead.name, stage: savedLead.stage },
-        });
-        registerLeadHistory(savedLead.id, "Negociação criada", savedLead.name);
-        toast.success("Negociação cadastrada com sucesso");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Não foi possível cadastrar a negociação.");
-        return;
-      }
-    }
-
-    setFormOpen(false);
-    setEditingLeadId(null);
-    setLeadForm(createEmptyLeadForm(selectedCompetence));
-  };
-
-  const handleSaveNotes = async (leadId: string, notes: string) => {
-    const lead = leads.find((item) => item.id === leadId);
-    if (!lead) return;
-
-    if ((lead.notes || "") === notes) return;
-
-    try {
-      const siteLeadId = extractSiteLeadId(leadId);
-      await saveLeadMutation.mutateAsync({
-        lead: { ...lead, notes },
-        leadId: extractCrmLeadId(leadId),
-        externalSource: siteLeadId ? "site_leads" : null,
-        externalId: siteLeadId,
-      });
-      registerLeadHistory(
-        leadId,
-        "Observações atualizadas",
-        notes ? "Observações registradas" : "Observações removidas",
-      );
-      toast.success("Observações salvas");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível salvar as observações.");
-    }
-  };
-
-  const handleDeleteLead = async (leadId: string) => {
-    const lead = leads.find((item) => item.id === leadId);
-    if (!lead) return;
-
-    const confirmed = window.confirm(`Excluir a negociacao "${lead.name}"?`);
-    if (!confirmed) return;
-
-    try {
-      await deleteLeadMutation.mutateAsync(leadId);
-      await recordOperationalAuditLog({
-        organizationId: currentOrganizationId,
-        action: "crm_lead_deleted",
-        entityType: "crm_lead",
-        entityId: extractCrmLeadId(leadId),
-        metadata: { name: lead.name, source: lead.source },
-      });
-      setSelectedLead((prev) => (prev?.id === leadId ? null : prev));
-      setSheetOpen(false);
-      registerLeadHistory(leadId, "Negociação excluída", lead.name);
-      toast.success("Negociação excluída");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível excluir a negociação.");
-    }
-  };
+  if (roleLoaded && !canAccessSales) {
+    return (
+      <AppLayout>
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Acesso bloqueado</AlertTitle>
+          <AlertDescription>Seu usuario nao possui permissao para acessar o modulo Vendas.</AlertDescription>
+        </Alert>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       <div className="max-w-none space-y-5 px-1">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
           <div>
             <ModuleContextPill icon={TrendingUp} label="Pipeline comercial" />
             <h1 className="font-heading text-3xl font-bold tracking-tight">Vendas</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Controle de negociacoes e pipeline comercial ({leads.length} cadastradas)
+              Pipeline comercial, oportunidades, produtos avulsos e follow-ups.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="h-11 rounded-xl"
-              onClick={() => void queryClient.invalidateQueries({ queryKey: leadsQueryKey })}
-              disabled={loadingLeads}
-            >
-              {loadingLeads ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Atualizar
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11 rounded-xl"
-              onClick={() => setActiveStageFilter("all")}
-              disabled={!hasActiveFilter}
-            >
-              <Filter className="mr-2 h-4 w-4" /> Limpar filtro
-            </Button>
-            <Button className="h-11 rounded-xl px-5 shadow-sm" onClick={openCreateDialog}>
-              <Plus className="mr-2 h-4 w-4" /> Nova Negociacao
+            {canManageSettings ? (
+              <Button variant="outline" className="h-11 rounded-xl" onClick={() => setSettingsOpen(true)}>
+                <Settings2 className="mr-2 h-4 w-4" />
+                Configurar
+              </Button>
+            ) : null}
+            <Button className="h-11 rounded-xl px-5" onClick={openCreateDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nova oportunidade
             </Button>
           </div>
-        </div>
+        </header>
 
-        {loadingLeads ? (
-          <div className="flex items-center justify-center py-20">
+        <section className="rounded-2xl border bg-card p-4 shadow-sm">
+          <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_repeat(5,minmax(150px,190px))]">
+            <Input
+              placeholder="Buscar por oportunidade, cliente, contato, CNPJ, telefone, e-mail ou oferta"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select className="h-10 rounded-md border bg-background px-3 text-sm outline-none" value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}>
+              <option value="all">Todas as etapas</option>
+              {stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+            </select>
+            <select className="h-10 rounded-md border bg-background px-3 text-sm outline-none" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">Todos os status</option>
+              <option value="active">Ativas</option>
+              <option value="won">Ganhas</option>
+              <option value="lost">Perdidas</option>
+            </select>
+            <select className="h-10 rounded-md border bg-background px-3 text-sm outline-none" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+              <option value="all">Todos responsaveis</option>
+                {users.map((item) => <option key={item.user_id} value={item.user_id}>{item.display_name || item.user_id}</option>)}
+            </select>
+            <select className="h-10 rounded-md border bg-background px-3 text-sm outline-none" value={saleTypeFilter} onChange={(event) => setSaleTypeFilter(event.target.value)}>
+              <option value="all">Todos os tipos</option>
+              {Object.entries(saleTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <select className="h-10 rounded-md border bg-background px-3 text-sm outline-none" value={clientFilter} onChange={(event) => setClientFilter(event.target.value)}>
+              <option value="all">Todos clientes</option>
+              {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+            </select>
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <Filter className="h-3.5 w-3.5" />
+            {filteredOpportunities.length} de {opportunities.length} oportunidades no filtro atual.
+          </div>
+        </section>
+
+        {loading ? (
+          <div className="flex min-h-80 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {salesMetrics.map((metric, index) => (
-                <motion.div
-                  key={metric.label}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.06 }}
-                  className="rounded-2xl border bg-card p-5 shadow-sm transition-colors hover:bg-muted/10"
-                >
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <metric.icon className="h-5 w-5" />
-                    </div>
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium",
-                        metric.trend === "up"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-red-50 text-destructive",
-                      )}
-                    >
-                      {metric.trend === "up" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                      {metric.change}
-                    </span>
-                  </div>
-                  <span className="text-xs font-medium text-muted-foreground">{metric.label}</span>
-                  <div className="mt-1 font-heading text-3xl font-bold tracking-tight">{metric.value}</div>
-                </motion.div>
-              ))}
-            </div>
+            <SalesPipelineMetrics metrics={metricCards} />
 
-            <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-              <div className="rounded-2xl border bg-card p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-2">
-                  <h2 className="font-heading font-semibold flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Target className="h-4 w-4" />
-                    </span>
-                    Metas do mes
-                  </h2>
-                  <Button variant="outline" size="sm" className="rounded-xl" onClick={openGoalsDialog}>
-                    Cadastrar metas
-                  </Button>
-                </div>
-                <div className="space-y-5">
-                  {metrics.goals.map((goal) => (
-                    <div key={goal.label}>
-                      <div className="flex items-start justify-between gap-3 mb-1.5">
-                        <span className="text-sm">{goal.label}</span>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold">{goal.pct}%</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {goal.currentLabel} / {goal.targetLabel}
-                          </p>
-                        </div>
-                      </div>
-                      <Progress value={goal.pct} className="h-2.5" />
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {filteredOpportunities.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Nenhuma oportunidade encontrada</AlertTitle>
+                <AlertDescription>Crie uma nova oportunidade ou ajuste os filtros ativos.</AlertDescription>
+              </Alert>
+            ) : null}
 
-              <div className="rounded-2xl border bg-card shadow-sm">
-                <div className="flex items-center justify-between border-b px-5 py-4">
-                  <h2 className="font-heading font-semibold">Top negociacoes por valor</h2>
-                  <Button variant="ghost" size="sm" className="gap-1 rounded-full text-xs">
-                    {metrics.filteredCount}/{metrics.totalCount} <ArrowRight className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="divide-y">
-                  {metrics.topNegotiations.length === 0 ? (
-                    <div className="flex min-h-52 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-                        <DollarSign className="h-6 w-6" />
-                      </div>
-                      Nenhuma negociacao encontrada para o filtro selecionado.
-                    </div>
-                  ) : (
-                    metrics.topNegotiations.map((lead, index) => (
-                      <div
-                        key={lead.id}
-                        className="flex cursor-pointer items-center justify-between gap-4 p-4 transition-colors hover:bg-muted/30"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setSheetOpen(true);
-                        }}
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
-                            {index + 1}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold">{lead.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {lead.contact || "Sem contato"} - {lead.stage}
-                            </div>
-                            {isSiteLeadSource(lead.source) && (
-                              <Badge variant="secondary" className="mt-1 rounded-full text-[10px]">
-                                {SITE_LEAD_TAG}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-sm font-semibold">{toCurrency(parseCurrency(lead.value))}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
+            <SalesPipelineBoard
+              stages={boardStages}
+              selectedStage={stageFilter === "all" ? null : stageFilter}
+              onStageSelect={(stageName) => setStageFilter(stageName === "all" ? "all" : stageName)}
+              onOpportunityClick={openOpportunity}
+            />
 
-            <div className="rounded-2xl border bg-card shadow-sm">
-              <div className="border-b px-5 py-4">
-                <h2 className="font-heading font-semibold">Leads captados via site</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Novos contatos recebidos pelos formulários institucionais
-                </p>
+            <section className="rounded-2xl border bg-card shadow-sm">
+              <div className="flex items-center justify-between border-b px-5 py-4">
+                <h2 className="font-heading font-semibold">Top oportunidades por valor</h2>
+                <Badge variant="secondary" className="rounded-full">{metrics.topOpportunities.length}</Badge>
               </div>
               <div className="divide-y">
-                {siteCapturedLeads.length === 0 ? (
-                  <div className="flex min-h-28 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-                    Nenhum lead com origem de captação via site no filtro atual.
-                  </div>
+                {metrics.topOpportunities.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-muted-foreground">Sem oportunidades para listar.</div>
                 ) : (
-                  siteCapturedLeads.map((lead) => (
-                    <div
-                      key={lead.id}
-                      className="flex cursor-pointer items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/30"
-                      onClick={() => {
-                        setSelectedLead(lead);
-                        setSheetOpen(true);
-                      }}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-semibold">{lead.name}</p>
-                          <Badge variant="secondary" className="rounded-full text-[10px]">
-                            {SITE_LEAD_TAG}
-                          </Badge>
+                  metrics.topOpportunities.map((item) => {
+                    const opportunity = opportunities.find((entry) => entry.id === item.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-muted/30"
+                        onClick={() => {
+                          setSelectedOpportunityId(item.id);
+                          setDetailOpen(true);
+                        }}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{opportunity?.name || item.id}</p>
+                          <p className="text-xs text-muted-foreground">{saleTypeLabels[item.saleType]} - {item.stage}</p>
                         </div>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">
-                          {lead.contact || "Sem contato"} {lead.email ? `- ${lead.email}` : ""}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-xs text-muted-foreground">
-                        {new Date(lead.createdAt).toLocaleDateString("pt-BR")}
-                      </div>
-                    </div>
-                  ))
+                        <span className="text-sm font-semibold">{formatSalesCurrency(item.estimatedValue)}</span>
+                      </button>
+                    );
+                  })
                 )}
               </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-heading font-semibold">Pipeline de negociacoes</h2>
-                {hasActiveFilter && (
-                  <span className="text-xs text-primary font-medium">
-                    Filtro ativo: {activeStageFilter}
-                  </span>
-                )}
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {stageSummary.map((stage, index) => (
-                  <motion.div
-                    key={stage.label}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={cn(
-                      "relative cursor-pointer rounded-2xl border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
-                      activeStageFilter === stage.label && "border-primary bg-primary/5 shadow-md",
-                    )}
-                    onClick={() =>
-                      setActiveStageFilter((prev) => (prev === stage.label ? "all" : stage.label))
-                    }
-                  >
-                    {(stage.label === "Negociacao" || stage.label === "Proposta Enviada") && (
-                      <Badge className="absolute right-3 top-3 gap-1 rounded-full border-0 bg-primary/10 text-primary">
-                        <Star className="h-3 w-3" /> Quente
-                      </Badge>
-                    )}
-                    <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${stage.color}`}>
-                      <Users className="h-5 w-5 text-white" />
-                    </div>
-                    <h3 className="font-semibold">{stage.label}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">{stage.count} negociacao(oes)</p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
+            </section>
           </>
         )}
       </div>
 
-      <LeadDetailSheet
-        lead={selectedLead}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        onStageChange={handleStageChange}
-        onDeleteLead={handleDeleteLead}
-        onEditLead={openEditDialog}
-        onSaveNotes={handleSaveNotes}
-        historyEntries={selectedLeadHistory}
+      <SalesOpportunityDialog
+        open={dialogOpen}
+        mode={opportunityForm.id ? "edit" : "create"}
+        form={opportunityForm}
+        clients={clients}
+        offers={offers}
+        stages={stages}
+        users={users}
+        duplicateWarnings={opportunityForm.clientMode === "new" ? duplicateWarnings : []}
+        isSaving={saving}
+        onOpenChange={setDialogOpen}
+        onFormChange={setOpportunityForm}
+        onSubmit={() => saveOpportunityMutation.mutate(opportunityForm)}
       />
 
-      <Dialog
-        open={goalsDialogOpen}
-        onOpenChange={(open) => {
-          setGoalsDialogOpen(open);
-          if (!open) {
-            setGoalForm(createGoalFormState(crmGoals));
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cadastrar metas de vendas</DialogTitle>
-          </DialogHeader>
+      <SalesOpportunityDetailSheet
+        open={detailOpen}
+        opportunity={selectedOpportunity}
+        activities={activitiesQuery.data || []}
+        users={users}
+        activityTitle={activityTitle}
+        activityBody={activityBody}
+        activityType={activityType}
+        followUpDate={followUpDate}
+        lossReason={lossReason}
+        isSaving={saving}
+        onOpenChange={setDetailOpen}
+        onEdit={openEditDialog}
+        onActivityTitleChange={setActivityTitle}
+        onActivityBodyChange={setActivityBody}
+        onActivityTypeChange={setActivityType}
+        onFollowUpDateChange={setFollowUpDate}
+        onLossReasonChange={setLossReason}
+        onAddActivity={() => addActivityMutation.mutate()}
+        onCloseWon={() => closeMutation.mutate({ status: "won" })}
+        onCloseLost={() => closeMutation.mutate({ status: "lost", reason: lossReason })}
+        onReopen={() => closeMutation.mutate({ status: "active" })}
+        onArchive={() => archiveMutation.mutate()}
+      />
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Meta de receita ganha (R$)</Label>
-              <Input
-                inputMode="decimal"
-                placeholder="25000"
-                value={goalForm.wonRevenue}
-                onChange={(event) => setGoalForm((prev) => ({ ...prev, wonRevenue: event.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Meta de negociacoes ganhas</Label>
-              <Input
-                inputMode="numeric"
-                placeholder="8"
-                value={goalForm.wonDeals}
-                onChange={(event) => setGoalForm((prev) => ({ ...prev, wonDeals: event.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Meta de conversao (%)</Label>
-              <Input
-                inputMode="decimal"
-                placeholder="40"
-                value={goalForm.conversionRate}
-                onChange={(event) => setGoalForm((prev) => ({ ...prev, conversionRate: event.target.value }))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setGoalsDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveGoals}>Salvar metas</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open);
-          if (!open) {
-            setEditingLeadId(null);
-            setLeadForm(createEmptyLeadForm(selectedCompetence));
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{isEditing ? "Editar Negociação" : "Nova Negociação"}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Empresa *</Label>
-                <Input
-                  placeholder="Nome da empresa"
-                  value={leadForm.name}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, name: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Valor estimado *</Label>
-                <Input
-                  placeholder="R$ 0,00"
-                  value={leadForm.value}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, value: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Contato</Label>
-                <Input
-                  placeholder="Nome do contato"
-                  value={leadForm.contact}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, contact: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Etapa</Label>
-                <select
-                  className="w-full text-sm bg-background border rounded-lg px-3 py-2 outline-none"
-                  value={leadForm.stage}
-                  onChange={(event) =>
-                    setLeadForm((prev) => ({ ...prev, stage: event.target.value as PipelineStage }))
-                  }
-                >
-                  {stageOrder.map((stage) => (
-                    <option key={stage} value={stage}>
-                      {stage}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>E-mail</Label>
-                <Input
-                  type="email"
-                  placeholder="contato@empresa.com"
-                  value={leadForm.email}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, email: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Telefone</Label>
-                <Input
-                  placeholder="(00) 00000-0000"
-                  value={leadForm.phone}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, phone: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Origem</Label>
-                <Input
-                  placeholder="Site, Indicação, Outbound..."
-                  value={leadForm.source}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, source: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 col-span-2 sm:col-span-1">
-                <Label>Competência</Label>
-                <Input
-                  placeholder="AAAA-MM"
-                  value={leadForm.competence}
-                  onChange={(event) => setLeadForm((prev) => ({ ...prev, competence: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Observacoes</Label>
-              <Textarea
-                placeholder="Contexto da negociação, próximos passos, pontos de atenção..."
-                value={leadForm.notes}
-                onChange={(event) => setLeadForm((prev) => ({ ...prev, notes: event.target.value }))}
-                rows={3}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveLead}>
-              {isEditing ? "Salvar alterações" : "Cadastrar Negociação"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SalesPipelineSettingsDialog
+        open={settingsOpen}
+        canManage={canManageSettings}
+        stages={stages}
+        offers={offers}
+        stageForm={stageForm}
+        offerForm={offerForm}
+        isSaving={saving}
+        onOpenChange={setSettingsOpen}
+        onStageFormChange={setStageForm}
+        onOfferFormChange={setOfferForm}
+        onEditStage={(stage) =>
+          setStageForm({
+            id: stage.id,
+            name: stage.name,
+            position: String(stage.position),
+            color: stage.color,
+            isActive: stage.is_active,
+          })
+        }
+        onEditOffer={(offer) =>
+          setOfferForm({
+            id: offer.id,
+            name: offer.name,
+            category: offer.category,
+            defaultRecurrenceType: offer.defaultRecurrenceType,
+            defaultValue: offer.defaultValue ? String(offer.defaultValue) : "",
+            description: offer.description || "",
+            isActive: offer.isActive,
+          })
+        }
+        onSaveStage={() => saveStageMutation.mutate()}
+        onSaveOffer={() => saveOfferMutation.mutate()}
+      />
     </AppLayout>
   );
 }

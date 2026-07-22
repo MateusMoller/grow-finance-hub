@@ -8,6 +8,9 @@ import {
   disablePushOnCurrentDevice,
   getPushUnsupportedMessage,
   getPushSubscriptionStatus,
+  isPushEnabledByUser,
+  restorePushSubscriptionIfEnabled,
+  sendPushTestToCurrentUser,
   subscribePushOnCurrentDevice,
   syncPushSubscriptionOnServer,
   type PushSubscriptionStatus,
@@ -63,7 +66,7 @@ const filterLabels: Record<NotificationFilter, string> = {
 };
 
 export default function NotificacoesPage() {
-  const { user } = useAuth();
+  const { currentOrganizationId, user } = useAuth();
   const navigate = useNavigate();
   const {
     notifications,
@@ -82,15 +85,23 @@ export default function NotificacoesPage() {
     endpoint: null,
     unsupportedReason: null,
   });
-  const [pushActionLoading, setPushActionLoading] = useState<"enable" | "disable" | null>(null);
+  const [pushActionLoading, setPushActionLoading] = useState<"enable" | "disable" | "test" | null>(null);
 
   const loadPushStatus = useCallback(async () => {
     try {
+      if (user?.id) {
+        try {
+          await restorePushSubscriptionIfEnabled(user.id, currentOrganizationId);
+        } catch {
+          // Mantem a preferencia local ativa; o status abaixo reflete o estado do navegador.
+        }
+      }
+
       const status = await getPushSubscriptionStatus();
       setPushStatus(status);
       if (status.subscribed && user?.id) {
         try {
-          await syncPushSubscriptionOnServer(user.id);
+          await syncPushSubscriptionOnServer(user.id, currentOrganizationId);
         } catch {
           // Mantem o estado local mesmo se a sincronizacao remota falhar.
         }
@@ -98,7 +109,7 @@ export default function NotificacoesPage() {
     } catch {
       setPushStatus((prev) => ({ ...prev, supported: false }));
     }
-  }, [user?.id]);
+  }, [currentOrganizationId, user?.id]);
 
   useEffect(() => {
     void loadPushStatus();
@@ -128,14 +139,18 @@ export default function NotificacoesPage() {
     return notifications.filter((notification) => notification.priority === filter);
   }, [filter, notifications]);
 
+  const pushPreferenceEnabled = isPushEnabledByUser();
+  const pushEnabled = pushStatus.subscribed || (pushStatus.permission === "granted" && pushPreferenceEnabled);
+
   const pushStatusLabel = useMemo(() => {
     if (!pushStatus.supported) return getPushUnsupportedMessage(pushStatus.unsupportedReason);
     if (!pushStatus.hasPublicKey) return "Chave publica VAPID sera carregada ao ativar.";
     if (pushStatus.permission === "denied") return "Permissao bloqueada no navegador.";
     if (pushStatus.permission !== "granted") return "Permissao ainda nao concedida.";
+    if (!pushStatus.subscribed && pushPreferenceEnabled) return "Ativacao salva. O sistema vai tentar sincronizar automaticamente.";
     if (!pushStatus.subscribed) return "Pronto para ativar neste dispositivo.";
     return "Ativo para este dispositivo.";
-  }, [pushStatus]);
+  }, [pushPreferenceEnabled, pushStatus]);
 
   const handleEnablePush = async () => {
     if (!user?.id) {
@@ -145,7 +160,7 @@ export default function NotificacoesPage() {
 
     setPushActionLoading("enable");
     try {
-      await subscribePushOnCurrentDevice(user.id);
+      await subscribePushOnCurrentDevice(user.id, null, currentOrganizationId);
       toast.success("Notificacoes push ativadas neste dispositivo.");
       await loadPushStatus();
     } catch (error) {
@@ -169,6 +184,25 @@ export default function NotificacoesPage() {
       await loadPushStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao desativar push.";
+      toast.error(message);
+    } finally {
+      setPushActionLoading(null);
+    }
+  };
+
+  const handleSendPushTest = async () => {
+    if (!user?.id) {
+      toast.error("Usuario nao autenticado.");
+      return;
+    }
+
+    setPushActionLoading("test");
+    try {
+      await sendPushTestToCurrentUser(user.id);
+      toast.success("Push de teste enviado para este dispositivo.");
+      await loadPushStatus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao enviar push de teste.";
       toast.error(message);
     } finally {
       setPushActionLoading(null);
@@ -226,25 +260,37 @@ export default function NotificacoesPage() {
               <div className="flex items-center gap-2">
                 <Smartphone className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-sm font-medium">Push no dispositivo</h2>
-                <Badge variant={pushStatus.subscribed ? "default" : "outline"} className="h-5 px-2 text-[11px]">
-                  {pushStatus.subscribed ? "Ativo" : "Inativo"}
+                <Badge variant={pushEnabled ? "default" : "outline"} className="h-5 px-2 text-[11px]">
+                  {pushEnabled ? "Ativo" : "Inativo"}
                 </Badge>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">{pushStatusLabel}</p>
             </div>
 
-            <div className="w-full sm:w-auto">
-              {pushStatus.subscribed ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-9 w-full px-4 sm:min-w-32"
-                  onClick={() => void handleDisablePush()}
-                  disabled={pushActionLoading !== null}
-                >
-                  {pushActionLoading === "disable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                  Desativar push
-                </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              {pushEnabled ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 w-full px-4 sm:min-w-28"
+                    onClick={() => void handleSendPushTest()}
+                    disabled={pushActionLoading !== null || !pushStatus.subscribed}
+                  >
+                    {pushActionLoading === "test" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                    Testar push
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 w-full px-4 sm:min-w-32"
+                    onClick={() => void handleDisablePush()}
+                    disabled={pushActionLoading !== null}
+                  >
+                    {pushActionLoading === "disable" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                    Desativar push
+                  </Button>
+                </>
               ) : (
                 <Button
                   size="sm"

@@ -41,6 +41,8 @@ import {
 } from "@/lib/userPermissions";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { restorePushSubscriptionIfEnabled } from "@/lib/pushNotifications";
+import { normalizePwaAppScopePath, syncPwaModeForPath } from "@/lib/pwaScope";
 
 interface QuickLink {
   title: string;
@@ -88,17 +90,33 @@ const showBrowserNotification = async (
 ) => {
   if (!canUseBrowserNotifications() || Notification.permission !== "granted") return;
 
+  const data = {
+    ...(typeof options.data === "object" && options.data !== null ? options.data : {}),
+    url: (options.data as { url?: string } | undefined)?.url || "/app/notificacoes",
+  };
+
   const serviceWorkerRegistration =
     "serviceWorker" in navigator
-      ? await navigator.serviceWorker.getRegistration().catch(() => null)
+      ? await syncPwaModeForPath(window.location.pathname)
+          .then(() => {
+            const scopeUrl = new URL(normalizePwaAppScopePath(), window.location.origin).href;
+            return navigator.serviceWorker.getRegistration(scopeUrl);
+          })
+          .catch(() => null)
       : null;
 
-  if (serviceWorkerRegistration) {
-    await serviceWorkerRegistration.showNotification(title, options);
+  if (serviceWorkerRegistration?.active) {
+    await serviceWorkerRegistration.showNotification(title, {
+      ...options,
+      data,
+    });
     return;
   }
 
-  const notification = new Notification(title, options);
+  const notification = new Notification(title, {
+    ...options,
+    data,
+  });
   notification.onclick = () => {
     window.focus();
     notification.close();
@@ -135,7 +153,7 @@ const buildQuickLinks = (
   });
 };
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, role, roles, signOut, effectiveAccess } = useAuth();
+  const { user, role, roles, signOut, effectiveAccess, currentOrganizationId } = useAuth();
   const {
     selectedCompany,
     selectedCompetence,
@@ -383,6 +401,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
       audioContextRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+
+    const restorePush = async () => {
+      try {
+        await restorePushSubscriptionIfEnabled(user.id, currentOrganizationId);
+      } catch {
+        if (cancelled) return;
+        // A preferencia continua ativa; a tela de notificacoes mostra o erro acionavel.
+      }
+    };
+
+    void restorePush();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganizationId, user?.id]);
 
   useEffect(() => {
     if (!user?.id) {

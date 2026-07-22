@@ -49,13 +49,22 @@ const clientFields: ReportFieldDefinition[] = [
 ];
 
 const leadFields: ReportFieldDefinition[] = [
-  field({ key: "nome", label: "Nome", sourcePath: "site_leads.full_name", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Identificacao" }),
-  field({ key: "empresa", label: "Empresa", sourcePath: "site_leads.company_name", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Identificacao" }),
-  field({ key: "email", label: "E-mail", sourcePath: "site_leads.email", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Contato" }),
-  field({ key: "telefone", label: "Telefone", sourcePath: "site_leads.phone", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Contato" }),
-  field({ key: "origem", label: "Origem", sourcePath: "site_leads.source_tag", dataType: "text", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Origem" }),
-  field({ key: "pagina_origem", label: "Pagina de origem", sourcePath: "site_leads.origin_page", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Origem" }),
-  field({ key: "criado_em", label: "Criado em", sourcePath: "site_leads.created_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Controle" }),
+  field({ key: "oportunidade", label: "Oportunidade", sourcePath: "crm_leads.name", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Identificacao" }),
+  field({ key: "cliente", label: "Cliente vinculado", sourcePath: "crm_leads.client_id", dataType: "text", classification: "sensitive", exportable: true, previewable: true, module: "Leads e Vendas", group: "Identificacao" }),
+  field({ key: "contato", label: "Contato", sourcePath: "crm_leads.contact", dataType: "text", classification: "sensitive", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Contato" }),
+  field({ key: "email", label: "E-mail", sourcePath: "crm_leads.email", dataType: "text", classification: "sensitive", exportable: true, previewable: true, module: "Leads e Vendas", group: "Contato" }),
+  field({ key: "telefone", label: "Telefone", sourcePath: "crm_leads.phone", dataType: "text", classification: "sensitive", exportable: true, previewable: true, module: "Leads e Vendas", group: "Contato" }),
+  field({ key: "tipo_venda", label: "Tipo de venda", sourcePath: "crm_leads.sale_type", dataType: "enum", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "oferta", label: "Oferta", sourcePath: "crm_leads.offer_id", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "oferta_outro", label: "Oferta outro", sourcePath: "crm_leads.other_offer_description", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "valor", label: "Valor estimado", sourcePath: "crm_leads.estimated_value", dataType: "currency", formatter: "currency", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "recorrencia", label: "Recorrencia", sourcePath: "crm_leads.recurrence_type", dataType: "enum", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "etapa", label: "Etapa", sourcePath: "crm_leads.stage", dataType: "enum", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "status", label: "Status", sourcePath: "crm_leads.status", dataType: "enum", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "responsavel", label: "Responsavel", sourcePath: "crm_leads.owner_user_id", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Pipeline" }),
+  field({ key: "origem", label: "Origem", sourcePath: "crm_leads.source", dataType: "text", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Origem" }),
+  field({ key: "previsao_fechamento", label: "Previsao de fechamento", sourcePath: "crm_leads.expected_close_date", dataType: "date", formatter: "date", classification: "internal", exportable: true, previewable: true, module: "Leads e Vendas", group: "Controle" }),
+  field({ key: "criado_em", label: "Criado em", sourcePath: "crm_leads.created_at", dataType: "datetime", formatter: "datetime", classification: "internal", exportable: true, previewable: true, defaultSelected: true, module: "Leads e Vendas", group: "Controle" }),
 ];
 
 const taskFields: ReportFieldDefinition[] = [
@@ -109,9 +118,9 @@ export const reportCatalog = [
   dataset({
     id: "leads_crm",
     name: "Leads e Vendas",
-    description: "Leads capturados e origem comercial com dados de contato permitidos.",
+    description: "Oportunidades comerciais, pipeline, valores, status e dados de contato permitidos.",
     sourceOwner: "Comercial",
-    sourceTablesOrViews: ["site_leads"],
+    sourceTablesOrViews: ["crm_leads", "crm_commercial_offers"],
     defaultFilters: ["organization_id", "company", "competence"],
     requiredFilters: ["organization_id"],
     defaultSort: "created_at_desc",

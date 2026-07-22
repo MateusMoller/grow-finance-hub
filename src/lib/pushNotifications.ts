@@ -26,6 +26,24 @@ export interface PushSubscriptionStatus {
   unsupportedReason: PushUnsupportedReason | null;
 }
 
+const PUSH_ENABLED_PREFERENCE_KEY = "grow-push-enabled";
+
+export const isPushEnabledByUser = () => {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(PUSH_ENABLED_PREFERENCE_KEY) === "true";
+};
+
+const setPushEnabledByUser = (enabled: boolean) => {
+  if (typeof window === "undefined") return;
+
+  if (enabled) {
+    window.localStorage.setItem(PUSH_ENABLED_PREFERENCE_KEY, "true");
+    return;
+  }
+
+  window.localStorage.removeItem(PUSH_ENABLED_PREFERENCE_KEY);
+};
+
 const normalizeConfigValue = (value: unknown) => {
   if (typeof value !== "string") return "";
   const normalized = value.trim().replace(/^['"]|['"]$/g, "");
@@ -242,7 +260,12 @@ const getActiveSubscription = async () => {
   return registration.pushManager.getSubscription();
 };
 
-const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubscription, deviceLabel?: string | null) => {
+const upsertSubscriptionOnServer = async (
+  userId: string,
+  subscription: PushSubscription,
+  deviceLabel?: string | null,
+  organizationId?: string | null,
+) => {
   const payload = subscription.toJSON();
   const endpoint = payload.endpoint || subscription.endpoint;
   const p256dh = payload.keys?.p256dh;
@@ -262,6 +285,7 @@ const upsertSubscriptionOnServer = async (userId: string, subscription: PushSubs
     {
       user_id: userId,
       endpoint,
+      ...(organizationId ? { organization_id: organizationId } : {}),
       p256dh,
       auth,
       expiration_time: expiration,
@@ -320,7 +344,11 @@ export const getPushSubscriptionStatus = async (): Promise<PushSubscriptionStatu
   };
 };
 
-export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?: string | null) => {
+export const subscribePushOnCurrentDevice = async (
+  userId: string,
+  deviceLabel?: string | null,
+  organizationId?: string | null,
+) => {
   try {
     const webPushPublicKey = await resolveWebPushPublicKey();
     const permission = await ensurePermission();
@@ -338,7 +366,8 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
       });
     }
 
-    await upsertSubscriptionOnServer(userId, subscription, deviceLabel);
+    await upsertSubscriptionOnServer(userId, subscription, deviceLabel, organizationId);
+    setPushEnabledByUser(true);
   } catch (error) {
     logPushActivationError("subscribePushOnCurrentDevice", error, {
       path: typeof window !== "undefined" ? window.location.pathname : null,
@@ -353,15 +382,34 @@ export const subscribePushOnCurrentDevice = async (userId: string, deviceLabel?:
   }
 };
 
-export const syncPushSubscriptionOnServer = async (userId: string) => {
+export const syncPushSubscriptionOnServer = async (userId: string, organizationId?: string | null) => {
   const subscription = await getActiveSubscription();
   if (!subscription) return;
-  await upsertSubscriptionOnServer(userId, subscription);
+  await upsertSubscriptionOnServer(userId, subscription, null, organizationId);
+  setPushEnabledByUser(true);
+};
+
+export const restorePushSubscriptionIfEnabled = async (userId: string, organizationId?: string | null) => {
+  if (!isPushEnabledByUser()) return false;
+  if (!isPushSupported()) return false;
+  if (Notification.permission !== "granted") return false;
+
+  const subscription = await getActiveSubscription();
+  if (subscription) {
+    await upsertSubscriptionOnServer(userId, subscription, null, organizationId);
+    return true;
+  }
+
+  await subscribePushOnCurrentDevice(userId, null, organizationId);
+  return true;
 };
 
 export const disablePushOnCurrentDevice = async (userId: string) => {
   const subscription = await getActiveSubscription();
-  if (!subscription) return;
+  if (!subscription) {
+    setPushEnabledByUser(false);
+    return;
+  }
 
   const endpoint = subscription.endpoint;
   await subscription.unsubscribe();
@@ -379,6 +427,8 @@ export const disablePushOnCurrentDevice = async (userId: string) => {
   if (error) {
     throw new Error(error.message || "Falha ao atualizar status da inscricao push.");
   }
+
+  setPushEnabledByUser(false);
 };
 
 const getCurrentAccessToken = async () => {
