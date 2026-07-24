@@ -1,13 +1,24 @@
-import { MessageCircle, MoreVertical, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MessageCircle, MessageSquareText, MoreVertical, Palette, Plus, Search, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { WhatsAppStandardMessage } from "@/components/whatsapp/MessageComposer";
 import {
   bubbleToneLabels,
   chatBackgroundLabels,
@@ -58,6 +69,8 @@ export function ConversationList({
   onChatDensityChange,
   onChatBackgroundChange,
   onBubbleToneChange,
+  standardMessages,
+  onStandardMessagesChange,
 }: {
   conversations: WhatsAppConversationSummary[];
   activeId: string | null;
@@ -71,9 +84,48 @@ export function ConversationList({
   onChatDensityChange: (value: WhatsAppChatDensity) => void;
   onChatBackgroundChange: (value: WhatsAppChatBackground) => void;
   onBubbleToneChange: (value: WhatsAppBubbleTone) => void;
+  standardMessages: WhatsAppStandardMessage[];
+  onStandardMessagesChange: (messages: WhatsAppStandardMessage[]) => void;
 }) {
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [standardMessagesOpen, setStandardMessagesOpen] = useState(false);
+  const [standardMessagesDraft, setStandardMessagesDraft] = useState<WhatsAppStandardMessage[]>(standardMessages);
+
+  useEffect(() => {
+    if (standardMessagesOpen) {
+      setStandardMessagesDraft(standardMessages.length > 0 ? standardMessages : [{ title: "", body: "" }]);
+    }
+  }, [standardMessages, standardMessagesOpen]);
+
+  const saveStandardMessages = () => {
+    onStandardMessagesChange(
+      standardMessagesDraft
+        .map((message) => ({ title: message.title.trim(), body: message.body.trim() }))
+        .filter((message) => message.title && message.body)
+        .slice(0, 10),
+    );
+    setStandardMessagesOpen(false);
+  };
+
+  const updateStandardMessageDraft = (index: number, field: keyof WhatsAppStandardMessage, value: string) => {
+    setStandardMessagesDraft((current) =>
+      current.map((message, messageIndex) => (messageIndex === index ? { ...message, [field]: value } : message)),
+    );
+  };
+
+  const removeStandardMessageDraft = (index: number) => {
+    setStandardMessagesDraft((current) => {
+      const next = current.filter((_, messageIndex) => messageIndex !== index);
+      return next.length > 0 ? next : [{ title: "", body: "" }];
+    });
+  };
+
+  const addStandardMessageDraft = () => {
+    setStandardMessagesDraft((current) => (current.length >= 10 ? current : [...current, { title: "", body: "" }]));
+  };
+
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden border-r border-[#d1d7db] bg-white">
+    <aside className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="border-b border-[#d1d7db] bg-[#f0f2f5] px-3 py-2.5">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-[#111b21]">Conversas</h2>
@@ -87,35 +139,16 @@ export function ConversationList({
                 <MoreVertical className="h-5 w-5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Personalizar chat</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => setCustomizeOpen(true)}>
+                <Palette className="mr-2 h-4 w-4" />
+                Customizar
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Densidade</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={chatDensity} onValueChange={(value) => onChatDensityChange(value as WhatsAppChatDensity)}>
-                {(Object.keys(chatDensityLabels) as WhatsAppChatDensity[]).map((value) => (
-                  <DropdownMenuRadioItem key={value} value={value}>
-                    {chatDensityLabels[value]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Fundo</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={chatBackground} onValueChange={(value) => onChatBackgroundChange(value as WhatsAppChatBackground)}>
-                {(Object.keys(chatBackgroundLabels) as WhatsAppChatBackground[]).map((value) => (
-                  <DropdownMenuRadioItem key={value} value={value}>
-                    {chatBackgroundLabels[value]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Bolhas</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={bubbleTone} onValueChange={(value) => onBubbleToneChange(value as WhatsAppBubbleTone)}>
-                {(Object.keys(bubbleToneLabels) as WhatsAppBubbleTone[]).map((value) => (
-                  <DropdownMenuRadioItem key={value} value={value}>
-                    {bubbleToneLabels[value]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+              <DropdownMenuItem onSelect={() => setStandardMessagesOpen(true)}>
+                <MessageSquareText className="mr-2 h-4 w-4" />
+                Mensagens padrão
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -184,6 +217,134 @@ export function ConversationList({
           })
         )}
       </div>
+      <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Customizar chat</DialogTitle>
+            <DialogDescription>Ajustes visuais aplicados somente à sua visualização do WhatsApp.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">Densidade</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.keys(chatDensityLabels) as WhatsAppChatDensity[]).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onChatDensityChange(value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                      chatDensity === value
+                        ? "border-[#00a884] bg-[#e7f8f1] text-[#005c4b]"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {chatDensityLabels[value]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">Fundo</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(Object.keys(chatBackgroundLabels) as WhatsAppChatBackground[]).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onChatBackgroundChange(value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                      chatBackground === value
+                        ? "border-[#00a884] bg-[#e7f8f1] text-[#005c4b]"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {chatBackgroundLabels[value]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">Bolhas</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(Object.keys(bubbleToneLabels) as WhatsAppBubbleTone[]).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onBubbleToneChange(value)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                      bubbleTone === value
+                        ? "border-[#00a884] bg-[#e7f8f1] text-[#005c4b]"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {bubbleToneLabels[value]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={standardMessagesOpen} onOpenChange={setStandardMessagesOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Mensagens padrão</DialogTitle>
+            <DialogDescription>
+              Configure respostas rápidas com um título curto para o atalho e a mensagem completa para envio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {standardMessagesDraft.map((message, index) => (
+              <div key={`standard-message-${index}`} className="flex items-start gap-2 rounded-2xl border bg-muted/20 p-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Input
+                    value={message.title}
+                    onChange={(event) => updateStandardMessageDraft(index, "title", event.target.value)}
+                    maxLength={28}
+                    placeholder="Título do atalho. Ex: Boas-vindas"
+                    className="h-9 bg-background"
+                  />
+                  <Textarea
+                    value={message.body}
+                    onChange={(event) => updateStandardMessageDraft(index, "body", event.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Mensagem completa. Ex: Olá, recebemos sua solicitação e já estamos verificando."
+                    className="min-h-[5.25rem] resize-none bg-background"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Remover mensagem padrão"
+                  onClick={() => removeStandardMessageDraft(index)}
+                  className="mt-1 shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addStandardMessageDraft}
+              disabled={standardMessagesDraft.length >= 10}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar mensagem
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setStandardMessagesOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={saveStandardMessages}>
+              Salvar mensagens
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }

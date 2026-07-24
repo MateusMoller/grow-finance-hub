@@ -2,20 +2,48 @@ import { buildSupabaseAdminClient, corsHeaders, getAuthenticatedUser, jsonRespon
 import { createWhatsAppEvent, createWhatsAppNotification } from "../_shared/whatsapp-events.ts";
 import { dispatchWhatsAppTextMessage } from "../_shared/whatsapp-provider.ts";
 import { asRecord, asString, errorMessage, isActiveWindowOpen, safePreview } from "../_shared/whatsapp-validation.ts";
+import { createWhatsAppTicketEvent } from "../_shared/whatsapp-ticket/audit.ts";
+import { buildPublicTicketProtocol } from "../_shared/whatsapp-ticket/protocol.ts";
+import { formatTaskCustomerMessage, formatTicketOpeningMessage } from "../_shared/whatsapp-ticket/task-chat.ts";
 
 type SupabaseAdmin = ReturnType<typeof buildSupabaseAdminClient>;
 
-const ticketNumberForTask = (taskId: string) => taskId.replaceAll("-", "").slice(0, 8).toUpperCase();
+type SenderIdentity = {
+  displayName: string;
+  sectorLabel: string;
+};
 
-const ticketCreatedMessage = (task: { id: string; title: string; assignee?: string | null }) => [
-  "*Ticket de atendimento criado*",
-  "",
-  `*Número do ticket:* #${ticketNumberForTask(task.id)}`,
-  `*Título:* ${task.title}`,
-  `*Responsável:* ${asString(task.assignee) || "Equipe Grow"}`,
-  "",
-  "Recebemos sua solicitação e nossa equipe dará continuidade ao atendimento por este ticket.",
-].join("\n");
+const sectorLabelByCode: Record<string, string> = {
+  contabil: "Contábil",
+  fiscal: "Fiscal",
+  departamento_pessoal: "Departamento Pessoal",
+  societario: "Societário",
+  comercial: "Comercial",
+  geral: "Geral",
+  admin: "Administrativo",
+};
+
+const roleLabelByCode: Record<string, string> = {
+  admin: "Administrativo",
+  colaborador: "Equipe Grow",
+  cliente: "Cliente",
+};
+
+const normalizeSectorCode = (value: string | null) =>
+  asString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+const resolveSectorLabel = (sectorCode: string | null, primaryRole: string | null) => {
+  const normalizedSector = normalizeSectorCode(sectorCode);
+  if (normalizedSector) return sectorLabelByCode[normalizedSector] || normalizedSector;
+
+  const normalizedRole = asString(primaryRole).trim().toLowerCase();
+  return roleLabelByCode[normalizedRole] || "Equipe Grow";
+};
 
 const normalizeContextMessages = (value: unknown) => {
   if (!Array.isArray(value)) return [];
@@ -52,19 +80,37 @@ async function loadConversation(supabaseAdmin: SupabaseAdmin, conversationId: st
   return data;
 }
 
-async function loadSenderDisplayName(supabaseAdmin: SupabaseAdmin, userId: string, organizationId: string) {
-  const { data } = await supabaseAdmin
+async function loadSenderIdentity(supabaseAdmin: SupabaseAdmin, userId: string, organizationId: string): Promise<SenderIdentity> {
+  const { data, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select("display_name")
     .eq("user_id", userId)
-    .eq("organization_id", organizationId)
     .maybeSingle();
-  return asString(data?.display_name) || "Equipe Grow";
+  if (profileError) {
+    console.warn("whatsapp sender profile lookup failed", { user_id: userId, message: errorMessage(profileError, "profile_lookup_failed") });
+  }
+
+  const { data: access } = await supabaseAdmin
+    .from("organization_user_access")
+    .select("primary_role, sector_code")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  return {
+    displayName: asString(data?.display_name) || "Equipe Grow",
+    sectorLabel: resolveSectorLabel(asString(access?.sector_code) || null, asString(access?.primary_role) || null),
+  };
 }
 
-const formatOutboundTextForClient = (text: string, senderDisplayName: string) => {
-  const senderLabel = senderDisplayName === "Equipe Grow" ? senderDisplayName : `${senderDisplayName} - Grow`;
-  return `*${senderLabel}:*\n${text}`;
+const formatOutboundTextForClient = (text: string, sender: SenderIdentity) => {
+  return [
+    `*Atendente:* ${sender.displayName}`,
+    `*Setor:* ${sender.sectorLabel}`,
+    "",
+    text,
+  ].join("\n");
 };
 
 async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
@@ -72,12 +118,17 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
   const text = asString(body.body);
   const clientMessageId = asString(body.clientMessageId);
   const replyToProviderMessageId = asString(body.replyToProviderMessageId) || null;
+  const taskId = asString(body.taskId) || null;
+  const ticketId = asString(body.ticketId) || null;
+  const requiresCustomerResponse = body.requiresCustomerResponse === true;
   if (!conversationId || !text || !clientMessageId) throw new Error("invalid_send_payload");
 
   const conversation = await loadConversation(supabaseAdmin, conversationId);
   await assertWhatsAppModuleAccess(supabaseAdmin, userId, conversation.organization_id);
-  const senderDisplayName = await loadSenderDisplayName(supabaseAdmin, userId, conversation.organization_id);
-  const providerText = formatOutboundTextForClient(text, senderDisplayName);
+  const senderIdentity = await loadSenderIdentity(supabaseAdmin, userId, conversation.organization_id);
+  const providerText = taskId
+    ? await formatTaskBoundOutboundText(supabaseAdmin, conversation.organization_id, taskId, ticketId, senderIdentity, text)
+    : formatOutboundTextForClient(text, senderIdentity);
 
   const blockedReason = !isActiveWindowOpen(conversation.active_window_expires_at)
     ? "active_window_closed"
@@ -97,8 +148,8 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
       sender_user_id: userId,
       client_message_id: clientMessageId,
       message_type: "text",
-      body: text,
-      safe_preview: safePreview(text),
+      body: providerText,
+      safe_preview: safePreview(providerText),
       delivery_status: "failed",
       blocked_reason: blockedReason,
       created_at: new Date().toISOString(),
@@ -131,8 +182,8 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
       sender_user_id: userId,
       client_message_id: clientMessageId,
       message_type: "text",
-      body: text,
-      safe_preview: safePreview(text),
+      body: providerText,
+      safe_preview: safePreview(providerText),
       delivery_status: "failed",
       failure_reason: safePreview(failureReason),
       created_at: new Date().toISOString(),
@@ -161,8 +212,8 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
     provider_message_id: providerResult.providerMessageId,
     client_message_id: clientMessageId,
     message_type: "text",
-    body: text,
-    safe_preview: safePreview(text),
+    body: providerText,
+    safe_preview: safePreview(providerText),
     delivery_status: providerResult.deliveryStatus,
     sent_at: now,
     created_at: now,
@@ -174,7 +225,7 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
     status: conversation.status === "open" ? "in_attendance" : conversation.status,
     last_message_id: message.id,
     last_message_at: now,
-    last_message_preview: safePreview(text),
+    last_message_preview: safePreview(providerText),
     last_outbound_at: now,
     updated_at: now,
   }).eq("id", conversation.id);
@@ -186,10 +237,85 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
       event_type: "outbound_sent",
       actor_user_id: userId,
       provider_event_id: providerResult.providerMessageId,
-      details: { sender_display_name: senderDisplayName, reply_to_provider_message_id: replyToProviderMessageId },
+      details: {
+        sender_display_name: senderIdentity.displayName,
+        sender_sector: senderIdentity.sectorLabel,
+        reply_to_provider_message_id: replyToProviderMessageId,
+      },
   });
 
+  if (taskId) {
+    await supabaseAdmin.from("whatsapp_task_message_links").upsert({
+      organization_id: conversation.organization_id,
+      ticket_id: ticketId,
+      task_id: taskId,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      relation_type: "agent_reply",
+      visibility: "customer",
+      route_confidence_percent: 100,
+      created_by_user_id: userId,
+    }, { onConflict: "organization_id,message_id,relation_type,ticket_id" });
+
+    const ticketQuery = supabaseAdmin
+      .from("whatsapp_customer_tickets")
+      .update({
+        status: requiresCustomerResponse ? "waiting_customer" : "open",
+        last_agent_message_at: now,
+        updated_at: now,
+      })
+      .eq("organization_id", conversation.organization_id);
+    if (ticketId) {
+      await ticketQuery.eq("id", ticketId);
+    } else {
+      await ticketQuery.eq("task_id", taskId);
+    }
+  }
+
   return { ok: true, message };
+}
+
+async function formatTaskBoundOutboundText(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  taskId: string,
+  ticketId: string | null,
+  sender: SenderIdentity,
+  text: string,
+) {
+  const { data: task, error: taskError } = await supabaseAdmin
+    .from("kanban_tasks")
+    .select("id, title, organization_id, sector")
+    .eq("id", taskId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (taskError) throw taskError;
+  if (!task) throw new Error("task_not_found");
+
+  const ticketQuery = supabaseAdmin
+    .from("whatsapp_customer_tickets")
+    .select("id, public_protocol")
+    .eq("organization_id", organizationId);
+  const { data: ticket, error: ticketError } = ticketId
+    ? await ticketQuery.eq("id", ticketId).maybeSingle()
+    : await ticketQuery.eq("task_id", taskId).maybeSingle();
+  if (ticketError) throw ticketError;
+
+  const taskSectorLabel = resolveSectorLabel(asString(task.sector) || null, null);
+  const senderForTask = {
+    ...sender,
+    sectorLabel: ["Administrativo", "Equipe Grow"].includes(sender.sectorLabel)
+      ? taskSectorLabel
+      : sender.sectorLabel,
+  };
+
+  return formatTaskCustomerMessage({
+    ticketProtocol: asString(ticket?.public_protocol) || taskId.replaceAll("-", "").slice(0, 8).toUpperCase(),
+    taskTitle: asString(task.title) || "Tarefa",
+    attendantName: senderForTask.displayName,
+    attendantSector: senderForTask.sectorLabel,
+    message: text,
+  });
 }
 
 async function linkClient(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
@@ -283,6 +409,8 @@ async function changeStatus(supabaseAdmin: SupabaseAdmin, userId: string, body: 
 
 async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const conversationId = asString(body.conversationId);
+  const mode = asString(body.mode) === "continue" ? "continue" : "create";
+  const existingTaskId = asString(body.existingTaskId) || null;
   const title = asString(body.title).trim();
   const description = asString(body.description).trim();
   const sector = asString(body.sector) || "Geral";
@@ -290,18 +418,134 @@ async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, bod
   const clientMessageId = asString(body.clientMessageId);
   const contextMessages = normalizeContextMessages(body.contextMessages);
   const contextDescription = formatContextMessagesForTask(contextMessages);
-  if (!conversationId || !title || !clientMessageId) throw new Error("invalid_quick_task_payload");
+  if (!conversationId || !clientMessageId) throw new Error("invalid_quick_task_payload");
+  if (mode === "create" && !title) throw new Error("invalid_quick_task_payload");
+  if (mode === "continue" && (!existingTaskId || contextMessages.length === 0)) throw new Error("invalid_continue_task_payload");
 
   const conversation = await loadConversation(supabaseAdmin, conversationId);
   await assertWhatsAppModuleAccess(supabaseAdmin, userId, conversation.organization_id);
+  if (!conversation.client_id) throw new Error("client_link_required_for_ticket");
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("display_name")
     .eq("user_id", userId)
-    .eq("organization_id", conversation.organization_id)
     .maybeSingle();
   const assigneeName = asString(profile?.display_name) || "Equipe Grow";
+
+  if (mode === "continue") {
+    const { data: client, error: clientError } = await supabaseAdmin
+      .from("clients")
+      .select("id, name")
+      .eq("id", conversation.client_id)
+      .eq("organization_id", conversation.organization_id)
+      .maybeSingle();
+    if (clientError) throw clientError;
+    if (!client) throw new Error("client_not_found");
+
+    const { data: task, error: taskError } = await supabaseAdmin
+      .from("kanban_tasks")
+      .select("id, title, client_name, description, assigned_to_user_id, assignee, status")
+      .eq("id", existingTaskId)
+      .eq("organization_id", conversation.organization_id)
+      .not("status", "in", '("done","archived")')
+      .maybeSingle();
+    if (taskError) throw taskError;
+    if (!task) throw new Error("active_task_not_found");
+    if (asString(task.client_name) !== asString(client.name)) throw new Error("task_client_mismatch");
+
+    const publicProtocol = buildPublicTicketProtocol({
+      openedAt: new Date(),
+      sequence: 0,
+      suffix: task.id.replaceAll("-", "").slice(0, 6),
+    });
+    const { data: ticket, error: ticketError } = await supabaseAdmin
+      .from("whatsapp_customer_tickets")
+      .upsert({
+        organization_id: conversation.organization_id,
+        client_id: conversation.client_id,
+        contact_id: conversation.contact_id,
+        conversation_id: conversation.id,
+        task_id: task.id,
+        public_protocol: publicProtocol,
+        title: task.title,
+        status: "open",
+        responsible_user_id: task.assigned_to_user_id,
+        responsible_name: asString(task.assignee) || assigneeName,
+        opened_by_user_id: userId,
+        metadata: {
+          source: "continued_from_whatsapp",
+          continue_task_client_message_id: clientMessageId,
+          context_message_ids: contextMessages.map((message) => message.id),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "organization_id,task_id" })
+      .select("id, public_protocol")
+      .single();
+    if (ticketError) throw ticketError;
+
+    for (const contextMessage of contextMessages) {
+      await supabaseAdmin.from("whatsapp_task_message_links").upsert({
+        organization_id: conversation.organization_id,
+        ticket_id: ticket.id,
+        task_id: task.id,
+        conversation_id: conversation.id,
+        message_id: contextMessage.id,
+        relation_type: "context",
+        visibility: "customer",
+        route_source: null,
+        route_confidence_percent: 100,
+        created_by_user_id: userId,
+      }, { onConflict: "organization_id,message_id,relation_type,ticket_id" });
+    }
+
+    const addition = contextDescription ? `\n\nContexto adicional do WhatsApp:\n${contextDescription}` : "";
+    if (addition) {
+      await supabaseAdmin
+        .from("kanban_tasks")
+        .update({
+          description: `${asString(task.description)}${addition}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", task.id)
+        .eq("organization_id", conversation.organization_id);
+    }
+
+    await createWhatsAppTicketEvent(supabaseAdmin, {
+      organizationId: conversation.organization_id,
+      ticketId: ticket.id,
+      taskId: task.id,
+      conversationId: conversation.id,
+      actorUserId: userId,
+      eventType: "task_context_added_from_whatsapp",
+      details: {
+        public_protocol: ticket.public_protocol,
+        context_message_ids: contextMessages.map((message) => message.id),
+      },
+      idempotencyKey: `${conversation.organization_id}:continue-task-context:${task.id}:${clientMessageId}`,
+    });
+
+    const { error: auditError } = await supabaseAdmin.rpc("record_operational_audit_log", {
+      _organization_id: conversation.organization_id,
+      _action: "Contexto WhatsApp adicionado à tarefa",
+      _entity_type: "task",
+      _entity_id: task.id,
+      _result: "success",
+      _metadata: {
+        details: task.title,
+        source: "whatsapp",
+        conversation_id: conversation.id,
+        context_message_ids: contextMessages.map((message) => message.id),
+      },
+      _client_id: null,
+      _request_id: null,
+    });
+    if (auditError) {
+      console.warn("whatsapp continue task audit failed", { message: errorMessage(auditError, "audit_failed"), task_id: task.id });
+    }
+
+    return { ok: true, mode: "continue", task, ticket, contextAdded: true };
+  }
 
   const descriptionParts = [
     description || null,
@@ -379,18 +623,84 @@ async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, bod
     console.warn("whatsapp quick task audit failed", { message: errorMessage(auditError, "audit_failed"), task_id: task.id });
   }
 
-  const confirmation = ticketCreatedMessage(task);
+  const publicProtocol = buildPublicTicketProtocol({
+    openedAt: new Date(),
+    sequence: 0,
+    suffix: task.id.replaceAll("-", "").slice(0, 6),
+  });
+  const { data: ticket, error: ticketError } = await supabaseAdmin
+    .from("whatsapp_customer_tickets")
+    .upsert({
+      organization_id: conversation.organization_id,
+      client_id: conversation.client_id,
+      contact_id: conversation.contact_id,
+      conversation_id: conversation.id,
+      task_id: task.id,
+      public_protocol: publicProtocol,
+      title: task.title,
+      status: "open",
+      responsible_user_id: task.assigned_to_user_id,
+      responsible_name: asString(task.assignee) || assigneeName,
+      opened_by_user_id: userId,
+      metadata: {
+        source: "quick_task",
+        quick_task_client_message_id: clientMessageId,
+        context_message_ids: contextMessages.map((message) => message.id),
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "organization_id,task_id" })
+    .select("id, public_protocol")
+    .single();
+  if (ticketError) throw ticketError;
+
+  for (const contextMessage of contextMessages) {
+    await supabaseAdmin.from("whatsapp_task_message_links").upsert({
+      organization_id: conversation.organization_id,
+      ticket_id: ticket.id,
+      task_id: task.id,
+      conversation_id: conversation.id,
+      message_id: contextMessage.id,
+      relation_type: "context",
+      visibility: "customer",
+      route_source: null,
+      route_confidence_percent: 100,
+      created_by_user_id: userId,
+    }, { onConflict: "organization_id,message_id,relation_type,ticket_id" });
+  }
+
+  await createWhatsAppTicketEvent(supabaseAdmin, {
+    organizationId: conversation.organization_id,
+    ticketId: ticket.id,
+    taskId: task.id,
+    conversationId: conversation.id,
+    actorUserId: userId,
+    eventType: "ticket_created_from_quick_task",
+    details: {
+      public_protocol: ticket.public_protocol,
+      context_message_ids: contextMessages.map((message) => message.id),
+    },
+    idempotencyKey: `${conversation.organization_id}:quick-task-ticket:${task.id}`,
+  });
+
+  const confirmation = formatTicketOpeningMessage({
+    ticketProtocol: ticket.public_protocol,
+    taskTitle: task.title,
+    responsibleName: asString(task.assignee) || assigneeName,
+  });
   try {
-    await sendText(supabaseAdmin, userId, {
+    const sendResult = await sendText(supabaseAdmin, userId, {
       conversationId: conversation.id,
       body: confirmation,
       clientMessageId,
+      taskId: task.id,
+      ticketId: ticket.id,
     });
-    return { ok: true, task, confirmationSent: true, confirmationError: null };
+    return { ok: true, task, ticket, message: sendResult.message, confirmationSent: true, confirmationError: null };
   } catch (error) {
     return {
       ok: true,
       task,
+      ticket,
       confirmationSent: false,
       confirmationError: error instanceof Error ? error.message : "ticket_confirmation_failed",
     };

@@ -60,6 +60,12 @@ import {
 } from "@/lib/fileUploadSecurity";
 import { recordOperationalAuditLog } from "@/lib/operationalAudit";
 import { buildPortalDataQueryKey, resolveSelectedPortalClient } from "@/lib/portalClientScope";
+import {
+  mergePortalRequestTypesWithDefaults,
+  normalizePortalRequestType,
+  portalRequestTypesTable,
+  type PortalRequestType,
+} from "@/lib/portalRequestTypes";
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
@@ -119,312 +125,7 @@ const normalizeLooseToken = (value: string) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-interface PortalGuidedField {
-  name: string;
-  label: string;
-  type: "text" | "email" | "date" | "select" | "textarea";
-  required?: boolean;
-  options?: string[];
-  placeholder?: string;
-}
-
-interface PortalGuidedReason {
-  key: string;
-  label: string;
-  sector: string;
-  description: string;
-  defaultTitle: string;
-  fields: PortalGuidedField[];
-}
-
 const DEFAULT_REQUEST_SECTOR = sectorOptions.includes("Geral") ? "Geral" : sectorOptions[0];
-
-const guidedReasonsBySector: Record<string, PortalGuidedReason[]> = {
-  departamento_pessoal: [
-    {
-      key: "folha_pagamento",
-      label: "Folha de pagamento",
-      sector: "Departamento Pessoal",
-      description: "Use quando precisar tratar fechamento, conferencia ou ajustes da folha.",
-      defaultTitle: "Folha de pagamento",
-      fields: [
-        { name: "competencia", label: "Competência", type: "text", required: true, placeholder: "Ex.: 04/2026" },
-        {
-          name: "solicitacao_folha",
-          label: "O que precisa nesta folha",
-          type: "select",
-          required: true,
-          options: ["Conferência", "Inclusão de variáveis", "Ajuste", "Envio de informações"],
-        },
-        {
-          name: "observacao_folha",
-          label: "Ponto principal",
-          type: "textarea",
-          placeholder: "Informe os eventos, colaboradores ou pontos que precisam de atencao.",
-        },
-      ],
-    },
-    {
-      key: "admissao",
-      label: "Admissao",
-      sector: "Departamento Pessoal",
-      description: "Fluxo para admissao de colaborador com dados iniciais e documentacao.",
-      defaultTitle: "Admissao de colaborador",
-      fields: [
-        { name: "nome_colaborador", label: "Nome do colaborador", type: "text", required: true },
-        { name: "data_inicio", label: "Data de inicio", type: "date", required: true },
-        { name: "cargo", label: "Cargo", type: "text", required: true },
-        { name: "salario", label: "Salario", type: "text", placeholder: "Ex.: R$ 2.500,00" },
-      ],
-    },
-    {
-      key: "demissao",
-      label: "Demissao",
-      sector: "Departamento Pessoal",
-      description: "Fluxo para desligamento com dados base para calculo rescisorio.",
-      defaultTitle: "Demissao de colaborador",
-      fields: [
-        { name: "nome_desligamento", label: "Nome do colaborador", type: "text", required: true },
-        { name: "data_desligamento", label: "Data do desligamento", type: "date", required: true },
-        {
-          name: "tipo_aviso",
-          label: "Tipo de aviso",
-          type: "select",
-          required: true,
-          options: ["Trabalhado", "Indenizado", "Sem aviso"],
-        },
-        { name: "motivo_desligamento", label: "Motivo", type: "text", placeholder: "Ex.: Pedido do colaborador" },
-      ],
-    },
-    {
-      key: "ferias",
-      label: "Ferias",
-      sector: "Departamento Pessoal",
-      description: "Solicite programacao, alteracao ou conferencia de ferias.",
-      defaultTitle: "Solicitacao de ferias",
-      fields: [
-        { name: "colaborador_ferias", label: "Colaborador", type: "text", required: true },
-        { name: "inicio_ferias", label: "Inicio das ferias", type: "date", required: true },
-        { name: "dias_ferias", label: "Quantidade de dias", type: "text", required: true, placeholder: "Ex.: 30" },
-        { name: "observacao_ferias", label: "Observacoes", type: "textarea", placeholder: "Divisao de periodos, abono, urgencia, etc." },
-      ],
-    },
-    {
-      key: "beneficios",
-      label: "Beneficios e pro-labore",
-      sector: "Departamento Pessoal",
-      description: "Centralize ajustes relacionados a beneficios, pro-labore e rotinas recorrentes do time.",
-      defaultTitle: "Ajuste de beneficios ou pro-labore",
-      fields: [
-        {
-          name: "tipo_beneficio",
-          label: "Assunto principal",
-          type: "select",
-          required: true,
-          options: ["Beneficios", "Pro-labore", "Vale transporte", "Vale refeicao", "Outro"],
-        },
-        { name: "pessoas_envolvidas", label: "Colaboradores ou socios envolvidos", type: "textarea", required: true },
-      ],
-    },
-  ],
-  fiscal: [
-    {
-      key: "guias_impostos",
-      label: "Guias e impostos",
-      sector: "Fiscal",
-      description: "Para dúvidas, revisões e regularizações ligadas a impostos e obrigações fiscais.",
-      defaultTitle: "Guias e impostos",
-      fields: [
-        { name: "competencia_fiscal", label: "Competência", type: "text", placeholder: "Ex.: 04/2026" },
-        {
-          name: "tipo_demanda_fiscal",
-          label: "Tipo de demanda",
-          type: "select",
-          required: true,
-          options: ["Apuracao", "Guia em atraso", "Reenvio de guia", "Regularizacao", "Duvida fiscal"],
-        },
-        { name: "detalhe_fiscal", label: "Detalhe da solicitacao", type: "textarea", required: true },
-      ],
-    },
-    {
-      key: "nota_fiscal",
-      label: "Notas fiscais",
-      sector: "Fiscal",
-      description: "Use para emissao, cancelamento, correcao ou duvidas sobre notas fiscais.",
-      defaultTitle: "Solicitacao sobre nota fiscal",
-      fields: [
-        {
-          name: "tipo_nota",
-          label: "Assunto da nota",
-          type: "select",
-          required: true,
-          options: ["Emissao", "Cancelamento", "Carta de correcao", "Tributacao", "Outro"],
-        },
-        { name: "numero_nota", label: "Numero da nota (se houver)", type: "text" },
-        { name: "detalhe_nota", label: "Contexto", type: "textarea", required: true },
-      ],
-    },
-    {
-      key: "certidao_fiscal",
-      label: "Certidoes e regularidade",
-      sector: "Fiscal",
-      description: "Solicite certidões, conferências de regularidade ou apoio em pendências fiscais.",
-      defaultTitle: "Certidoes e regularidade fiscal",
-      fields: [
-        {
-          name: "tipo_certidao",
-          label: "Necessidade",
-          type: "select",
-          required: true,
-          options: ["Emissao de certidao", "Consulta de pendencia", "Regularizacao", "Outro"],
-        },
-        { name: "uso_certidao", label: "Finalidade", type: "text", placeholder: "Ex.: licitacao, banco, cadastro" },
-      ],
-    },
-  ],
-  contabil: [
-    {
-      key: "fechamento_contabil",
-      label: "Fechamento contabil",
-      sector: "Contabil",
-      description: "Use para fechamento mensal, ajustes contabilisticos e alinhamentos de lancamentos.",
-      defaultTitle: "Fechamento contabil",
-      fields: [
-        { name: "competencia_contabil", label: "Competência", type: "text", required: true },
-        {
-          name: "tipo_rotina_contabil",
-          label: "Etapa",
-          type: "select",
-          required: true,
-          options: ["Fechamento", "Ajuste de lancamentos", "Balancete", "DRE", "Outro"],
-        },
-        { name: "detalhe_contabil", label: "Detalhe", type: "textarea", required: true },
-      ],
-    },
-    {
-      key: "balancete_relatorio",
-      label: "Balancete e relatórios",
-      sector: "Contabil",
-      description: "Solicite demonstrações, relatórios ou leituras contábeis específicas.",
-      defaultTitle: "Balancete ou relatorio contabil",
-      fields: [
-        {
-          name: "tipo_relatorio_contabil",
-          label: "Relatorio desejado",
-          type: "select",
-          required: true,
-          options: ["Balancete", "DRE", "Razao", "Livro diario", "Outro"],
-        },
-        { name: "periodo_contabil", label: "Periodo", type: "text", placeholder: "Ex.: Jan a Mar/2026" },
-      ],
-    },
-  ],
-  societario: [
-    {
-      key: "alteracao_contratual",
-      label: "Alteracao contratual",
-      sector: "Societario",
-      description: "Fluxo para alteracoes societarias, cadastrais e de quadro societario.",
-      defaultTitle: "Alteracao contratual",
-      fields: [
-        {
-          name: "tipo_alteracao",
-          label: "Tipo de alteracao",
-          type: "select",
-          required: true,
-          options: ["Endereco", "Atividade", "Capital social", "Entrada/Saida de socio", "Outro"],
-        },
-        { name: "resumo_alteracao", label: "Resumo do pedido", type: "textarea", required: true },
-      ],
-    },
-    {
-      key: "certificado_licenca",
-      label: "Certificado, licenca ou cadastro",
-      sector: "Societario",
-      description: "Use para certificados digitais, licencas e cadastros ligados a regularidade da empresa.",
-      defaultTitle: "Certificado, licenca ou cadastro",
-      fields: [
-        {
-          name: "tipo_documento_societario",
-          label: "Assunto",
-          type: "select",
-          required: true,
-          options: ["Certificado digital", "Licenca", "Inscricao", "Cadastro", "Outro"],
-        },
-        { name: "detalhe_societario", label: "Detalhe", type: "textarea", required: true },
-      ],
-    },
-  ],
-  comercial: [
-    {
-      key: "proposta_ou_plano",
-      label: "Proposta, plano ou escopo",
-      sector: "Comercial",
-      description: "Use para falar de proposta comercial, ajuste de escopo ou revisão de plano.",
-      defaultTitle: "Proposta, plano ou escopo",
-      fields: [
-        {
-          name: "assunto_comercial",
-          label: "Assunto",
-          type: "select",
-          required: true,
-          options: ["Nova proposta", "Revisao de plano", "Aditivo de escopo", "Duvida comercial"],
-        },
-        { name: "detalhe_comercial", label: "Contexto", type: "textarea", required: true },
-      ],
-    },
-  ],
-  geral: [
-    {
-      key: "acesso_portal",
-      label: "Acesso ao portal",
-      sector: "Geral",
-      description: "Use para suporte de acesso, permissao, senha ou navegacao no portal.",
-      defaultTitle: "Suporte de acesso ao portal",
-      fields: [
-        {
-          name: "tipo_suporte_portal",
-          label: "Tipo de suporte",
-          type: "select",
-          required: true,
-          options: ["Login", "Senha", "Permissao", "Erro na tela", "Duvida de uso"],
-        },
-        { name: "detalhe_portal", label: "O que aconteceu", type: "textarea", required: true },
-      ],
-    },
-    {
-      key: "atualizacao_cadastral",
-      label: "Atualizacao cadastral",
-      sector: "Geral",
-      description: "Use para atualizar contatos, email, responsaveis e dados basicos do cadastro.",
-      defaultTitle: "Atualizacao cadastral",
-      fields: [
-        { name: "dados_para_atualizar", label: "Quais dados precisam ser atualizados", type: "textarea", required: true },
-      ],
-    },
-    {
-      key: "outro_assunto",
-      label: "Outro assunto",
-      sector: "Geral",
-      description: "Se o pedido não encaixar nas categorias acima, use este caminho e detalhe o contexto.",
-      defaultTitle: "Solicitacao geral",
-      fields: [
-        {
-          name: "objetivo_solicitacao",
-          label: "Objetivo principal",
-          type: "textarea",
-          required: true,
-          placeholder: "Explique o que precisa e como a equipe pode ajudar.",
-        },
-      ],
-    },
-  ],
-};
-
-const getGuidedReasonsForSector = (sector: string) =>
-  guidedReasonsBySector[normalizeLooseToken(sector)] || guidedReasonsBySector[normalizeLooseToken(DEFAULT_REQUEST_SECTOR)] || [];
-
-const getDefaultReasonKey = (sector: string) => getGuidedReasonsForSector(sector)[0]?.key || "";
 
 const isEcontinuoDocument = (document: PortalClientDocument) => {
   const categoryToken = normalizeLooseToken(document.category || "");
@@ -479,25 +180,6 @@ const toActionFromTask = (task: PortalClientTask): PortalActionItem => ({
   requestId: task.request_id,
 });
 
-type PortalRequestEntryMode = "freeform" | "support";
-
-const portalRequestShortcuts = [
-  {
-    label: "Admissao",
-    hint: "Novo colaborador",
-    sector: "Departamento Pessoal",
-    reasonKey: "admissao",
-    title: "Admissao de colaborador",
-  },
-  {
-    label: "Demissao",
-    hint: "Encerramento de vinculo",
-    sector: "Departamento Pessoal",
-    reasonKey: "demissao",
-    title: "Demissao de colaborador",
-  },
-] as const;
-
 export default function PortalClientePage() {
   const { user, session, loading: authLoading, signOut, effectiveAccess } = useAuth();
   const navigate = useNavigate();
@@ -518,12 +200,11 @@ export default function PortalClientePage() {
   const [messages, setMessages] = useState<PortalRequestMessage[]>([]);
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState<string>("all");
-  const [requestEntryMode, setRequestEntryMode] = useState<PortalRequestEntryMode>("freeform");
-
   const [newRequestSector, setNewRequestSector] = useState(DEFAULT_REQUEST_SECTOR);
-  const [newRequestReasonKey, setNewRequestReasonKey] = useState(getDefaultReasonKey(DEFAULT_REQUEST_SECTOR));
   const [newRequestTitle, setNewRequestTitle] = useState("");
   const [newRequestDescription, setNewRequestDescription] = useState("");
+  const [selectedRequestTypeId, setSelectedRequestTypeId] = useState<string | null>(null);
+  const [requestTypeFieldValues, setRequestTypeFieldValues] = useState<Record<string, string>>({});
   const [newRequestFiles, setNewRequestFiles] = useState<File[]>([]);
   const [creatingRequest, setCreatingRequest] = useState(false);
   const requestFilesInputRef = useRef<HTMLInputElement>(null);
@@ -539,8 +220,6 @@ export default function PortalClientePage() {
   const [selectedRequest, setSelectedRequest] = useState<PortalClientRequest | null>(null);
   const [requestDetailOpen, setRequestDetailOpen] = useState(false);
 
-  const [requestFieldValues, setRequestFieldValues] = useState<Record<string, string>>({});
-
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -549,6 +228,42 @@ export default function PortalClientePage() {
   const [changingPortalPassword, setChangingPortalPassword] = useState(false);
   const knownPortalTaskIdsRef = useRef<Set<string>>(new Set());
   const ensuredPortalProfileRef = useRef<string | null>(null);
+
+  const requestTypesQuery = useQuery({
+    queryKey: ["portal-request-types", clientProfile?.organization_id || effectiveAccess?.organizationId || "global"],
+    queryFn: async () => {
+      const organizationId = clientProfile?.organization_id || effectiveAccess?.organizationId || null;
+      let query = portalRequestTypesTable()
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("title", { ascending: true });
+
+      if (organizationId) {
+        query = query.or(`organization_id.is.null,organization_id.eq.${organizationId}`);
+      } else {
+        query = query.is("organization_id", null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return asArray<unknown>(data)
+        .map(normalizePortalRequestType)
+        .filter((item): item is PortalRequestType => Boolean(item));
+    },
+    enabled: Boolean(user),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const portalRequestTypes = useMemo(
+    () => mergePortalRequestTypesWithDefaults(requestTypesQuery.data || []),
+    [requestTypesQuery.data],
+  );
+
+  const selectedRequestType = useMemo(
+    () => portalRequestTypes.find((item) => item.id === selectedRequestTypeId) || null,
+    [portalRequestTypes, selectedRequestTypeId],
+  );
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -1068,36 +783,13 @@ export default function PortalClientePage() {
     setRequestDetailOpen(true);
   }, [requests]);
 
-
-  const availableReasons = useMemo(() => getGuidedReasonsForSector(newRequestSector), [newRequestSector]);
-
-  const selectedRequestReason = useMemo(
-    () => availableReasons.find((reason) => reason.key === newRequestReasonKey) || availableReasons[0] || null,
-    [availableReasons, newRequestReasonKey]
-  );
-
-  const activeStructuredFields = useMemo(
-    () => selectedRequestReason?.fields || [],
-    [selectedRequestReason],
-  );
-  const completedStructuredFieldCount = useMemo(
-    () => activeStructuredFields.filter((field) => requestFieldValues[field.name]?.trim()).length,
-    [activeStructuredFields, requestFieldValues],
-  );
-
-  useEffect(() => {
-    if (!availableReasons.some((reason) => reason.key === newRequestReasonKey)) {
-      setNewRequestReasonKey(getDefaultReasonKey(newRequestSector));
-    }
-  }, [availableReasons, newRequestReasonKey, newRequestSector]);
-
   const resetNewRequestForm = () => {
     setNewRequestSector(DEFAULT_REQUEST_SECTOR);
-    setNewRequestReasonKey(getDefaultReasonKey(DEFAULT_REQUEST_SECTOR));
     setNewRequestTitle("");
     setNewRequestDescription("");
+    setSelectedRequestTypeId(null);
+    setRequestTypeFieldValues({});
     setNewRequestFiles([]);
-    setRequestFieldValues({});
     if (requestFilesInputRef.current) requestFilesInputRef.current.value = "";
   };
 
@@ -1107,46 +799,41 @@ export default function PortalClientePage() {
     }, 60);
   }, []);
 
-  const openRequestsHub = (mode: PortalRequestEntryMode = "freeform") => {
+  const openRequestsHub = (mode?: string) => {
+    void mode;
     setActiveTab("requests");
-    setRequestEntryMode(mode);
     focusRequestComposer();
   };
 
   const prepareInlineRequest = (
     preset?: { sector?: string; reasonKey?: string; title?: string; description?: string },
-    mode: PortalRequestEntryMode = "freeform",
+    mode?: string,
   ) => {
     openRequestsHub(mode);
-    setRequestFieldValues({});
 
     const nextSector =
       preset?.sector && sectorOptions.includes(preset.sector) ? preset.sector : newRequestSector || DEFAULT_REQUEST_SECTOR;
-    const sectorReasons = getGuidedReasonsForSector(nextSector);
-    const nextReasonKey =
-      preset?.reasonKey && sectorReasons.some((reason) => reason.key === preset.reasonKey)
-        ? preset.reasonKey
-        : sectorReasons[0]?.key || "";
 
     setNewRequestSector(nextSector);
-    setNewRequestReasonKey(nextReasonKey);
     if (preset?.title) setNewRequestTitle(preset.title);
     if (preset?.description) setNewRequestDescription(preset.description);
   };
 
   const handleRequestSectorChange = (value: string) => {
-    setRequestFieldValues({});
     setNewRequestSector(value);
-    setNewRequestReasonKey(getDefaultReasonKey(value));
   };
 
-  const handleRequestReasonChange = (value: string) => {
-    const reason = availableReasons.find((item) => item.key === value);
-    setRequestFieldValues({});
-    setNewRequestReasonKey(value);
-    if (reason && !newRequestTitle.trim()) {
-      setNewRequestTitle(reason.defaultTitle);
-    }
+  const handleRequestTypeSelect = (requestType: PortalRequestType) => {
+    setSelectedRequestTypeId(requestType.id);
+    setNewRequestSector(requestType.sector || DEFAULT_REQUEST_SECTOR);
+    setNewRequestTitle(requestType.task_title_template || requestType.title);
+    setNewRequestDescription(requestType.task_description_template || "");
+    setRequestTypeFieldValues({});
+    requestComposerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleRequestTypeFieldChange = (fieldId: string, value: string) => {
+    setRequestTypeFieldValues((prev) => ({ ...prev, [fieldId]: value }));
   };
 
   const handleRequestFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1213,34 +900,22 @@ export default function PortalClientePage() {
     return { success, failed };
   };
 
-  const buildStructuredLines = (fields: PortalGuidedField[]) =>
-    fields
-      .map((field) => {
-        const value = requestFieldValues[field.name]?.trim();
-        if (!value) return null;
-        return `${field.label}: ${value}`;
-      })
-      .filter(Boolean) as string[];
-
   const buildRequestDescription = () => {
-    const sections: string[] = [];
+    const description = newRequestDescription.trim();
+    const fieldLines = selectedRequestType?.form_fields
+      .map((field) => {
+        const value = (requestTypeFieldValues[field.id] || "").trim();
+        return value ? `${field.label}: ${value}` : null;
+      })
+      .filter(Boolean) || [];
 
-    if (selectedRequestReason?.description) {
-      sections.push(selectedRequestReason.description);
-    }
+    const sections = [
+      selectedRequestType ? `Tipo de solicitação: ${selectedRequestType.title}` : null,
+      description || null,
+      fieldLines.length > 0 ? ["Dados adicionais:", ...fieldLines].join("\n") : null,
+    ].filter(Boolean);
 
-    if (activeStructuredFields.length > 0) {
-      const lines = buildStructuredLines(activeStructuredFields);
-      if (lines.length > 0) {
-        sections.push(lines.join("\n"));
-      }
-    }
-
-    if (newRequestDescription.trim()) {
-      sections.push(`Contexto adicional:\n${newRequestDescription.trim()}`);
-    }
-
-    return sections.filter(Boolean).join("\n\n") || null;
+    return sections.length > 0 ? sections.join("\n\n") : null;
   };
 
   const handleCreateRequest = async () => {
@@ -1253,22 +928,24 @@ export default function PortalClientePage() {
       toast.error("Selecione o setor responsavel.");
       return;
     }
-    if (!selectedRequestReason) {
-      toast.error("Selecione o motivo da solicitacao.");
-      return;
-    }
     if (!newRequestTitle.trim()) {
       toast.error("Informe o título da solicitação.");
       return;
     }
-
-    const missingRequired = activeStructuredFields.find((field) => field.required && !requestFieldValues[field.name]?.trim());
-    if (missingRequired) {
-      toast.error(`Preencha o campo obrigatorio: ${missingRequired.label}`);
+    if (!newRequestDescription.trim()) {
+      toast.error("Descreva o que precisa ser feito.");
+      return;
+    }
+    const missingRequiredField = selectedRequestType?.form_fields.find(
+      (field) => field.required && !(requestTypeFieldValues[field.id] || "").trim(),
+    );
+    if (missingRequiredField) {
+      toast.error(`Preencha o campo obrigatório: ${missingRequiredField.label}.`);
       return;
     }
 
     setCreatingRequest(true);
+    const requestCategory = selectedRequestType?.title || "Tarefa generica";
     const { data: createdRequest, error } = await supabase
       .from("client_requests")
       .insert({
@@ -1277,7 +954,7 @@ export default function PortalClientePage() {
         organization_id: clientProfile.organization_id,
         title: newRequestTitle.trim(),
         description: buildRequestDescription(),
-        category: selectedRequestReason?.label || "Solicitacao",
+        category: requestCategory,
         sector: newRequestSector,
       })
       .select("id")
@@ -1292,7 +969,7 @@ export default function PortalClientePage() {
     const uploadResult = await uploadFilesToRequest(
       createdRequest.id,
       newRequestFiles,
-      `Solicitacao - ${selectedRequestReason?.label || "Geral"}`
+      requestCategory
     );
 
     setCreatingRequest(false);
@@ -1307,7 +984,8 @@ export default function PortalClientePage() {
       metadata: {
         title: newRequestTitle.trim(),
         sector: newRequestSector,
-        category: selectedRequestReason?.label || "Solicitacao",
+        category: requestCategory,
+        requestTypeId: selectedRequestTypeId,
         files: uploadResult.success,
       },
     });
@@ -1321,7 +999,6 @@ export default function PortalClientePage() {
     }
 
     setActiveTab("requests");
-    setRequestEntryMode("freeform");
     await refetchPortalData();
   };
 
@@ -1445,10 +1122,6 @@ export default function PortalClientePage() {
 
   const handleDownloadObligationDocument = async (document: PortalObligationDocument) =>
     handleDownloadStoredFile(document.storage_bucket, document.storage_path);
-
-  const handleRequestFieldValueChange = (fieldName: string, value: string) => {
-    setRequestFieldValues((prev) => ({ ...prev, [fieldName]: value }));
-  };
 
   const handlePortalPasswordChange = async () => {
     const accountEmail = user?.email?.trim().toLowerCase();
@@ -1629,17 +1302,12 @@ export default function PortalClientePage() {
           <TabsContent value="requests" className="space-y-4">
             <div className="mx-auto max-w-6xl space-y-4">
               <Card className="overflow-hidden border-primary/10 shadow-sm">
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="text-base">Nova solicitacao</CardTitle>
-                        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-                          {requestEntryMode === "support" ? "Atendimento por setor" : "Fluxo guiado"}
-                        </Badge>
-                      </div>
-                      <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                        Escolha o setor, refine o motivo e envie apenas o contexto que ajuda a equipe a agir com rapidez.
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">Nova tarefa</CardTitle>
+                      <p className="max-w-2xl text-sm text-muted-foreground">
+                        Abra uma tarefa simples para a equipe acompanhar pelo portal.
                       </p>
                     </div>
                     <Button
@@ -1653,40 +1321,36 @@ export default function PortalClientePage() {
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-5 pt-0">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                <CardContent className="space-y-4 pt-0">
+                  <div className="rounded-2xl border bg-muted/20 p-3">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Atalhos
+                      Tipos de solicitação
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {portalRequestShortcuts.map((shortcut) => (
-                        <Button
-                          key={shortcut.label}
-                          type="button"
-                          variant="outline"
-                          className="h-auto shrink-0 justify-start rounded-2xl border bg-background px-3 py-3 text-left transition-transform hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background"
-                          onClick={() =>
-                            prepareInlineRequest(
-                              {
-                                sector: shortcut.sector,
-                                reasonKey: shortcut.reasonKey,
-                                title: shortcut.title,
-                              },
-                              "support",
-                            )
-                          }
-                        >
-                          <div className="space-y-0.5">
-                            <div className="text-sm font-medium">{shortcut.label}</div>
-                            <div className="text-xs text-muted-foreground">{shortcut.hint}</div>
-                          </div>
-                        </Button>
-                      ))}
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {portalRequestTypes.map((requestType) => {
+                        const selected = selectedRequestTypeId === requestType.id;
+                        return (
+                          <button
+                            key={requestType.id}
+                            type="button"
+                            className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                              selected
+                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                                : "border-border bg-white text-foreground hover:border-primary/40 hover:bg-primary/5"
+                            }`}
+                            onClick={() => handleRequestTypeSelect(requestType)}
+                          >
+                            {requestType.title}
+                          </button>
+                        );
+                      })}
                     </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Escolha uma opção para preencher o formulário com campos direcionados, ou envie uma tarefa genérica.
+                    </p>
                   </div>
-
-                  <div ref={requestComposerRef} className="rounded-[1.6rem] border bg-white p-4 sm:p-5">
+                  <div ref={requestComposerRef} className="rounded-2xl border bg-white p-4 shadow-sm sm:p-5">
                     <div className="space-y-4">
                         <div className="grid gap-3 md:grid-cols-2">
                           <div className="space-y-1.5">
@@ -1706,113 +1370,80 @@ export default function PortalClientePage() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <label htmlFor="portal-request-reason" className="text-sm font-medium">Motivo da solicitacao</label>
-                            <Select value={selectedRequestReason?.key || ""} onValueChange={handleRequestReasonChange}>
-                              <SelectTrigger id="portal-request-reason" className="bg-background">
-                                <SelectValue placeholder="Selecione o motivo" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableReasons.map((reason) => (
-                                  <SelectItem key={reason.key} value={reason.key}>
-                                    {reason.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-1.5 md:col-span-2">
-                            <label htmlFor="portal-request-title" className="text-sm font-medium">Assunto</label>
+                            <label htmlFor="portal-request-title" className="text-sm font-medium">Titulo da tarefa</label>
                             <Input
                               id="portal-request-title"
                               name="portal_request_title"
                               autoComplete="off"
                               value={newRequestTitle}
                               onChange={(event) => setNewRequestTitle(event.target.value)}
-                              placeholder={selectedRequestReason?.defaultTitle || "Ex.: Revisao da folha do mes"}
+                              placeholder="Ex.: Revisar documentos enviados"
                             />
                           </div>
                         </div>
 
-                        {activeStructuredFields.length > 0 ? (
-                          <div className="space-y-3 rounded-2xl border bg-white p-4">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">Campos do pedido</p>
-                              <p className="text-xs leading-relaxed text-muted-foreground">
-                                O portal mostra apenas os dados que realmente ajudam a equipe a entender este motivo.
-                              </p>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                              {activeStructuredFields.map((field) => (
-                                <div
-                                  key={field.name}
-                                  className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
-                                >
-                                  <label htmlFor={`portal-field-${field.name}`} className="text-sm font-medium">
-                                    {field.label}
-                                    {field.required ? <span className="ml-1 text-destructive">*</span> : null}
-                                  </label>
-                                  {field.type === "select" ? (
-                                    <Select
-                                      value={requestFieldValues[field.name] || ""}
-                                      onValueChange={(value) => handleRequestFieldValueChange(field.name, value)}
-                                    >
-                                      <SelectTrigger id={`portal-field-${field.name}`} className="bg-background">
-                                        <SelectValue placeholder="Selecione…" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {(field.options || []).map((option) => (
-                                          <SelectItem key={option} value={option}>
-                                            {option}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : field.type === "textarea" ? (
-                                    <Textarea
-                                      id={`portal-field-${field.name}`}
-                                      name={field.name}
-                                      rows={4}
-                                      autoComplete="off"
-                                      value={requestFieldValues[field.name] || ""}
-                                      onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
-                                      placeholder={field.placeholder}
-                                    />
-                                  ) : (
-                                    <Input
-                                      id={`portal-field-${field.name}`}
-                                      name={field.name}
-                                      autoComplete={field.type === "email" ? "email" : "off"}
-                                      spellCheck={field.type === "email" ? false : undefined}
-                                      type={field.type === "date" ? "date" : field.type === "email" ? "email" : "text"}
-                                      value={requestFieldValues[field.name] || ""}
-                                      onChange={(event) => handleRequestFieldValueChange(field.name, event.target.value)}
-                                      placeholder={field.placeholder}
-                                    />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="space-y-1.5 rounded-2xl border bg-white p-4">
-                          <label htmlFor="portal-request-description" className="text-sm font-medium">Contexto adicional</label>
+                        <div className="space-y-1.5">
+                          <label htmlFor="portal-request-description" className="text-sm font-medium">Descricao da tarefa</label>
                           <Textarea
                             id="portal-request-description"
                             name="portal_request_description"
-                            rows={6}
+                            rows={5}
                             autoComplete="off"
                             value={newRequestDescription}
                             onChange={(event) => setNewRequestDescription(event.target.value)}
-                            placeholder="Descreva prazo, urgencia, observacoes ou qualquer detalhe que ajude a equipe."
+                            placeholder="Descreva o contexto, o resultado esperado e qualquer prazo relevante."
                           />
                         </div>
+
+                        {selectedRequestType && selectedRequestType.form_fields.length > 0 && (
+                          <div className="rounded-2xl border bg-muted/20 p-4">
+                            <div className="mb-3">
+                              <p className="text-sm font-medium">Dados de {selectedRequestType.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Campos configurados no módulo interno de solicitações.
+                              </p>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                              {selectedRequestType.form_fields.map((field) => {
+                                const fieldValue = requestTypeFieldValues[field.id] || "";
+                                const commonProps = {
+                                  id: `portal-request-type-field-${field.id}`,
+                                  value: fieldValue,
+                                  onChange: (
+                                    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+                                  ) => handleRequestTypeFieldChange(field.id, event.target.value),
+                                };
+
+                                return (
+                                  <div
+                                    key={field.id}
+                                    className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
+                                  >
+                                    <label
+                                      htmlFor={`portal-request-type-field-${field.id}`}
+                                      className="text-sm font-medium"
+                                    >
+                                      {field.label}
+                                      {field.required ? <span className="text-destructive"> *</span> : null}
+                                    </label>
+                                    {field.type === "textarea" ? (
+                                      <Textarea {...commonProps} rows={3} />
+                                    ) : (
+                                      <Input
+                                        {...commonProps}
+                                        type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="mt-4 space-y-3 rounded-2xl border bg-white p-4">
+                    <div className="mt-5 space-y-3 rounded-2xl border bg-muted/20 p-4">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-medium">Arquivos</p>
@@ -1874,7 +1505,7 @@ export default function PortalClientePage() {
 
                     <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm leading-relaxed text-muted-foreground">
-                        O pedido entra no historico do portal com status, mensagens e documentos vinculados.
+                        A tarefa entra no historico do portal com status, mensagens e documentos vinculados.
                       </p>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <Button
@@ -1895,7 +1526,7 @@ export default function PortalClientePage() {
                           disabled={creatingRequest}
                         >
                           {creatingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                          Enviar solicitacao
+                          Enviar tarefa
                         </Button>
                       </div>
                     </div>

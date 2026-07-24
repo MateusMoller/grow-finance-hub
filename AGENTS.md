@@ -62,5 +62,5 @@ Adaptacao ao Grow Finance Hub:
 
 <!-- SPECKIT START -->
 Current Spec Kit feature plan:
-`specs/009-sales-pipeline/plan.md`
+`specs/010-whatsapp-ticket-automation/plan.md`
 <!-- SPECKIT END -->

@@ -115,6 +115,7 @@ export const clientDataCategories = [
     fields: [
       { name: "possui_pro_labore", label: "Possui Pro-labore" },
       { name: "possui_funcionarios", label: "Possui Funcionarios" },
+      { name: "senha_seguro_desemprego", label: "Senha do seguro desemprego" },
       { name: "possui_variaveis", label: "Possui Variaveis" },
       { name: "possui_inss", label: "Possui INSS" },
       { name: "possui_fgts", label: "Possui FGTS" },

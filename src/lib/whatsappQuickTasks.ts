@@ -3,6 +3,7 @@ import { throwDetailedFunctionError } from "@/lib/whatsappFunctionErrors";
 
 export type WhatsAppQuickTaskInput = {
   organizationId: string;
+  mode?: "create" | "continue";
   title: string;
   description?: string | null;
   clientName?: string | null;
@@ -12,6 +13,7 @@ export type WhatsAppQuickTaskInput = {
   conversationId: string;
   contactPhone?: string | null;
   clientMessageId: string;
+  existingTaskId?: string | null;
   contextMessages?: Array<{
     id: string;
     direction: "inbound" | "outbound";
@@ -28,6 +30,7 @@ export async function createWhatsAppQuickTask(input: WhatsAppQuickTaskInput) {
   const { data, error } = await supabase.functions.invoke("whatsapp-send-message", {
     body: {
       action: "create_quick_task",
+      mode: input.mode || "create",
       conversationId: input.conversationId,
       title,
       description: input.description || "",
@@ -35,6 +38,7 @@ export async function createWhatsAppQuickTask(input: WhatsAppQuickTaskInput) {
       priority: input.priority,
       clientName: input.clientName || null,
       clientMessageId: input.clientMessageId,
+      existingTaskId: input.existingTaskId || null,
       contextMessages: input.contextMessages || [],
     },
   });

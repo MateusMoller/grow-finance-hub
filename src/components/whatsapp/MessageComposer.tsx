@@ -24,10 +24,17 @@ const WHATSAPP_ATTACHMENT_ACCEPT = [
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ].join(",");
 
+export type WhatsAppStandardMessage = {
+  title: string;
+  body: string;
+};
+
 export function MessageComposer({
   conversation,
   sending,
   compact = false,
+  disabledReasonOverride,
+  standardMessages = [],
   replyReference,
   onSendText,
   onSendFile,
@@ -36,6 +43,8 @@ export function MessageComposer({
   conversation: WhatsAppConversationSummary | null;
   sending: boolean;
   compact?: boolean;
+  disabledReasonOverride?: string | null;
+  standardMessages?: WhatsAppStandardMessage[];
   replyReference: WhatsAppReplyReference | null;
   onSendText: (text: string, replyReference: WhatsAppReplyReference | null) => Promise<void>;
   onSendFile: (file: File) => Promise<void>;
@@ -45,18 +54,23 @@ export function MessageComposer({
   const [fileError, setFileError] = useState<string | null>(null);
   const windowActive = isWhatsAppWindowActive(conversation?.active_window_expires_at);
   const disabledReason = useMemo(() => {
+    if (disabledReasonOverride) return disabledReasonOverride;
     if (!conversation) return "Selecione uma conversa para responder.";
     if (!windowActive) return "Janela de atendimento fechada. Envio livre bloqueado no v1.";
     return null;
-  }, [conversation, windowActive]);
+  }, [conversation, disabledReasonOverride, windowActive]);
+
+  const sendValue = async (rawValue: string) => {
+    const value = rawValue.trim();
+    if (!value || disabledReason || sending) return;
+    setText("");
+    await onSendText(value, replyReference);
+    onClearReplyReference();
+  };
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
-    const value = text.trim();
-    if (!value || disabledReason || sending) return;
-    await onSendText(value, replyReference);
-    setText("");
-    onClearReplyReference();
+    await sendValue(text);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -100,6 +114,22 @@ export function MessageComposer({
         )}
       </div>
       <div className="mx-auto max-w-[58rem]">
+        {standardMessages.length > 0 && !disabledReason && (
+          <div className="mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
+            {standardMessages.map((message, index) => (
+              <button
+                key={`${message.title}-${index}`}
+                type="button"
+                title={message.body}
+                onClick={() => void sendValue(message.body)}
+                disabled={sending}
+                className="max-w-[16rem] shrink-0 truncate rounded-full bg-white px-3 py-1.5 text-xs font-medium text-[#54656f] shadow-sm ring-1 ring-black/5 transition hover:bg-[#e7f8f1] hover:text-[#005c4b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a884]/35"
+              >
+                {message.title}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2 rounded-[1.65rem] bg-white px-2 py-1.5 shadow-sm ring-1 ring-black/5 transition focus-within:ring-[#00a884]/35">
           <label className={`inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full text-[#54656f] transition hover:bg-[#f0f2f5] hover:text-[#111b21] ${compact ? "h-9 w-9" : "h-10 w-10"}`}>
             <Paperclip className="h-5 w-5" />

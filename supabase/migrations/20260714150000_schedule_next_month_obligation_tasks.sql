@@ -139,13 +139,18 @@ BEGIN
       template.name AS template_name,
       template.sector,
       client.name AS client_name
-    FROM public.obligation_instances instance
+    FROM (
+      SELECT * FROM instance_rows
+      UNION ALL
+      SELECT existing_instance.*
+      FROM public.obligation_instances existing_instance
+      WHERE existing_instance.competence_key = to_char(target_month, 'YYYY-MM')
+        AND existing_instance.organization_id IS NOT NULL
+    ) instance
     JOIN public.obligation_templates template
       ON template.id = instance.template_id
     JOIN public.clients client
       ON client.id = instance.client_id
-    WHERE instance.competence_key = to_char(target_month, 'YYYY-MM')
-      AND instance.organization_id IS NOT NULL
   ),
   task_rows AS (
     INSERT INTO public.kanban_tasks (

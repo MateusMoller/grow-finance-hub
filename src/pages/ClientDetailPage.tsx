@@ -185,6 +185,7 @@ const cadastroFiscalFields = [
 const cadastroDpFields = [
   { name: "possui_pro_labore", label: "Possui Pro-labore" },
   { name: "possui_funcionarios", label: "Possui Funcionários" },
+  { name: "senha_seguro_desemprego", label: "Senha do seguro desemprego" },
   { name: "possui_variaveis", label: "Possui Variaveis" },
   { name: "possui_inss", label: "Possui INSS" },
   { name: "possui_fgts", label: "Possui FGTS" },
@@ -214,6 +215,7 @@ const cadastroDpSindicatoFields = [
 const cadastroDpClinicaParceiraFieldNames = new Set(cadastroDpClinicaParceiraFields.map((field) => field.name));
 const cadastroDpSindicatoFieldNames = new Set(cadastroDpSindicatoFields.map((field) => field.name));
 const cadastroDpEmployeeDependentFieldNames = new Set([
+  "senha_seguro_desemprego",
   "possui_fgts",
   "possui_adiantamento_salarial",
   "envia_folha_ponto",
@@ -2354,6 +2356,7 @@ export default function ClientDetailPage() {
       const rule = getFieldRule(category, field.name);
       const fieldError = dataFieldErrors[key];
       const isYesNoField = rule?.type === "yesNo";
+      const isPasswordField = field.name === "senha_seguro_desemprego";
       const inputMode = isCadastroClientesDddField(category, field.name)
         ? "numeric"
         : rule?.type === "integer" || rule?.type === "number" || rule?.type === "percent"
@@ -2382,7 +2385,8 @@ export default function ClientDetailPage() {
               value={dataEntries[key] || ""}
               onChange={(event) => handleDataFieldChange(category, field.name, event.target.value)}
               inputMode={inputMode}
-              type={rule?.type === "date" ? "date" : "text"}
+              type={isPasswordField ? "password" : rule?.type === "date" ? "date" : "text"}
+              autoComplete={isPasswordField ? "new-password" : undefined}
               placeholder={getFieldPlaceholder(rule, field.name, category)}
               maxLength={getFieldMaxLength(rule, field.name, category)}
               className={`h-9 ${fieldError ? "border-destructive focus-visible:ring-destructive/30" : ""}`}

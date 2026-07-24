@@ -11,6 +11,8 @@ export interface NormalizedWhatsAppMessage {
   fileName: string | null;
   sizeBytes: number | null;
   timestamp: string;
+  interactiveReplyId: string | null;
+  interactiveReplyTitle: string | null;
 }
 
 export const normalizeInboundMessage = (payload: unknown): NormalizedWhatsAppMessage | null => {
@@ -35,6 +37,11 @@ export const normalizeInboundMessage = (payload: unknown): NormalizedWhatsAppMes
   const audio = asRecord(message.audio);
   const video = asRecord(message.video);
   const document = asRecord(message.document);
+  const interactive = asRecord(message.interactive);
+  const buttonReply = asRecord(interactive.button_reply);
+  const listReply = asRecord(interactive.list_reply);
+  const interactiveReplyId = asString(buttonReply.id || listReply.id) || null;
+  const interactiveReplyTitle = asString(buttonReply.title || listReply.title) || null;
   const media = type === "image"
     ? image
     : type === "audio"
@@ -56,14 +63,16 @@ export const normalizeInboundMessage = (payload: unknown): NormalizedWhatsAppMes
     providerMediaId: asString(media.id) || null,
     fromPhone: normalizePhone(message.from || root.from || contacts.wa_id),
     displayName: asString(profile.name || root.display_name) || null,
-    body: asString(text.body || media.caption || root.body || ""),
-    messageType,
+    body: asString(text.body || media.caption || interactiveReplyTitle || root.body || ""),
+    messageType: interactiveReplyId ? "text" : messageType,
     contentType: asString(media.mime_type) || null,
     fileName: asString(media.filename) || null,
     sizeBytes: media.file_size ? Number(media.file_size) : null,
     timestamp: Number.isFinite(timestampSeconds) && timestampSeconds > 0
       ? new Date(timestampSeconds * 1000).toISOString()
       : new Date().toISOString(),
+    interactiveReplyId,
+    interactiveReplyTitle,
   };
 };
 
@@ -240,6 +249,21 @@ export async function dispatchWhatsAppTextMessage(args: {
     return messagePayload;
   });
 
+  const messageId = providerMessageId(payload);
+  if (!messageId) throw new Error("whatsapp_provider_missing_message_id");
+
+  return {
+    providerMessageId: messageId,
+    deliveryStatus: "sent" as const,
+  };
+}
+
+export async function dispatchWhatsAppInteractiveMessage(args: {
+  toPhone: string;
+  payloadForPhone: (phone: string) => Record<string, unknown>;
+}) {
+  const config = loadProviderConfig();
+  const payload = await postProviderMessageWithRecipientFallback(config.phoneNumberId, args.toPhone, args.payloadForPhone);
   const messageId = providerMessageId(payload);
   if (!messageId) throw new Error("whatsapp_provider_missing_message_id");
 

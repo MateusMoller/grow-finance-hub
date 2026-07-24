@@ -31,11 +31,22 @@ export type WhatsAppClientLinkOption = {
 };
 
 export type WhatsAppQuickTaskDraft = {
+  mode: "create" | "continue";
   title: string;
   description: string;
   sector: string;
   priority: string;
+  existingTaskId: string | null;
   contextMessages: WhatsAppQuickTaskContextMessage[];
+};
+
+export type WhatsAppExistingTaskOption = {
+  id: string;
+  title: string;
+  status: string;
+  sector: string;
+  priority: string;
+  updatedAt: string;
 };
 
 export type WhatsAppQuickTaskContextMessage = {
@@ -93,6 +104,7 @@ export function ConversationHeader({
   onLinkClient,
   onCreateQuickTask,
   activeClients,
+  existingTasks,
   clientLinking,
   quickTaskCreating,
 }: {
@@ -101,6 +113,7 @@ export function ConversationHeader({
   onLinkClient?: (clientId: string) => void;
   onCreateQuickTask?: (draft: WhatsAppQuickTaskDraft) => void;
   activeClients: WhatsAppClientLinkOption[];
+  existingTasks: WhatsAppExistingTaskOption[];
   clientLinking?: boolean;
   quickTaskCreating?: boolean;
 }) {
@@ -109,10 +122,12 @@ export function ConversationHeader({
   const [clientSearch, setClientSearch] = useState("");
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [quickTask, setQuickTask] = useState<WhatsAppQuickTaskDraft>({
+    mode: "create",
     title: "",
     description: "",
     sector: "Geral",
     priority: "Média",
+    existingTaskId: null,
     contextMessages: [],
   });
   const normalizedClientSearch = clientSearch.trim().toLowerCase();
@@ -155,14 +170,17 @@ export function ConversationHeader({
     }));
   };
   const submitQuickTask = () => {
-    if (!quickTask.title.trim()) return;
+    if (quickTask.mode === "create" && !quickTask.title.trim()) return;
+    if (quickTask.mode === "continue" && (!quickTask.existingTaskId || quickTask.contextMessages.length === 0)) return;
     onCreateQuickTask?.(quickTask);
     setQuickTaskOpen(false);
     setQuickTask({
+      mode: "create",
       title: "",
       description: "",
       sector: "Geral",
       priority: "Média",
+      existingTaskId: null,
       contextMessages: [],
     });
   };
@@ -256,10 +274,55 @@ export function ConversationHeader({
       <Dialog open={quickTaskOpen} onOpenChange={setQuickTaskOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Criar tarefa rápida</DialogTitle>
+            <DialogTitle>Tarefa do atendimento</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  quickTask.mode === "create" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"
+                }`}
+                onClick={() => setQuickTask((current) => ({ ...current, mode: "create", existingTaskId: null }))}
+              >
+                Criar nova tarefa
+              </button>
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  quickTask.mode === "continue" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"
+                }`}
+                onClick={() => setQuickTask((current) => ({ ...current, mode: "continue", title: "", existingTaskId: current.existingTaskId || existingTasks[0]?.id || null }))}
+              >
+                Continuar tarefa existente
+              </button>
+            </div>
+            {quickTask.mode === "continue" ? (
+              <div className="grid gap-2">
+                <Label>Tarefa existente</Label>
+                <Select
+                  value={quickTask.existingTaskId || ""}
+                  onValueChange={(existingTaskId) => setQuickTask((current) => ({ ...current, existingTaskId }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma tarefa ativa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {existingTasks.map((task) => (
+                      <SelectItem key={task.id} value={task.id}>
+                        {task.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {existingTasks.length === 0 ? (
+                  <p className="rounded-lg border border-dashed px-3 py-4 text-sm text-slate-500">
+                    Nenhuma tarefa ativa encontrada para este cliente.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className={`grid gap-2 ${quickTask.mode === "continue" ? "hidden" : ""}`}>
               <Label htmlFor="whatsapp-quick-task-title">Título</Label>
               <Input
                 id="whatsapp-quick-task-title"
@@ -268,7 +331,7 @@ export function ConversationHeader({
                 placeholder="Ex: Retornar contato do cliente"
               />
             </div>
-            <div className="grid gap-2">
+            <div className={`grid gap-2 ${quickTask.mode === "continue" ? "hidden" : ""}`}>
               <Label htmlFor="whatsapp-quick-task-description">Descrição</Label>
               <Textarea
                 id="whatsapp-quick-task-description"
@@ -338,7 +401,7 @@ export function ConversationHeader({
                 Selecione manualmente as mensagens que explicam o contexto da tarefa.
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className={`grid gap-3 sm:grid-cols-2 ${quickTask.mode === "continue" ? "hidden" : ""}`}>
               <div className="grid gap-2">
                 <Label>Setor</Label>
                 <Select value={quickTask.sector} onValueChange={(sector) => setQuickTask((current) => ({ ...current, sector }))}>
@@ -371,15 +434,24 @@ export function ConversationHeader({
               </div>
             </div>
             <p className="text-xs text-slate-500">
-              A tarefa será criada em A Fazer e vinculada ao cliente da conversa quando houver cliente associado.
+              {quickTask.mode === "create"
+                ? "A tarefa será criada em A Fazer e vinculada ao cliente da conversa quando houver cliente associado."
+                : "As mensagens selecionadas serão adicionadas como novo contexto da tarefa escolhida, sem alterar o fluxo ou status atual."}
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setQuickTaskOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={submitQuickTask} disabled={!quickTask.title.trim() || quickTaskCreating}>
-              {quickTaskCreating ? "Criando..." : "Criar tarefa"}
+            <Button
+              onClick={submitQuickTask}
+              disabled={
+                quickTaskCreating ||
+                (quickTask.mode === "create" && !quickTask.title.trim()) ||
+                (quickTask.mode === "continue" && (!quickTask.existingTaskId || quickTask.contextMessages.length === 0))
+              }
+            >
+              {quickTaskCreating ? "Salvando..." : quickTask.mode === "create" ? "Criar tarefa" : "Adicionar contexto"}
             </Button>
           </DialogFooter>
         </DialogContent>

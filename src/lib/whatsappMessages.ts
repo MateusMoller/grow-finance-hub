@@ -36,6 +36,7 @@ export async function listWhatsAppMessages(conversationId: string, page = 0, pag
       sent_at,
       received_at,
       created_at,
+      metadata,
       attachments:whatsapp_conversation_attachments(id, file_name, content_type, size_bytes, status, failure_reason, storage_path)
     `)
     .eq("conversation_id", conversationId)
@@ -51,6 +52,9 @@ export async function sendWhatsAppTextMessage(
   body: string,
   clientMessageId: string,
   replyToProviderMessageId?: string | null,
+  taskId?: string | null,
+  ticketId?: string | null,
+  requiresCustomerResponse?: boolean,
 ) {
   const { data, error } = await db.functions.invoke("whatsapp-send-message", {
     body: {
@@ -59,6 +63,9 @@ export async function sendWhatsAppTextMessage(
       body,
       clientMessageId,
       replyToProviderMessageId,
+      taskId,
+      ticketId,
+      requiresCustomerResponse,
     },
   });
   if (error) await throwDetailedFunctionError(error);

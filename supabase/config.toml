@@ -76,6 +76,12 @@ verify_jwt = true
 [functions.whatsapp-media]
 verify_jwt = true
 
+[functions.whatsapp-ticket-actions]
+verify_jwt = true
+
+[functions.whatsapp-ticket-automations]
+verify_jwt = false
+
 [functions.open-finance-module]
 verify_jwt = false
 

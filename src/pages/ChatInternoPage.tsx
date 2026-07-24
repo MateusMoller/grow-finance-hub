@@ -15,6 +15,7 @@ import {
   Building2,
   ChevronDown,
   Check,
+  CheckCheck,
   ClipboardList,
   Download,
   FileText,
@@ -50,6 +51,27 @@ type ChatDensity = "compact" | "comfortable";
 type ChatBackground = "grid" | "plain" | "soft";
 type ChatBubbleTone = "green" | "blue" | "slate";
 type ReferencePickerType = "task" | "client";
+
+interface InternalChatReadRow {
+  message_id: string;
+  user_id: string;
+  read_at: string;
+}
+
+interface InternalChatReadSummary {
+  readCount: number;
+  lastReadAt: string | null;
+}
+
+type UntypedQueryBuilder<T = unknown> = PromiseLike<{ data: T | null; error: Error | null }> & {
+  select: (columns: string) => UntypedQueryBuilder<T>;
+  insert: (values: unknown, options?: Record<string, unknown>) => UntypedQueryBuilder<T>;
+  in: (column: string, values: unknown[]) => UntypedQueryBuilder<T>;
+};
+
+const untypedSupabase = supabase as unknown as {
+  from: <T = unknown>(table: string) => UntypedQueryBuilder<T>;
+};
 
 interface InternalMessage extends InternalChatMessageRow {
   profile?: ProfileRow | null;
@@ -156,6 +178,12 @@ const initialsFromName = (name: string) => {
 const isHiddenSystemUser = (name: string | null | undefined) => {
   const normalized = (name || "").trim().toLowerCase();
   return normalized.startsWith("grow docume") || normalized.startsWith("grow bot");
+};
+
+const formatReadStatus = (summary: InternalChatReadSummary | undefined) => {
+  if (!summary || summary.readCount === 0) return "Enviada";
+  if (summary.readCount === 1) return "Lida";
+  return `Lida por ${summary.readCount}`;
 };
 
 const isInternalChatReplyData = (value: unknown): value is InternalChatReplyData => {
@@ -433,6 +461,7 @@ function ChatReplyPreview({
 export default function ChatInternoPage() {
   const { user, role, roles, currentOrganizationId, effectiveAccess, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<InternalMessage[]>([]);
+  const [readStatusByMessageId, setReadStatusByMessageId] = useState<Record<string, InternalChatReadSummary>>({});
   const [contacts, setContacts] = useState<InternalUser[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [loadingContacts, setLoadingContacts] = useState(true);
@@ -460,6 +489,7 @@ export default function ChatInternoPage() {
   );
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const sendInFlightRef = useRef(false);
   const {
     summaries: conversationSummaries,
@@ -579,6 +609,52 @@ export default function ChatInternoPage() {
     }
 
     const rows = (data || []) as InternalChatMessageRow[];
+    const messageIds = rows.map((row) => row.id);
+    let readRows: InternalChatReadRow[] = [];
+
+    if (messageIds.length > 0) {
+      const { data: reads, error: readsError } = await untypedSupabase
+        .from<InternalChatReadRow[]>("internal_chat_message_reads")
+        .select("message_id, user_id, read_at")
+        .in("message_id", messageIds);
+
+      if (!readsError) {
+        readRows = reads || [];
+      }
+    }
+
+    const nextReadStatus: Record<string, InternalChatReadSummary> = {};
+    readRows.forEach((read) => {
+      if (read.user_id === user.id) return;
+      const current = nextReadStatus[read.message_id];
+      if (!current) {
+        nextReadStatus[read.message_id] = { readCount: 1, lastReadAt: read.read_at };
+        return;
+      }
+
+      current.readCount += 1;
+      if (!current.lastReadAt || read.read_at > current.lastReadAt) {
+        current.lastReadAt = read.read_at;
+      }
+    });
+
+    setReadStatusByMessageId(nextReadStatus);
+
+    const unreadReceivedRows = rows.filter((row) => row.user_id !== user.id);
+    if (unreadReceivedRows.length > 0) {
+      void untypedSupabase
+        .from("internal_chat_message_reads")
+        .insert(
+          unreadReceivedRows.map((row) => ({
+            organization_id: row.organization_id,
+            message_id: row.id,
+            user_id: user.id,
+            read_at: new Date().toISOString(),
+          })),
+          { ignoreDuplicates: true },
+        );
+    }
+
     const userIds = Array.from(
       new Set(
         rows
@@ -639,6 +715,17 @@ export default function ChatInternoPage() {
           event: "INSERT",
           schema: "public",
           table: "internal_chat_messages",
+        },
+        () => {
+          void fetchMessages();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "internal_chat_message_reads",
         },
         () => {
           void fetchMessages();
@@ -829,6 +916,9 @@ export default function ChatInternoPage() {
     setSelectedReply(null);
     setSelectedReference(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    window.setTimeout(() => {
+      messageInputRef.current?.focus();
+    }, 0);
     void fetchMessages();
     void refreshConversationSummaries();
   };
@@ -1368,6 +1458,18 @@ export default function ChatInternoPage() {
                               {message.content}
                             </p>
                           )}
+                          {isOwn ? (
+                            <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+                              <CheckCheck
+                                className={`h-3.5 w-3.5 ${
+                                  (readStatusByMessageId[message.id]?.readCount || 0) > 0
+                                    ? "text-[#00a884]"
+                                    : "text-muted-foreground"
+                                }`}
+                              />
+                              <span>{formatReadStatus(readStatusByMessageId[message.id])}</span>
+                            </div>
+                          ) : null}
                         </div>
                       </motion.div>
                     );
@@ -1460,6 +1562,7 @@ export default function ChatInternoPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Textarea
+                  ref={messageInputRef}
                   rows={1}
                   value={newMessage}
                   onChange={(event) => setNewMessage(event.target.value)}

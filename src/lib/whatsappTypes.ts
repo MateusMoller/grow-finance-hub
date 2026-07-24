@@ -83,6 +83,24 @@ export interface WhatsAppMessage {
   sent_at: string | null;
   received_at: string | null;
   created_at: string;
+  metadata?: {
+    interactive?: {
+      type: "button" | "list";
+      buttonText?: string | null;
+      sections?: Array<{
+        title: string;
+        rows: Array<{
+          id: string;
+          title: string;
+          description?: string | null;
+        }>;
+      }>;
+      buttons?: Array<{
+        id: string;
+        title: string;
+      }>;
+    };
+  } | null;
   attachments?: WhatsAppAttachment[];
 }
 

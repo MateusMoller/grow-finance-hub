@@ -53,6 +53,7 @@ import type { ChangeHistoryEntry } from "@/lib/changeHistory";
 import { whatsappConversationKeys } from "@/hooks/useWhatsAppConversations";
 import { useWhatsAppMessages, whatsappMessageKeys } from "@/hooks/useWhatsAppMessages";
 import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
+import { useWhatsAppTicketMessages } from "@/hooks/useWhatsAppTickets";
 import { useAuth } from "@/hooks/useAuth";
 import {
   formatTaskAssigneeLabel,
@@ -64,7 +65,7 @@ import type { RelatedTaskSummary } from "@/lib/taskRelations";
 import { listWhatsAppConversations } from "@/lib/whatsappConversations";
 import { sendWhatsAppAttachment } from "@/lib/whatsappMedia";
 import { sendWhatsAppTextMessage } from "@/lib/whatsappMessages";
-import type { WhatsAppConversationSummary } from "@/lib/whatsappTypes";
+import type { WhatsAppConversationSummary, WhatsAppMessage } from "@/lib/whatsappTypes";
 
 export type KanbanStatus =
   "backlog" | "todo" | "doing" | "review" | "done" | "archived";
@@ -93,6 +94,7 @@ export interface KanbanTaskItem {
   updated_at?: string | null;
   integration_source?: string | null;
   integration_task_id?: string | null;
+  integration_payload?: unknown;
 }
 
 type SavePayload = {
@@ -116,6 +118,15 @@ interface TaskComment {
   profile?: {
     display_name: string | null;
   } | null;
+}
+
+interface TaskRequestDocument {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number | null;
+  category: string | null;
+  created_at: string;
 }
 
 type TaskCommentAttachmentType = "task_chat_attachment" | "task_internal_attachment";
@@ -271,16 +282,59 @@ const getWhatsAppConversationName = (conversation: WhatsAppConversationSummary |
   fallback ||
   "Cliente";
 
-const formatTaskWhatsAppMessage = (task: KanbanTaskItem, attendantName: string, body: string) => {
-  const taskCode = task.id.slice(0, 8).toUpperCase();
-  return [
-    `*Tarefa relacionada* #${taskCode}`,
-    `*Titulo:* ${task.title}`,
-    `*Atendente:* ${attendantName}`,
-    "",
-    body.trim(),
-  ].join("\n");
+type TaskWhatsAppContextMessage = {
+  id: string;
+  direction?: string | null;
+  body?: string | null;
+  messageType?: string | null;
+  createdAt?: string | null;
 };
+
+const getTaskWhatsAppContextMessages = (task: KanbanTaskItem | null): TaskWhatsAppContextMessage[] => {
+  const payload = task?.integration_payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+
+  const contextMessages = (payload as { context_messages?: unknown }).context_messages;
+  if (!Array.isArray(contextMessages)) return [];
+
+  return contextMessages
+    .filter((message): message is Record<string, unknown> =>
+      Boolean(message) && typeof message === "object" && !Array.isArray(message),
+    )
+    .map((message) => ({
+      id: typeof message.id === "string" ? message.id : "",
+      direction: typeof message.direction === "string" ? message.direction : null,
+      body: typeof message.body === "string" ? message.body : null,
+      messageType: typeof message.messageType === "string" ? message.messageType : null,
+      createdAt: typeof message.createdAt === "string" ? message.createdAt : null,
+    }))
+    .filter((message) => message.id);
+};
+
+const toContextOnlyWhatsAppMessage = (message: TaskWhatsAppContextMessage): WhatsAppMessage => ({
+  id: message.id,
+  conversation_id: "",
+  direction: message.direction === "outbound" ? "outbound" : "inbound",
+  sender_user_id: null,
+  provider_message_id: null,
+  message_type:
+    message.messageType === "image" ||
+    message.messageType === "audio" ||
+    message.messageType === "video" ||
+    message.messageType === "document" ||
+    message.messageType === "text"
+      ? message.messageType
+      : "text",
+  body: message.body || null,
+  safe_preview: message.body || null,
+  delivery_status: message.direction === "outbound" ? "sent" : "received",
+  failure_reason: null,
+  blocked_reason: null,
+  sent_at: message.direction === "outbound" ? message.createdAt || null : null,
+  received_at: message.direction === "outbound" ? null : message.createdAt || null,
+  created_at: message.createdAt || new Date(0).toISOString(),
+  attachments: [],
+});
 
 export function KanbanTaskDetailSheet({
   task,
@@ -314,9 +368,9 @@ export function KanbanTaskDetailSheet({
   const [sendingInternalComment, setSendingInternalComment] = useState(false);
   const [newInternalComment, setNewInternalComment] = useState("");
   const [selectedInternalFile, setSelectedInternalFile] = useState<File | null>(null);
+  const [requiresCustomerResponse, setRequiresCustomerResponse] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
-  const [whatsappAttendantName, setWhatsappAttendantName] = useState<string | null>(null);
   const [assigneeOptions, setAssigneeOptions] = useState<TaskAssigneeOption[]>(
     [],
   );
@@ -353,15 +407,34 @@ export function KanbanTaskDetailSheet({
   const whatsappConversation = whatsappConversationQuery.data || null;
   const whatsappConversationId = whatsappConversation?.id || null;
   const whatsappMessagesQuery = useWhatsAppMessages(whatsappConversationId);
+  const taskLinkedMessagesQuery = useWhatsAppTicketMessages(task?.id || null);
   useWhatsAppRealtime(whatsappConversationId);
 
+  const requestDocumentsQuery = useQuery({
+    queryKey: ["task-request-documents", task?.request_id || "none"],
+    enabled: open && Boolean(task?.request_id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_documents")
+        .select("id, file_name, file_path, file_size, category, created_at")
+        .eq("request_id", task?.request_id || "")
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as TaskRequestDocument[];
+    },
+  });
+  const requestDocuments = requestDocumentsQuery.data || [];
+
   const sendWhatsAppTextMutation = useMutation({
-    mutationFn: ({ text, clientMessageId }: { text: string; clientMessageId: string }) =>
-      sendWhatsAppTextMessage(whatsappConversationId || "", text, clientMessageId),
+    mutationFn: ({ text, clientMessageId, waitCustomer }: { text: string; clientMessageId: string; waitCustomer: boolean }) =>
+      sendWhatsAppTextMessage(whatsappConversationId || "", text, clientMessageId, null, task?.id || null, null, waitCustomer),
     onSuccess: () => {
+      setRequiresCustomerResponse(false);
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }),
         queryClient.invalidateQueries({ queryKey: whatsappMessageKeys.conversation(whatsappConversationId) }),
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-tickets", "task-messages", task?.id || "none"] }),
       ]);
     },
     onError: (error) => {
@@ -371,12 +444,13 @@ export function KanbanTaskDetailSheet({
 
   const sendWhatsAppFileMutation = useMutation({
     mutationFn: ({ file, clientMessageId }: { file: File; clientMessageId: string }) =>
-      sendWhatsAppAttachment(whatsappConversationId || "", file, "", clientMessageId),
+      sendWhatsAppAttachment(whatsappConversationId || "", file, "", clientMessageId, task?.id || null),
     onSuccess: () => {
       toast.success("Arquivo enviado para o WhatsApp.");
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }),
         queryClient.invalidateQueries({ queryKey: whatsappMessageKeys.conversation(whatsappConversationId) }),
+        queryClient.invalidateQueries({ queryKey: ["whatsapp-tickets", "task-messages", task?.id || "none"] }),
       ]);
     },
     onError: (error) => {
@@ -453,40 +527,6 @@ export function KanbanTaskDetailSheet({
       cancelled = true;
     };
   }, [open, task?.created_by]);
-
-  useEffect(() => {
-    if (!open || !user?.id) {
-      setWhatsappAttendantName(null);
-      return;
-    }
-
-    let cancelled = false;
-    const loadAttendantName = async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (!cancelled) {
-        const metadataName =
-          typeof user.user_metadata?.display_name === "string"
-            ? user.user_metadata.display_name
-            : typeof user.user_metadata?.full_name === "string"
-              ? user.user_metadata.full_name
-              : typeof user.user_metadata?.name === "string"
-                ? user.user_metadata.name
-                : null;
-
-        setWhatsappAttendantName(data?.display_name?.trim() || metadataName?.trim() || user.email || "Equipe Grow");
-      }
-    };
-
-    void loadAttendantName();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, user]);
 
   const fetchTaskComments = useCallback(async () => {
     if (!task?.id) {
@@ -623,11 +663,21 @@ export function KanbanTaskDetailSheet({
     ? Math.round((subtaskDone / task.subtasks.length) * 100)
     : 0;
   const whatsappMessages = whatsappMessagesQuery.data || [];
+  const taskLinkedMessages = taskLinkedMessagesQuery.data || [];
+  const taskWhatsAppContextMessages = getTaskWhatsAppContextMessages(task);
+  const loadedWhatsAppMessagesById = new Map(whatsappMessages.map((message) => [message.id, message]));
+  const linkedWhatsAppMessages = taskLinkedMessages
+    .map((link) => loadedWhatsAppMessagesById.get(String(link.message_id)) || link.message)
+    .filter((message): message is WhatsAppMessage => Boolean(message?.id));
+  const fallbackTaskContextWhatsAppMessages = taskWhatsAppContextMessages.map(
+    (contextMessage) => loadedWhatsAppMessagesById.get(contextMessage.id) || toContextOnlyWhatsAppMessage(contextMessage),
+  );
+  const taskContextWhatsAppMessages = linkedWhatsAppMessages.length > 0 ? linkedWhatsAppMessages : fallbackTaskContextWhatsAppMessages;
   const whatsappSending = sendWhatsAppTextMutation.isPending || sendWhatsAppFileMutation.isPending;
   const whatsappContactInitials = initialsFor(
     getWhatsAppConversationName(whatsappConversation, task.client_name || ""),
   );
-  const whatsappLoading = taskClientQuery.isLoading || whatsappConversationQuery.isLoading || whatsappMessagesQuery.isLoading;
+  const whatsappLoading = taskClientQuery.isLoading || whatsappConversationQuery.isLoading || whatsappMessagesQuery.isLoading || taskLinkedMessagesQuery.isLoading;
 
   const toggleSector = (sector: string) => {
     setForm((prev) => {
@@ -962,6 +1012,50 @@ export function KanbanTaskDetailSheet({
                 />
               </div>
 
+              <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-sm">Arquivos anexados na criacao</Label>
+                  </div>
+                  {requestDocuments.length > 0 && (
+                    <Badge variant="secondary" className="rounded-full">
+                      {requestDocuments.length}
+                    </Badge>
+                  )}
+                </div>
+                {requestDocumentsQuery.isLoading ? (
+                  <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Carregando arquivos...
+                  </div>
+                ) : requestDocuments.length === 0 ? (
+                  <div className="rounded-md border border-dashed bg-background px-3 py-3 text-xs text-muted-foreground">
+                    Nenhum arquivo foi anexado na criacao desta tarefa.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {requestDocuments.map((document) => (
+                      <button
+                        key={document.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-md border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                        onClick={() => handleDownloadAttachment(document.file_path)}
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{document.file_name}</span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {document.category || "Arquivo da tarefa"} - {formatFileSize(document.file_size || 0)}
+                          </span>
+                        </span>
+                        <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {task.subtasks.length > 0 && (
                 <div className="space-y-3 rounded-lg border p-3">
                   <div className="flex items-center justify-between">
@@ -1246,7 +1340,7 @@ export function KanbanTaskDetailSheet({
                     WhatsApp do cliente
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Esta aba mostra a conversa real do WhatsApp vinculada ao cliente desta tarefa.
+                    Esta aba mostra somente as mensagens selecionadas como contexto desta tarefa.
                   </p>
                 </div>
 
@@ -1275,14 +1369,14 @@ export function KanbanTaskDetailSheet({
                 ) : (
                   <>
                     <div className="h-[clamp(360px,48vh,560px)] space-y-3 overflow-y-auto bg-[#efeae2] bg-[radial-gradient(circle_at_1px_1px,rgba(15,23,42,0.08)_1px,transparent_0)] bg-[size:22px_22px] p-4">
-                      {whatsappMessages.length === 0 ? (
+                      {taskContextWhatsAppMessages.length === 0 ? (
                         <div className="flex h-full min-h-[280px] items-center justify-center text-center">
                           <p className="rounded-lg bg-white/80 px-4 py-2 text-sm text-slate-500 shadow-sm">
-                            Nenhuma mensagem registrada nesta conversa.
+                            Nenhuma mensagem foi selecionada como contexto desta tarefa.
                           </p>
                         </div>
                       ) : (
-                        whatsappMessages.map((message) => (
+                        taskContextWhatsAppMessages.map((message) => (
                           <MessageBubble key={message.id} message={message} contactInitials={whatsappContactInitials} />
                         ))
                       )}
@@ -1294,14 +1388,22 @@ export function KanbanTaskDetailSheet({
                       onSendText={async (text) => {
                         if (!task) return;
                         await sendWhatsAppTextMutation.mutateAsync({
-                          text: formatTaskWhatsAppMessage(task, whatsappAttendantName || "Equipe Grow", text),
+                          text,
                           clientMessageId: createClientMessageId(),
+                          waitCustomer: requiresCustomerResponse,
                         });
                       }}
                       onSendFile={async (file) => {
                         await sendWhatsAppFileMutation.mutateAsync({ file, clientMessageId: createClientMessageId() });
                       }}
                     />
+                    <label className="mt-2 flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-xs text-slate-600">
+                      <Checkbox
+                        checked={requiresCustomerResponse}
+                        onCheckedChange={(checked) => setRequiresCustomerResponse(checked === true)}
+                      />
+                      Marcar ticket como aguardando retorno do cliente após enviar
+                    </label>
                   </>
                 )}
               </div>

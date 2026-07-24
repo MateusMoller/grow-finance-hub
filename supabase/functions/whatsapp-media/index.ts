@@ -17,12 +17,14 @@ async function loadConversation(supabaseAdmin: SupabaseAdmin, conversationId: st
 }
 
 async function loadSenderDisplayName(supabaseAdmin: SupabaseAdmin, userId: string, organizationId: string) {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("display_name")
     .eq("user_id", userId)
-    .eq("organization_id", organizationId)
     .maybeSingle();
+  if (error) {
+    console.warn("whatsapp media sender profile lookup failed", { user_id: userId, organization_id: organizationId });
+  }
   return asString(data?.display_name) || "Equipe Grow";
 }
 
@@ -39,6 +41,8 @@ async function prepareUpload(supabaseAdmin: SupabaseAdmin, userId: string, body:
   const contentType = asString(file.type);
   const sizeBytes = Number(file.size || 0);
   const caption = asString(file.caption);
+  const taskId = asString(body.taskId) || null;
+  const ticketId = asString(body.ticketId) || null;
   const conversation = await loadConversation(supabaseAdmin, conversationId);
   await assertWhatsAppModuleAccess(supabaseAdmin, userId, conversation.organization_id);
 
@@ -87,6 +91,21 @@ async function prepareUpload(supabaseAdmin: SupabaseAdmin, userId: string, body:
     .select("*")
     .single();
   if (attachmentError) throw attachmentError;
+
+  if (taskId) {
+    await supabaseAdmin.from("whatsapp_task_message_links").upsert({
+      organization_id: conversation.organization_id,
+      ticket_id: ticketId,
+      task_id: taskId,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      attachment_id: attachment.id,
+      relation_type: "document",
+      visibility: "customer",
+      route_confidence_percent: 100,
+      created_by_user_id: userId,
+    }, { onConflict: "organization_id,message_id,relation_type,ticket_id" });
+  }
 
   await createWhatsAppEvent(supabaseAdmin, {
     organization_id: conversation.organization_id,

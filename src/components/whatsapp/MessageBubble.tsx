@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Download, FileText, Image as ImageIcon, Mic, Pause, Play, RefreshCw, Reply, Video } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Download, FileText, Image as ImageIcon, ListChecks, Mic, Pause, Play, RefreshCw, Reply, Video } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,39 @@ const statusLabel = (status: string | null | undefined) => {
   return status || "";
 };
 
+const deliveryStatusLabel = (message: WhatsAppMessage) => {
+  if (message.blocked_reason) return "Bloqueada";
+  if (message.delivery_status === "failed") return "Falha";
+  if (message.delivery_status === "queued") return "Na fila";
+  if (message.delivery_status === "sending") return "Enviando";
+  if (message.delivery_status === "sent") return "Enviada";
+  if (message.delivery_status === "delivered") return "Entregue";
+  if (message.delivery_status === "read") return "Lida";
+  return "Enviada";
+};
+
+const DeliveryStatusIcon = ({ message }: { message: WhatsAppMessage }) => {
+  if (message.delivery_status === "failed" || message.blocked_reason) {
+    return <RefreshCw className="h-3 w-3 text-destructive" />;
+  }
+
+  if (message.delivery_status === "queued" || message.delivery_status === "sending") {
+    return <RefreshCw className="h-3 w-3 animate-spin text-[#667781]" />;
+  }
+
+  if (message.delivery_status === "sent") {
+    return <Check className="h-3.5 w-3.5 text-[#667781]" />;
+  }
+
+  return (
+    <CheckCheck
+      className={`h-3.5 w-3.5 ${
+        message.delivery_status === "read" ? "text-[#53bdeb]" : "text-[#667781]"
+      }`}
+    />
+  );
+};
+
 const formatSeconds = (value: number) => {
   if (!Number.isFinite(value) || value <= 0) return "0:00";
   const minutes = Math.floor(value / 60);
@@ -45,6 +78,54 @@ const formatSeconds = (value: number) => {
 };
 
 const waveformBars = [12, 16, 22, 13, 27, 18, 30, 20, 14, 25, 32, 16, 22, 28, 18, 12, 26, 34, 20, 15, 24, 29, 17, 22, 31, 19, 14, 26, 33, 21, 16, 24];
+
+function InteractivePreview({ message }: { message: WhatsAppMessage }) {
+  const interactive = message.metadata?.interactive;
+  if (!interactive) return null;
+
+  if (interactive.type === "button" && interactive.buttons?.length) {
+    return (
+      <div className="mt-2 space-y-1.5 border-t border-[#d1d7db] pt-1.5">
+        {interactive.buttons.map((button) => (
+          <div
+            key={button.id}
+            className="flex h-9 items-center justify-center rounded-md bg-white/70 px-3 text-sm font-semibold text-[#008069] shadow-[0_1px_0_rgba(11,20,26,0.08)]"
+          >
+            {button.title}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (interactive.type === "list" && interactive.sections?.length) {
+    return (
+      <div className="mt-2 rounded-lg border border-[#d1d7db] bg-white/70">
+        <div className="flex items-center justify-center gap-2 border-b border-[#d1d7db] px-3 py-2 text-sm font-semibold text-[#008069]">
+          <ListChecks className="h-4 w-4" />
+          {interactive.buttonText || "Escolher opção"}
+        </div>
+        <div className="max-h-56 overflow-y-auto">
+          {interactive.sections.map((section) => (
+            <div key={section.title} className="border-b border-[#e9edef] last:border-b-0">
+              <div className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#667781]">
+                {section.title}
+              </div>
+              {section.rows.map((row) => (
+                <div key={row.id} className="px-3 py-2">
+                  <div className="text-sm font-semibold text-[#111b21]">{row.title}</div>
+                  {row.description && <div className="mt-0.5 text-xs text-[#667781]">{row.description}</div>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 function AudioVoiceNote({
   signedUrl,
@@ -335,6 +416,7 @@ export function MessageBubble({
             {message.body}
           </p>
         )}
+        <InteractivePreview message={message} />
         {message.attachments?.map((attachment) => (
           <AttachmentPreview
             key={attachment.id}
@@ -345,11 +427,18 @@ export function MessageBubble({
             bubbleTone={bubbleTone}
           />
         ))}
-        <div className={`mt-0.5 items-center justify-end gap-1 px-1 text-[10px] text-[#667781] ${hasAttachments && !failed ? "hidden" : "flex"}`}>
-          {failed && <RefreshCw className="h-3 w-3 text-destructive" />}
-          {(failed || message.delivery_status === "queued" || message.delivery_status === "sending") && (
-            <span>{message.blocked_reason || message.failure_reason || message.delivery_status}</span>
-          )}
+        <div className={`mt-0.5 items-center justify-end gap-1 px-1 text-[10px] text-[#667781] ${hasAttachments && !failed && !outbound ? "hidden" : "flex"}`}>
+          {outbound ? (
+            <>
+              <DeliveryStatusIcon message={message} />
+              <span>{failed ? message.blocked_reason || message.failure_reason || deliveryStatusLabel(message) : deliveryStatusLabel(message)}</span>
+            </>
+          ) : failed ? (
+            <>
+              <RefreshCw className="h-3 w-3 text-destructive" />
+              <span>{message.blocked_reason || message.failure_reason || "Falha"}</span>
+            </>
+          ) : null}
           <span>{time}</span>
         </div>
       </div>

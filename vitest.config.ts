@@ -12,6 +12,7 @@ export default defineConfig({
       "src/**/*.{test,spec}.{ts,tsx}",
       "tests/unit/**/*.{test,spec}.{ts,tsx}",
       "tests/integration/**/*.{test,spec}.{ts,tsx}",
+      "supabase/tests/**/*.{test,spec}.{ts,tsx}",
     ],
   },
   resolve: {

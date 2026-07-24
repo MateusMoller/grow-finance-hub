@@ -9,6 +9,7 @@ export const organizationFeatureDefaults = {
   tarefas: true,
   relatorios: true,
   usuarios: true,
+  solicitacoes: true,
   newsletter: true,
 } as const;
 
@@ -29,6 +30,7 @@ export const routeFeatureMap: Record<string, OrganizationFeatureKey> = {
   "/app/kanban": "tarefas",
   "/app/relatorios": "relatorios",
   "/app/usuarios": "usuarios",
+  "/app/solicitacoes": "solicitacoes",
   "/app/newsletter": "newsletter",
 };
 

@@ -63,6 +63,7 @@ const operationalItems = [
 ];
 
 const systemItems = [
+  { title: "Solicitações", url: "/app/solicitacoes", icon: ClipboardList },
   { title: "Usuários", url: "/app/usuarios", icon: UserCog },
   { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
 ];

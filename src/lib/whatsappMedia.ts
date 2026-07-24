@@ -5,7 +5,14 @@ const db = supabase as unknown as {
   functions: typeof supabase.functions;
 };
 
-export async function sendWhatsAppAttachment(conversationId: string, file: File, caption: string, clientMessageId: string) {
+export async function sendWhatsAppAttachment(
+  conversationId: string,
+  file: File,
+  caption: string,
+  clientMessageId: string,
+  taskId?: string | null,
+  ticketId?: string | null,
+) {
   const filePayload = {
     name: file.name,
     type: file.type,
@@ -18,6 +25,8 @@ export async function sendWhatsAppAttachment(conversationId: string, file: File,
       action: "prepare_upload",
       conversationId,
       clientMessageId,
+      taskId,
+      ticketId,
       file: filePayload,
     },
   });

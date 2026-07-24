@@ -2,23 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { MessageCircle } from "lucide-react";
+
 import { AppLayout } from "@/components/app/AppLayout";
 import { ModuleContextPill } from "@/components/app/ModuleContextPill";
-import { MessageCircle } from "lucide-react";
 import {
   ConversationList,
   ConversationPanel,
 } from "@/components/whatsapp";
 import type { WhatsAppBubbleTone, WhatsAppChatBackground, WhatsAppChatDensity } from "@/components/whatsapp/appearance";
 import type { WhatsAppQuickTaskDraft } from "@/components/whatsapp/ConversationHeader";
+import type { WhatsAppStandardMessage } from "@/components/whatsapp/MessageComposer";
 import { useAuth } from "@/hooks/useAuth";
 import { useWhatsAppConversations, whatsappConversationKeys } from "@/hooks/useWhatsAppConversations";
 import { useWhatsAppMessages, whatsappMessageKeys } from "@/hooks/useWhatsAppMessages";
 import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
 import { supabase } from "@/integrations/supabase/client";
-import { markWhatsAppConversationRead, sendWhatsAppTextMessage } from "@/lib/whatsappMessages";
-import { sendWhatsAppAttachment } from "@/lib/whatsappMedia";
 import { linkWhatsAppConversationClient } from "@/lib/whatsappConversations";
+import { sendWhatsAppAttachment } from "@/lib/whatsappMedia";
+import { markWhatsAppConversationRead, sendWhatsAppTextMessage } from "@/lib/whatsappMessages";
 import { createWhatsAppQuickTask } from "@/lib/whatsappQuickTasks";
 import type { WhatsAppConversationFilters, WhatsAppConversationSummary } from "@/lib/whatsappTypes";
 
@@ -28,11 +30,46 @@ const createClientMessageId = () =>
     : `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const whatsappPreferenceKey = (key: string) => `grow-whatsapp-chat-${key}`;
+const whatsappUserPreferenceKey = (userId: string | undefined, key: string) =>
+  `grow-whatsapp-user-${userId || "anonymous"}-${key}`;
 
 const loadWhatsAppPreference = <T extends string>(key: string, fallback: T, allowed: readonly T[]) => {
   if (typeof window === "undefined") return fallback;
   const stored = window.localStorage.getItem(whatsappPreferenceKey(key));
   return allowed.includes(stored as T) ? (stored as T) : fallback;
+};
+
+const titleFromStandardMessage = (message: string) => message.trim().split(/\s+/).slice(0, 3).join(" ").slice(0, 28);
+
+const loadWhatsAppStandardMessages = (userId: string | undefined) => {
+  if (typeof window === "undefined") return [];
+  const stored = window.localStorage.getItem(whatsappUserPreferenceKey(userId, "standard-messages"));
+  if (!stored) return [];
+
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed)
+      ? parsed
+          .map((message): WhatsAppStandardMessage | null => {
+            if (typeof message === "string") {
+              const body = message.trim();
+              return body ? { title: titleFromStandardMessage(body) || "Atalho", body } : null;
+            }
+
+            if (message && typeof message === "object" && "title" in message && "body" in message) {
+              const title = typeof message.title === "string" ? message.title.trim().slice(0, 28) : "";
+              const body = typeof message.body === "string" ? message.body.trim() : "";
+              return title && body ? { title, body } : null;
+            }
+
+            return null;
+          })
+          .filter((message): message is WhatsAppStandardMessage => Boolean(message))
+          .slice(0, 10)
+      : [];
+  } catch {
+    return [];
+  }
 };
 
 export default function WhatsAppAtendimentoPage() {
@@ -53,6 +90,7 @@ export default function WhatsAppAtendimentoPage() {
   const [bubbleTone, setBubbleTone] = useState<WhatsAppBubbleTone>(() =>
     loadWhatsAppPreference("bubble", "verde", ["verde", "azul", "neutro"] as const),
   );
+  const [standardMessages, setStandardMessages] = useState<WhatsAppStandardMessage[]>(() => loadWhatsAppStandardMessages(user?.id));
 
   const selectedConversationId = searchParams.get("conversation");
   const conversationsQuery = useWhatsAppConversations(filters);
@@ -86,6 +124,30 @@ export default function WhatsAppAtendimentoPage() {
       }));
     },
   });
+  const existingTasksQuery = useQuery({
+    queryKey: ["whatsapp", "existing-client-tasks", currentOrganizationId, selectedConversation?.client_name || null],
+    enabled: Boolean(currentOrganizationId && selectedConversation?.client_name),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kanban_tasks")
+        .select("id, title, status, sector, priority, updated_at")
+        .eq("organization_id", currentOrganizationId)
+        .eq("client_name", selectedConversation?.client_name || "")
+        .not("status", "in", '("done","archived")')
+        .order("updated_at", { ascending: false })
+        .limit(80);
+
+      if (error) throw error;
+      return (data || []).map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        sector: task.sector,
+        priority: task.priority,
+        updatedAt: task.updated_at,
+      }));
+    },
+  });
 
   useWhatsAppRealtime(selectedConversationId);
 
@@ -100,6 +162,10 @@ export default function WhatsAppAtendimentoPage() {
   useEffect(() => {
     window.localStorage.setItem(whatsappPreferenceKey("bubble"), bubbleTone);
   }, [bubbleTone]);
+
+  useEffect(() => {
+    setStandardMessages(loadWhatsAppStandardMessages(user?.id));
+  }, [user?.id]);
 
   useEffect(() => {
     if (!selectedConversationId) return;
@@ -120,6 +186,16 @@ export default function WhatsAppAtendimentoPage() {
     const next = new URLSearchParams(searchParams);
     next.set("conversation", conversation.id);
     setSearchParams(next);
+  };
+
+  const saveStandardMessages = (messages: WhatsAppStandardMessage[]) => {
+    const sanitized = messages
+      .map((message) => ({ title: message.title.trim().slice(0, 28), body: message.body.trim() }))
+      .filter((message) => message.title && message.body)
+      .slice(0, 10);
+    setStandardMessages(sanitized);
+    window.localStorage.setItem(whatsappUserPreferenceKey(user?.id, "standard-messages"), JSON.stringify(sanitized));
+    toast.success("Mensagens padrão atualizadas.");
   };
 
   const sendTextMutation = useMutation({
@@ -173,12 +249,15 @@ export default function WhatsAppAtendimentoPage() {
       if (!currentOrganizationId || !selectedConversation) {
         throw new Error("Conversa ou organização ativa não encontrada.");
       }
+
       return createWhatsAppQuickTask({
         organizationId: currentOrganizationId,
         title: draft.title,
         description: draft.description,
         sector: draft.sector,
         priority: draft.priority,
+        mode: draft.mode,
+        existingTaskId: draft.existingTaskId,
         clientName: selectedConversation.client_name || null,
         createdBy: user?.id || null,
         conversationId: selectedConversation.id,
@@ -188,7 +267,9 @@ export default function WhatsAppAtendimentoPage() {
       });
     },
     onSuccess: (result) => {
-      if (result.confirmationSent) {
+      if (result.mode === "continue" || result.contextAdded) {
+        toast.success("Contexto adicionado à tarefa existente.");
+      } else if (result.confirmationSent) {
         toast.success("Ticket criado e enviado ao cliente.");
       } else {
         toast.warning(`Ticket criado, mas a mensagem ao cliente falhou: ${result.confirmationError}`);
@@ -208,46 +289,52 @@ export default function WhatsAppAtendimentoPage() {
       <div className="flex h-[calc(100svh-5.25rem)] w-full max-w-none flex-col gap-2">
         <ModuleContextPill icon={MessageCircle} label="Atendimento WhatsApp" className="mb-0 ml-1" />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-[#f0f2f5] shadow-sm lg:rounded-none">
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
-          <ConversationList
-            conversations={conversations}
-            activeId={selectedConversationId}
-            loading={conversationsQuery.isLoading}
-            search={filters.search || ""}
-            chatDensity={chatDensity}
-            chatBackground={chatBackground}
-            bubbleTone={bubbleTone}
-            onSearchChange={updateSearch}
-            onSelect={selectConversation}
-            onChatDensityChange={setChatDensity}
-            onChatBackgroundChange={setChatBackground}
-            onBubbleToneChange={setBubbleTone}
-          />
-          <ConversationPanel
-            conversation={selectedConversation}
-            messages={messagesQuery.data || []}
-            loading={messagesQuery.isLoading}
-            sending={isSending}
-            activeClients={activeClientsQuery.data || []}
-            clientLinking={linkClientMutation.isPending}
-            quickTaskCreating={quickTaskMutation.isPending}
-            chatDensity={chatDensity}
-            chatBackground={chatBackground}
-            bubbleTone={bubbleTone}
-            onSendText={async (text, replyReference) => {
-              await sendTextMutation.mutateAsync({
-                text,
-                clientMessageId: createClientMessageId(),
-                replyToProviderMessageId: replyReference?.providerMessageId || null,
-              });
-            }}
-            onSendFile={async (file) => {
-              await sendFileMutation.mutateAsync({ file, clientMessageId: createClientMessageId() });
-            }}
-            onLinkClient={(clientId) => linkClientMutation.mutate(clientId)}
-            onCreateQuickTask={(draft) => quickTaskMutation.mutate(draft)}
-          />
-        </div>
+          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
+            <div className="flex min-h-0 flex-col border-r border-[#d1d7db] bg-white">
+              <ConversationList
+                conversations={conversations}
+                activeId={selectedConversationId}
+                loading={conversationsQuery.isLoading}
+                search={filters.search || ""}
+                chatDensity={chatDensity}
+                chatBackground={chatBackground}
+                bubbleTone={bubbleTone}
+                onSearchChange={updateSearch}
+                onSelect={selectConversation}
+                onChatDensityChange={setChatDensity}
+                onChatBackgroundChange={setChatBackground}
+                onBubbleToneChange={setBubbleTone}
+                standardMessages={standardMessages}
+                onStandardMessagesChange={saveStandardMessages}
+              />
+            </div>
+            <ConversationPanel
+              conversation={selectedConversation}
+              messages={messagesQuery.data || []}
+              loading={messagesQuery.isLoading}
+              sending={isSending}
+              activeClients={activeClientsQuery.data || []}
+              existingTasks={existingTasksQuery.data || []}
+              clientLinking={linkClientMutation.isPending}
+              quickTaskCreating={quickTaskMutation.isPending}
+              chatDensity={chatDensity}
+              chatBackground={chatBackground}
+              bubbleTone={bubbleTone}
+              standardMessages={standardMessages}
+              onSendText={async (text, replyReference) => {
+                await sendTextMutation.mutateAsync({
+                  text,
+                  clientMessageId: createClientMessageId(),
+                  replyToProviderMessageId: replyReference?.providerMessageId || null,
+                });
+              }}
+              onSendFile={async (file) => {
+                await sendFileMutation.mutateAsync({ file, clientMessageId: createClientMessageId() });
+              }}
+              onLinkClient={(clientId) => linkClientMutation.mutate(clientId)}
+              onCreateQuickTask={(draft) => quickTaskMutation.mutate(draft)}
+            />
+          </div>
         </div>
       </div>
     </AppLayout>

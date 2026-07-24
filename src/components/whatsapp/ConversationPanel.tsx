@@ -1,7 +1,7 @@
 import { MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConversationHeader } from "@/components/whatsapp/ConversationHeader";
-import type { WhatsAppClientLinkOption, WhatsAppQuickTaskDraft } from "@/components/whatsapp/ConversationHeader";
+import type { WhatsAppClientLinkOption, WhatsAppExistingTaskOption, WhatsAppQuickTaskDraft } from "@/components/whatsapp/ConversationHeader";
 import {
   whatsappBackgroundClass,
   type WhatsAppBubbleTone,
@@ -10,6 +10,7 @@ import {
 } from "@/components/whatsapp/appearance";
 import { MessageBubble } from "@/components/whatsapp/MessageBubble";
 import { MessageComposer } from "@/components/whatsapp/MessageComposer";
+import type { WhatsAppStandardMessage } from "@/components/whatsapp/MessageComposer";
 import type { WhatsAppReplyReference } from "@/lib/whatsappMessagePreview";
 import type { WhatsAppConversationSummary, WhatsAppMessage } from "@/lib/whatsappTypes";
 
@@ -35,11 +36,13 @@ export function ConversationPanel({
   loading,
   sending,
   activeClients,
+  existingTasks,
   clientLinking,
   quickTaskCreating,
   chatDensity,
   chatBackground,
   bubbleTone,
+  standardMessages,
   onSendText,
   onSendFile,
   onLinkClient,
@@ -50,11 +53,13 @@ export function ConversationPanel({
   loading: boolean;
   sending: boolean;
   activeClients: WhatsAppClientLinkOption[];
+  existingTasks: WhatsAppExistingTaskOption[];
   clientLinking?: boolean;
   quickTaskCreating?: boolean;
   chatDensity: WhatsAppChatDensity;
   chatBackground: WhatsAppChatBackground;
   bubbleTone: WhatsAppBubbleTone;
+  standardMessages?: WhatsAppStandardMessage[];
   onSendText: (text: string, replyReference: WhatsAppReplyReference | null) => Promise<void>;
   onSendFile: (file: File) => Promise<void>;
   onLinkClient: (clientId: string) => void;
@@ -76,6 +81,7 @@ export function ConversationPanel({
           onLinkClient={onLinkClient}
           onCreateQuickTask={onCreateQuickTask}
           activeClients={activeClients}
+          existingTasks={existingTasks}
           clientLinking={clientLinking}
           quickTaskCreating={quickTaskCreating}
         />
@@ -118,6 +124,7 @@ export function ConversationPanel({
         conversation={conversation}
         sending={sending}
         compact={chatDensity === "compacta"}
+        standardMessages={standardMessages}
         replyReference={replyReference}
         onSendText={onSendText}
         onSendFile={onSendFile}
