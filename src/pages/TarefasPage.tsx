@@ -60,6 +60,7 @@ import {
 } from "@/lib/globalFilters";
 import {
   canCreateTaskInSector,
+  canViewTaskByCanonicalScope,
   getCanonicalTaskSectorAccess,
   normalizeTaskSectorLabel,
 } from "@/lib/taskSectorAccess";
@@ -164,8 +165,10 @@ const sectors = [
   "Fiscal",
   "Departamento Pessoal",
   "Comercial",
+  "Societário",
   "Geral",
 ];
+const creatableSectors = sectors.filter((sector) => sector !== "Todos");
 const statuses = [
   "Todos",
   "Pendente",
@@ -461,11 +464,11 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
   }, [availableSectors, sectorFilter]);
 
   useEffect(() => {
-    if (availableSectors.length === 0) return;
-    if (!availableSectors.includes(newTask.sector)) {
-      setNewTask((prev) => ({ ...prev, sector: availableSectors[0] }));
+    if (creatableSectors.length === 0) return;
+    if (!creatableSectors.includes(newTask.sector)) {
+      setNewTask((prev) => ({ ...prev, sector: creatableSectors[0] }));
     }
-  }, [availableSectors, newTask.sector]);
+  }, [newTask.sector]);
 
   const scopedTasks = useMemo(
     () =>
@@ -617,7 +620,17 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
+    const createdTask = {
+      id: crypto.randomUUID(),
+      title: newTask.title.trim(),
+    };
+    const canViewCreatedTask = canViewTaskByCanonicalScope(
+      { sector: newTask.sector, assignedToUserId: newTask.assignedToUserId || null },
+      effectiveAccess,
+    );
+
     const baseInsertPayload = {
+      id: createdTask.id,
       title: newTask.title.trim(),
       description: newTask.description.trim() || null,
       client_name: selectedClient?.name || null,
@@ -637,11 +650,8 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
         subtasksAvailable
           ? { ...baseInsertPayload, subtasks: newTask.subtasks }
           : baseInsertPayload,
-      )
-      .select("id, title")
-      .single();
+      );
 
-    let createdTask = firstTry.data;
     let error = firstTry.error;
     let savedWithoutSubtasks = !subtasksAvailable;
 
@@ -650,22 +660,21 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       savedWithoutSubtasks = true;
       const fallbackInsert = await supabase
         .from("kanban_tasks")
-        .insert(baseInsertPayload)
-        .select("id, title")
-        .single();
-      createdTask = fallbackInsert.data;
+        .insert(baseInsertPayload);
       error = fallbackInsert.error;
     }
 
-    if (error || !createdTask) {
+    if (error) {
       toast.error(
         `Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`,
       );
       return;
     }
 
-    void registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
-    if (relatedSourceTask) {
+    if (canViewCreatedTask) {
+      void registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
+    }
+    if (relatedSourceTask && canViewCreatedTask) {
       if (!currentOrganizationId) {
         toast.warning("Tarefa criada, mas a relação não foi salva por falta de organização ativa.");
       } else {
@@ -703,7 +712,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       title: "",
       description: "",
       client: "",
-      sector: availableSectors[0] || "Geral",
+      sector: creatableSectors[0] || "Geral",
       assignee: "",
       assignedToUserId: "",
       priority: "Media",
@@ -1277,7 +1286,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                     }))
                   }
                 >
-                  {availableSectors.map((sector) => (
+                  {creatableSectors.map((sector) => (
                     <option key={sector}>{sector}</option>
                   ))}
                 </select>
@@ -1326,7 +1335,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   title: "",
                   description: "",
                   client: "",
-                  sector: availableSectors[0] || "Geral",
+                  sector: creatableSectors[0] || "Geral",
                   assignee: "",
                   assignedToUserId: "",
                   priority: "Media",

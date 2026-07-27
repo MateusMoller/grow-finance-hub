@@ -18,7 +18,7 @@ import { useWhatsAppConversations, whatsappConversationKeys } from "@/hooks/useW
 import { useWhatsAppMessages, whatsappMessageKeys } from "@/hooks/useWhatsAppMessages";
 import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
 import { supabase } from "@/integrations/supabase/client";
-import { linkWhatsAppConversationClient } from "@/lib/whatsappConversations";
+import { endWhatsAppAttendance, linkWhatsAppConversationClient } from "@/lib/whatsappConversations";
 import { sendWhatsAppAttachment } from "@/lib/whatsappMedia";
 import { markWhatsAppConversationRead, sendWhatsAppTextMessage } from "@/lib/whatsappMessages";
 import { createWhatsAppQuickTask } from "@/lib/whatsappQuickTasks";
@@ -81,6 +81,7 @@ export default function WhatsAppAtendimentoPage() {
     status: "all",
     unread: false,
   });
+  const [conversationQueue, setConversationQueue] = useState<"attendance" | "automatic">("attendance");
   const [chatDensity, setChatDensity] = useState<WhatsAppChatDensity>(() =>
     loadWhatsAppPreference("density", "confortavel", ["compacta", "confortavel"] as const),
   );
@@ -97,6 +98,15 @@ export default function WhatsAppAtendimentoPage() {
   const conversations = useMemo(
     () => conversationsQuery.data?.pages.flat() || [],
     [conversationsQuery.data],
+  );
+  const visibleConversations = useMemo(
+    () =>
+      conversations.filter((conversation) =>
+        conversationQueue === "attendance"
+          ? conversation.status === "in_attendance"
+          : conversation.status !== "in_attendance",
+      ),
+    [conversationQueue, conversations],
   );
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedConversationId) || null,
@@ -282,6 +292,19 @@ export default function WhatsAppAtendimentoPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Não foi possível criar a tarefa."),
   });
 
+  const endAttendanceMutation = useMutation({
+    mutationFn: () => endWhatsAppAttendance(selectedConversationId || ""),
+    onSuccess: () => {
+      toast.success("Atendimento finalizado.");
+      setConversationQueue("automatic");
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: whatsappConversationKeys.all }),
+        queryClient.invalidateQueries({ queryKey: whatsappMessageKeys.conversation(selectedConversationId) }),
+      ]);
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Nao foi possivel finalizar o atendimento."),
+  });
+
   const isSending = sendTextMutation.isPending || sendFileMutation.isPending;
 
   return (
@@ -292,14 +315,17 @@ export default function WhatsAppAtendimentoPage() {
           <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
             <div className="flex min-h-0 flex-col border-r border-[#d1d7db] bg-white">
               <ConversationList
-                conversations={conversations}
+                conversations={visibleConversations}
+                allConversations={conversations}
                 activeId={selectedConversationId}
+                activeQueue={conversationQueue}
                 loading={conversationsQuery.isLoading}
                 search={filters.search || ""}
                 chatDensity={chatDensity}
                 chatBackground={chatBackground}
                 bubbleTone={bubbleTone}
                 onSearchChange={updateSearch}
+                onQueueChange={setConversationQueue}
                 onSelect={selectConversation}
                 onChatDensityChange={setChatDensity}
                 onChatBackgroundChange={setChatBackground}
@@ -317,6 +343,7 @@ export default function WhatsAppAtendimentoPage() {
               existingTasks={existingTasksQuery.data || []}
               clientLinking={linkClientMutation.isPending}
               quickTaskCreating={quickTaskMutation.isPending}
+              attendanceEnding={endAttendanceMutation.isPending}
               chatDensity={chatDensity}
               chatBackground={chatBackground}
               bubbleTone={bubbleTone}
@@ -333,6 +360,7 @@ export default function WhatsAppAtendimentoPage() {
               }}
               onLinkClient={(clientId) => linkClientMutation.mutate(clientId)}
               onCreateQuickTask={(draft) => quickTaskMutation.mutate(draft)}
+              onEndAttendance={() => endAttendanceMutation.mutate()}
             />
           </div>
         </div>

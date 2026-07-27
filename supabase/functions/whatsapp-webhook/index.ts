@@ -16,6 +16,7 @@ import {
   buildRequestsFlowButtonPayload,
   buildRequestsFlowListPayload,
   parseAutoServiceReplyId,
+  parseAutoServiceTextReply,
 } from "../_shared/whatsapp-ticket/interactive-messages.ts";
 import { buildPublicTicketProtocol, extractPublicTicketProtocol } from "../_shared/whatsapp-ticket/protocol.ts";
 import { resolveWhatsAppTicketRoute } from "../_shared/whatsapp-ticket/routing.ts";
@@ -434,18 +435,21 @@ async function sendAutoServiceMenu(
     conversation: Record<string, unknown>;
     contact: Record<string, unknown>;
     reason: string;
+    includeTickets?: boolean;
   },
 ) {
-  const tickets = await listAutoServiceTickets(supabaseAdmin, {
-    organizationId: input.organizationId,
-    conversationId: asString(input.conversation.id),
-    contactId: asString(input.contact.id),
-    clientId: asString(input.contact.client_id) || null,
-    limit: 7,
-  });
+  const tickets = input.includeTickets === false
+    ? []
+    : await listAutoServiceTickets(supabaseAdmin, {
+        organizationId: input.organizationId,
+        conversationId: asString(input.conversation.id),
+        contactId: asString(input.contact.id),
+        clientId: asString(input.contact.client_id) || null,
+        limit: 7,
+      });
   const body = tickets.length > 0
-    ? "Encontrei tickets ativos para este contato. Selecione um ticket ou escolha como deseja continuar."
-    : "Como podemos ajudar? Escolha uma opção para direcionarmos seu atendimento.";
+    ? "Identificamos atendimentos em andamento vinculados a este contato. Selecione um ticket para continuar ou escolha uma das opcoes abaixo."
+    : "Ola. Para direcionarmos seu atendimento corretamente, selecione uma das opcoes abaixo.";
   const clientMessageId = `${input.organizationId}:auto-service:${input.conversation.id}:${Date.now()}`;
   const ticketRows = toTicketOptions(tickets.slice(0, 7));
   const interactiveMetadata = tickets.length > 0
@@ -457,8 +461,8 @@ async function sendAutoServiceMenu(
             {
               title: "Menu",
               rows: [
-                { id: "grow:auto:attendance", title: "Atendimento", description: "Falar com a equipe." },
-                { id: "grow:auto:requests", title: "Solicitações", description: "Criar ou acompanhar uma solicitação." },
+                { id: "grow:auto:attendance", title: "Atendimento", description: "Falar diretamente com a equipe." },
+                { id: "grow:auto:requests", title: "Solicitacoes", description: "Abrir ou acompanhar uma demanda." },
               ],
             },
             ...(ticketRows.length > 0 ? [{ title: "Tickets ativos", rows: ticketRows }] : []),
@@ -470,7 +474,7 @@ async function sendAutoServiceMenu(
           type: "button",
           buttons: [
             { id: "grow:auto:attendance", title: "Atendimento" },
-            { id: "grow:auto:requests", title: "Solicitações" },
+            { id: "grow:auto:requests", title: "Solicitacoes" },
           ],
         },
       };
@@ -516,6 +520,7 @@ async function sendAutoServiceMenu(
     details: {
       reason: input.reason,
       ticket_count: tickets.length,
+      include_tickets: input.includeTickets !== false,
       delivery_status: deliveryStatus,
       failure_reason: failureReason,
     },
@@ -607,8 +612,8 @@ async function sendRequestsFlowMenu(
   const requestTypes = await listActivePortalRequestTypes(supabaseAdmin, input.organizationId);
   const requestTypeOptions = toRequestTypeOptions(requestTypes);
   const body = requestTypeOptions.length > 0
-    ? "Escolha uma opção para consultar tarefas ou abrir uma nova solicitação."
-    : "Escolha como deseja seguir com suas solicitações.";
+    ? "Selecione como deseja prosseguir. Voce pode consultar tarefas em andamento ou abrir uma nova solicitacao para nossa equipe."
+    : "Selecione uma das opcoes abaixo para consultar tarefas em andamento ou abrir uma nova demanda.";
   const clientMessageId = `${input.organizationId}:requests-flow:${input.sourceMessageId}`;
   let providerMessageId: string | null = null;
   let deliveryStatus: "sent" | "failed" = "sent";
@@ -641,7 +646,7 @@ async function sendRequestsFlowMenu(
       interactive: requestTypeOptions.length > 0
         ? {
             type: "list",
-            buttonText: "Escolher solicitação",
+            buttonText: "Escolher opcao",
             sections: [
               {
                 title: "Acompanhamento",
@@ -649,12 +654,12 @@ async function sendRequestsFlowMenu(
                   {
                     id: "grow:auto:consult_tasks",
                     title: "Tarefas em andamento",
-                    description: "Consultar tarefas abertas deste cliente.",
+                    description: "Consultar demandas abertas deste cliente.",
                   },
                 ],
               },
               {
-                title: "Nova solicitação",
+                title: "Nova solicitacao",
                 rows: requestTypeOptions.map((requestType) => ({
                   id: `grow:reqtype:${requestType.id}`,
                   title: requestType.title,
@@ -701,7 +706,7 @@ async function sendActiveTicketsSelection(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Nao encontrei um cliente vinculado a este numero. Para consultar tarefas em andamento, primeiro precisamos vincular este contato a um cliente cadastrado.",
+      body: "Nao localizamos um cliente vinculado a este numero. Para consultar tarefas em andamento, este contato precisa estar vinculado a um cliente cadastrado.",
       clientMessageId: `${input.organizationId}:active-tickets-client-required:${input.sourceMessageId}`,
     });
     return;
@@ -720,8 +725,15 @@ async function sendActiveTicketsSelection(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Nao encontrei tarefas em andamento para este cliente. Para abrir uma nova tarefa, selecione Solicitacoes e depois Criar nova tarefa.",
+      body: "Nao localizamos tarefas em andamento para este cliente no momento. Caso precise registrar uma nova demanda, selecione Solicitacoes e depois Criar nova tarefa.",
       clientMessageId: `${input.organizationId}:active-tickets-empty:${input.sourceMessageId}`,
+    });
+    await sendSystemText(supabaseAdmin, {
+      organizationId: input.organizationId,
+      conversation: input.conversation,
+      contact: input.contact,
+      body: "Deseja receber mais alguma informacao sobre tarefas ou prefere falar diretamente com a equipe para um atendimento personalizado?",
+      clientMessageId: `${input.organizationId}:active-tickets-empty-followup:${input.sourceMessageId}`,
     });
     return;
   }
@@ -730,7 +742,7 @@ async function sendActiveTicketsSelection(
     organizationId: input.organizationId,
     conversation: input.conversation,
     contact: input.contact,
-    body: `Encontrei ${tickets.length} tarefa(s) em andamento para este cliente.`,
+    body: `Localizamos ${tickets.length} tarefa(s) em andamento para este cliente. Enviaremos os detalhes a seguir.`,
     clientMessageId: `${input.organizationId}:active-tickets-summary:${input.sourceMessageId}`,
   });
 
@@ -748,7 +760,7 @@ async function sendActiveTicketsSelection(
     organizationId: input.organizationId,
     conversation: input.conversation,
     contact: input.contact,
-    body: "Para continuar uma tarefa, envie uma mensagem com o numero do ticket correspondente.",
+    body: "Para continuar uma tarefa existente, responda informando o numero do ticket correspondente.",
     clientMessageId: `${input.organizationId}:active-tickets-instructions:${input.sourceMessageId}`,
   });
 
@@ -783,12 +795,12 @@ const normalizeTaskCreationSector = (value: string) => {
 };
 
 const taskCreationSectorPrompt = [
-  "Vamos abrir uma nova tarefa para a equipe.",
+  "Vamos registrar uma nova tarefa para acompanhamento da equipe.",
   "",
   "*1/3 - Setor*",
-  "Qual setor deve atender?",
+  "Informe qual setor deve atender esta demanda.",
   "",
-  "Responda com uma das opções:",
+  "Responda com uma das opcoes abaixo:",
   "Geral, Fiscal, Contabil, Departamento Pessoal, Societario ou Comercial.",
   "",
   "Para cancelar, responda *cancelar*.",
@@ -796,14 +808,14 @@ const taskCreationSectorPrompt = [
 
 const taskCreationTitlePrompt = [
   "*2/3 - Titulo da tarefa*",
-  "Agora envie um titulo curto para a tarefa.",
+  "Envie um titulo curto e objetivo para identificarmos a demanda.",
   "",
   "Exemplo: Revisar documentos enviados",
 ].join("\n");
 
 const taskCreationDescriptionPrompt = [
   "*3/3 - Descricao da tarefa*",
-  "Agora descreva o contexto, o resultado esperado e qualquer prazo relevante.",
+  "Descreva o contexto da solicitacao, o resultado esperado e qualquer prazo relevante.",
 ].join("\n");
 
 const appendFlowAnswerMessageId = (metadata: Record<string, unknown>, messageId: string) => {
@@ -830,7 +842,7 @@ async function startTaskCreationFlow(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Nao encontrei um cliente vinculado a este numero. Para criar uma nova tarefa, primeiro precisamos vincular este contato a um cliente cadastrado.",
+      body: "Nao localizamos um cliente vinculado a este numero. Para abrir uma nova tarefa, este contato precisa estar vinculado a um cliente cadastrado.",
       clientMessageId: `${input.organizationId}:task-flow-client-required:${input.sourceMessageId}`,
     });
     return;
@@ -875,13 +887,13 @@ async function startTaskCreationFlow(
     contact: input.contact,
     body: requestType
       ? [
-          `Vamos abrir uma nova solicitação de *${requestTypeTitle || requestTypeTaskTitle || "Tarefa"}*.`,
+          `Vamos registrar uma nova solicitacao de *${requestTypeTitle || requestTypeTaskTitle || "Tarefa"}*.`,
           "",
           requestTypeDescription || null,
-          requestTypeTaskTitle ? `Título sugerido: ${requestTypeTaskTitle}` : null,
+          requestTypeTaskTitle ? `Titulo sugerido: ${requestTypeTaskTitle}` : null,
           "",
-          "*1/2 - Título da tarefa*",
-          "Envie um título curto para a tarefa ou responda *manter* para usar o título sugerido.",
+          "*1/2 - Titulo da tarefa*",
+          "Envie um titulo curto para a tarefa ou responda *manter* para usar o titulo sugerido.",
           "",
           "Para cancelar, responda *cancelar*.",
         ].filter(Boolean).join("\n")
@@ -1072,7 +1084,7 @@ async function handleTaskCreationFlowReply(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Para continuar a criacao da tarefa, responda em texto. Se preferir encerrar, responda cancelar.",
+      body: "Para continuar a abertura da tarefa, envie sua resposta em texto. Se desejar encerrar este fluxo, responda *cancelar*.",
       clientMessageId: `${input.organizationId}:task-flow-text-required:${input.message.id}`,
     });
     return {
@@ -1092,7 +1104,7 @@ async function handleTaskCreationFlowReply(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Criacao da tarefa cancelada. Quando quiser abrir uma nova tarefa, selecione Solicitacoes e depois Criar nova tarefa.",
+      body: "A abertura da tarefa foi cancelada. Quando desejar registrar uma nova demanda, selecione Solicitacoes e depois Criar nova tarefa.",
       clientMessageId: `${input.organizationId}:task-flow-cancelled:${input.message.id}`,
     });
     return {
@@ -1111,7 +1123,7 @@ async function handleTaskCreationFlowReply(
         organizationId: input.organizationId,
         conversation: input.conversation,
         contact: input.contact,
-        body: "Nao reconheci o setor. Responda com uma das opcoes: Geral, Fiscal, Contabil, Departamento Pessoal, Societario ou Comercial.",
+        body: "Nao conseguimos identificar o setor informado. Responda com uma das opcoes abaixo: Geral, Fiscal, Contabil, Departamento Pessoal, Societario ou Comercial.",
         clientMessageId: `${input.organizationId}:task-flow-invalid-sector:${input.message.id}`,
       });
       return {
@@ -1149,7 +1161,7 @@ async function handleTaskCreationFlowReply(
         organizationId: input.organizationId,
         conversation: input.conversation,
         contact: input.contact,
-        body: "O titulo ficou muito curto. Envie um titulo um pouco mais claro para a tarefa.",
+        body: "O titulo informado ficou muito curto. Envie um titulo mais claro e objetivo para a tarefa.",
         clientMessageId: `${input.organizationId}:task-flow-title-short:${input.message.id}`,
       });
       return {
@@ -1266,7 +1278,7 @@ async function activateTicketContextFromSelection(
     organizationId: input.organizationId,
     conversation: input.conversation,
     contact: input.contact,
-    body: `Ticket #${ticket.public_protocol} selecionado. Pode enviar sua mensagem ou documento por aqui que vamos vincular a este atendimento.`,
+    body: `Ticket #${ticket.public_protocol} selecionado. Envie sua mensagem ou documento por aqui para vincularmos ao atendimento correspondente.`,
     clientMessageId: `${input.organizationId}:ticket-selected:${input.message.id}`,
   });
 
@@ -1284,7 +1296,9 @@ async function routeInboundToTicket(
     interactiveReplyId?: string | null;
   },
 ) {
-  const selected = parseAutoServiceReplyId(input.interactiveReplyId);
+  const selectedById = parseAutoServiceReplyId(input.interactiveReplyId);
+  const selectedByText = parseAutoServiceTextReply(input.body);
+  const selected = selectedById.type !== "unknown" ? selectedById : selectedByText;
   if (selected.type === "ticket" && selected.id) {
     const ticket = await activateTicketContextFromSelection(supabaseAdmin, {
       organizationId: input.organizationId,
@@ -1312,6 +1326,11 @@ async function routeInboundToTicket(
   }
 
   if (selected.type === "request_type" && selected.id) {
+    await supabaseAdmin
+      .from("whatsapp_conversations")
+      .update({ status: "open", assigned_team: null, updated_at: new Date().toISOString() })
+      .eq("id", input.conversation.id);
+
     const requestType = await getPortalRequestType(supabaseAdmin, {
       organizationId: input.organizationId,
       requestTypeId: selected.id,
@@ -1359,7 +1378,48 @@ async function routeInboundToTicket(
   }
 
   if (selected.type === "action") {
+    if (selected.action === "menu") {
+      await supabaseAdmin
+        .from("whatsapp_active_ticket_contexts")
+        .update({
+          cleared_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", input.organizationId)
+        .eq("conversation_id", asString(input.conversation.id))
+        .is("cleared_at", null);
+
+      await sendAutoServiceMenu(supabaseAdmin, {
+        organizationId: input.organizationId,
+        conversation: input.conversation,
+        contact: input.contact,
+        reason: "customer_requested_menu",
+        includeTickets: false,
+      });
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({ status: "open", assigned_team: null, updated_at: new Date().toISOString() })
+        .eq("id", input.conversation.id);
+      await createWhatsAppEvent(supabaseAdmin, {
+        organization_id: input.organizationId,
+        conversation_id: asString(input.conversation.id),
+        message_id: asString(input.message.id),
+        event_type: "auto_service_action.menu",
+        details: { action: selected.action, next_step: "auto_service_menu", cleared_context: true },
+      });
+      return {
+        source: "unrouted" as const,
+        ticketId: null,
+        confidencePercent: null,
+        reason: "Cliente solicitou o menu de autoatendimento.",
+      };
+    }
+
     if (selected.action === "requests") {
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({ status: "open", assigned_team: null, updated_at: new Date().toISOString() })
+        .eq("id", input.conversation.id);
       await sendRequestsFlowMenu(supabaseAdmin, {
         organizationId: input.organizationId,
         conversation: input.conversation,
@@ -1381,7 +1441,52 @@ async function routeInboundToTicket(
       };
     }
 
+    if (selected.action === "attendance" || selected.action === "talk_team") {
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({
+          status: "in_attendance",
+          assigned_team: "Atendimento",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.conversation.id);
+
+      const attendanceMessage = "Certo. Encaminhamos sua conversa para a equipe de atendimento. Em instantes, alguem da nossa equipe dara continuidade por aqui.";
+      await sendSystemText(supabaseAdmin, {
+        organizationId: input.organizationId,
+        conversation: input.conversation,
+        contact: input.contact,
+        body: attendanceMessage,
+        clientMessageId: `${input.organizationId}:auto-action:${selected.action}:${input.message.id}`,
+      });
+      await createWhatsAppNotification(supabaseAdmin, {
+        organization_id: input.organizationId,
+        conversation_id: asString(input.conversation.id),
+        target_scope: "queue",
+        notification_type: "new_message",
+        title: "Atendimento WhatsApp solicitado",
+        body: input.body || "Cliente solicitou atendimento humano pelo WhatsApp.",
+      });
+      await createWhatsAppEvent(supabaseAdmin, {
+        organization_id: input.organizationId,
+        conversation_id: asString(input.conversation.id),
+        message_id: asString(input.message.id),
+        event_type: `auto_service_action.${selected.action}`,
+        details: { action: selected.action, next_step: "attendance_queue" },
+      });
+      return {
+        source: "unrouted" as const,
+        ticketId: null,
+        confidencePercent: null,
+        reason: "Cliente solicitou atendimento humano.",
+      };
+    }
+
     if (selected.action === "consult_tasks") {
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({ status: "open", assigned_team: null, updated_at: new Date().toISOString() })
+        .eq("id", input.conversation.id);
       await sendActiveTicketsSelection(supabaseAdmin, {
         organizationId: input.organizationId,
         conversation: input.conversation,
@@ -1404,6 +1509,10 @@ async function routeInboundToTicket(
     }
 
     if (selected.action === "create_task") {
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({ status: "open", assigned_team: null, updated_at: new Date().toISOString() })
+        .eq("id", input.conversation.id);
       await startTaskCreationFlow(supabaseAdmin, {
         organizationId: input.organizationId,
         conversation: input.conversation,
@@ -1591,7 +1700,7 @@ async function processInbound(supabaseAdmin: SupabaseAdmin, payload: Record<stri
       last_seen_at: inbound.timestamp,
       updated_at: new Date().toISOString(),
     }, { onConflict: "organization_id,phone_number" })
-    .select("id, client_id")
+    .select("id, client_id, phone_number, display_name, profile_name, match_status, auto_link_source")
     .single();
   if (contactError) throw contactError;
 

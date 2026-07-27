@@ -780,11 +780,15 @@ async function assertOrganizationFeatureEnabled(
   }
 }
 
-async function loadClientsMap(supabaseAdmin: SupabaseAdmin) {
-  const { data, error } = await supabaseAdmin
+async function loadClientsMap(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+  let query = supabaseAdmin
     .from("clients")
     .select("id, organization_id, name, cnpj, regime, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
     .order("name");
+
+  if (organizationId) query = query.eq("organization_id", organizationId);
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -847,33 +851,69 @@ function buildEmptyOverview(warnings: string[] = []) {
   };
 }
 
-async function loadTemplatesMap(supabaseAdmin: SupabaseAdmin) {
-  const { data, error } = await supabaseAdmin
+async function loadTemplatesMap(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+  let query = supabaseAdmin
     .from("obligation_templates")
     .select("*")
     .order("name");
 
+  if (organizationId) query = query.eq("organization_id", organizationId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return new Map((data || []).map((row) => [String((row as JsonRecord).id), row as TemplateRow]));
 }
 
-async function loadProfilesMap(supabaseAdmin: SupabaseAdmin) {
-  const { data, error } = await supabaseAdmin
+async function loadProfilesMap(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+  let query = supabaseAdmin
     .from("client_obligation_profiles")
     .select("*")
     .order("created_at", { ascending: false });
 
+  if (organizationId) query = query.eq("organization_id", organizationId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return new Map((data || []).map((row) => [String((row as JsonRecord).id), row as ProfileRow]));
 }
 
-async function loadReferenceFilesMap(supabaseAdmin: SupabaseAdmin) {
-  const { data, error } = await supabaseAdmin
+async function loadReferenceFilesMap(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId?: string,
+  options: { includeAnalysisPayload?: boolean } = {},
+) {
+  const selectColumns = options.includeAnalysisPayload
+    ? "*"
+    : [
+        "id",
+        "organization_id",
+        "template_id",
+        "profile_id",
+        "document_type_key",
+        "file_name",
+        "storage_bucket",
+        "storage_path",
+        "content_type",
+        "file_size",
+        "is_active",
+        "source_kind",
+        "extracted_text_preview",
+        "text_extraction_status",
+        "ocr_status",
+        "fingerprint_version",
+        "keywords",
+        "primary_cues",
+        "created_at",
+      ].join(", ");
+  let query = supabaseAdmin
     .from("expected_document_reference_files")
-    .select("*")
+    .select(selectColumns)
     .eq("is_active", true)
     .order("created_at", { ascending: false });
 
+  if (organizationId) query = query.eq("organization_id", organizationId);
+
+  const { data, error } = await query;
   if (error) throw error;
 
   const rows = (data || []) as ReferenceFileRow[];
@@ -891,13 +931,16 @@ async function loadReferenceFilesMap(supabaseAdmin: SupabaseAdmin) {
   return { byTemplateDocument, byId, rows };
 }
 
-async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin) {
-  const { data, error } = await supabaseAdmin
+async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+  let query = supabaseAdmin
     .from("document_ingestion_jobs")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(120);
 
+  if (organizationId) query = query.eq("organization_id", organizationId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []) as IngestionJobRow[];
 }
@@ -3393,45 +3436,50 @@ async function buildOverview(
   organizationId: string,
   filters: JsonRecord = {},
 ) {
+  const skipOperationalSync = asBoolean(filters.skip_operational_sync, false);
   const templatesMap = new Map(
-    filterByOrganization(Array.from((await loadTemplatesMap(supabaseAdmin)).values()) as unknown as JsonRecord[], organizationId)
+    filterByOrganization(Array.from((await loadTemplatesMap(supabaseAdmin, organizationId)).values()) as unknown as JsonRecord[], organizationId)
       .map((template) => [String(template.id), template as unknown as TemplateRow]),
   );
   const profilesMap = new Map(
-    filterByOrganization(Array.from((await loadProfilesMap(supabaseAdmin)).values()) as unknown as JsonRecord[], organizationId)
+    filterByOrganization(Array.from((await loadProfilesMap(supabaseAdmin, organizationId)).values()) as unknown as JsonRecord[], organizationId)
       .map((profile) => [String(profile.id), profile as unknown as ProfileRow]),
   );
   const clientsMap = new Map(
-    filterByOrganization(Array.from((await loadClientsMap(supabaseAdmin)).values()) as unknown as JsonRecord[], organizationId)
+    filterByOrganization(Array.from((await loadClientsMap(supabaseAdmin, organizationId)).values()) as unknown as JsonRecord[], organizationId)
       .map((client) => [String(client.id), client]),
   );
-  const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
+  const referenceFiles = await loadReferenceFilesMap(supabaseAdmin, organizationId, {
+    includeAnalysisPayload: !skipOperationalSync,
+  });
   const overviewWarnings: string[] = [];
 
   const currentGenerationWindow = currentCompetenceGenerationWindow();
 
-  try {
-    await ensureInstancesForProfiles(
-      supabaseAdmin,
-      Array.from(profilesMap.values()),
-      templatesMap,
-      actorId,
-      currentGenerationWindow.cursorStart,
-      currentGenerationWindow.cursorEnd,
-      currentGenerationWindow.targetCompetenceKey,
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao sincronizar competencias.";
-    overviewWarnings.push(`Sincronizacao de competencias nao concluida: ${message}`);
-    console.error("grow-obligations overview ensureInstancesForProfiles failed", { message });
-  }
+  if (!skipOperationalSync) {
+    try {
+      await ensureInstancesForProfiles(
+        supabaseAdmin,
+        Array.from(profilesMap.values()),
+        templatesMap,
+        actorId,
+        currentGenerationWindow.cursorStart,
+        currentGenerationWindow.cursorEnd,
+        currentGenerationWindow.targetCompetenceKey,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao sincronizar competencias.";
+      overviewWarnings.push(`Sincronizacao de competencias nao concluida: ${message}`);
+      console.error("grow-obligations overview ensureInstancesForProfiles failed", { message });
+    }
 
-  try {
-    await markOverdueInstances(supabaseAdmin, actorId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao atualizar atrasos.";
-    overviewWarnings.push(`Atualizacao de atrasos nao concluida: ${message}`);
-    console.error("grow-obligations overview markOverdueInstances failed", { message });
+    try {
+      await markOverdueInstances(supabaseAdmin, actorId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao atualizar atrasos.";
+      overviewWarnings.push(`Atualizacao de atrasos nao concluida: ${message}`);
+      console.error("grow-obligations overview markOverdueInstances failed", { message });
+    }
   }
 
   let documentsQuery = supabaseAdmin
@@ -3470,7 +3518,7 @@ async function buildOverview(
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
       .limit(200),
-    loadIngestionJobs(supabaseAdmin),
+    loadIngestionJobs(supabaseAdmin, organizationId),
   ]);
 
   if (instancesError) throw instancesError;
@@ -3513,17 +3561,19 @@ async function buildOverview(
     latest_delivery_attempt: attemptsByInstance.get(instance.id)?.[0] || null,
   }));
 
-  try {
-    for (const instance of instances) {
-      const template = templatesMap.get(instance.template_id);
-      const client = clientsMap.get(instance.client_id);
-      if (!template || !client) continue;
-      await syncInstanceArtifacts(supabaseAdmin, instance as InstanceRow, template, String((client as JsonRecord).name || "Cliente"));
+  if (!skipOperationalSync) {
+    try {
+      for (const instance of instances) {
+        const template = templatesMap.get(instance.template_id);
+        const client = clientsMap.get(instance.client_id);
+        if (!template || !client) continue;
+        await syncInstanceArtifacts(supabaseAdmin, instance as InstanceRow, template, String((client as JsonRecord).name || "Cliente"));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao sincronizar calendario e tarefas.";
+      overviewWarnings.push(`Sincronizacao de calendario/tarefas nao concluida: ${message}`);
+      console.error("grow-obligations overview syncInstanceArtifacts failed", { message });
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao sincronizar calendario e tarefas.";
-    overviewWarnings.push(`Sincronizacao de calendario/tarefas nao concluida: ${message}`);
-    console.error("grow-obligations overview syncInstanceArtifacts failed", { message });
   }
 
   const documents = (docsData || []).map((item) => {

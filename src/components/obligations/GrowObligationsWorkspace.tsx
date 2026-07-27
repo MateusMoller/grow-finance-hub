@@ -1282,6 +1282,7 @@ export function GrowObligationsWorkspace({
         document_client_id: documentClientFilter,
         document_template_id: documentTemplateFilter,
         document_competence: documentCompetenceFilter || null,
+        skip_operational_sync: true,
       }),
   });
 

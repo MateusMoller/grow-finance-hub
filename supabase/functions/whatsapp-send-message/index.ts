@@ -407,6 +407,32 @@ async function changeStatus(supabaseAdmin: SupabaseAdmin, userId: string, body: 
   return { ok: true };
 }
 
+async function endAttendance(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
+  const conversationId = asString(body.conversationId);
+  const conversation = await loadConversation(supabaseAdmin, conversationId);
+  await assertWhatsAppModuleAccess(supabaseAdmin, userId, conversation.organization_id);
+
+  await supabaseAdmin
+    .from("whatsapp_conversations")
+    .update({
+      status: "open",
+      assigned_to_user_id: null,
+      assigned_team: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversation.id);
+
+  await createWhatsAppEvent(supabaseAdmin, {
+    organization_id: conversation.organization_id,
+    conversation_id: conversation.id,
+    event_type: "attendance_ended",
+    actor_user_id: userId,
+    details: { previous_status: conversation.status },
+  });
+
+  return { ok: true };
+}
+
 async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const conversationId = asString(body.conversationId);
   const mode = asString(body.mode) === "continue" ? "continue" : "create";
@@ -721,6 +747,7 @@ Deno.serve(async (request) => {
     if (action === "link_client") return jsonResponse(await linkClient(supabaseAdmin, user.id, body));
     if (action === "assign_conversation") return jsonResponse(await assignConversation(supabaseAdmin, user.id, body));
     if (action === "change_status") return jsonResponse(await changeStatus(supabaseAdmin, user.id, body));
+    if (action === "end_attendance") return jsonResponse(await endAttendance(supabaseAdmin, user.id, body));
     if (action === "create_quick_task") return jsonResponse(await createQuickTask(supabaseAdmin, user.id, body));
     return jsonResponse({ error: "unknown_action" }, 400);
   } catch (error) {

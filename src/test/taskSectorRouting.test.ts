@@ -19,9 +19,9 @@ const collaborator: EffectiveAccess = {
 };
 
 describe("canonical task sector routing", () => {
-  it("limits task creation to the collaborator sector", () => {
+  it("allows collaborators with Tasks access to create tasks for any sector", () => {
     expect(canCreateTaskInSector("Fiscal", collaborator)).toBe(true);
-    expect(canCreateTaskInSector("Financeiro", collaborator)).toBe(false);
+    expect(canCreateTaskInSector("Financeiro", collaborator)).toBe(true);
   });
 
   it("allows admins to create tasks in every fixed sector", () => {
@@ -42,14 +42,14 @@ describe("canonical task sector routing", () => {
     });
   });
 
-  it("allows matching sector tasks and one direct cross-sector assignment", () => {
+  it("allows only matching sector tasks for collaborators", () => {
     expect(canViewTaskByCanonicalScope({ sector: "Fiscal" }, collaborator)).toBe(true);
     expect(
       canViewTaskByCanonicalScope(
         { sector: "Financeiro", assignedToUserId: collaborator.userId },
         collaborator,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(canViewTaskByCanonicalScope({ sector: "Financeiro", assignedToUserId: null }, collaborator)).toBe(false);
   });
 

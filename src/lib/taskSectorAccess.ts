@@ -102,12 +102,10 @@ export const getCanonicalTaskSectorAccess = (access: EffectiveAccess | null) => 
   };
 };
 
-export const canCreateTaskInSector = (sector: string, access: EffectiveAccess | null) => {
+export const canCreateTaskInSector = (_sector: string, access: EffectiveAccess | null) => {
   if (!access || access.status !== "active" || access.requiresAccessReview) return false;
   if (access.primaryRole === "admin") return true;
-  return access.primaryRole === "colaborador" &&
-    Boolean(access.sectorCode) &&
-    normalizeSectorCode(sector) === access.sectorCode;
+  return access.primaryRole === "colaborador" && access.enabledModules.includes("tarefas");
 };
 
 export const canViewTaskByCanonicalScope = (
@@ -118,8 +116,5 @@ export const canViewTaskByCanonicalScope = (
   if (access.primaryRole === "admin") return true;
   if (access.primaryRole !== "colaborador" || !access.enabledModules.includes("tarefas")) return false;
 
-  return (
-    (Boolean(access.sectorCode) && normalizeSectorCode(task.sector) === access.sectorCode) ||
-    task.assignedToUserId === access.userId
-  );
+  return Boolean(access.sectorCode) && normalizeSectorCode(task.sector) === access.sectorCode;
 };

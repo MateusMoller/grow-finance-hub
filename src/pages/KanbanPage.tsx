@@ -42,7 +42,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { invokeGrowObligations } from "@/lib/growObligations";
 import { motion } from "framer-motion";
-import { Archive, CalendarDays, Check, ChevronsUpDown, Filter, KanbanSquare, Loader2, Plus } from "lucide-react";
+import { Archive, CalendarDays, Check, ChevronDown, ChevronsUpDown, Filter, KanbanSquare, Loader2, Plus } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -65,6 +65,7 @@ import {
 } from "@/lib/changeHistory";
 import {
   canCreateTaskInSector,
+  canViewTaskByCanonicalScope,
   getCanonicalTaskSectorAccess,
   normalizeTaskSectorLabel,
 } from "@/lib/taskSectorAccess";
@@ -159,6 +160,30 @@ const getObligationInstanceId = (task: Pick<KanbanTaskItem, "integration_task_id
   return value.startsWith("instance:") ? value.slice("instance:".length) : "";
 };
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const getObligationTemplateId = (task: Pick<KanbanTaskItem, "integration_payload">) => {
+  const payload = asRecord(task.integration_payload);
+  return typeof payload.template_id === "string" ? payload.template_id : "";
+};
+
+const getObligationCompetenceKey = (task: Pick<KanbanTaskItem, "integration_payload">) => {
+  const payload = asRecord(task.integration_payload);
+  return typeof payload.target_competence_key === "string" ? payload.target_competence_key : "";
+};
+
+const getObligationGroupName = (task: Pick<KanbanTaskItem, "title" | "client_name">) => {
+  const title = task.title || "Obrigação";
+  const clientName = task.client_name?.trim();
+  if (clientName && title.endsWith(` - ${clientName}`)) {
+    return title.slice(0, -` - ${clientName}`.length).trim() || title;
+  }
+  return title.split(" - ")[0]?.trim() || title;
+};
+
 const formatTaskCreatedDate = (value: string | null | undefined) => {
   if (!value) return null;
   const date = new Date(value);
@@ -218,6 +243,105 @@ const tasksByStatusTemplate = (): Record<KanbanStatus, KanbanTaskItem[]> => ({
   archived: [],
 });
 
+const kanbanTaskListColumns = [
+  "id",
+  "title",
+  "client_name",
+  "assignee",
+  "assigned_to_user_id",
+  "priority",
+  "sector",
+  "status",
+  "due_date",
+  "tags",
+  "request_id",
+  "created_at",
+  "created_by",
+  "updated_at",
+  "integration_source",
+  "integration_task_id",
+  "integration_payload",
+].join(",");
+
+const normalizeKanbanTask = (task: Record<string, unknown>): KanbanTaskItem => ({
+  ...(task as unknown as KanbanTaskItem),
+  description: typeof task.description === "string" ? task.description : null,
+  client_name: typeof task.client_name === "string" ? task.client_name : null,
+  assignee: typeof task.assignee === "string" ? task.assignee : null,
+  priority: normalizePriority(String(task.priority || "")),
+  sector: normalizeVisibleSector(String(task.sector || "")),
+  status: String(task.status || "backlog") as KanbanStatus,
+  due_date: typeof task.due_date === "string" ? task.due_date : null,
+  tags: (Array.isArray(task.tags) && task.tags.length
+    ? task.tags
+    : task.sector
+      ? [task.sector]
+      : []
+  ).map((sector) => normalizeVisibleSector(String(sector))),
+  subtasks: parseSubtasks(task.subtasks),
+  request_id: typeof task.request_id === "string" ? task.request_id : null,
+  created_at: String(task.created_at || new Date().toISOString()),
+  integration_source:
+    typeof task.integration_source === "string"
+      ? task.integration_source
+      : null,
+  integration_task_id:
+    typeof task.integration_task_id === "string"
+      ? task.integration_task_id
+      : null,
+});
+
+interface ObligationTaskGroup {
+  id: string;
+  name: string;
+  competenceKey: string;
+  sector: string;
+  priority: string;
+  dueDate: string | null;
+  tasks: KanbanTaskItem[];
+}
+
+const groupBacklogObligationTasks = (tasks: KanbanTaskItem[]) => {
+  const groups = new Map<string, ObligationTaskGroup>();
+  const regularTasks: KanbanTaskItem[] = [];
+
+  tasks.forEach((task) => {
+    if (!isObligationTask(task)) {
+      regularTasks.push(task);
+      return;
+    }
+
+    const templateId = getObligationTemplateId(task);
+    const competenceKey = getObligationCompetenceKey(task);
+    const name = getObligationGroupName(task);
+    const groupId = [templateId || name, competenceKey || "sem-competencia", task.status].join(":");
+    const existing = groups.get(groupId);
+
+    if (existing) {
+      existing.tasks.push(task);
+      return;
+    }
+
+    groups.set(groupId, {
+      id: groupId,
+      name,
+      competenceKey,
+      sector: task.sector || task.tags[0] || "Geral",
+      priority: task.priority,
+      dueDate: task.due_date,
+      tasks: [task],
+    });
+  });
+
+  return {
+    regularTasks,
+    groups: Array.from(groups.values()).sort((left, right) =>
+      left.name.localeCompare(right.name, "pt-BR") ||
+      left.competenceKey.localeCompare(right.competenceKey),
+    ),
+  };
+};
+
 interface TaskKanbanViewProps {
   embedded?: boolean;
 }
@@ -275,6 +399,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     if (taskSectorAccess.canAccessAllTaskSectors) return taskSectorOptions;
     return taskSectorAccess.allowedTaskSectors;
   }, [taskSectorAccess]);
+  const creatableSectors = taskSectorOptions;
   const newTaskSectorCode = useMemo<SectorCode | null>(
     () => normalizeSectorCode(newTask.sector),
     [newTask.sector],
@@ -336,6 +461,30 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     );
   }, [location.pathname, location.search, navigate]);
 
+  const openTaskDetails = useCallback(async (task: KanbanTaskItem) => {
+    setSelectedTask(task);
+    setDetailOpen(true);
+
+    const { data, error } = await supabase
+      .from("kanban_tasks")
+      .select("*")
+      .eq("id", task.id)
+      .maybeSingle();
+
+    if (error) {
+      toast.error("NÃ£o foi possÃ­vel carregar os detalhes completos da tarefa.");
+      return;
+    }
+
+    if (data) {
+      const fullTask = normalizeKanbanTask(data as Record<string, unknown>);
+      setSelectedTask(fullTask);
+      setTasks((prev) =>
+        prev.map((current) => current.id === fullTask.id ? { ...current, ...fullTask } : current),
+      );
+    }
+  }, []);
+
   useEffect(() => {
     if (loading) return;
 
@@ -358,8 +507,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    setSelectedTask(targetTask);
-    setDetailOpen(true);
+    void openTaskDetails(targetTask);
     if (targetTask.status === "archived") {
       setShowArchived(true);
     }
@@ -373,13 +521,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       },
       { replace: true },
     );
-  }, [loading, location.pathname, location.search, navigate, tasks]);
+  }, [loading, location.pathname, location.search, navigate, openTaskDetails, tasks]);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("kanban_tasks")
-      .select("*")
+      .select(kanbanTaskListColumns)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -404,30 +552,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     }
 
     const normalized = (data || []).map((task) => {
-      const taskRecord = task as unknown as Record<string, unknown>;
+      const normalizedTask = normalizeKanbanTask(task as Record<string, unknown>);
       return {
-        ...task,
-        priority: normalizePriority(task.priority || ""),
-        sector: normalizeVisibleSector(task.sector || ""),
-        status: (autoArchivedIds.has(task.id) ? "archived" : task.status) as KanbanStatus,
-        tags: (task.tags?.length
-          ? task.tags
-          : task.sector
-            ? [task.sector]
-            : []
-        ).map((sector) => normalizeVisibleSector(sector)),
-        subtasks: parseSubtasks(task.subtasks),
-        integration_source:
-          typeof taskRecord.integration_source === "string"
-            ? taskRecord.integration_source
-            : null,
-        integration_task_id:
-          typeof taskRecord.integration_task_id === "string"
-            ? taskRecord.integration_task_id
-            : null,
+        ...normalizedTask,
+        status: (autoArchivedIds.has(normalizedTask.id) ? "archived" : normalizedTask.status) as KanbanStatus,
       };
     });
-    setTasks(normalized as KanbanTaskItem[]);
+    setTasks(normalized);
     setLoading(false);
   }, []);
 
@@ -540,11 +671,11 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   }, [availableSectors, sectorFilter]);
 
   useEffect(() => {
-    if (availableSectors.length === 0) return;
-    if (!availableSectors.includes(newTask.sector)) {
-      setNewTask((prev) => ({ ...prev, sector: availableSectors[0] }));
+    if (creatableSectors.length === 0) return;
+    if (!creatableSectors.includes(newTask.sector)) {
+      setNewTask((prev) => ({ ...prev, sector: creatableSectors[0] }));
     }
-  }, [availableSectors, newTask.sector]);
+  }, [creatableSectors, newTask.sector]);
 
   const tasksByStatus = useMemo(() => {
     const grouped = tasksByStatusTemplate();
@@ -880,9 +1011,19 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    const { data: createdTask, error } = await supabase
+    const createdTask = {
+      id: crypto.randomUUID(),
+      title: newTask.title,
+    };
+    const canViewCreatedTask = canViewTaskByCanonicalScope(
+      { sector: newTask.sector, assignedToUserId: newTask.assigned_to_user_id || null },
+      effectiveAccess,
+    );
+
+    const { error } = await supabase
       .from("kanban_tasks")
       .insert({
+        id: createdTask.id,
         title: newTask.title,
         client_name: selectedClient?.name || null,
         assignee: newTask.assignee || null,
@@ -893,19 +1034,19 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         tags: [newTask.sector],
         subtasks: newTask.subtasks,
         created_by: user?.id,
-      })
-      .select("id, title")
-      .single();
+      });
 
-    if (error || !createdTask) {
+    if (error) {
       toast.error(
         `Erro ao criar tarefa: ${error?.message || "Não foi possível criar a tarefa"}`,
       );
       return;
     }
 
-    void registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
-    if (relatedSourceTask) {
+    if (canViewCreatedTask) {
+      void registerTaskHistory(createdTask.id, "Tarefa criada", createdTask.title);
+    }
+    if (relatedSourceTask && canViewCreatedTask) {
       if (!currentOrganizationId) {
         toast.warning("Tarefa criada, mas a relação não foi salva por falta de organização ativa.");
       } else {
@@ -946,7 +1087,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       assignee: "",
       assigned_to_user_id: "",
       priority: "Média",
-      sector: availableSectors[0] || "Geral",
+      sector: creatableSectors[0] || "Geral",
       subtasks: [],
     });
     void fetchTasks();
@@ -1008,8 +1149,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    setSelectedTask(relatedTask);
-    setDetailOpen(true);
+    void openTaskDetails(relatedTask);
     if (relatedTask.status === "archived") {
       setShowArchived(true);
     }
@@ -1125,6 +1265,14 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               <div className="grid w-full min-w-[1120px] grid-cols-5 gap-4 pr-2 2xl:min-w-0">
                 {baseColumns.map((column) => {
                   const columnTasks = tasksByStatus[column.id] || [];
+                  const backlogObligationGroups =
+                    column.id === "backlog"
+                      ? groupBacklogObligationTasks(columnTasks)
+                      : null;
+                  const visibleColumnTasks =
+                    backlogObligationGroups?.regularTasks || columnTasks;
+                  const visibleItemCount =
+                    visibleColumnTasks.length + (backlogObligationGroups?.groups.length || 0);
 
                   return (
                     <div
@@ -1151,7 +1299,22 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                             : "border-border/35 bg-background/40"
                         }`}
                       >
-                        {columnTasks.map((task, index) => (
+                        {backlogObligationGroups?.groups.map((group) => (
+                          <ObligationTaskGroupCard
+                            key={group.id}
+                            group={group}
+                            currentStatus={column.id}
+                            onStatusChange={handleStatusChange}
+                            onOpenTask={(task) => {
+                              void openTaskDetails(task);
+                            }}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                            draggingTaskId={draggingTaskId}
+                            canArchive={isAdmin}
+                          />
+                        ))}
+                        {visibleColumnTasks.map((task, index) => (
                           <KanbanCard
                             key={task.id}
                             task={task}
@@ -1159,8 +1322,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                             currentStatus={column.id}
                             onStatusChange={handleStatusChange}
                             onOpenDetails={() => {
-                              setSelectedTask(task);
-                              setDetailOpen(true);
+                              void openTaskDetails(task);
                             }}
                             onDragStart={handleDragStart}
                             onDragEnd={handleDragEnd}
@@ -1168,7 +1330,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                             canArchive={isAdmin}
                           />
                         ))}
-                        {columnTasks.length === 0 && (
+                        {visibleItemCount === 0 && (
                           <div className="rounded-lg border border-dashed bg-card/40 p-5 text-center text-xs leading-relaxed text-muted-foreground">
                             Arraste uma tarefa para esta coluna
                           </div>
@@ -1208,8 +1370,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       currentStatus={archiveColumn.id}
                       onStatusChange={handleStatusChange}
                       onOpenDetails={() => {
-                        setSelectedTask(task);
-                        setDetailOpen(true);
+                        void openTaskDetails(task);
                       }}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
@@ -1423,7 +1584,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableSectors.map((sector) => (
+                    {creatableSectors.map((sector) => (
                       <SelectItem key={sector} value={sector}>
                         {sector}
                       </SelectItem>
@@ -1465,7 +1626,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                   assignee: "",
                   assigned_to_user_id: "",
                   priority: "Média",
-                  sector: availableSectors[0] || "Geral",
+                  sector: creatableSectors[0] || "Geral",
                   subtasks: [],
                 });
               }}
@@ -1615,5 +1776,80 @@ function KanbanCard({
         </div>
       )}
     </motion.div>
+  );
+}
+
+function ObligationTaskGroupCard({
+  group,
+  currentStatus,
+  onStatusChange,
+  onOpenTask,
+  onDragStart,
+  onDragEnd,
+  draggingTaskId,
+  canArchive,
+}: {
+  group: ObligationTaskGroup;
+  currentStatus: KanbanStatus;
+  onStatusChange: (id: string, status: KanbanStatus) => void;
+  onOpenTask: (task: KanbanTaskItem) => void;
+  onDragStart: (taskId: string) => void;
+  onDragEnd: () => void;
+  draggingTaskId: string | null;
+  canArchive: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const dueDate = formatTaskCreatedDate(group.dueDate);
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/35"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground/95">
+          {group.name}
+        </p>
+        {group.competenceKey && (
+          <span className="hidden shrink-0 text-[11px] text-muted-foreground 2xl:inline">
+            {group.competenceKey}
+          </span>
+        )}
+        {dueDate && (
+          <span className="hidden shrink-0 text-[11px] text-muted-foreground 2xl:inline">
+            {dueDate}
+          </span>
+        )}
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {group.tasks.length}
+        </span>
+      </button>
+
+      {open && (
+        <div className="space-y-3 border-t border-border/50 bg-muted/15 p-2.5">
+          {group.tasks.map((task, index) => (
+            <KanbanCard
+              key={task.id}
+              task={task}
+              index={index}
+              currentStatus={currentStatus}
+              onStatusChange={onStatusChange}
+              onOpenDetails={() => onOpenTask(task)}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              isDragging={draggingTaskId === task.id}
+              canArchive={canArchive}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

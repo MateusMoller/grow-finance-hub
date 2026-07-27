@@ -99,3 +99,11 @@ export async function updateWhatsAppConversationStatus(conversationId: string, s
   if (error) throw error;
   return data;
 }
+
+export async function endWhatsAppAttendance(conversationId: string) {
+  const { data, error } = await db.functions.invoke("whatsapp-send-message", {
+    body: { action: "end_attendance", conversationId },
+  });
+  if (error) throw error;
+  return data;
+}

@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(16);
+SELECT plan(17);
 
 SELECT has_column('public', 'kanban_tasks', 'assigned_to_user_id', 'typed assignee exists');
 SELECT has_function('public', 'canonical_task_sector', ARRAY['text'], 'sector normalizer exists');
@@ -9,7 +9,13 @@ SELECT has_function(
   'public',
   'can_access_task_values',
   ARRAY['uuid', 'uuid', 'text', 'uuid'],
-  'sector or direct assignment helper exists'
+  'sector-only task access helper exists'
+);
+SELECT has_function(
+  'public',
+  'can_create_task_values',
+  ARRAY['uuid', 'uuid'],
+  'cross-sector task creation helper exists'
 );
 SELECT has_function(
   'public',

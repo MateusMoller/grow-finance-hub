@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ExternalLink, Link2, Loader2, Plus, Search } from "lucide-react";
+import { Check, ExternalLink, Link2, Loader2, Plus, Search, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,19 +103,23 @@ export function ConversationHeader({
   messages,
   onLinkClient,
   onCreateQuickTask,
+  onEndAttendance,
   activeClients,
   existingTasks,
   clientLinking,
   quickTaskCreating,
+  attendanceEnding,
 }: {
   conversation: WhatsAppConversationSummary | null;
   messages: WhatsAppMessage[];
   onLinkClient?: (clientId: string) => void;
   onCreateQuickTask?: (draft: WhatsAppQuickTaskDraft) => void;
+  onEndAttendance?: () => void;
   activeClients: WhatsAppClientLinkOption[];
   existingTasks: WhatsAppExistingTaskOption[];
   clientLinking?: boolean;
   quickTaskCreating?: boolean;
+  attendanceEnding?: boolean;
 }) {
   const navigate = useNavigate();
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
@@ -199,6 +203,19 @@ export function ConversationHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        {conversation.status === "in_attendance" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 rounded-full px-3 text-[#54656f] hover:bg-white/80 hover:text-[#111b21]"
+            onClick={onEndAttendance}
+            disabled={attendanceEnding}
+            aria-label="Finalizar atendimento"
+          >
+            {attendanceEnding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+            Finalizar atendimento
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

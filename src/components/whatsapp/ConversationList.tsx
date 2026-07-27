@@ -58,13 +58,16 @@ const initialsFor = (name: string) =>
 
 export function ConversationList({
   conversations,
+  allConversations = conversations,
   activeId,
+  activeQueue,
   loading,
   search,
   chatDensity,
   chatBackground,
   bubbleTone,
   onSearchChange,
+  onQueueChange,
   onSelect,
   onChatDensityChange,
   onChatBackgroundChange,
@@ -73,13 +76,16 @@ export function ConversationList({
   onStandardMessagesChange,
 }: {
   conversations: WhatsAppConversationSummary[];
+  allConversations?: WhatsAppConversationSummary[];
   activeId: string | null;
+  activeQueue: "attendance" | "automatic";
   loading: boolean;
   search: string;
   chatDensity: WhatsAppChatDensity;
   chatBackground: WhatsAppChatBackground;
   bubbleTone: WhatsAppBubbleTone;
   onSearchChange: (value: string) => void;
+  onQueueChange: (value: "attendance" | "automatic") => void;
   onSelect: (conversation: WhatsAppConversationSummary) => void;
   onChatDensityChange: (value: WhatsAppChatDensity) => void;
   onChatBackgroundChange: (value: WhatsAppChatBackground) => void;
@@ -90,6 +96,8 @@ export function ConversationList({
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [standardMessagesOpen, setStandardMessagesOpen] = useState(false);
   const [standardMessagesDraft, setStandardMessagesDraft] = useState<WhatsAppStandardMessage[]>(standardMessages);
+  const attendanceCount = allConversations.filter((conversation) => conversation.status === "in_attendance").length;
+  const automaticCount = allConversations.length - attendanceCount;
 
   useEffect(() => {
     if (standardMessagesOpen) {
@@ -127,6 +135,40 @@ export function ConversationList({
   return (
     <aside className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="border-b border-[#d1d7db] bg-[#f0f2f5] px-3 py-2.5">
+        <div className="mb-2 grid grid-cols-2 rounded-xl bg-[#d9e7e0] p-1 text-[12px] font-semibold text-[#54656f] shadow-inner">
+          <button
+            type="button"
+            onClick={() => onQueueChange("attendance")}
+            className={`flex h-9 items-center justify-center gap-1.5 rounded-lg transition ${
+              activeQueue === "attendance"
+                ? "bg-white text-[#075e54] shadow-sm"
+                : "hover:bg-white/65 hover:text-[#111b21]"
+            }`}
+          >
+            Atendimento
+            {attendanceCount > 0 && (
+              <span className="rounded-full bg-[#25d366] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {attendanceCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onQueueChange("automatic")}
+            className={`flex h-9 items-center justify-center gap-1.5 rounded-lg transition ${
+              activeQueue === "automatic"
+                ? "bg-white text-[#075e54] shadow-sm"
+                : "hover:bg-white/65 hover:text-[#111b21]"
+            }`}
+          >
+            Automático
+            {automaticCount > 0 && (
+              <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#54656f] ring-1 ring-black/5">
+                {automaticCount}
+              </span>
+            )}
+          </button>
+        </div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-[#111b21]">Conversas</h2>
           <DropdownMenu>

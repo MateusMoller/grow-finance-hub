@@ -39,6 +39,7 @@ export function ConversationPanel({
   existingTasks,
   clientLinking,
   quickTaskCreating,
+  attendanceEnding,
   chatDensity,
   chatBackground,
   bubbleTone,
@@ -47,6 +48,7 @@ export function ConversationPanel({
   onSendFile,
   onLinkClient,
   onCreateQuickTask,
+  onEndAttendance,
 }: {
   conversation: WhatsAppConversationSummary | null;
   messages: WhatsAppMessage[];
@@ -56,6 +58,7 @@ export function ConversationPanel({
   existingTasks: WhatsAppExistingTaskOption[];
   clientLinking?: boolean;
   quickTaskCreating?: boolean;
+  attendanceEnding?: boolean;
   chatDensity: WhatsAppChatDensity;
   chatBackground: WhatsAppChatBackground;
   bubbleTone: WhatsAppBubbleTone;
@@ -64,6 +67,7 @@ export function ConversationPanel({
   onSendFile: (file: File) => Promise<void>;
   onLinkClient: (clientId: string) => void;
   onCreateQuickTask: (draft: WhatsAppQuickTaskDraft) => void;
+  onEndAttendance: () => void;
 }) {
   const [replyReference, setReplyReference] = useState<WhatsAppReplyReference | null>(null);
   const contactInitials = initialsFor(getConversationName(conversation));
@@ -80,10 +84,12 @@ export function ConversationPanel({
           messages={messages}
           onLinkClient={onLinkClient}
           onCreateQuickTask={onCreateQuickTask}
+          onEndAttendance={onEndAttendance}
           activeClients={activeClients}
           existingTasks={existingTasks}
           clientLinking={clientLinking}
           quickTaskCreating={quickTaskCreating}
+          attendanceEnding={attendanceEnding}
         />
       )}
       <div
