@@ -77,7 +77,7 @@ async function processSlaAlerts(supabaseAdmin: SupabaseAdmin) {
 async function sendWaitingCustomerReminders(supabaseAdmin: SupabaseAdmin) {
   const { data: tickets, error } = await supabaseAdmin
     .from("whatsapp_customer_tickets")
-    .select("*, conversation:whatsapp_conversations(contact:whatsapp_contacts(phone_number))")
+    .select("*, conversation:whatsapp_conversations(provider_phone_number_id, contact:whatsapp_contacts(phone_number))")
     .eq("status", "waiting_customer")
     .not("last_agent_message_at", "is", null)
     .lt("last_agent_message_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
@@ -97,6 +97,7 @@ async function sendWaitingCustomerReminders(supabaseAdmin: SupabaseAdmin) {
       toPhone: phone,
       body: message,
       clientMessageId: `reminder:${ticket.id}:${Date.now()}`,
+      phoneNumberId: asString(ticket.conversation?.provider_phone_number_id) || null,
     }).then(async () => {
       sent += 1;
       await createWhatsAppTicketEvent(supabaseAdmin, {

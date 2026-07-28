@@ -153,6 +153,7 @@ export function ConversationHeader({
     conversation.contact?.profile_name ||
     "Contato não identificado";
   const windowActive = isWhatsAppWindowActive(conversation.active_window_expires_at);
+  const deliveryBlocked = conversation.status === "delivery_blocked";
   const contextMessageOptions = messages
     .filter((message) => message.delivery_status !== "failed")
     .slice(-30)
@@ -198,7 +199,8 @@ export function ConversationHeader({
         <div className="min-w-0">
           <h2 className="truncate text-[15px] font-semibold text-[#111b21]">{name}</h2>
           <p className="truncate text-xs text-[#667781]">
-            {conversation.contact?.phone_number || "Sem telefone"} - {windowActive ? "janela ativa" : "janela fechada"}
+            {conversation.contact?.phone_number || "Sem telefone"} -{" "}
+            {deliveryBlocked ? "envio automático bloqueado" : windowActive ? "janela ativa" : "janela fechada"}
           </p>
         </div>
       </div>

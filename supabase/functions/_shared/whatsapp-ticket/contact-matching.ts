@@ -43,6 +43,21 @@ export function shouldPreserveManualClientLink(contact: WhatsAppContactLinkState
   return Boolean(contact.clientId && (contact.autoLinkSource === "manual" || contact.matchStatus === "manual"));
 }
 
+export function hasReliableWhatsAppClientLink(contact: WhatsAppContactLinkState): boolean {
+  return Boolean(
+    contact.clientId &&
+      (
+        contact.matchStatus === "manual" ||
+        contact.autoLinkSource === "manual" ||
+        (contact.matchStatus === "matched" && contact.autoLinkSource === "unique_phone_match")
+      ),
+  );
+}
+
+export function reliableWhatsAppClientId(contact: WhatsAppContactLinkState): string | null {
+  return hasReliableWhatsAppClientLink(contact) ? contact.clientId ?? null : null;
+}
+
 export function chooseSafeClientMatch(
   candidateClientIds: Array<string | null | undefined>,
 ): { clientId: string | null; matchStatus: "matched" | "unmatched" | "conflict" } {

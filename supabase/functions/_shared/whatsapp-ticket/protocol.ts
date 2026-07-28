@@ -1,5 +1,18 @@
 const PUBLIC_PROTOCOL_PATTERN = /^WAT-\d{6}-[A-Z0-9]{6}$/;
 
+export const WHATSAPP_AUTO_ACTIONS = {
+  menu: "menu",
+  attendance: "attendance",
+  requests: "requests",
+  consultTasks: "consult_tasks",
+  createTask: "create_task",
+  continueContext: "continue_context",
+  endFlow: "end_flow",
+} as const;
+
+export type WhatsAppAutoAction =
+  typeof WHATSAPP_AUTO_ACTIONS[keyof typeof WHATSAPP_AUTO_ACTIONS];
+
 export function buildPublicTicketProtocol(input: {
   openedAt?: Date;
   sequence: number;

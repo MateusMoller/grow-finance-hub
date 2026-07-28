@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MessageCircle, MessageSquareText, MoreVertical, Palette, Plus, Search, Trash2 } from "lucide-react";
+import { Check, Headset, MessageCircle, MessageSquareText, MoreVertical, Palette, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,12 +66,15 @@ export function ConversationList({
   chatDensity,
   chatBackground,
   bubbleTone,
+  includeHumanAttendanceInFlow,
+  flowSettingsSaving,
   onSearchChange,
   onQueueChange,
   onSelect,
   onChatDensityChange,
   onChatBackgroundChange,
   onBubbleToneChange,
+  onIncludeHumanAttendanceInFlowChange,
   standardMessages,
   onStandardMessagesChange,
 }: {
@@ -84,12 +87,15 @@ export function ConversationList({
   chatDensity: WhatsAppChatDensity;
   chatBackground: WhatsAppChatBackground;
   bubbleTone: WhatsAppBubbleTone;
+  includeHumanAttendanceInFlow: boolean;
+  flowSettingsSaving?: boolean;
   onSearchChange: (value: string) => void;
   onQueueChange: (value: "attendance" | "automatic") => void;
   onSelect: (conversation: WhatsAppConversationSummary) => void;
   onChatDensityChange: (value: WhatsAppChatDensity) => void;
   onChatBackgroundChange: (value: WhatsAppChatBackground) => void;
   onBubbleToneChange: (value: WhatsAppBubbleTone) => void;
+  onIncludeHumanAttendanceInFlowChange: (value: boolean) => void;
   standardMessages: WhatsAppStandardMessage[];
   onStandardMessagesChange: (messages: WhatsAppStandardMessage[]) => void;
 }) {
@@ -191,6 +197,26 @@ export function ConversationList({
                 <MessageSquareText className="mr-2 h-4 w-4" />
                 Mensagens padrão
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Fluxo automático
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={flowSettingsSaving}
+                onSelect={() => onIncludeHumanAttendanceInFlowChange(true)}
+              >
+                <Headset className="mr-2 h-4 w-4" />
+                <span className="flex-1">Com atendimento</span>
+                {includeHumanAttendanceInFlow && <Check className="ml-2 h-4 w-4 text-[#00a884]" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={flowSettingsSaving}
+                onSelect={() => onIncludeHumanAttendanceInFlowChange(false)}
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                <span className="flex-1">Somente automático</span>
+                {!includeHumanAttendanceInFlow && <Check className="ml-2 h-4 w-4 text-[#00a884]" />}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -216,6 +242,7 @@ export function ConversationList({
           conversations.map((conversation) => {
             const active = conversation.id === activeId;
             const windowActive = isWhatsAppWindowActive(conversation.active_window_expires_at);
+            const deliveryBlocked = conversation.status === "delivery_blocked";
             return (
               <button
                 key={conversation.id}
@@ -248,8 +275,8 @@ export function ConversationList({
                       )}
                     </span>
                     <span className="mt-1 flex items-center gap-1.5 text-[10px] text-[#8696a0]">
-                      <span className={windowActive ? "text-[#008069]" : "text-amber-600"}>
-                        {windowActive ? "janela ativa" : "janela fechada"}
+                      <span className={deliveryBlocked ? "text-red-600" : windowActive ? "text-[#008069]" : "text-amber-600"}>
+                        {deliveryBlocked ? "envio bloqueado" : windowActive ? "janela ativa" : "janela fechada"}
                       </span>
                     </span>
                   </span>

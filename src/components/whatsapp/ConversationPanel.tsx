@@ -1,5 +1,6 @@
 import { MessageCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConversationHeader } from "@/components/whatsapp/ConversationHeader";
 import type { WhatsAppClientLinkOption, WhatsAppExistingTaskOption, WhatsAppQuickTaskDraft } from "@/components/whatsapp/ConversationHeader";
 import {
@@ -12,6 +13,7 @@ import { MessageBubble } from "@/components/whatsapp/MessageBubble";
 import { MessageComposer } from "@/components/whatsapp/MessageComposer";
 import type { WhatsAppStandardMessage } from "@/components/whatsapp/MessageComposer";
 import type { WhatsAppReplyReference } from "@/lib/whatsappMessagePreview";
+import { listWhatsAppConversationTaskContext } from "@/lib/whatsappTickets";
 import type { WhatsAppConversationSummary, WhatsAppMessage } from "@/lib/whatsappTypes";
 
 const getConversationName = (conversation: WhatsAppConversationSummary | null) =>
@@ -29,6 +31,8 @@ const initialsFor = (name: string) =>
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "WA";
+
+const emptyTaskContext: Awaited<ReturnType<typeof listWhatsAppConversationTaskContext>> = [];
 
 export function ConversationPanel({
   conversation,
@@ -70,11 +74,47 @@ export function ConversationPanel({
   onEndAttendance: () => void;
 }) {
   const [replyReference, setReplyReference] = useState<WhatsAppReplyReference | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const conversationId = conversation?.id || null;
   const contactInitials = initialsFor(getConversationName(conversation));
+  const latestMessageId = messages[messages.length - 1]?.id || null;
+  const taskContextQuery = useQuery({
+    queryKey: ["whatsapp", "conversation-task-context", conversationId],
+    queryFn: () => listWhatsAppConversationTaskContext(conversationId || ""),
+    enabled: Boolean(conversationId),
+    staleTime: 30_000,
+  });
+  const taskContext = taskContextQuery.data || emptyTaskContext;
+  const taskContextByMessageId = useMemo(() => {
+    const grouped = new Map<string, typeof taskContext>();
+    for (const context of taskContext) {
+      grouped.set(context.message_id, [...(grouped.get(context.message_id) || []), context]);
+    }
+    return grouped;
+  }, [taskContext]);
+
+  const scrollToLatestMessage = () => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+    scrollArea.scrollTop = scrollArea.scrollHeight;
+  };
 
   useEffect(() => {
     setReplyReference(null);
-  }, [conversation?.id]);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId || loading) return;
+
+    scrollToLatestMessage();
+    const animationFrameId = window.requestAnimationFrame(scrollToLatestMessage);
+    const timeoutId = window.setTimeout(scrollToLatestMessage, 120);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [conversationId, latestMessageId, loading]);
 
   return (
     <section className="flex min-h-0 flex-col overflow-hidden bg-[#efeae2]" aria-label="Painel da conversa WhatsApp">
@@ -92,7 +132,29 @@ export function ConversationPanel({
           attendanceEnding={attendanceEnding}
         />
       )}
+      {conversation && taskContext.length > 0 && (
+        <div className="border-b border-[#d1d7db] bg-[#fffdf7] px-4 py-2">
+          <div className="mx-auto flex max-w-[56rem] gap-2 overflow-x-auto text-xs">
+            {taskContext.map((item) => (
+              <span
+                key={item.id}
+                className="inline-flex max-w-[18rem] shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[#54656f]"
+                title={[
+                  item.ticket_protocol,
+                  item.task_title || item.ticket_title,
+                  item.attachment_name ? `Anexo: ${item.attachment_name}` : null,
+                ].filter(Boolean).join(" - ")}
+              >
+                <span className="font-semibold text-[#111b21]">{item.ticket_protocol || "Ticket"}</span>
+                <span className="truncate">{item.task_title || item.ticket_title || "Contexto vinculado"}</span>
+                {item.attachment_name && <span className="text-amber-700">anexo</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div
+        ref={scrollAreaRef}
         className={`min-h-0 flex-1 overflow-y-auto px-4 sm:px-7 ${
           chatDensity === "compacta" ? "py-3 sm:py-4" : "py-4 sm:py-5"
         } ${whatsappBackgroundClass[chatBackground]}`}
@@ -120,6 +182,7 @@ export function ConversationPanel({
                 contactInitials={contactInitials}
                 bubbleTone={bubbleTone}
                 compact={chatDensity === "compacta"}
+                taskContexts={taskContextByMessageId.get(message.id) || []}
                 onReply={setReplyReference}
               />
             ))}

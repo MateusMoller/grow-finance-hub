@@ -1,6 +1,7 @@
 import { buildSupabaseAdminClient, jsonResponse, corsHeaders } from "../_shared/whatsapp-auth.ts";
 import { createWhatsAppEvent, createWhatsAppNotification } from "../_shared/whatsapp-events.ts";
 import {
+  classifyWhatsAppProviderFailure,
   dispatchWhatsAppInteractiveMessage,
   dispatchWhatsAppTextMessage,
   downloadWhatsAppMedia,
@@ -13,14 +14,16 @@ import { formatTicketOpeningMessage } from "../_shared/whatsapp-ticket/task-chat
 import {
   buildAutoServiceButtonPayload,
   buildAutoServiceListPayload,
+  buildAutoActionRowId,
   buildRequestsFlowButtonPayload,
   buildRequestsFlowListPayload,
   parseAutoServiceReplyId,
   parseAutoServiceTextReply,
 } from "../_shared/whatsapp-ticket/interactive-messages.ts";
 import { buildPublicTicketProtocol, extractPublicTicketProtocol } from "../_shared/whatsapp-ticket/protocol.ts";
-import { resolveWhatsAppTicketRoute } from "../_shared/whatsapp-ticket/routing.ts";
+import { isOutsideHumanAttendanceHours, localSaoPauloParts, resolveWhatsAppTicketRoute } from "../_shared/whatsapp-ticket/routing.ts";
 import { DEFAULT_ACTIVE_CONTEXT_MINUTES } from "../_shared/whatsapp-ticket/types.ts";
+import { reliableWhatsAppClientId } from "../_shared/whatsapp-ticket/contact-matching.ts";
 
 const verifyWebhook = (request: Request) => {
   const url = new URL(request.url);
@@ -118,6 +121,24 @@ async function findOrganizationId(supabaseAdmin: SupabaseAdmin, payload: Record<
   if (error) throw error;
   if (!data?.id) throw new Error("organization_mapping_not_found");
   return data.id as string;
+}
+
+async function loadWhatsAppFlowSettings(supabaseAdmin: SupabaseAdmin, organizationId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("operational_limits")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("whatsapp_flow_settings_load_failed", error);
+    return { includeHumanAttendance: true };
+  }
+
+  const limits = asRecord(data?.operational_limits);
+  const whatsapp = asRecord(limits.whatsapp);
+  const flow = asRecord(whatsapp.flow);
+  return { includeHumanAttendance: flow.includeHumanAttendance !== false };
 }
 
 const onlyDigits = (value: unknown) => String(value || "").replace(/\D/g, "");
@@ -303,6 +324,16 @@ async function processStatus(supabaseAdmin: SupabaseAdmin, status: NonNullable<R
     details: { delivery_status: status.deliveryStatus },
   });
 
+  if (status.deliveryStatus === "failed") {
+    await blockAutomaticFlowAfterDeliveryFailure(supabaseAdmin, {
+      organizationId: asString(message.organization_id) || "",
+      conversationId: asString(message.conversation_id) || null,
+      messageId: asString(message.id) || null,
+      failureReason: status.failureReason || "whatsapp_status_failed",
+      context: "provider_status_update",
+    });
+  }
+
   return { ok: true, status: status.deliveryStatus };
 }
 
@@ -367,6 +398,8 @@ async function recordOutboundSystemMessage(
       client_id: input.contact.client_id,
       direction: "outbound",
       provider_message_id: input.providerMessageId ?? null,
+      provider_phone_number_id: asString(input.conversation.provider_phone_number_id) || null,
+      provider_display_phone_number: asString(input.conversation.provider_display_phone_number) || null,
       client_message_id: input.clientMessageId,
       message_type: "text",
       body: input.body,
@@ -378,7 +411,7 @@ async function recordOutboundSystemMessage(
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: "organization_id,client_message_id" })
-    .select("id")
+    .select("id, delivery_status, failure_reason")
     .single();
   if (error) throw error;
 
@@ -413,6 +446,7 @@ async function sendSystemText(
       toPhone: asString(input.contact.phone_number),
       body: input.body,
       clientMessageId: input.clientMessageId,
+      phoneNumberId: asString(input.conversation.provider_phone_number_id) || null,
     });
     providerMessageId = sent.providerMessageId;
   } catch (error) {
@@ -420,12 +454,198 @@ async function sendSystemText(
     failureReason = errorMessage(error, "whatsapp_text_send_failed");
   }
 
-  return recordOutboundSystemMessage(supabaseAdmin, {
+  const message = await recordOutboundSystemMessage(supabaseAdmin, {
     ...input,
     providerMessageId,
     deliveryStatus,
     failureReason,
   });
+
+  if (deliveryStatus === "failed") {
+    await blockAutomaticFlowAfterDeliveryFailure(supabaseAdmin, {
+      organizationId: input.organizationId,
+      conversationId: asString(input.conversation.id) || null,
+      messageId: asString(message.id) || null,
+      failureReason,
+      context: input.clientMessageId,
+    });
+  }
+
+  return message;
+}
+
+async function blockAutomaticFlowAfterDeliveryFailure(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    organizationId: string;
+    conversationId: string | null;
+    messageId: string | null;
+    failureReason: string | null;
+    context: string;
+  },
+) {
+  if (!input.conversationId) return;
+  const classifiedFailure = classifyWhatsAppProviderFailure(new Error(input.failureReason || "whatsapp_delivery_failed"));
+  const blockedAt = new Date().toISOString();
+
+  await supabaseAdmin
+    .from("whatsapp_task_creation_flows")
+    .update({
+      status: "blocked",
+      blocked_at: blockedAt,
+      block_reason: classifiedFailure.reason,
+      metadata: {
+        blocked_reason: input.failureReason || "whatsapp_delivery_failed",
+        blocked_failure_kind: classifiedFailure.kind,
+        blocked_retryable: classifiedFailure.retryable,
+        blocked_context: input.context,
+        blocked_message_id: input.messageId,
+      },
+      updated_at: blockedAt,
+    })
+    .eq("organization_id", input.organizationId)
+    .eq("conversation_id", input.conversationId)
+    .in("status", ["collecting_sector", "collecting_title", "collecting_description"]);
+
+  await supabaseAdmin
+    .from("whatsapp_conversations")
+    .update({
+      status: "delivery_blocked",
+      last_message_preview: "Falha no envio automÃ¡tico. IntervenÃ§Ã£o interna necessÃ¡ria.",
+      updated_at: blockedAt,
+    })
+    .eq("id", input.conversationId);
+
+  await createWhatsAppEvent(supabaseAdmin, {
+    organization_id: input.organizationId,
+    conversation_id: input.conversationId,
+    message_id: input.messageId,
+    event_type: "automatic_flow.delivery_blocked",
+    details: {
+      context: input.context,
+      failure_reason: input.failureReason,
+      failure_kind: classifiedFailure.kind,
+      retryable: classifiedFailure.retryable,
+      next_step_blocked: true,
+    },
+  });
+
+  await createWhatsAppNotification(supabaseAdmin, {
+    organization_id: input.organizationId,
+    conversation_id: input.conversationId,
+    target_scope: "queue",
+    notification_type: "new_message",
+    title: "Fluxo WhatsApp bloqueado",
+    body: "Uma mensagem automÃ¡tica falhou e o fluxo foi pausado para intervenÃ§Ã£o interna.",
+  });
+}
+
+async function stopIfDeliveryFailed(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    organizationId: string;
+    conversationId: string | null;
+    message: Record<string, unknown> | null;
+    context: string;
+  },
+) {
+  if (asString(input.message?.delivery_status) !== "failed") return false;
+  await blockAutomaticFlowAfterDeliveryFailure(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    messageId: asString(input.message?.id) || null,
+    failureReason: asString(input.message?.failure_reason) || null,
+    context: input.context,
+  });
+  return true;
+}
+
+async function getLinkedClientName(
+  supabaseAdmin: SupabaseAdmin,
+  clientId: string | null,
+) {
+  if (!clientId) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .select("name")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return asString(data?.name) || null;
+}
+
+async function maybeSendDailyGreeting(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    organizationId: string;
+    conversation: Record<string, unknown>;
+    contact: Record<string, unknown>;
+    reason: string;
+  },
+) {
+  const conversationId = asString(input.conversation.id);
+  const contactId = asString(input.contact.id);
+  if (!conversationId || !contactId) return true;
+
+  const { dateKey, greeting } = localSaoPauloParts();
+  const clientMessageId = `${input.organizationId}:daily-greeting:${conversationId}:${dateKey}`;
+
+  const { data: existingMessage, error: existingMessageError } = await supabaseAdmin
+    .from("whatsapp_messages")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("client_message_id", clientMessageId)
+    .maybeSingle();
+  if (existingMessageError) throw existingMessageError;
+  if (existingMessage?.id) return true;
+
+  const { data: existingGreetingEvent, error: existingGreetingError } = await supabaseAdmin
+    .from("whatsapp_conversation_events")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("conversation_id", conversationId)
+    .eq("event_type", "daily_greeting_sent")
+    .contains("details", { greeting_date: dateKey })
+    .limit(1)
+    .maybeSingle();
+  if (existingGreetingError) throw existingGreetingError;
+  if (existingGreetingEvent?.id) return true;
+
+  const greetingClientId = reliableWhatsAppClientId({
+    clientId: asString(input.contact.client_id) || null,
+    matchStatus: asString(input.contact.match_status) as "matched" | "unmatched" | "manual" | "conflict" | null,
+    autoLinkSource: asString(input.contact.auto_link_source) as "unique_phone_match" | "manual" | null,
+  });
+  const clientName = await getLinkedClientName(supabaseAdmin, greetingClientId);
+  const body = clientName
+    ? `${greeting}, ${clientName}. Seja bem-vindo(a) ao atendimento da Grow Contabilidade.`
+    : `${greeting}. OlÃ¡, bem-vindo(a) a Grow Contabilidade.`;
+
+  const message = await sendSystemText(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversation: input.conversation,
+    contact: input.contact,
+    body,
+    clientMessageId,
+  });
+
+  await createWhatsAppEvent(supabaseAdmin, {
+    organization_id: input.organizationId,
+    conversation_id: conversationId,
+    message_id: asString(message.id) || null,
+    event_type: "daily_greeting_sent",
+    details: {
+      greeting_date: dateKey,
+      greeting,
+      reason: input.reason,
+      client_id: greetingClientId,
+      client_name: clientName,
+    },
+  });
+
+  return asString(message.delivery_status) !== "failed";
 }
 
 async function sendAutoServiceMenu(
@@ -438,20 +658,25 @@ async function sendAutoServiceMenu(
     includeTickets?: boolean;
   },
 ) {
-  const tickets = input.includeTickets === false
-    ? []
-    : await listAutoServiceTickets(supabaseAdmin, {
-        organizationId: input.organizationId,
-        conversationId: asString(input.conversation.id),
-        contactId: asString(input.contact.id),
-        clientId: asString(input.contact.client_id) || null,
-        limit: 7,
-      });
-  const body = tickets.length > 0
-    ? "Identificamos atendimentos em andamento vinculados a este contato. Selecione um ticket para continuar ou escolha uma das opcoes abaixo."
-    : "Ola. Para direcionarmos seu atendimento corretamente, selecione uma das opcoes abaixo.";
+  const greetingOk = await maybeSendDailyGreeting(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversation: input.conversation,
+    contact: input.contact,
+    reason: input.reason,
+  });
+  if (!greetingOk) return;
+
+  const tickets: Record<string, unknown>[] = [];
+  const body = "Para direcionarmos seu atendimento corretamente, selecione uma das opções abaixo.";
   const clientMessageId = `${input.organizationId}:auto-service:${input.conversation.id}:${Date.now()}`;
   const ticketRows = toTicketOptions(tickets.slice(0, 7));
+  const flowSettings = await loadWhatsAppFlowSettings(supabaseAdmin, input.organizationId);
+  const menuRows = [
+    ...(flowSettings.includeHumanAttendance
+      ? [{ id: "grow:auto:attendance", title: "Atendimento", description: "Falar diretamente com a equipe." }]
+      : []),
+    { id: "grow:auto:requests", title: "Solicitações", description: "Abrir ou acompanhar uma demanda." },
+  ];
   const interactiveMetadata = tickets.length > 0
     ? {
         interactive: {
@@ -460,10 +685,7 @@ async function sendAutoServiceMenu(
           sections: [
             {
               title: "Menu",
-              rows: [
-                { id: "grow:auto:attendance", title: "Atendimento", description: "Falar diretamente com a equipe." },
-                { id: "grow:auto:requests", title: "Solicitacoes", description: "Abrir ou acompanhar uma demanda." },
-              ],
+              rows: menuRows,
             },
             ...(ticketRows.length > 0 ? [{ title: "Tickets ativos", rows: ticketRows }] : []),
           ],
@@ -472,10 +694,7 @@ async function sendAutoServiceMenu(
     : {
         interactive: {
           type: "button",
-          buttons: [
-            { id: "grow:auto:attendance", title: "Atendimento" },
-            { id: "grow:auto:requests", title: "Solicitacoes" },
-          ],
+          buttons: menuRows.map((row) => ({ id: row.id, title: row.title })),
         },
       };
   let providerMessageId: string | null = null;
@@ -485,14 +704,20 @@ async function sendAutoServiceMenu(
   try {
     const sent = await dispatchWhatsAppInteractiveMessage({
       toPhone: asString(input.contact.phone_number),
+      phoneNumberId: asString(input.conversation.provider_phone_number_id) || null,
       payloadForPhone: (phone) =>
         tickets.length > 0
           ? buildAutoServiceListPayload({
               to: phone,
               bodyText: body,
               tickets: ticketRows,
+              includeAttendance: flowSettings.includeHumanAttendance,
             })
-          : buildAutoServiceButtonPayload({ to: phone, bodyText: body }),
+          : buildAutoServiceButtonPayload({
+              to: phone,
+              bodyText: body,
+              includeAttendance: flowSettings.includeHumanAttendance,
+            }),
     });
     providerMessageId = sent.providerMessageId;
   } catch (error) {
@@ -521,9 +746,17 @@ async function sendAutoServiceMenu(
       reason: input.reason,
       ticket_count: tickets.length,
       include_tickets: input.includeTickets !== false,
+      include_human_attendance: flowSettings.includeHumanAttendance,
       delivery_status: deliveryStatus,
       failure_reason: failureReason,
     },
+  });
+
+  await stopIfDeliveryFailed(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversationId: asString(input.conversation.id) || null,
+    message,
+    context: "auto_service_menu",
   });
 }
 
@@ -537,7 +770,7 @@ const toTicketOptions = (tickets: Record<string, unknown>[]) =>
 const toRequestTypeOptions = (requestTypes: Record<string, unknown>[]) =>
   requestTypes.map((requestType) => ({
     id: asString(requestType.id),
-    title: asString(requestType.title) || "Solicitação",
+    title: asString(requestType.title) || "SolicitaÃ§Ã£o",
     description: asString(requestType.description) || asString(requestType.sector) || null,
   }));
 
@@ -586,14 +819,14 @@ const ticketStatusLabel = (status: string) => {
 
 const formatActiveTicketMessage = (ticket: Record<string, unknown>, index: number, total: number) => {
   const protocol = asString(ticket.public_protocol) || "sem protocolo";
-  const title = asString(ticket.title) || "Tarefa sem titulo";
+  const title = asString(ticket.title) || "Tarefa sem tÃ­tulo";
   const status = ticketStatusLabel(asString(ticket.status));
 
   return [
     `*Tarefa em andamento ${index}/${total}*`,
     "",
     `*Ticket:* #${protocol}`,
-    `*Titulo:* ${title}`,
+    `*TÃ­tulo:* ${title}`,
     `*Status:* ${status}`,
     "",
     `Para continuar esta tarefa, responda informando o ticket #${protocol}.`,
@@ -612,8 +845,8 @@ async function sendRequestsFlowMenu(
   const requestTypes = await listActivePortalRequestTypes(supabaseAdmin, input.organizationId);
   const requestTypeOptions = toRequestTypeOptions(requestTypes);
   const body = requestTypeOptions.length > 0
-    ? "Selecione como deseja prosseguir. Voce pode consultar tarefas em andamento ou abrir uma nova solicitacao para nossa equipe."
-    : "Selecione uma das opcoes abaixo para consultar tarefas em andamento ou abrir uma nova demanda.";
+    ? "Selecione como deseja prosseguir. VocÃª pode consultar tarefas em andamento ou abrir uma nova solicitaÃ§Ã£o para nossa equipe."
+    : "Selecione uma das opÃ§Ãµes abaixo para consultar tarefas em andamento ou abrir uma nova demanda.";
   const clientMessageId = `${input.organizationId}:requests-flow:${input.sourceMessageId}`;
   let providerMessageId: string | null = null;
   let deliveryStatus: "sent" | "failed" = "sent";
@@ -622,6 +855,7 @@ async function sendRequestsFlowMenu(
   try {
     const sent = await dispatchWhatsAppInteractiveMessage({
       toPhone: asString(input.contact.phone_number),
+      phoneNumberId: asString(input.conversation.provider_phone_number_id) || null,
       payloadForPhone: (phone) =>
         requestTypeOptions.length > 0
           ? buildRequestsFlowListPayload({ to: phone, bodyText: body, requestTypes: requestTypeOptions })
@@ -646,7 +880,7 @@ async function sendRequestsFlowMenu(
       interactive: requestTypeOptions.length > 0
         ? {
             type: "list",
-            buttonText: "Escolher opcao",
+            buttonText: "Escolher opÃ§Ã£o",
             sections: [
               {
                 title: "Acompanhamento",
@@ -659,7 +893,7 @@ async function sendRequestsFlowMenu(
                 ],
               },
               {
-                title: "Nova solicitacao",
+                title: "Nova solicitaÃ§Ã£o",
                 rows: requestTypeOptions.map((requestType) => ({
                   id: `grow:reqtype:${requestType.id}`,
                   title: requestType.title,
@@ -689,6 +923,186 @@ async function sendRequestsFlowMenu(
       request_type_count: requestTypeOptions.length,
     },
   });
+
+  await stopIfDeliveryFailed(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversationId: asString(input.conversation.id) || null,
+    message,
+    context: "requests_flow_menu",
+  });
+}
+
+async function sendActiveTicketsFollowupActions(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    organizationId: string;
+    conversation: Record<string, unknown>;
+    contact: Record<string, unknown>;
+    sourceMessageId: string;
+    body?: string;
+    returnAction?: "menu" | "consult_tasks";
+    returnTitle?: string;
+  },
+) {
+  const body = input.body || "Como deseja prosseguir? VocÃª pode encerrar este fluxo ou voltar ao menu principal para escolher outra opÃ§Ã£o.";
+  const returnAction = input.returnAction || "menu";
+  const returnTitle = input.returnTitle || "Voltar menu";
+  const clientMessageId = `${input.organizationId}:active-tickets-followup-actions:${input.sourceMessageId}`;
+  let providerMessageId: string | null = null;
+  let deliveryStatus: "sent" | "failed" = "sent";
+  let failureReason: string | null = null;
+
+  try {
+    const sent = await dispatchWhatsAppInteractiveMessage({
+      toPhone: asString(input.contact.phone_number),
+      phoneNumberId: asString(input.conversation.provider_phone_number_id) || null,
+      payloadForPhone: (phone) => ({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: phone,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: body },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: buildAutoActionRowId("end_flow"),
+                  title: "Encerrar",
+                },
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: buildAutoActionRowId(returnAction),
+                  title: returnTitle,
+                },
+              },
+            ],
+          },
+        },
+      }),
+    });
+    providerMessageId = sent.providerMessageId;
+  } catch (error) {
+    deliveryStatus = "failed";
+    failureReason = errorMessage(error, "whatsapp_active_tickets_followup_send_failed");
+  }
+
+  const message = await recordOutboundSystemMessage(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversation: input.conversation,
+    contact: input.contact,
+    body,
+    clientMessageId,
+    providerMessageId,
+    deliveryStatus,
+    failureReason,
+    metadata: {
+      interactive: {
+        type: "button",
+        buttons: [
+          { id: buildAutoActionRowId("end_flow"), title: "Encerrar" },
+          { id: buildAutoActionRowId(returnAction), title: returnTitle },
+        ],
+      },
+    },
+  });
+
+  await stopIfDeliveryFailed(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversationId: asString(input.conversation.id) || null,
+    message,
+    context: "active_tickets_followup_actions",
+  });
+
+  return message;
+}
+
+async function sendTicketContextFollowupActions(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    organizationId: string;
+    conversation: Record<string, unknown>;
+    contact: Record<string, unknown>;
+    sourceMessageId: string;
+  },
+) {
+  const body = "Contexto recebido e vinculado ao ticket. Deseja continuar adicionando informaÃ§Ãµes ou sair deste fluxo?";
+  const clientMessageId = `${input.organizationId}:ticket-context-followup:${input.sourceMessageId}`;
+  let providerMessageId: string | null = null;
+  let deliveryStatus: "sent" | "failed" = "sent";
+  let failureReason: string | null = null;
+
+  try {
+    const sent = await dispatchWhatsAppInteractiveMessage({
+      toPhone: asString(input.contact.phone_number),
+      phoneNumberId: asString(input.conversation.provider_phone_number_id) || null,
+      payloadForPhone: (phone) => ({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: phone,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: body },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: buildAutoActionRowId("continue_context"),
+                  title: "Continuar",
+                },
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: buildAutoActionRowId("end_flow"),
+                  title: "Sair do fluxo",
+                },
+              },
+            ],
+          },
+        },
+      }),
+    });
+    providerMessageId = sent.providerMessageId;
+  } catch (error) {
+    deliveryStatus = "failed";
+    failureReason = errorMessage(error, "whatsapp_ticket_context_followup_send_failed");
+  }
+
+  const message = await recordOutboundSystemMessage(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversation: input.conversation,
+    contact: input.contact,
+    body,
+    clientMessageId,
+    providerMessageId,
+    deliveryStatus,
+    failureReason,
+    metadata: {
+      interactive: {
+        type: "button",
+        buttons: [
+          { id: buildAutoActionRowId("continue_context"), title: "Continuar" },
+          { id: buildAutoActionRowId("end_flow"), title: "Sair do fluxo" },
+        ],
+      },
+    },
+  });
+
+  await stopIfDeliveryFailed(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversationId: asString(input.conversation.id) || null,
+    message,
+    context: "ticket_context_followup_actions",
+  });
+
+  return message;
 }
 
 async function sendActiveTicketsSelection(
@@ -700,14 +1114,27 @@ async function sendActiveTicketsSelection(
     sourceMessageId: string;
   },
 ) {
-  const clientId = asString(input.contact.client_id) || null;
+  const clientId = reliableWhatsAppClientId({
+    clientId: asString(input.contact.client_id) || null,
+    matchStatus: asString(input.contact.match_status) as "matched" | "unmatched" | "manual" | "conflict" | null,
+    autoLinkSource: asString(input.contact.auto_link_source) as "unique_phone_match" | "manual" | null,
+  });
   if (!clientId) {
     await sendSystemText(supabaseAdmin, {
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Nao localizamos um cliente vinculado a este numero. Para consultar tarefas em andamento, este contato precisa estar vinculado a um cliente cadastrado.",
+      body: "NÃ£o localizamos um cliente vinculado a este nÃºmero. Para consultar tarefas em andamento, este contato precisa estar vinculado a um cliente cadastrado.",
       clientMessageId: `${input.organizationId}:active-tickets-client-required:${input.sourceMessageId}`,
+    });
+    await sendActiveTicketsFollowupActions(supabaseAdmin, {
+      organizationId: input.organizationId,
+      conversation: input.conversation,
+      contact: input.contact,
+      sourceMessageId: `active-tickets-client-required:${input.sourceMessageId}`,
+      body: "Como deseja prosseguir? VocÃª pode voltar ao menu principal ou encerrar este atendimento automÃ¡tico.",
+      returnAction: "menu",
+      returnTitle: "Voltar menu",
     });
     return;
   }
@@ -725,15 +1152,17 @@ async function sendActiveTicketsSelection(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Nao localizamos tarefas em andamento para este cliente no momento. Caso precise registrar uma nova demanda, selecione Solicitacoes e depois Criar nova tarefa.",
+      body: "NÃ£o localizamos tarefas em andamento para este cliente no momento. Caso precise registrar uma nova demanda, selecione SolicitaÃ§Ãµes e depois Criar nova tarefa.",
       clientMessageId: `${input.organizationId}:active-tickets-empty:${input.sourceMessageId}`,
     });
-    await sendSystemText(supabaseAdmin, {
+    await sendActiveTicketsFollowupActions(supabaseAdmin, {
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Deseja receber mais alguma informacao sobre tarefas ou prefere falar diretamente com a equipe para um atendimento personalizado?",
-      clientMessageId: `${input.organizationId}:active-tickets-empty-followup:${input.sourceMessageId}`,
+      sourceMessageId: `active-tickets-empty:${input.sourceMessageId}`,
+      body: "Como deseja prosseguir? VocÃª pode voltar ao menu principal para escolher outra opÃ§Ã£o ou encerrar este atendimento automÃ¡tico.",
+      returnAction: "menu",
+      returnTitle: "Voltar menu",
     });
     return;
   }
@@ -756,12 +1185,11 @@ async function sendActiveTicketsSelection(
     });
   }
 
-  const message = await sendSystemText(supabaseAdmin, {
+  const message = await sendActiveTicketsFollowupActions(supabaseAdmin, {
     organizationId: input.organizationId,
     conversation: input.conversation,
     contact: input.contact,
-    body: "Para continuar uma tarefa existente, responda informando o numero do ticket correspondente.",
-    clientMessageId: `${input.organizationId}:active-tickets-instructions:${input.sourceMessageId}`,
+    sourceMessageId: input.sourceMessageId,
   });
 
   await createWhatsAppEvent(supabaseAdmin, {
@@ -780,9 +1208,9 @@ async function sendActiveTicketsSelection(
 const taskCreationSectorOptions = [
   { label: "Geral", normalized: "Geral", aliases: ["geral", "administrativo"] },
   { label: "Fiscal", normalized: "Fiscal", aliases: ["fiscal"] },
-  { label: "Contabil", normalized: "Contabil", aliases: ["contabil", "contábil", "contabil"] },
+  { label: "ContÃ¡bil", normalized: "Contabil", aliases: ["contabil", "contÃ¡bil", "contabil"] },
   { label: "Departamento Pessoal", normalized: "Departamento Pessoal", aliases: ["departamento pessoal", "dp", "pessoal"] },
-  { label: "Societario", normalized: "Societario", aliases: ["societario", "societário"] },
+  { label: "SocietÃ¡rio", normalized: "Societario", aliases: ["societario", "societÃ¡rio"] },
   { label: "Comercial", normalized: "Comercial", aliases: ["comercial", "vendas"] },
 ];
 
@@ -800,22 +1228,22 @@ const taskCreationSectorPrompt = [
   "*1/3 - Setor*",
   "Informe qual setor deve atender esta demanda.",
   "",
-  "Responda com uma das opcoes abaixo:",
-  "Geral, Fiscal, Contabil, Departamento Pessoal, Societario ou Comercial.",
+  "Responda com uma das opÃ§Ãµes abaixo:",
+  "Geral, Fiscal, ContÃ¡bil, Departamento Pessoal, SocietÃ¡rio ou Comercial.",
   "",
   "Para cancelar, responda *cancelar*.",
 ].join("\n");
 
 const taskCreationTitlePrompt = [
-  "*2/3 - Titulo da tarefa*",
-  "Envie um titulo curto e objetivo para identificarmos a demanda.",
+  "*2/3 - TÃ­tulo da tarefa*",
+  "Envie um tÃ­tulo curto e objetivo para identificarmos a demanda.",
   "",
   "Exemplo: Revisar documentos enviados",
 ].join("\n");
 
 const taskCreationDescriptionPrompt = [
-  "*3/3 - Descricao da tarefa*",
-  "Descreva o contexto da solicitacao, o resultado esperado e qualquer prazo relevante.",
+  "*3/3 - DescriÃ§Ã£o da tarefa*",
+  "Descreva o contexto da solicitaÃ§Ã£o, o resultado esperado e qualquer prazo relevante.",
 ].join("\n");
 
 const appendFlowAnswerMessageId = (metadata: Record<string, unknown>, messageId: string) => {
@@ -836,14 +1264,41 @@ async function startTaskCreationFlow(
     requestType?: Record<string, unknown> | null;
   },
 ) {
-  const clientId = asString(input.contact.client_id) || null;
+  const clientId = reliableWhatsAppClientId({
+    clientId: asString(input.contact.client_id) || null,
+    matchStatus: asString(input.contact.match_status) as "matched" | "unmatched" | "manual" | "conflict" | null,
+    autoLinkSource: asString(input.contact.auto_link_source) as "unique_phone_match" | "manual" | null,
+  });
   if (!clientId) {
     await sendSystemText(supabaseAdmin, {
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "Nao localizamos um cliente vinculado a este numero. Para abrir uma nova tarefa, este contato precisa estar vinculado a um cliente cadastrado.",
+      body: "Para abrir uma nova solicitaÃ§Ã£o, precisamos primeiro identificar o cliente vinculado a este nÃºmero. Vamos direcionar sua conversa para a equipe.",
       clientMessageId: `${input.organizationId}:task-flow-client-required:${input.sourceMessageId}`,
+    });
+    await supabaseAdmin
+      .from("whatsapp_conversations")
+      .update({
+        status: "in_attendance",
+        assigned_team: "Atendimento",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.conversation.id);
+    await createWhatsAppNotification(supabaseAdmin, {
+      organization_id: input.organizationId,
+      conversation_id: asString(input.conversation.id),
+      target_scope: "queue",
+      notification_type: "new_message",
+      title: "IdentificaÃ§Ã£o de cliente necessÃ¡ria",
+      body: "Contato WhatsApp tentou abrir uma tarefa sem cliente vinculado.",
+    });
+    await createWhatsAppEvent(supabaseAdmin, {
+      organization_id: input.organizationId,
+      conversation_id: asString(input.conversation.id),
+      message_id: input.sourceMessageId,
+      event_type: "task_creation.blocked_unlinked_contact",
+      details: { next_step: "attendance_queue" },
     });
     return;
   }
@@ -853,7 +1308,7 @@ async function startTaskCreationFlow(
     .update({ status: "cancelled", cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("organization_id", input.organizationId)
     .eq("conversation_id", asString(input.conversation.id))
-    .in("status", ["collecting_sector", "collecting_title", "collecting_description"]);
+    .in("status", ["collecting_sector", "collecting_title", "collecting_description", "blocked"]);
 
   const requestType = input.requestType || null;
   const requestTypeTitle = asString(requestType?.title);
@@ -881,25 +1336,29 @@ async function startTaskCreationFlow(
   });
   if (error) throw error;
 
-  await sendSystemText(supabaseAdmin, {
+  const confirmationMessage = await sendSystemText(supabaseAdmin, {
     organizationId: input.organizationId,
     conversation: input.conversation,
     contact: input.contact,
     body: requestType
       ? [
-          `Vamos registrar uma nova solicitacao de *${requestTypeTitle || requestTypeTaskTitle || "Tarefa"}*.`,
+          `Vamos registrar uma nova solicitaÃ§Ã£o de *${requestTypeTitle || requestTypeTaskTitle || "Tarefa"}*.`,
           "",
           requestTypeDescription || null,
-          requestTypeTaskTitle ? `Titulo sugerido: ${requestTypeTaskTitle}` : null,
+          requestTypeTaskTitle ? `TÃ­tulo sugerido: ${requestTypeTaskTitle}` : null,
           "",
-          "*1/2 - Titulo da tarefa*",
-          "Envie um titulo curto para a tarefa ou responda *manter* para usar o titulo sugerido.",
+          "*1/2 - TÃ­tulo da tarefa*",
+          "Envie um tÃ­tulo curto para a tarefa ou responda *manter* para usar o tÃ­tulo sugerido.",
           "",
           "Para cancelar, responda *cancelar*.",
         ].filter(Boolean).join("\n")
       : taskCreationSectorPrompt,
     clientMessageId: `${input.organizationId}:task-flow-start:${input.sourceMessageId}`,
   });
+
+  if (asString(confirmationMessage.delivery_status) === "failed") {
+    return;
+  }
 }
 
 async function createTaskFromCreationFlow(
@@ -928,11 +1387,11 @@ async function createTaskFromCreationFlow(
     ? flowMetadata.answer_message_ids.map(String)
     : [input.messageId];
   const sector = asString(input.flow.sector) || "Geral";
-  const title = asString(input.flow.title) || "Solicitacao via WhatsApp";
+  const title = asString(input.flow.title) || "SolicitaÃ§Ã£o via WhatsApp";
   const requestTypeTitle = asString(flowMetadata.request_type_title);
   const requestTypeDescription = asString(flowMetadata.request_type_description);
   const descriptionParts = [
-    requestTypeTitle ? `Tipo de solicitação: ${requestTypeTitle}` : null,
+    requestTypeTitle ? `Tipo de solicitaÃ§Ã£o: ${requestTypeTitle}` : null,
     requestTypeDescription || null,
     input.description,
     "Criada automaticamente a partir do atendimento WhatsApp.",
@@ -940,33 +1399,61 @@ async function createTaskFromCreationFlow(
   ].filter(Boolean);
   const integrationTaskId = `whatsapp-flow:${input.flow.id}`;
 
-  const { data: task, error: taskError } = await supabaseAdmin
+  const { data: existingTask, error: existingTaskError } = await supabaseAdmin
     .from("kanban_tasks")
-    .insert({
-      organization_id: input.organizationId,
-      title,
-      client_name: asString(client.name),
-      description: descriptionParts.join("\n"),
-      priority: "Media",
-      sector,
-      status: "todo",
-      tags: [sector, "WhatsApp"],
-      subtasks: [],
-      integration_source: "whatsapp",
-      integration_task_id: integrationTaskId,
-      integration_payload: {
-        source: "whatsapp_task_creation_flow",
-        conversation_id: input.conversation.id,
-        contact_id: input.contact.id,
-        flow_id: input.flow.id,
-        request_type_id: asString(flowMetadata.request_type_id) || null,
-        request_type_title: requestTypeTitle || null,
-        answer_message_ids: answerMessageIds,
-      },
-    })
     .select("id, title")
-    .single();
-  if (taskError) throw taskError;
+    .eq("organization_id", input.organizationId)
+    .eq("integration_source", "whatsapp")
+    .eq("integration_task_id", integrationTaskId)
+    .maybeSingle();
+  if (existingTaskError) throw existingTaskError;
+
+  let task = existingTask;
+  if (!task) {
+    const { data: insertedTask, error: taskError } = await supabaseAdmin
+      .from("kanban_tasks")
+      .insert({
+        organization_id: input.organizationId,
+        title,
+        client_name: asString(client.name),
+        description: descriptionParts.join("\n"),
+        priority: "Media",
+        sector,
+        status: "todo",
+        tags: [sector, "WhatsApp"],
+        subtasks: [],
+        integration_source: "whatsapp",
+        integration_task_id: integrationTaskId,
+        integration_payload: {
+          source: "whatsapp_task_creation_flow",
+          conversation_id: input.conversation.id,
+          contact_id: input.contact.id,
+          flow_id: input.flow.id,
+          request_type_id: asString(flowMetadata.request_type_id) || null,
+          request_type_title: requestTypeTitle || null,
+          answer_message_ids: answerMessageIds,
+        },
+      })
+      .select("id, title")
+      .single();
+
+    if (taskError?.code === "23505") {
+      const { data: recoveredTask, error: recoverTaskError } = await supabaseAdmin
+        .from("kanban_tasks")
+        .select("id, title")
+        .eq("organization_id", input.organizationId)
+        .eq("integration_source", "whatsapp")
+        .eq("integration_task_id", integrationTaskId)
+        .single();
+      if (recoverTaskError) throw recoverTaskError;
+      task = recoveredTask;
+    } else if (taskError) {
+      throw taskError;
+    } else {
+      task = insertedTask;
+    }
+  }
+  if (!task) throw new Error("whatsapp_task_creation_failed");
 
   const publicProtocol = buildPublicTicketProtocol({
     openedAt: new Date(),
@@ -1014,6 +1501,28 @@ async function createTaskFromCreationFlow(
     }, { onConflict: "organization_id,message_id,relation_type,ticket_id" });
   }
 
+  const { data: attachments, error: attachmentsError } = await supabaseAdmin
+    .from("whatsapp_conversation_attachments")
+    .select("id, message_id")
+    .eq("organization_id", input.organizationId)
+    .in("message_id", answerMessageIds);
+  if (attachmentsError) throw attachmentsError;
+
+  for (const attachment of attachments || []) {
+    await supabaseAdmin.from("whatsapp_task_message_links").upsert({
+      organization_id: input.organizationId,
+      ticket_id: ticket.id,
+      task_id: task.id,
+      conversation_id: input.conversation.id,
+      message_id: attachment.message_id,
+      attachment_id: attachment.id,
+      relation_type: "document",
+      visibility: "customer",
+      route_source: null,
+      route_confidence_percent: 100,
+    }, { onConflict: "organization_id,message_id,relation_type,ticket_id" });
+  }
+
   await supabaseAdmin
     .from("whatsapp_task_creation_flows")
     .update({
@@ -1042,7 +1551,7 @@ async function createTaskFromCreationFlow(
     idempotencyKey: `${input.organizationId}:customer-task-flow:${input.flow.id}`,
   });
 
-  await sendSystemText(supabaseAdmin, {
+  const confirmationMessage = await sendSystemText(supabaseAdmin, {
     organizationId: input.organizationId,
     conversation: input.conversation,
     contact: input.contact,
@@ -1052,6 +1561,20 @@ async function createTaskFromCreationFlow(
       responsibleName: "Equipe Grow",
     }),
     clientMessageId: `${input.organizationId}:task-flow-confirmation:${input.flow.id}`,
+  });
+
+  if (asString(confirmationMessage.delivery_status) === "failed") {
+    return { task, ticket };
+  }
+
+  await sendActiveTicketsFollowupActions(supabaseAdmin, {
+    organizationId: input.organizationId,
+    conversation: input.conversation,
+    contact: input.contact,
+    sourceMessageId: `task-flow:${input.flow.id}`,
+    body: "Como deseja prosseguir? VocÃª pode voltar ao menu para escolher outra opÃ§Ã£o ou encerrar este atendimento automÃ¡tico.",
+    returnAction: "menu",
+    returnTitle: "Voltar menu",
   });
 
   return { task, ticket };
@@ -1091,7 +1614,7 @@ async function handleTaskCreationFlowReply(
       source: "unrouted" as const,
       ticketId: null,
       confidencePercent: null,
-      reason: "Cliente enviou mensagem sem texto durante criacao de tarefa.",
+      reason: "Cliente enviou mensagem sem texto durante criaÃ§Ã£o de tarefa.",
     };
   }
 
@@ -1104,14 +1627,14 @@ async function handleTaskCreationFlowReply(
       organizationId: input.organizationId,
       conversation: input.conversation,
       contact: input.contact,
-      body: "A abertura da tarefa foi cancelada. Quando desejar registrar uma nova demanda, selecione Solicitacoes e depois Criar nova tarefa.",
+      body: "A abertura da tarefa foi cancelada. Quando desejar registrar uma nova demanda, selecione SolicitaÃ§Ãµes e depois Criar nova tarefa.",
       clientMessageId: `${input.organizationId}:task-flow-cancelled:${input.message.id}`,
     });
     return {
       source: "unrouted" as const,
       ticketId: null,
       confidencePercent: null,
-      reason: "Cliente cancelou o fluxo de criacao de tarefa.",
+      reason: "Cliente cancelou o fluxo de criaÃ§Ã£o de tarefa.",
     };
   }
 
@@ -1123,14 +1646,14 @@ async function handleTaskCreationFlowReply(
         organizationId: input.organizationId,
         conversation: input.conversation,
         contact: input.contact,
-        body: "Nao conseguimos identificar o setor informado. Responda com uma das opcoes abaixo: Geral, Fiscal, Contabil, Departamento Pessoal, Societario ou Comercial.",
+        body: "NÃ£o conseguimos identificar o setor informado. Responda com uma das opÃ§Ãµes abaixo: Geral, Fiscal, ContÃ¡bil, Departamento Pessoal, SocietÃ¡rio ou Comercial.",
         clientMessageId: `${input.organizationId}:task-flow-invalid-sector:${input.message.id}`,
       });
       return {
         source: "unrouted" as const,
         ticketId: null,
         confidencePercent: null,
-        reason: "Cliente informou setor invalido no fluxo de criacao de tarefa.",
+        reason: "Cliente informou setor invÃ¡lido no fluxo de criaÃ§Ã£o de tarefa.",
       };
     }
 
@@ -1161,14 +1684,14 @@ async function handleTaskCreationFlowReply(
         organizationId: input.organizationId,
         conversation: input.conversation,
         contact: input.contact,
-        body: "O titulo informado ficou muito curto. Envie um titulo mais claro e objetivo para a tarefa.",
+        body: "O tÃ­tulo informado ficou muito curto. Envie um tÃ­tulo mais claro e objetivo para a tarefa.",
         clientMessageId: `${input.organizationId}:task-flow-title-short:${input.message.id}`,
       });
       return {
         source: "unrouted" as const,
         ticketId: null,
         confidencePercent: null,
-        reason: "Cliente informou titulo curto no fluxo de criacao de tarefa.",
+        reason: "Cliente informou tÃ­tulo curto no fluxo de criaÃ§Ã£o de tarefa.",
       };
     }
 
@@ -1192,7 +1715,7 @@ async function handleTaskCreationFlowReply(
       source: "unrouted" as const,
       ticketId: null,
       confidencePercent: null,
-      reason: "Cliente informou titulo da nova tarefa.",
+      reason: "Cliente informou tÃ­tulo da nova tarefa.",
     };
   }
 
@@ -1235,7 +1758,11 @@ async function activateTicketContextFromSelection(
 
   const contactId = asString(input.contact.id);
   const conversationId = asString(input.conversation.id);
-  const clientId = asString(input.contact.client_id) || null;
+  const clientId = reliableWhatsAppClientId({
+    clientId: asString(input.contact.client_id) || null,
+    matchStatus: asString(input.contact.match_status) as "matched" | "unmatched" | "manual" | "conflict" | null,
+    autoLinkSource: asString(input.contact.auto_link_source) as "unique_phone_match" | "manual" | null,
+  });
   const ticketAllowed = asString(ticket.conversation_id) === conversationId ||
     asString(ticket.contact_id) === contactId ||
     (clientId && asString(ticket.client_id) === clientId);
@@ -1321,7 +1848,7 @@ async function routeInboundToTicket(
       source: "unrouted" as const,
       ticketId: null,
       confidencePercent: null,
-      reason: "Cliente selecionou um ticket indisponivel ou sem permissao.",
+      reason: "Cliente selecionou um ticket indisponÃ­vel ou sem permissÃ£o.",
     };
   }
 
@@ -1347,7 +1874,7 @@ async function routeInboundToTicket(
         source: "unrouted" as const,
         ticketId: null,
         confidencePercent: null,
-        reason: "Cliente selecionou um tipo de solicitação indisponível.",
+        reason: "Cliente selecionou um tipo de solicitaÃ§Ã£o indisponÃ­vel.",
       };
     }
 
@@ -1373,7 +1900,7 @@ async function routeInboundToTicket(
       source: "unrouted" as const,
       ticketId: null,
       confidencePercent: null,
-      reason: "Cliente escolheu um tipo de solicitação para criar tarefa.",
+      reason: "Cliente escolheu um tipo de solicitaÃ§Ã£o para criar tarefa.",
     };
   }
 
@@ -1388,6 +1915,17 @@ async function routeInboundToTicket(
         .eq("organization_id", input.organizationId)
         .eq("conversation_id", asString(input.conversation.id))
         .is("cleared_at", null);
+
+      await supabaseAdmin
+        .from("whatsapp_task_creation_flows")
+        .update({
+          status: "cancelled",
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", input.organizationId)
+        .eq("conversation_id", asString(input.conversation.id))
+        .in("status", ["collecting_sector", "collecting_title", "collecting_description", "blocked"]);
 
       await sendAutoServiceMenu(supabaseAdmin, {
         organizationId: input.organizationId,
@@ -1437,11 +1975,116 @@ async function routeInboundToTicket(
         source: "unrouted" as const,
         ticketId: null,
         confidencePercent: null,
-        reason: "Cliente abriu o fluxo de solicitacoes.",
+        reason: "Cliente abriu o fluxo de solicitaÃ§Ãµes.",
+      };
+    }
+
+    if (selected.action === "continue_context") {
+      await sendSystemText(supabaseAdmin, {
+        organizationId: input.organizationId,
+        conversation: input.conversation,
+        contact: input.contact,
+        body: "Certo. Envie a prÃ³xima mensagem ou documento que deseja adicionar ao ticket selecionado.",
+        clientMessageId: `${input.organizationId}:continue-context:${input.message.id}`,
+      });
+      await createWhatsAppEvent(supabaseAdmin, {
+        organization_id: input.organizationId,
+        conversation_id: asString(input.conversation.id),
+        message_id: asString(input.message.id),
+        event_type: "auto_service_action.continue_context",
+        details: { action: selected.action, active_context_kept: true },
+      });
+      return {
+        source: "unrouted" as const,
+        ticketId: null,
+        confidencePercent: null,
+        reason: "Cliente optou por continuar adicionando contexto ao ticket selecionado.",
+      };
+    }
+
+    if (selected.action === "end_flow") {
+      await supabaseAdmin
+        .from("whatsapp_active_ticket_contexts")
+        .update({
+          cleared_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", input.organizationId)
+        .eq("conversation_id", asString(input.conversation.id))
+        .is("cleared_at", null);
+
+      await supabaseAdmin
+        .from("whatsapp_task_creation_flows")
+        .update({
+          status: "cancelled",
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", input.organizationId)
+        .eq("conversation_id", asString(input.conversation.id))
+        .in("status", ["collecting_sector", "collecting_title", "collecting_description", "blocked"]);
+
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({ status: "open", assigned_team: null, updated_at: new Date().toISOString() })
+        .eq("id", input.conversation.id);
+
+      await sendSystemText(supabaseAdmin, {
+        organizationId: input.organizationId,
+        conversation: input.conversation,
+        contact: input.contact,
+        body: "Certo. Encerramos este fluxo de atendimento automÃ¡tico. Caso precise de algo mais, envie *menu* para ver as opÃ§Ãµes novamente.",
+        clientMessageId: `${input.organizationId}:auto-action:${selected.action}:${input.message.id}`,
+      });
+
+      await createWhatsAppEvent(supabaseAdmin, {
+        organization_id: input.organizationId,
+        conversation_id: asString(input.conversation.id),
+        message_id: asString(input.message.id),
+        event_type: "auto_service_action.end_flow",
+        details: { action: selected.action, cleared_context: true },
+      });
+
+      return {
+        source: "unrouted" as const,
+        ticketId: null,
+        confidencePercent: null,
+        reason: "Cliente encerrou o fluxo automÃ¡tico.",
       };
     }
 
     if (selected.action === "attendance" || selected.action === "talk_team") {
+      const flowSettings = await loadWhatsAppFlowSettings(supabaseAdmin, input.organizationId);
+      if (!flowSettings.includeHumanAttendance) {
+        await sendSystemText(supabaseAdmin, {
+          organizationId: input.organizationId,
+          conversation: input.conversation,
+          contact: input.contact,
+          body: "Este canal esta configurado para atendimento automatico no momento. Selecione uma opcao para abrir ou acompanhar solicitacoes.",
+          clientMessageId: `${input.organizationId}:auto-action:${selected.action}:automatic-only:${input.message.id}`,
+        });
+        await sendRequestsFlowMenu(supabaseAdmin, {
+          organizationId: input.organizationId,
+          conversation: input.conversation,
+          contact: input.contact,
+          sourceMessageId: `automatic-only:${input.message.id}`,
+        });
+        await createWhatsAppEvent(supabaseAdmin, {
+          organization_id: input.organizationId,
+          conversation_id: asString(input.conversation.id),
+          message_id: asString(input.message.id),
+          event_type: "auto_service_action.attendance_disabled",
+          details: { action: selected.action, next_step: "automatic_flow" },
+        });
+        return {
+          source: "unrouted" as const,
+          ticketId: null,
+          confidencePercent: null,
+          reason: "Atendimento humano desabilitado no fluxo automatico.",
+        };
+      }
+
+      const outsideOfficeHours = isOutsideHumanAttendanceHours();
       await supabaseAdmin
         .from("whatsapp_conversations")
         .update({
@@ -1451,7 +2094,9 @@ async function routeInboundToTicket(
         })
         .eq("id", input.conversation.id);
 
-      const attendanceMessage = "Certo. Encaminhamos sua conversa para a equipe de atendimento. Em instantes, alguem da nossa equipe dara continuidade por aqui.";
+      const attendanceMessage = outsideOfficeHours
+        ? "No momento, o horÃ¡rio de atendimento do escritÃ³rio jÃ¡ foi excedido. Sua solicitaÃ§Ã£o ficou registrada e retornaremos no prÃ³ximo dia Ãºtil, ou assim que possÃ­vel."
+        : "Certo. Encaminhamos sua conversa para a equipe de atendimento. Em instantes, alguÃ©m da nossa equipe darÃ¡ continuidade por aqui.";
       await sendSystemText(supabaseAdmin, {
         organizationId: input.organizationId,
         conversation: input.conversation,
@@ -1472,13 +2117,15 @@ async function routeInboundToTicket(
         conversation_id: asString(input.conversation.id),
         message_id: asString(input.message.id),
         event_type: `auto_service_action.${selected.action}`,
-        details: { action: selected.action, next_step: "attendance_queue" },
+        details: { action: selected.action, next_step: "attendance_queue", outside_office_hours: outsideOfficeHours },
       });
       return {
         source: "unrouted" as const,
         ticketId: null,
         confidencePercent: null,
-        reason: "Cliente solicitou atendimento humano.",
+        reason: outsideOfficeHours
+          ? "Cliente solicitou atendimento humano fora do horÃ¡rio comercial."
+          : "Cliente solicitou atendimento humano.",
       };
     }
 
@@ -1530,13 +2177,13 @@ async function routeInboundToTicket(
         source: "unrouted" as const,
         ticketId: null,
         confidencePercent: null,
-        reason: "Cliente iniciou fluxo guiado de criacao de tarefa.",
+        reason: "Cliente iniciou fluxo guiado de criaÃ§Ã£o de tarefa.",
       };
     }
 
     const actionMessages = {
       attendance: "Chamamos a equipe interna. Envie sua mensagem com o contexto para darmos continuidade.",
-      new_request: "Certo. Descreva sua solicitacao em uma mensagem para criarmos o atendimento.",
+      new_request: "Certo. Descreva sua solicitaÃ§Ã£o em uma mensagem para criarmos o atendimento.",
       send_document: "Pode enviar o documento por aqui. Se ele estiver relacionado a um ticket existente, selecione o ticket antes de anexar.",
       talk_team: "Chamamos a equipe interna. Envie sua mensagem com o contexto para darmos continuidade.",
     } as const;
@@ -1558,7 +2205,7 @@ async function routeInboundToTicket(
       source: "unrouted" as const,
       ticketId: null,
       confidencePercent: null,
-      reason: "Cliente escolheu uma acao do autoatendimento.",
+      reason: "Cliente escolheu uma aÃ§Ã£o do autoatendimento.",
     };
   }
 
@@ -1634,6 +2281,15 @@ async function routeInboundToTicket(
       details: { reason: decision.reason, confidence_percent: decision.confidencePercent },
       idempotencyKey: `${input.organizationId}:route-message:${input.message.id}`,
     });
+
+    if (decision.source === "active_context") {
+      await sendTicketContextFollowupActions(supabaseAdmin, {
+        organizationId: input.organizationId,
+        conversation: input.conversation,
+        contact: input.contact,
+        sourceMessageId: asString(input.message.id),
+      });
+    }
 
     return decision;
   }
@@ -1723,6 +2379,8 @@ async function processInbound(supabaseAdmin: SupabaseAdmin, payload: Record<stri
     unread_count: (existingConversation?.unread_count || 0) + 1,
     last_inbound_at: inbound.timestamp,
     active_window_expires_at: activeWindowExpiresAt(new Date(inbound.timestamp)),
+    provider_phone_number_id: inbound.providerPhoneNumberId,
+    provider_display_phone_number: inbound.providerDisplayPhoneNumber,
     updated_at: new Date().toISOString(),
   };
 
@@ -1749,6 +2407,8 @@ async function processInbound(supabaseAdmin: SupabaseAdmin, payload: Record<stri
       client_id: contact.client_id,
       direction: "inbound",
       provider_message_id: inbound.providerMessageId,
+      provider_phone_number_id: inbound.providerPhoneNumberId,
+      provider_display_phone_number: inbound.providerDisplayPhoneNumber,
       message_type: inbound.messageType,
       body: inbound.body,
       safe_preview: safePreview(inbound.body || inbound.messageType),
@@ -1794,7 +2454,7 @@ async function processInbound(supabaseAdmin: SupabaseAdmin, payload: Record<stri
 
     if (attachmentStatus.allowed && attachment?.storage_path) {
       try {
-        const downloaded = await downloadWhatsAppMedia(inbound.providerMediaId);
+        const downloaded = await downloadWhatsAppMedia(inbound.providerMediaId, inbound.providerPhoneNumberId);
         const uploadContentType = baseMimeType(downloaded.contentType) || baseMimeType(inbound.contentType) || "application/octet-stream";
         const { error: uploadError } = await supabaseAdmin.storage
           .from("whatsapp-media")
@@ -1831,7 +2491,11 @@ async function processInbound(supabaseAdmin: SupabaseAdmin, payload: Record<stri
     message_id: message.id,
     event_type: "inbound_received",
     provider_event_id: inbound.providerMessageId,
-    details: { message_type: inbound.messageType },
+    details: {
+      message_type: inbound.messageType,
+      provider_phone_number_id: inbound.providerPhoneNumberId,
+      provider_display_phone_number: inbound.providerDisplayPhoneNumber,
+    },
   });
 
   const routeDecision = await routeInboundToTicket(supabaseAdmin, {
@@ -1849,7 +2513,7 @@ async function processInbound(supabaseAdmin: SupabaseAdmin, payload: Record<stri
     target_user_id: conversation.assigned_to_user_id,
     target_scope: conversation.assigned_to_user_id ? "user" : "queue",
     notification_type: "new_message",
-    title: `Nova mensagem WhatsApp${contact.client_id ? "" : " nao identificada"}`,
+    title: `Nova mensagem WhatsApp${contact.client_id ? "" : " nÃ£o identificada"}`,
     body: routeDecision.ticketId
       ? inbound.body || "Arquivo recebido pelo WhatsApp"
       : `Mensagem sem ticket selecionado: ${inbound.body || "Arquivo recebido pelo WhatsApp"}`,
@@ -1889,3 +2553,5 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: message }, status);
   }
 });
+
+

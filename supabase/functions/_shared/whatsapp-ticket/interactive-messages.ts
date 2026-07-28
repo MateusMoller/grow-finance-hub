@@ -14,9 +14,11 @@ export type WhatsAppAutoServiceAction =
   | "requests"
   | "consult_tasks"
   | "create_task"
+  | "continue_context"
   | "new_request"
   | "send_document"
-  | "talk_team";
+  | "talk_team"
+  | "end_flow";
 
 const truncateWhatsAppTitle = (value: string, fallback: string) => {
   const title = value.trim() || fallback;
@@ -62,9 +64,11 @@ export function parseAutoServiceReplyId(value: string | null | undefined) {
       action === "requests" ||
       action === "consult_tasks" ||
       action === "create_task" ||
+      action === "continue_context" ||
       action === "new_request" ||
       action === "send_document" ||
-      action === "talk_team"
+      action === "talk_team" ||
+      action === "end_flow"
     ) {
       return { type: "action" as const, id: null, action };
     }
@@ -77,7 +81,7 @@ export function parseAutoServiceTextReply(value: string | null | undefined) {
   const text = normalizeReplyText(value);
   if (!text) return { type: "unknown" as const, id: null, action: null };
 
-  if (["menu", "inicio", "iniciar", "oi", "ola", "olá"].includes(text)) {
+  if (["menu", "inicio", "iniciar", "oi", "ola", "olÃ¡"].includes(text)) {
     return { type: "action" as const, id: null, action: "menu" as const };
   }
 
@@ -92,7 +96,7 @@ export function parseAutoServiceTextReply(value: string | null | undefined) {
     return { type: "action" as const, id: null, action: "attendance" as const };
   }
 
-  if (["solicitacoes", "solicitacao", "solicitações", "solicitação", "demandas"].includes(text)) {
+  if (["solicitacoes", "solicitacao", "solicitaÃ§Ãµes", "solicitaÃ§Ã£o", "demandas"].includes(text)) {
     return { type: "action" as const, id: null, action: "requests" as const };
   }
 
@@ -102,6 +106,14 @@ export function parseAutoServiceTextReply(value: string | null | undefined) {
 
   if (["criar nova tarefa", "nova tarefa", "abrir tarefa"].includes(text)) {
     return { type: "action" as const, id: null, action: "create_task" as const };
+  }
+
+  if (["continuar", "continuar contexto", "adicionar contexto", "mais contexto"].includes(text)) {
+    return { type: "action" as const, id: null, action: "continue_context" as const };
+  }
+
+  if (["encerrar", "encerrar atendimento", "finalizar", "finalizar atendimento", "sair"].includes(text)) {
+    return { type: "action" as const, id: null, action: "end_flow" as const };
   }
 
   return { type: "unknown" as const, id: null, action: null };
@@ -143,12 +155,30 @@ export function buildAutoServiceListPayload(input: {
   to: string;
   bodyText?: string;
   tickets?: WhatsAppInteractiveTicketOption[];
+  includeAttendance?: boolean;
 }) {
   const ticketRows = (input.tickets || []).slice(0, 7).map((ticket) => ({
     id: buildTicketRowId(ticket.id),
     title: truncateWhatsAppTitle(ticket.title, "Ticket"),
     description: truncateWhatsAppDescription(ticket.description),
   }));
+  const includeAttendance = input.includeAttendance !== false;
+  const menuRows = [
+    ...(includeAttendance
+      ? [
+          {
+            id: buildAutoActionRowId("attendance"),
+            title: "Atendimento",
+            description: "Falar diretamente com a equipe.",
+          },
+        ]
+      : []),
+    {
+      id: buildAutoActionRowId("requests"),
+      title: "Solicitações",
+      description: "Abrir ou acompanhar uma demanda.",
+    },
+  ];
 
   return {
     messaging_product: "whatsapp",
@@ -159,25 +189,14 @@ export function buildAutoServiceListPayload(input: {
       type: "list",
       body: {
         text: input.bodyText ||
-          "Ola. Para direcionarmos seu atendimento corretamente, selecione uma das opcoes abaixo.",
+          "Para direcionarmos seu atendimento corretamente, selecione uma das opções abaixo.",
       },
       action: {
-        button: "Escolher opcao",
+        button: "Escolher opção",
         sections: [
           {
             title: "Menu",
-            rows: [
-              {
-                id: buildAutoActionRowId("attendance"),
-                title: "Atendimento",
-                description: "Falar diretamente com a equipe.",
-              },
-              {
-                id: buildAutoActionRowId("requests"),
-                title: "Solicitacoes",
-                description: "Abrir ou acompanhar uma demanda.",
-              },
-            ],
+            rows: menuRows,
           },
           ...(ticketRows.length > 0
             ? [
@@ -196,7 +215,30 @@ export function buildAutoServiceListPayload(input: {
 export function buildAutoServiceButtonPayload(input: {
   to: string;
   bodyText?: string;
+  includeAttendance?: boolean;
 }) {
+  const includeAttendance = input.includeAttendance !== false;
+  const buttons = [
+    ...(includeAttendance
+      ? [
+          {
+            type: "reply",
+            reply: {
+              id: buildAutoActionRowId("attendance"),
+              title: "Atendimento",
+            },
+          },
+        ]
+      : []),
+    {
+      type: "reply",
+      reply: {
+        id: buildAutoActionRowId("requests"),
+        title: "Solicitações",
+      },
+    },
+  ];
+
   return {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -206,25 +248,10 @@ export function buildAutoServiceButtonPayload(input: {
       type: "button",
       body: {
         text: input.bodyText ||
-          "Ola. Para direcionarmos seu atendimento corretamente, selecione uma das opcoes abaixo.",
+          "Para direcionarmos seu atendimento corretamente, selecione uma das opções abaixo.",
       },
       action: {
-        buttons: [
-          {
-            type: "reply",
-            reply: {
-              id: buildAutoActionRowId("attendance"),
-              title: "Atendimento",
-            },
-          },
-          {
-            type: "reply",
-            reply: {
-              id: buildAutoActionRowId("requests"),
-              title: "Solicitacoes",
-            },
-          },
-        ],
+        buttons,
       },
     },
   };
@@ -243,7 +270,7 @@ export function buildRequestsFlowButtonPayload(input: {
       type: "button",
       body: {
         text: input.bodyText ||
-          "Selecione como deseja prosseguir. Voce pode consultar tarefas em andamento ou abrir uma nova solicitacao para nossa equipe.",
+          "Selecione como deseja prosseguir. VocÃª pode consultar tarefas em andamento ou abrir uma nova solicitaÃ§Ã£o para nossa equipe.",
       },
       action: {
         buttons: [
@@ -281,10 +308,10 @@ export function buildRequestsFlowListPayload(input: {
       type: "list",
       body: {
         text: input.bodyText ||
-          "Selecione como deseja prosseguir. Voce pode consultar tarefas em andamento ou abrir uma nova solicitacao para nossa equipe.",
+          "Selecione como deseja prosseguir. VocÃª pode consultar tarefas em andamento ou abrir uma nova solicitaÃ§Ã£o para nossa equipe.",
       },
       action: {
-        button: "Escolher opcao",
+        button: "Escolher opÃ§Ã£o",
         sections: [
           {
             title: "Acompanhamento",
@@ -297,10 +324,10 @@ export function buildRequestsFlowListPayload(input: {
             ],
           },
           {
-            title: "Nova solicitacao",
+            title: "Nova solicitaÃ§Ã£o",
             rows: input.requestTypes.slice(0, 10).map((requestType) => ({
               id: buildRequestTypeRowId(requestType.id),
-              title: truncateWhatsAppTitle(requestType.title, "Solicitacao"),
+              title: truncateWhatsAppTitle(requestType.title, "SolicitaÃ§Ã£o"),
               description: truncateWhatsAppDescription(requestType.description),
             })),
           },

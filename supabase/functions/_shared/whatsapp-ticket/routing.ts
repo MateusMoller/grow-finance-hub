@@ -4,6 +4,38 @@ import {
   type WhatsAppTicketRouteInput,
 } from "./types.ts";
 
+export const localSaoPauloParts = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "short",
+    hour12: false,
+  }).formatToParts(date);
+
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  const hour = Number(value("hour"));
+  const minute = Number(value("minute"));
+
+  return {
+    dateKey: `${value("year")}-${value("month")}-${value("day")}`,
+    greeting: hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite",
+    minutesOfDay: (Number.isFinite(hour) ? hour : 0) * 60 + (Number.isFinite(minute) ? minute : 0),
+    weekday: value("weekday").toLowerCase(),
+  };
+};
+
+export const isOutsideHumanAttendanceHours = (date = new Date()) => {
+  const parts = localSaoPauloParts(date);
+  const isWeekend = parts.weekday.startsWith("sáb") ||
+    parts.weekday.startsWith("sab") ||
+    parts.weekday.startsWith("dom");
+  return isWeekend || parts.minutesOfDay >= 17 * 60;
+};
+
 export function normalizeConfidencePercent(confidence: number | null | undefined): number | null {
   if (confidence === null || confidence === undefined || Number.isNaN(confidence)) {
     return null;

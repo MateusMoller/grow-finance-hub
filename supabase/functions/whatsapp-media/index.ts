@@ -62,6 +62,8 @@ async function prepareUpload(supabaseAdmin: SupabaseAdmin, userId: string, body:
     direction: "outbound",
     sender_user_id: userId,
     client_message_id: clientMessageId,
+    provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+    provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
     message_type: attachmentPolicy.allowedType === "pdf" ? "document" : attachmentPolicy.allowedType || "document",
     body: caption,
     safe_preview: safePreview(caption || fileName),
@@ -133,7 +135,7 @@ async function finalizeUpload(supabaseAdmin: SupabaseAdmin, userId: string, body
       file_name,
       content_type,
       message:whatsapp_messages(body),
-      conversation:whatsapp_conversations(contact:whatsapp_contacts(phone_number))
+      conversation:whatsapp_conversations(provider_phone_number_id, provider_display_phone_number, contact:whatsapp_contacts(phone_number))
     `)
     .eq("id", attachmentId)
     .maybeSingle();
@@ -156,6 +158,7 @@ async function finalizeUpload(supabaseAdmin: SupabaseAdmin, userId: string, body
     fileName: attachment.file_name,
     contentType: attachment.content_type,
     caption: formatOutboundCaptionForClient(asString(message.body), senderDisplayName),
+    phoneNumberId: asString(conversation.provider_phone_number_id) || null,
   });
   const now = new Date().toISOString();
 
@@ -168,6 +171,8 @@ async function finalizeUpload(supabaseAdmin: SupabaseAdmin, userId: string, body
       .from("whatsapp_messages")
       .update({
         provider_message_id: providerResult.providerMessageId,
+        provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+        provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
         delivery_status: providerResult.deliveryStatus,
         sent_at: now,
         updated_at: now,

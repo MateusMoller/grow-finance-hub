@@ -69,6 +69,21 @@ export type WhatsAppTicketEvent = {
   created_at: string;
 };
 
+export type WhatsAppConversationTaskContext = {
+  id: string;
+  message_id: string;
+  task_id: string;
+  ticket_id: string | null;
+  relation_type: string;
+  created_at: string;
+  ticket_protocol: string | null;
+  ticket_title: string | null;
+  task_title: string | null;
+  task_status: string | null;
+  attachment_name: string | null;
+  attachment_status: string | null;
+};
+
 export async function listWhatsAppTicketsForConversation(conversationId: string): Promise<WhatsAppCustomerTicket[]> {
   const { data, error } = await supabase
     .from("whatsapp_customer_tickets" as never)
@@ -81,6 +96,58 @@ export async function listWhatsAppTicketsForConversation(conversationId: string)
   }
 
   return (data ?? []) as unknown as WhatsAppCustomerTicket[];
+}
+
+export async function listWhatsAppConversationTaskContext(
+  conversationId: string,
+): Promise<WhatsAppConversationTaskContext[]> {
+  if (!conversationId) return [];
+
+  const { data, error } = await supabase
+    .from("whatsapp_task_message_links" as never)
+    .select(`
+      id,
+      message_id,
+      task_id,
+      ticket_id,
+      relation_type,
+      created_at,
+      ticket:whatsapp_customer_tickets(public_protocol, title),
+      task:kanban_tasks(title, status),
+      attachment:whatsapp_conversation_attachments(file_name, status)
+    `)
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as Array<{
+    id: string;
+    message_id: string;
+    task_id: string;
+    ticket_id: string | null;
+    relation_type: string;
+    created_at: string;
+    ticket?: { public_protocol?: string | null; title?: string | null } | null;
+    task?: { title?: string | null; status?: string | null } | null;
+    attachment?: { file_name?: string | null; status?: string | null } | null;
+  }>).map((row) => ({
+    id: row.id,
+    message_id: row.message_id,
+    task_id: row.task_id,
+    ticket_id: row.ticket_id,
+    relation_type: row.relation_type,
+    created_at: row.created_at,
+    ticket_protocol: row.ticket?.public_protocol || null,
+    ticket_title: row.ticket?.title || null,
+    task_title: row.task?.title || null,
+    task_status: row.task?.status || null,
+    attachment_name: row.attachment?.file_name || null,
+    attachment_status: row.attachment?.status || null,
+  }));
 }
 
 export async function listWhatsAppTicketMessages(taskId: string) {

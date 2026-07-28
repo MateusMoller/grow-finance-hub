@@ -3,6 +3,8 @@ import { asRecord, asString, baseMimeType, normalizePhone, safePreview } from ".
 export interface NormalizedWhatsAppMessage {
   providerMessageId: string | null;
   providerMediaId: string | null;
+  providerPhoneNumberId: string | null;
+  providerDisplayPhoneNumber: string | null;
   fromPhone: string;
   displayName: string | null;
   body: string;
@@ -21,6 +23,7 @@ export const normalizeInboundMessage = (payload: unknown): NormalizedWhatsAppMes
   const entry = Array.isArray(root.entry) ? asRecord(root.entry[0]) : {};
   const change = Array.isArray(entry.changes) ? asRecord(entry.changes[0]) : {};
   const value = asRecord(change.value);
+  const metadata = asRecord(value.metadata);
   const message = Object.keys(direct).length > 0
     ? direct
     : Array.isArray(value.messages)
@@ -61,6 +64,8 @@ export const normalizeInboundMessage = (payload: unknown): NormalizedWhatsAppMes
   return {
     providerMessageId: asString(message.id) || null,
     providerMediaId: asString(media.id) || null,
+    providerPhoneNumberId: asString(metadata.phone_number_id || root.phone_number_id) || null,
+    providerDisplayPhoneNumber: asString(metadata.display_phone_number || root.display_phone_number) || null,
     fromPhone: normalizePhone(message.from || root.from || contacts.wa_id),
     displayName: asString(profile.name || root.display_name) || null,
     body: asString(text.body || media.caption || interactiveReplyTitle || root.body || ""),
@@ -82,6 +87,7 @@ export const normalizeStatusUpdate = (payload: unknown) => {
   const entry = Array.isArray(root.entry) ? asRecord(root.entry[0]) : {};
   const change = Array.isArray(entry.changes) ? asRecord(entry.changes[0]) : {};
   const value = asRecord(change.value);
+  const metadata = asRecord(value.metadata);
   const status = Object.keys(direct).length > 0
     ? direct
     : Array.isArray(value.statuses)
@@ -91,6 +97,8 @@ export const normalizeStatusUpdate = (payload: unknown) => {
   if (Object.keys(status).length === 0) return null;
   return {
     providerMessageId: asString(status.id),
+    providerPhoneNumberId: asString(metadata.phone_number_id || root.phone_number_id) || null,
+    providerDisplayPhoneNumber: asString(metadata.display_phone_number || root.display_phone_number) || null,
     deliveryStatus: asString(status.status) || "sent",
     failureReason: asString(status.errors ? JSON.stringify(status.errors) : "") || null,
   };
@@ -186,6 +194,44 @@ const providerMessageId = (payload: Record<string, unknown>) => {
 const isRecipientNotAllowedError = (error: unknown) =>
   error instanceof Error && (error.message.includes("#131030") || error.message.includes("code=131030"));
 
+export type WhatsAppProviderFailureKind =
+  | "recipient_not_allowed"
+  | "authentication"
+  | "reengagement_window"
+  | "country_restricted"
+  | "not_configured"
+  | "unknown";
+
+export function classifyWhatsAppProviderFailure(error: unknown): {
+  kind: WhatsAppProviderFailureKind;
+  retryable: boolean;
+  reason: string;
+} {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  if (message.includes("#131030") || message.includes("code=131030") || message.includes("Recipient phone number not in allowed list")) {
+    return { kind: "recipient_not_allowed", retryable: false, reason: "recipient_not_allowed" };
+  }
+
+  if (message.includes("code=190") || message.includes("OAuthException") || message.includes("Authentication Error")) {
+    return { kind: "authentication", retryable: false, reason: "authentication_error" };
+  }
+
+  if (message.includes("#131047") || message.includes("code=131047") || message.includes("Re-engagement message")) {
+    return { kind: "reengagement_window", retryable: false, reason: "reengagement_window_expired" };
+  }
+
+  if (message.includes("130497") || message.includes("restricted from messaging users in this country")) {
+    return { kind: "country_restricted", retryable: false, reason: "country_restricted" };
+  }
+
+  if (message.includes("whatsapp_provider_not_configured")) {
+    return { kind: "not_configured", retryable: false, reason: "provider_not_configured" };
+  }
+
+  return { kind: "unknown", retryable: false, reason: "provider_failed" };
+}
+
 const recipientPhoneVariants = (value: unknown) => {
   const phone = normalizePhone(value);
   if (!phone) return [];
@@ -228,9 +274,11 @@ export async function dispatchWhatsAppTextMessage(args: {
   body: string;
   clientMessageId: string;
   replyToProviderMessageId?: string | null;
+  phoneNumberId?: string | null;
 }) {
   const config = loadProviderConfig();
-  const payload = await postProviderMessageWithRecipientFallback(config.phoneNumberId, args.toPhone, (phone) => {
+  const phoneNumberId = args.phoneNumberId?.trim() || config.phoneNumberId;
+  const payload = await postProviderMessageWithRecipientFallback(phoneNumberId, args.toPhone, (phone) => {
     const messagePayload: Record<string, unknown> = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -261,9 +309,59 @@ export async function dispatchWhatsAppTextMessage(args: {
 export async function dispatchWhatsAppInteractiveMessage(args: {
   toPhone: string;
   payloadForPhone: (phone: string) => Record<string, unknown>;
+  phoneNumberId?: string | null;
 }) {
   const config = loadProviderConfig();
-  const payload = await postProviderMessageWithRecipientFallback(config.phoneNumberId, args.toPhone, args.payloadForPhone);
+  const phoneNumberId = args.phoneNumberId?.trim() || config.phoneNumberId;
+  const payload = await postProviderMessageWithRecipientFallback(phoneNumberId, args.toPhone, args.payloadForPhone);
+  const messageId = providerMessageId(payload);
+  if (!messageId) throw new Error("whatsapp_provider_missing_message_id");
+
+  return {
+    providerMessageId: messageId,
+    deliveryStatus: "sent" as const,
+  };
+}
+
+export async function dispatchWhatsAppTemplateMessage(args: {
+  toPhone: string;
+  templateName: string;
+  languageCode?: string | null;
+  bodyParameters?: string[];
+  phoneNumberId?: string | null;
+}) {
+  const config = loadProviderConfig();
+  const phoneNumberId = args.phoneNumberId?.trim() || config.phoneNumberId;
+  const payload = await postProviderMessageWithRecipientFallback(phoneNumberId, args.toPhone, (phone) => {
+    const parameters = (args.bodyParameters || [])
+      .map((parameter) => parameter.trim())
+      .filter(Boolean)
+      .map((parameter) => ({ type: "text", text: parameter }));
+
+    const templatePayload: Record<string, unknown> = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: phone,
+      type: "template",
+      template: {
+        name: args.templateName,
+        language: { code: args.languageCode || "pt_BR" },
+        ...(parameters.length > 0
+          ? {
+              components: [
+                {
+                  type: "body",
+                  parameters,
+                },
+              ],
+            }
+          : {}),
+      },
+    };
+
+    return templatePayload;
+  });
+
   const messageId = providerMessageId(payload);
   if (!messageId) throw new Error("whatsapp_provider_missing_message_id");
 
@@ -279,14 +377,16 @@ export async function dispatchWhatsAppMediaMessage(args: {
   fileName: string;
   contentType: string;
   caption: string | null;
+  phoneNumberId?: string | null;
 }) {
   const config = loadProviderConfig();
+  const phoneNumberId = args.phoneNumberId?.trim() || config.phoneNumberId;
   const formData = new FormData();
   formData.append("messaging_product", "whatsapp");
   formData.append("type", baseMimeType(args.contentType) || args.contentType);
   formData.append("file", args.file, args.fileName);
 
-  const uploaded = await postProviderForm(`${config.phoneNumberId}/media`, formData);
+  const uploaded = await postProviderForm(`${phoneNumberId}/media`, formData);
   const mediaId = asString(uploaded.id);
   if (!mediaId) throw new Error("whatsapp_provider_missing_media_id");
 
@@ -302,7 +402,7 @@ export async function dispatchWhatsAppMediaMessage(args: {
   if (args.caption && mediaType !== "audio") mediaPayload.caption = args.caption;
   if (mediaType === "document") mediaPayload.filename = args.fileName;
 
-  const sent = await postProviderMessageWithRecipientFallback(config.phoneNumberId, args.toPhone, (phone) => ({
+  const sent = await postProviderMessageWithRecipientFallback(phoneNumberId, args.toPhone, (phone) => ({
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: phone,
@@ -320,9 +420,10 @@ export async function dispatchWhatsAppMediaMessage(args: {
   };
 }
 
-export async function downloadWhatsAppMedia(providerMediaId: string) {
+export async function downloadWhatsAppMedia(providerMediaId: string, phoneNumberIdOverride?: string | null) {
   const config = loadProviderConfig();
-  const media = await getProviderJson(`${providerMediaId}?phone_number_id=${encodeURIComponent(config.phoneNumberId)}`);
+  const phoneNumberId = phoneNumberIdOverride?.trim() || config.phoneNumberId;
+  const media = await getProviderJson(`${providerMediaId}?phone_number_id=${encodeURIComponent(phoneNumberId)}`);
   const mediaUrl = asString(media.url);
   if (!mediaUrl) throw new Error("whatsapp_provider_missing_media_url");
 

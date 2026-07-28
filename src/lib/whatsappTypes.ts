@@ -1,4 +1,10 @@
-export type WhatsAppConversationStatus = "open" | "in_attendance" | "pending_client" | "resolved" | "archived";
+export type WhatsAppConversationStatus =
+  | "open"
+  | "in_attendance"
+  | "pending_client"
+  | "resolved"
+  | "archived"
+  | "delivery_blocked";
 export type WhatsAppMessageDirection = "inbound" | "outbound";
 export type WhatsAppMessageType = "text" | "image" | "audio" | "video" | "document" | "unknown";
 export type WhatsAppDeliveryStatus = "queued" | "sending" | "sent" | "delivered" | "read" | "failed" | "received";

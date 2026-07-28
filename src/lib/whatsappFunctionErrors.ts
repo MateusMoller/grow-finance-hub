@@ -13,5 +13,5 @@ export async function throwDetailedFunctionError(error: unknown): Promise<never>
   const payloadMessage = await extractFunctionErrorPayload(error);
   if (payloadMessage) throw new Error(payloadMessage);
   if (error instanceof Error) throw error;
-  throw new Error("Nao foi possivel concluir a acao.");
+  throw new Error("Não foi possível concluir a ação.");
 }

@@ -1,4 +1,4 @@
-import { normalizeReportToken } from "./classification";
+import { isCredentialLikeField, normalizeReportToken } from "./classification";
 import type { ReportFieldDataType, ReportFieldDefinition } from "./types";
 
 interface ClientDataFieldConfig {
@@ -195,18 +195,26 @@ export const clientDataCategories = [
 function toClientDataField(category: ClientDataCategoryConfig, config: ClientDataFieldConfig): ReportFieldDefinition {
   const normalizedName = normalizeReportToken(config.name);
   const dataType = config.dataType || (booleanFieldNames.has(normalizedName) ? "boolean" : "text");
-  const classification = config.classification || (sensitiveFieldNames.has(normalizedName) ? "sensitive" : "internal");
+  const sourcePath = `client_data.${category.category}.${config.name}`;
+  const isProhibited =
+    config.classification === "prohibited" ||
+    isCredentialLikeField(normalizedName) ||
+    isCredentialLikeField(config.label) ||
+    isCredentialLikeField(sourcePath);
+  const classification = isProhibited
+    ? "prohibited"
+    : config.classification || (sensitiveFieldNames.has(normalizedName) ? "sensitive" : "internal");
 
   return {
     key: `cadastral_${category.category}_${normalizedName}`,
     label: config.label,
     description: `${category.label}: ${config.label}`,
-    sourcePath: `client_data.${category.category}.${config.name}`,
+    sourcePath,
     dataType,
     classification,
     formatter: config.formatter,
-    exportable: true,
-    previewable: true,
+    exportable: !isProhibited,
+    previewable: !isProhibited,
     module: "Clientes",
     group: category.label,
   };

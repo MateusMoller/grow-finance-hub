@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Check, CheckCheck, ChevronDown, Download, FileText, Image as ImageIcon, ListChecks, Mic, Pause, Play, RefreshCw, Reply, Video } from "lucide-react";
 import {
   Dialog,
@@ -18,6 +19,7 @@ import {
 import { bubbleToneClass, type WhatsAppBubbleTone } from "@/components/whatsapp/appearance";
 import { whatsAppReplyReferenceFor, type WhatsAppReplyReference } from "@/lib/whatsappMessagePreview";
 import { getWhatsAppAttachmentUrl } from "@/lib/whatsappMedia";
+import type { WhatsAppConversationTaskContext } from "@/lib/whatsappTickets";
 import type { WhatsAppAttachment, WhatsAppMessage } from "@/lib/whatsappTypes";
 
 const formatTime = (message: WhatsAppMessage) => {
@@ -335,12 +337,14 @@ export function MessageBubble({
   contactInitials,
   bubbleTone = "verde",
   compact = false,
+  taskContexts = [],
   onReply,
 }: {
   message: WhatsAppMessage;
   contactInitials: string;
   bubbleTone?: WhatsAppBubbleTone;
   compact?: boolean;
+  taskContexts?: WhatsAppConversationTaskContext[];
   onReply?: (message: WhatsAppReplyReference) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -427,6 +431,22 @@ export function MessageBubble({
             bubbleTone={bubbleTone}
           />
         ))}
+        {taskContexts.length > 0 && (
+          <div className="mt-1.5 space-y-1 border-t border-black/10 pt-1.5">
+            {taskContexts.slice(0, 2).map((context) => (
+              <Link
+                key={context.id}
+                to={`/app/tarefas?task=${encodeURIComponent(context.task_id)}`}
+                className="block rounded-md bg-white/55 px-2 py-1 text-[11px] text-[#54656f] transition hover:bg-white/80"
+              >
+                <span className="font-semibold text-[#111b21]">{context.ticket_protocol || "Ticket"}</span>
+                <span className="mx-1">-</span>
+                <span>{context.task_title || context.ticket_title || "Tarefa vinculada"}</span>
+                {context.attachment_name && <span className="ml-1 text-amber-700">com anexo</span>}
+              </Link>
+            ))}
+          </div>
+        )}
         <div className={`mt-0.5 items-center justify-end gap-1 px-1 text-[10px] text-[#667781] ${hasAttachments && !failed && !outbound ? "hidden" : "flex"}`}>
           {outbound ? (
             <>
@@ -445,3 +465,4 @@ export function MessageBubble({
     </div>
   );
 }
+

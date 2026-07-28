@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { MessageCircle } from "lucide-react";
 
 import { AppLayout } from "@/components/app/AppLayout";
-import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import {
   ConversationList,
   ConversationPanel,
@@ -22,6 +20,11 @@ import { endWhatsAppAttendance, linkWhatsAppConversationClient } from "@/lib/wha
 import { sendWhatsAppAttachment } from "@/lib/whatsappMedia";
 import { markWhatsAppConversationRead, sendWhatsAppTextMessage } from "@/lib/whatsappMessages";
 import { createWhatsAppQuickTask } from "@/lib/whatsappQuickTasks";
+import {
+  defaultWhatsAppFlowSettings,
+  getWhatsAppFlowSettings,
+  saveWhatsAppFlowSettings,
+} from "@/lib/whatsappFlowSettings";
 import type { WhatsAppConversationFilters, WhatsAppConversationSummary } from "@/lib/whatsappTypes";
 
 const createClientMessageId = () =>
@@ -113,6 +116,11 @@ export default function WhatsAppAtendimentoPage() {
     [conversations, selectedConversationId],
   );
   const messagesQuery = useWhatsAppMessages(selectedConversationId);
+  const flowSettingsQuery = useQuery({
+    queryKey: ["whatsapp", "flow-settings", currentOrganizationId],
+    enabled: Boolean(currentOrganizationId),
+    queryFn: () => getWhatsAppFlowSettings(currentOrganizationId || ""),
+  });
   const activeClientsQuery = useQuery({
     queryKey: ["whatsapp", "active-clients", currentOrganizationId],
     enabled: Boolean(currentOrganizationId),
@@ -207,6 +215,27 @@ export default function WhatsAppAtendimentoPage() {
     window.localStorage.setItem(whatsappUserPreferenceKey(user?.id, "standard-messages"), JSON.stringify(sanitized));
     toast.success("Mensagens padrão atualizadas.");
   };
+
+  const flowSettingsMutation = useMutation({
+    mutationFn: (includeHumanAttendance: boolean) => {
+      if (!currentOrganizationId) {
+        throw new Error("Organizacao ativa nao encontrada.");
+      }
+
+      return saveWhatsAppFlowSettings(currentOrganizationId, { includeHumanAttendance });
+    },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["whatsapp", "flow-settings", currentOrganizationId], settings);
+      toast.success(
+        settings.includeHumanAttendance
+          ? "Fluxo com atendimento habilitado."
+          : "Fluxo configurado para modo somente automático.",
+      );
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel salvar o fluxo do WhatsApp.");
+    },
+  });
 
   const sendTextMutation = useMutation({
     mutationFn: ({
@@ -308,9 +337,8 @@ export default function WhatsAppAtendimentoPage() {
   const isSending = sendTextMutation.isPending || sendFileMutation.isPending;
 
   return (
-    <AppLayout>
-      <div className="flex h-[calc(100svh-5.25rem)] w-full max-w-none flex-col gap-2">
-        <ModuleContextPill icon={MessageCircle} label="Atendimento WhatsApp" className="mb-0 ml-1" />
+    <AppLayout hideFooter flushContentTop>
+      <div className="flex h-[calc(100svh-4rem)] w-full max-w-none flex-col">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-y bg-[#f0f2f5] shadow-sm lg:rounded-none">
           <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
             <div className="flex min-h-0 flex-col border-r border-[#d1d7db] bg-white">
@@ -324,12 +352,18 @@ export default function WhatsAppAtendimentoPage() {
                 chatDensity={chatDensity}
                 chatBackground={chatBackground}
                 bubbleTone={bubbleTone}
+                includeHumanAttendanceInFlow={
+                  flowSettingsQuery.data?.includeHumanAttendance ??
+                  defaultWhatsAppFlowSettings.includeHumanAttendance
+                }
+                flowSettingsSaving={flowSettingsMutation.isPending || flowSettingsQuery.isLoading}
                 onSearchChange={updateSearch}
                 onQueueChange={setConversationQueue}
                 onSelect={selectConversation}
                 onChatDensityChange={setChatDensity}
                 onChatBackgroundChange={setChatBackground}
                 onBubbleToneChange={setBubbleTone}
+                onIncludeHumanAttendanceInFlowChange={(value) => flowSettingsMutation.mutate(value)}
                 standardMessages={standardMessages}
                 onStandardMessagesChange={saveStandardMessages}
               />

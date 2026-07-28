@@ -25,7 +25,7 @@ export type WhatsAppQuickTaskInput = {
 
 export async function createWhatsAppQuickTask(input: WhatsAppQuickTaskInput) {
   const title = input.title.trim();
-  if (!title) throw new Error("Informe o titulo da tarefa.");
+  if ((input.mode || "create") === "create" && !title) throw new Error("Informe o título da tarefa.");
 
   const { data, error } = await supabase.functions.invoke("whatsapp-send-message", {
     body: {

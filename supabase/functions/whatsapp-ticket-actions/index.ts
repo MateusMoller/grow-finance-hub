@@ -229,6 +229,68 @@ async function linkMessageToExistingTask(supabaseAdmin: SupabaseAdmin, userId: s
   return { ok: true, ticket };
 }
 
+const parseWhatsAppFlowSettings = (operationalLimits: unknown) => {
+  const limits = asRecord(operationalLimits);
+  const whatsapp = asRecord(limits.whatsapp);
+  const flow = asRecord(whatsapp.flow);
+  return { includeHumanAttendance: flow.includeHumanAttendance !== false };
+};
+
+async function loadWhatsAppFlowSettings(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
+  const organizationId = asString(body.organizationId);
+  if (!organizationId) throw new Error("invalid_organization_payload");
+  await assertWhatsAppModuleAccess(supabaseAdmin, userId, organizationId);
+
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .select("operational_limits")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return { ok: true, settings: parseWhatsAppFlowSettings(data?.operational_limits) };
+}
+
+async function updateWhatsAppFlowSettings(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
+  const organizationId = asString(body.organizationId);
+  if (!organizationId) throw new Error("invalid_organization_payload");
+  await assertWhatsAppModuleAccess(supabaseAdmin, userId, organizationId);
+
+  const includeHumanAttendance = body.includeHumanAttendance !== false;
+  const { data: current, error: loadError } = await supabaseAdmin
+    .from("organization_settings")
+    .select("operational_limits")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (loadError) throw loadError;
+  if (!current) throw new Error("organization_settings_not_found");
+
+  const limits = asRecord(current.operational_limits);
+  const whatsapp = asRecord(limits.whatsapp);
+  const flow = asRecord(whatsapp.flow);
+  const operationalLimits = {
+    ...limits,
+    whatsapp: {
+      ...whatsapp,
+      flow: {
+        ...flow,
+        includeHumanAttendance,
+      },
+    },
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from("organization_settings")
+    .update({ operational_limits: operationalLimits })
+    .eq("organization_id", organizationId)
+    .select("operational_limits")
+    .single();
+
+  if (error) throw error;
+  return { ok: true, settings: parseWhatsAppFlowSettings(data.operational_limits) };
+}
+
 async function transitionTicket(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>, status: string) {
   const ticketId = asString(body.ticketId);
   if (!ticketId) throw new Error("invalid_ticket_payload");
@@ -288,7 +350,7 @@ async function completeTicketTask(supabaseAdmin: SupabaseAdmin, userId: string, 
     ].join("\n");
     const { data: conversation } = await supabaseAdmin
       .from("whatsapp_conversations")
-      .select("contact:whatsapp_contacts(phone_number)")
+      .select("provider_phone_number_id, contact:whatsapp_contacts(phone_number)")
       .eq("id", ticket.conversation_id)
       .maybeSingle();
     const toPhone = asString(conversation?.contact?.phone_number);
@@ -297,6 +359,7 @@ async function completeTicketTask(supabaseAdmin: SupabaseAdmin, userId: string, 
         toPhone,
         body: messageBody,
         clientMessageId: `complete:${ticket.id}:${Date.now()}`,
+        phoneNumberId: asString(conversation?.provider_phone_number_id) || null,
       }).catch(() => undefined);
     }
   }
@@ -318,6 +381,8 @@ Deno.serve(async (request) => {
     if (action === "select_ticket_context") return jsonResponse(await selectTicketContext(supabaseAdmin, user.id, body));
     if (action === "clear_ticket_context") return jsonResponse(await clearTicketContext(supabaseAdmin, user.id, body));
     if (action === "link_message_to_existing_task") return jsonResponse(await linkMessageToExistingTask(supabaseAdmin, user.id, body));
+    if (action === "load_whatsapp_flow_settings") return jsonResponse(await loadWhatsAppFlowSettings(supabaseAdmin, user.id, body));
+    if (action === "update_whatsapp_flow_settings") return jsonResponse(await updateWhatsAppFlowSettings(supabaseAdmin, user.id, body));
     if (action === "complete_ticket_task") return jsonResponse(await completeTicketTask(supabaseAdmin, user.id, body));
     if (action === "resolve_ticket") return jsonResponse(await transitionTicket(supabaseAdmin, user.id, body, "resolved"));
     if (action === "close_ticket") return jsonResponse(await transitionTicket(supabaseAdmin, user.id, body, "closed"));

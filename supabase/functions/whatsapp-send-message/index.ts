@@ -1,6 +1,6 @@
 import { buildSupabaseAdminClient, corsHeaders, getAuthenticatedUser, jsonResponse, assertWhatsAppModuleAccess } from "../_shared/whatsapp-auth.ts";
 import { createWhatsAppEvent, createWhatsAppNotification } from "../_shared/whatsapp-events.ts";
-import { dispatchWhatsAppTextMessage } from "../_shared/whatsapp-provider.ts";
+import { dispatchWhatsAppTemplateMessage, dispatchWhatsAppTextMessage } from "../_shared/whatsapp-provider.ts";
 import { asRecord, asString, errorMessage, isActiveWindowOpen, safePreview } from "../_shared/whatsapp-validation.ts";
 import { createWhatsAppTicketEvent } from "../_shared/whatsapp-ticket/audit.ts";
 import { buildPublicTicketProtocol } from "../_shared/whatsapp-ticket/protocol.ts";
@@ -12,6 +12,15 @@ type SenderIdentity = {
   displayName: string;
   sectorLabel: string;
 };
+
+const WHATSAPP_REENGAGEMENT_TEMPLATE_NAME =
+  Deno.env.get("WHATSAPP_REENGAGEMENT_TEMPLATE_NAME")?.trim() || "grow_retomada_atendimento";
+const WHATSAPP_REENGAGEMENT_TEMPLATE_LANGUAGE =
+  Deno.env.get("WHATSAPP_REENGAGEMENT_TEMPLATE_LANGUAGE")?.trim() || "pt_BR";
+const WHATSAPP_CLOSING_SURVEY_TEMPLATE_NAME =
+  Deno.env.get("WHATSAPP_CLOSING_SURVEY_TEMPLATE_NAME")?.trim() || "grow_avaliacao_atendimento";
+const WHATSAPP_CLOSING_SURVEY_TEMPLATE_LANGUAGE =
+  Deno.env.get("WHATSAPP_CLOSING_SURVEY_TEMPLATE_LANGUAGE")?.trim() || "pt_BR";
 
 const sectorLabelByCode: Record<string, string> = {
   contabil: "Contábil",
@@ -113,6 +122,128 @@ const formatOutboundTextForClient = (text: string, sender: SenderIdentity) => {
   ].join("\n");
 };
 
+async function getConversationClientName(
+  supabaseAdmin: SupabaseAdmin,
+  conversation: Record<string, unknown>,
+) {
+  const clientId = asString(conversation.client_id);
+  if (!clientId) return asString(asRecord(conversation.contact).display_name) || "cliente";
+
+  const { data, error } = await supabaseAdmin
+    .from("clients")
+    .select("name")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("whatsapp client lookup failed", { client_id: clientId, message: errorMessage(error, "client_lookup_failed") });
+  }
+
+  return asString(data?.name) || asString(asRecord(conversation.contact).display_name) || "cliente";
+}
+
+async function sendTemplateMessage(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    conversation: Record<string, unknown>;
+    userId: string;
+    clientMessageId: string;
+    templateName: string;
+    languageCode: string;
+    bodyParameters?: string[];
+    localBody: string;
+    eventType: string;
+    failureFallback: string;
+  },
+) {
+  let providerMessageId: string | null = null;
+  let deliveryStatus: "sent" | "failed" = "sent";
+  let failureReason: string | null = null;
+
+  try {
+    const providerResult = await dispatchWhatsAppTemplateMessage({
+      toPhone: asString(asRecord(input.conversation.contact).phone_number),
+      templateName: input.templateName,
+      languageCode: input.languageCode,
+      bodyParameters: input.bodyParameters,
+      phoneNumberId: asString(input.conversation.provider_phone_number_id) || null,
+    });
+    providerMessageId = providerResult.providerMessageId;
+    deliveryStatus = providerResult.deliveryStatus;
+  } catch (error) {
+    deliveryStatus = "failed";
+    failureReason = safePreview(error instanceof Error ? error.message : input.failureFallback);
+  }
+
+  const now = new Date().toISOString();
+  const { data: message, error } = await supabaseAdmin.from("whatsapp_messages").upsert({
+    organization_id: input.conversation.organization_id,
+    conversation_id: input.conversation.id,
+    contact_id: input.conversation.contact_id,
+    client_id: input.conversation.client_id,
+    direction: "outbound",
+    sender_user_id: input.userId,
+    provider_message_id: providerMessageId,
+    provider_phone_number_id: asString(input.conversation.provider_phone_number_id) || null,
+    provider_display_phone_number: asString(input.conversation.provider_display_phone_number) || null,
+    client_message_id: input.clientMessageId,
+    message_type: "template",
+    body: input.localBody,
+    safe_preview: safePreview(input.localBody),
+    delivery_status: deliveryStatus,
+    failure_reason: failureReason,
+    sent_at: deliveryStatus === "sent" ? now : null,
+    created_at: now,
+    updated_at: now,
+  }, { onConflict: "organization_id,client_message_id" }).select("*").single();
+  if (error) throw error;
+
+  await supabaseAdmin.from("whatsapp_conversations").update({
+    last_message_id: message.id,
+    last_message_at: now,
+    last_message_preview: safePreview(input.localBody),
+    last_outbound_at: deliveryStatus === "sent" ? now : input.conversation.last_outbound_at,
+    updated_at: now,
+  }).eq("id", input.conversation.id);
+
+  await createWhatsAppEvent(supabaseAdmin, {
+    organization_id: asString(input.conversation.organization_id),
+    conversation_id: asString(input.conversation.id),
+    message_id: asString(message.id),
+    event_type: input.eventType,
+    actor_user_id: input.userId,
+    provider_event_id: providerMessageId,
+    details: {
+      template_name: input.templateName,
+      template_language: input.languageCode,
+      delivery_status: deliveryStatus,
+      failure_reason: failureReason,
+    },
+  });
+
+  return { sent: deliveryStatus === "sent", reason: failureReason, message };
+}
+
+async function sendReengagementTemplate(
+  supabaseAdmin: SupabaseAdmin,
+  conversation: Record<string, unknown>,
+  userId: string,
+  clientMessageId: string,
+) {
+  const clientName = await getConversationClientName(supabaseAdmin, conversation);
+  return sendTemplateMessage(supabaseAdmin, {
+    conversation,
+    userId,
+    clientMessageId,
+    templateName: WHATSAPP_REENGAGEMENT_TEMPLATE_NAME,
+    languageCode: WHATSAPP_REENGAGEMENT_TEMPLATE_LANGUAGE,
+    bodyParameters: [clientName],
+    localBody: `Template de retomada enviado para ${clientName}. O cliente precisa responder para reabrir a janela de atendimento.`,
+    eventType: "reengagement_template_sent",
+    failureFallback: "whatsapp_reengagement_template_failed",
+  });
+}
+
 async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const conversationId = asString(body.conversationId);
   const text = asString(body.body);
@@ -138,6 +269,78 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
         ? "contact_blocked"
         : null;
 
+  if (blockedReason === "active_window_closed") {
+    const templateResult = await sendReengagementTemplate(
+      supabaseAdmin,
+      conversation,
+      userId,
+      `${clientMessageId}:reengagement`,
+    );
+
+    const { data: blockedMessage, error } = await supabaseAdmin.from("whatsapp_messages").insert({
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      contact_id: conversation.contact_id,
+      client_id: conversation.client_id,
+      direction: "outbound",
+      sender_user_id: userId,
+      client_message_id: clientMessageId,
+      provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+      provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
+      message_type: "text",
+      body: providerText,
+      safe_preview: safePreview(providerText),
+      delivery_status: "failed",
+      blocked_reason: blockedReason,
+      failure_reason: "Mensagem livre bloqueada pela janela de 24h. Template de retomada enviado no lugar.",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).select("*").single();
+    if (error) throw error;
+    await createWhatsAppEvent(supabaseAdmin, {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      message_id: blockedMessage.id,
+      event_type: "send_blocked_template_fallback",
+      actor_user_id: userId,
+      details: {
+        blocked_reason: blockedReason,
+        template_sent: templateResult.sent,
+        template_failure_reason: templateResult.reason,
+      },
+    });
+
+    if (!templateResult.sent) {
+      throw new Error(templateResult.reason || "reengagement_template_failed");
+    }
+
+    return {
+      ok: true,
+      message: templateResult.message,
+      templateSent: true,
+      blockedOriginalMessageId: blockedMessage.id,
+    };
+  }
+
+  if (blockedReason === "active_window_closed") {
+    const templateResult = await sendTemplateMessage(supabaseAdmin, {
+      conversation,
+      userId,
+      clientMessageId: `${clientMessageId}:closing-survey-template`,
+      templateName: WHATSAPP_CLOSING_SURVEY_TEMPLATE_NAME,
+      languageCode: WHATSAPP_CLOSING_SURVEY_TEMPLATE_LANGUAGE,
+      localBody: body,
+      eventType: "attendance_closing_survey_template_sent",
+      failureFallback: "whatsapp_closing_survey_template_failed",
+    });
+
+    return {
+      sent: templateResult.sent,
+      reason: templateResult.reason || "active_window_closed_template_fallback",
+      message: templateResult.message,
+    };
+  }
+
   if (blockedReason) {
     const { data: blockedMessage, error } = await supabaseAdmin.from("whatsapp_messages").insert({
       organization_id: conversation.organization_id,
@@ -153,6 +356,7 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
       delivery_status: "failed",
       blocked_reason: blockedReason,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }).select("*").single();
     if (error) throw error;
     await createWhatsAppEvent(supabaseAdmin, {
@@ -171,6 +375,7 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
     body: providerText,
     clientMessageId,
     replyToProviderMessageId,
+    phoneNumberId: asString(conversation.provider_phone_number_id) || null,
   }).catch(async (error) => {
     const failureReason = error instanceof Error ? error.message : "whatsapp_provider_failed";
     const { data: failedMessage, error: insertError } = await supabaseAdmin.from("whatsapp_messages").upsert({
@@ -181,6 +386,8 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
       direction: "outbound",
       sender_user_id: userId,
       client_message_id: clientMessageId,
+      provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+      provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
       message_type: "text",
       body: providerText,
       safe_preview: safePreview(providerText),
@@ -210,6 +417,8 @@ async function sendText(supabaseAdmin: SupabaseAdmin, userId: string, body: Reco
     direction: "outbound",
     sender_user_id: userId,
     provider_message_id: providerResult.providerMessageId,
+    provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+    provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
     client_message_id: clientMessageId,
     message_type: "text",
     body: providerText,
@@ -407,10 +616,125 @@ async function changeStatus(supabaseAdmin: SupabaseAdmin, userId: string, body: 
   return { ok: true };
 }
 
+async function sendAttendanceClosingSurvey(
+  supabaseAdmin: SupabaseAdmin,
+  conversation: Record<string, unknown>,
+  userId: string,
+) {
+  const senderIdentity = await loadSenderIdentity(supabaseAdmin, userId, asString(conversation.organization_id));
+  const body = "Foi um prazer atendê-lo. Para mantermos um bom atendimento, pedimos que avalie de 1 a 10 o atendimento recebido.";
+  const now = new Date().toISOString();
+  const clientMessageId = `${asString(conversation.organization_id)}:manual-attendance-closing:${asString(conversation.id)}:${Date.now()}`;
+  const blockedReason = !isActiveWindowOpen(asString(conversation.active_window_expires_at))
+    ? "active_window_closed"
+    : asString(asRecord(conversation.contact)?.is_blocked) === "true"
+      ? "contact_blocked"
+      : null;
+
+  if (blockedReason) {
+    const { data: blockedMessage, error } = await supabaseAdmin.from("whatsapp_messages").insert({
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      contact_id: conversation.contact_id,
+      client_id: conversation.client_id,
+      direction: "outbound",
+      sender_user_id: userId,
+      client_message_id: clientMessageId,
+      provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+      provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
+      message_type: "text",
+      body,
+      safe_preview: safePreview(body),
+      delivery_status: "failed",
+      blocked_reason: blockedReason,
+      created_at: now,
+      updated_at: now,
+    }).select("*").single();
+    if (error) throw error;
+
+    await createWhatsAppEvent(supabaseAdmin, {
+      organization_id: asString(conversation.organization_id),
+      conversation_id: asString(conversation.id),
+      message_id: asString(blockedMessage.id),
+      event_type: "attendance_closing_survey_failed",
+      actor_user_id: userId,
+      details: { blocked_reason: blockedReason },
+    });
+
+    return { sent: false, reason: blockedReason, message: blockedMessage };
+  }
+
+  let providerMessageId: string | null = null;
+  let deliveryStatus: "sent" | "failed" = "sent";
+  let failureReason: string | null = null;
+
+  try {
+    const providerResult = await dispatchWhatsAppTextMessage({
+      toPhone: asString(asRecord(conversation.contact).phone_number),
+      body,
+      clientMessageId,
+      phoneNumberId: asString(conversation.provider_phone_number_id) || null,
+    });
+    providerMessageId = providerResult.providerMessageId;
+    deliveryStatus = providerResult.deliveryStatus;
+  } catch (error) {
+    deliveryStatus = "failed";
+    failureReason = safePreview(error instanceof Error ? error.message : "whatsapp_provider_failed");
+  }
+
+  const { data: message, error } = await supabaseAdmin.from("whatsapp_messages").upsert({
+    organization_id: conversation.organization_id,
+    conversation_id: conversation.id,
+    contact_id: conversation.contact_id,
+    client_id: conversation.client_id,
+    direction: "outbound",
+    sender_user_id: userId,
+    provider_message_id: providerMessageId,
+    provider_phone_number_id: asString(conversation.provider_phone_number_id) || null,
+    provider_display_phone_number: asString(conversation.provider_display_phone_number) || null,
+    client_message_id: clientMessageId,
+    message_type: "text",
+    body,
+    safe_preview: safePreview(body),
+    delivery_status: deliveryStatus,
+    failure_reason: failureReason,
+    sent_at: deliveryStatus === "sent" ? now : null,
+    created_at: now,
+    updated_at: now,
+  }, { onConflict: "organization_id,client_message_id" }).select("*").single();
+  if (error) throw error;
+
+  await supabaseAdmin.from("whatsapp_conversations").update({
+    last_message_id: message.id,
+    last_message_at: now,
+    last_message_preview: safePreview(body),
+    last_outbound_at: deliveryStatus === "sent" ? now : conversation.last_outbound_at,
+    updated_at: now,
+  }).eq("id", conversation.id);
+
+  await createWhatsAppEvent(supabaseAdmin, {
+    organization_id: asString(conversation.organization_id),
+    conversation_id: asString(conversation.id),
+    message_id: asString(message.id),
+    event_type: deliveryStatus === "sent" ? "attendance_closing_survey_sent" : "attendance_closing_survey_failed",
+    actor_user_id: userId,
+    provider_event_id: providerMessageId,
+    details: {
+      sender_display_name: senderIdentity.displayName,
+      sender_sector: senderIdentity.sectorLabel,
+      failure_reason: failureReason,
+    },
+  });
+
+  return { sent: deliveryStatus === "sent", reason: failureReason, message };
+}
+
 async function endAttendance(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const conversationId = asString(body.conversationId);
   const conversation = await loadConversation(supabaseAdmin, conversationId);
   await assertWhatsAppModuleAccess(supabaseAdmin, userId, conversation.organization_id);
+
+  const surveyResult = await sendAttendanceClosingSurvey(supabaseAdmin, conversation, userId);
 
   await supabaseAdmin
     .from("whatsapp_conversations")
@@ -427,10 +751,14 @@ async function endAttendance(supabaseAdmin: SupabaseAdmin, userId: string, body:
     conversation_id: conversation.id,
     event_type: "attendance_ended",
     actor_user_id: userId,
-    details: { previous_status: conversation.status },
+    details: {
+      previous_status: conversation.status,
+      closing_survey_sent: surveyResult.sent,
+      closing_survey_failure_reason: surveyResult.reason,
+    },
   });
 
-  return { ok: true };
+  return { ok: true, closingSurveySent: surveyResult.sent, closingSurveyFailureReason: surveyResult.reason };
 }
 
 async function createQuickTask(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {

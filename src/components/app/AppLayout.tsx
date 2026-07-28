@@ -152,7 +152,15 @@ const buildQuickLinks = (
     return !moduleKey || canAccessModule(effectiveAccess, moduleKey);
   });
 };
-export function AppLayout({ children }: { children: ReactNode }) {
+export function AppLayout({
+  children,
+  hideFooter = false,
+  flushContentTop = false,
+}: {
+  children: ReactNode;
+  hideFooter?: boolean;
+  flushContentTop?: boolean;
+}) {
   const { user, role, roles, signOut, effectiveAccess, currentOrganizationId } = useAuth();
   const {
     selectedCompany,
@@ -656,13 +664,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0">
+          <main
+            className={
+              flushContentTop
+                ? "flex-1 overflow-auto bg-muted/20 px-3 pb-0 pt-0 sm:px-4 lg:px-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0"
+                : "flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0"
+            }
+          >
             {children}
           </main>
 
-          <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
-            Grow Finance Hub - Área interna
-          </footer>
+          {!hideFooter && (
+            <footer className="border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground mb-[calc(env(safe-area-inset-bottom)+4rem)] md:mb-0">
+              Grow Finance Hub - Área interna
+            </footer>
+          )}
 
           <div className="fixed bottom-0 left-0 right-0 border-t bg-card/95 backdrop-blur md:hidden z-30">
             <div
