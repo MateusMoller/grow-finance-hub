@@ -42,7 +42,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { invokeGrowObligations } from "@/lib/growObligations";
 import { motion } from "framer-motion";
-import { Archive, CalendarDays, Check, ChevronDown, ChevronsUpDown, Filter, KanbanSquare, Loader2, Plus } from "lucide-react";
+import { Archive, CalendarDays, Check, ChevronDown, ChevronsUpDown, Filter, KanbanSquare, Loader2, Plus, Search, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -127,6 +127,15 @@ const priorityDot: Record<string, string> = {
   Baixa: "bg-muted-foreground",
 };
 
+const taskOriginFilterOptions = [
+  { value: "all", label: "Todas as origens" },
+  { value: "portal", label: "Portal do Cliente" },
+  { value: "obligations", label: "Obrigações" },
+  { value: "internal", label: "Criação Interna" },
+];
+
+const taskPriorityFilterOptions = ["Urgente", "Alta", "Média", "Baixa"];
+
 const normalizeSector = (value: string) =>
   value
     .replace("Cont\u00c3\u00a1bil", "Contábil")
@@ -154,6 +163,12 @@ const normalizeVisibleSector = (value: string) =>
 
 const isObligationTask = (task: Pick<KanbanTaskItem, "integration_source">) =>
   task.integration_source === obligationTaskSource;
+
+const getTaskOriginFilterValue = (task: Pick<KanbanTaskItem, "request_id" | "integration_source">) => {
+  if (isObligationTask(task)) return "obligations";
+  if (task.request_id) return "portal";
+  return "internal";
+};
 
 const getObligationInstanceId = (task: Pick<KanbanTaskItem, "integration_task_id">) => {
   const value = task.integration_task_id || "";
@@ -360,6 +375,11 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
+  const [originFilter, setOriginFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [taskSearch, setTaskSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -428,6 +448,53 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       }));
     }
   }, [assigneeOptions, newTask.assigned_to_user_id, newTaskSectorCode]);
+
+  const taskAssigneeFilterOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    tasks.forEach((task) => {
+      if (task.assigned_to_user_id) {
+        const knownAssignee = assigneeOptions.find(
+          (option) => option.id === task.assigned_to_user_id,
+        );
+        options.set(
+          task.assigned_to_user_id,
+          knownAssignee
+            ? formatTaskAssigneeLabel(knownAssignee)
+            : task.assignee || "Responsável",
+        );
+        return;
+      }
+      if (task.assignee) {
+        options.set(`name:${task.assignee}`, task.assignee);
+      }
+    });
+    return Array.from(options.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => left.label.localeCompare(right.label, "pt-BR"));
+  }, [assigneeOptions, tasks]);
+
+  const hasLocalTaskFilters =
+    sectorFilter !== "all" ||
+    originFilter !== "all" ||
+    priorityFilter !== "all" ||
+    assigneeFilter !== "all" ||
+    taskSearch.trim().length > 0;
+
+  const activeLocalTaskFilterCount = [
+    sectorFilter !== "all",
+    originFilter !== "all",
+    priorityFilter !== "all",
+    assigneeFilter !== "all",
+    taskSearch.trim().length > 0,
+  ].filter(Boolean).length;
+
+  const clearLocalTaskFilters = () => {
+    setSectorFilter("all");
+    setOriginFilter("all");
+    setPriorityFilter("all");
+    setAssigneeFilter("all");
+    setTaskSearch("");
+  };
 
   const registerTaskHistory = async (
     taskId: string,
@@ -662,6 +729,29 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       )
     )
       return false;
+    if (originFilter !== "all" && getTaskOriginFilterValue(task) !== originFilter)
+      return false;
+    if (priorityFilter !== "all" && normalizePriority(task.priority) !== priorityFilter)
+      return false;
+    if (assigneeFilter !== "all") {
+      if (assigneeFilter === "unassigned") {
+        if (task.assigned_to_user_id || task.assignee) return false;
+      } else {
+        const assigneeKey = task.assigned_to_user_id || (task.assignee ? `name:${task.assignee}` : "");
+        if (assigneeKey !== assigneeFilter) return false;
+      }
+    }
+    const searchToken = normalizeText(taskSearch);
+    if (searchToken) {
+      const searchable = normalizeText([
+        task.title,
+        task.client_name || "",
+        task.assignee || "",
+        task.sector || "",
+        task.tags.join(" "),
+      ].join(" "));
+      if (!searchable.includes(searchToken)) return false;
+    }
     return true;
   });
 
@@ -1218,41 +1308,128 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               </Button>
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card/45 px-3 py-2.5">
-            <TaskOriginLegend />
-            <div className={`flex flex-wrap items-center gap-2 ${embedded ? "ml-auto" : ""}`}>
-              <Select value={sectorFilter} onValueChange={setSectorFilter}>
-                <SelectTrigger className="h-9 w-full rounded-md border-border/70 bg-background/80 text-xs sm:w-44">
-                  <Filter className="h-4 w-4 mr-1" />
-                  <SelectValue placeholder="Filtrar setor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Setores</SelectItem>
-                  {availableSectors.map((sector) => (
-                    <SelectItem key={sector} value={sector}>
-                      {sector}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isAdmin && (
+          <div className="rounded-lg border border-border/60 bg-card/45 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <TaskOriginLegend />
+              <div className={`flex flex-wrap items-center gap-2 ${embedded ? "ml-auto" : ""}`}>
                 <Button
                   type="button"
-                  variant={showArchived ? "secondary" : "ghost"}
+                  variant={filtersOpen || hasLocalTaskFilters ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-9 gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground"
-                  onClick={() => setShowArchived((current) => !current)}
+                  className="h-9 gap-1.5 rounded-md px-3 text-xs"
+                  onClick={() => setFiltersOpen((current) => !current)}
+                  aria-expanded={filtersOpen}
                 >
-                  <Archive className="h-3.5 w-3.5" />
-                  Arquivo
-                  {archivedCount > 0 && (
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none">
-                      {archivedCount}
+                  <Filter className="h-3.5 w-3.5" />
+                  Filtros
+                  {activeLocalTaskFilterCount > 0 && (
+                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                      {activeLocalTaskFilterCount}
                     </span>
                   )}
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      filtersOpen && "rotate-180",
+                    )}
+                  />
                 </Button>
-              )}
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant={showArchived ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-9 gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground"
+                    onClick={() => setShowArchived((current) => !current)}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    Arquivo
+                    {archivedCount > 0 && (
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none">
+                        {archivedCount}
+                      </span>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
+            {filtersOpen && (
+              <div className="mt-3 grid gap-2 border-t border-border/60 pt-3 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1.4fr)_repeat(4,minmax(150px,1fr))_auto]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={taskSearch}
+                    onChange={(event) => setTaskSearch(event.target.value)}
+                    placeholder="Buscar tarefa ou cliente"
+                    className="h-9 w-full rounded-md border-border/70 bg-background/80 pl-8 text-xs"
+                  />
+                </div>
+                <Select value={sectorFilter} onValueChange={setSectorFilter}>
+                  <SelectTrigger className="h-9 w-full rounded-md border-border/70 bg-background/80 text-xs">
+                    <SelectValue placeholder="Filtrar setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Setores</SelectItem>
+                    {availableSectors.map((sector) => (
+                      <SelectItem key={sector} value={sector}>
+                        {sector}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={originFilter} onValueChange={setOriginFilter}>
+                  <SelectTrigger className="h-9 w-full rounded-md border-border/70 bg-background/80 text-xs">
+                    <SelectValue placeholder="Origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taskOriginFilterOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                  <SelectTrigger className="h-9 w-full rounded-md border-border/70 bg-background/80 text-xs">
+                    <SelectValue placeholder="Prioridade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas prioridades</SelectItem>
+                    {taskPriorityFilterOptions.map((priority) => (
+                      <SelectItem key={priority} value={priority}>
+                        {priority}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                  <SelectTrigger className="h-9 w-full rounded-md border-border/70 bg-background/80 text-xs">
+                    <SelectValue placeholder="Responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos responsáveis</SelectItem>
+                    <SelectItem value="unassigned">Sem responsável</SelectItem>
+                    {taskAssigneeFilterOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasLocalTaskFilters ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground"
+                    onClick={clearLocalTaskFilters}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Limpar
+                  </Button>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
         {loading ? (

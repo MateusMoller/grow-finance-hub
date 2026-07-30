@@ -114,6 +114,11 @@ type TemplateRow = {
   competence_reference: string;
   technical_due_month_reference: string;
   due_day: number;
+  due_rule_type?: string | null;
+  due_business_day_index?: number | null;
+  due_fixed_month?: number | null;
+  due_fixed_day?: number | null;
+  due_fixed_dates?: unknown;
   yearly_due_month: number | null;
   legal_due_day: number | null;
   priority: string;
@@ -663,6 +668,107 @@ function computeDueDate(
   const monthIndex = dueBaseDate.getUTCMonth();
   const day = clampDay(dueDay, year, monthIndex);
   return new Date(Date.UTC(year, monthIndex, day));
+}
+
+function isUtcBusinessDay(date: Date) {
+  const weekday = date.getUTCDay();
+  return weekday !== 0 && weekday !== 6;
+}
+
+function nthBusinessDayOfMonth(year: number, monthIndex: number, index: number) {
+  const targetIndex = Math.max(1, Math.min(23, Math.trunc(index || 1)));
+  const cursor = new Date(Date.UTC(year, monthIndex, 1));
+  let seen = 0;
+  while (cursor.getUTCMonth() === monthIndex) {
+    if (isUtcBusinessDay(cursor)) {
+      seen += 1;
+      if (seen === targetIndex) return new Date(cursor);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return lastBusinessDayOfMonth(year, monthIndex);
+}
+
+function lastBusinessDayOfMonth(year: number, monthIndex: number) {
+  const cursor = new Date(Date.UTC(year, monthIndex + 1, 0));
+  while (!isUtcBusinessDay(cursor)) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return cursor;
+}
+
+type FixedDueDateEntry = {
+  month: number;
+  day: number;
+  label: string | null;
+};
+
+function normalizeFixedDueDates(template: Pick<TemplateRow, "due_fixed_dates" | "due_fixed_month" | "due_fixed_day" | "yearly_due_month" | "due_day">): FixedDueDateEntry[] {
+  const entries: FixedDueDateEntry[] = [];
+  const used = new Set<string>();
+  const rawDates = Array.isArray(template.due_fixed_dates) ? template.due_fixed_dates : [];
+
+  const addEntry = (monthValue: unknown, dayValue: unknown, labelValue?: unknown) => {
+    const month = Math.max(1, Math.min(12, Number(monthValue || 0)));
+    const day = Math.max(1, Math.min(31, Number(dayValue || 0)));
+    if (!Number.isFinite(month) || !Number.isFinite(day)) return;
+    const key = `${month}-${day}`;
+    if (used.has(key)) return;
+    used.add(key);
+    entries.push({
+      month,
+      day,
+      label: asTrimmedString(labelValue),
+    });
+  };
+
+  rawDates.forEach((value) => {
+    const record = asRecord(value);
+    addEntry(record.month, record.day, record.label);
+  });
+
+  if (entries.length === 0) {
+    addEntry(template.due_fixed_month || template.yearly_due_month || 1, template.due_fixed_day || template.due_day || 1);
+  }
+
+  return entries.sort((left, right) => left.month - right.month || left.day - right.day);
+}
+
+function computeTechnicalDueDate(
+  competenceDate: Date,
+  template: Pick<TemplateRow, "due_day" | "due_rule_type" | "due_business_day_index" | "due_fixed_month" | "due_fixed_day" | "technical_due_month_reference">,
+  dueDayOverride?: number | null,
+  fixedDate?: Pick<FixedDueDateEntry, "month" | "day"> | null,
+) {
+  const dueBaseDate = new Date(Date.UTC(competenceDate.getUTCFullYear(), competenceDate.getUTCMonth(), 1));
+  if (normalizeMonthReference(template.technical_due_month_reference, "vigente") === "anterior") {
+    dueBaseDate.setUTCMonth(dueBaseDate.getUTCMonth() - 1);
+  }
+
+  const year = dueBaseDate.getUTCFullYear();
+  const monthIndex = dueBaseDate.getUTCMonth();
+  const ruleType = asTrimmedString(template.due_rule_type) || "calendar_day";
+
+  if (ruleType === "business_day_from_month_start") {
+    return nthBusinessDayOfMonth(year, monthIndex, template.due_business_day_index || dueDayOverride || template.due_day);
+  }
+
+  if (ruleType === "last_business_day") {
+    return lastBusinessDayOfMonth(year, monthIndex);
+  }
+
+  if (ruleType === "fixed_date") {
+    const fixedMonthIndex = Math.max(0, Math.min(11, (fixedDate?.month || template.due_fixed_month || monthIndex + 1) - 1));
+    const fixedYear = competenceDate.getUTCFullYear();
+    const fixedDay = clampDay(fixedDate?.day || template.due_fixed_day || dueDayOverride || template.due_day, fixedYear, fixedMonthIndex);
+    return new Date(Date.UTC(fixedYear, fixedMonthIndex, fixedDay));
+  }
+
+  return computeDueDate(
+    competenceDate,
+    dueDayOverride ?? template.due_day,
+    normalizeMonthReference(template.technical_due_month_reference, "vigente"),
+  );
 }
 
 async function buildAuthContext(req: Request) {
@@ -2201,10 +2307,33 @@ async function handleSendDelivery(
     },
   );
 
-  await syncInstanceArtifacts(supabaseAdmin, updatedInstanceData as InstanceRow, prepared.template, prepared.client.name);
+  let artifactSyncWarning: string | null = null;
+  try {
+    await syncInstanceArtifacts(supabaseAdmin, updatedInstanceData as InstanceRow, prepared.template, prepared.client.name);
+  } catch (error) {
+    artifactSyncWarning = error instanceof Error ? error.message : "Falha ao sincronizar tarefa e calendario apos envio.";
+    console.error("grow-obligations send_delivery syncInstanceArtifacts failed", {
+      instance_id: prepared.instance.id,
+      message: artifactSyncWarning,
+    });
+    await createInstanceEvent(
+      supabaseAdmin,
+      prepared.instance.id,
+      actorId,
+      "delivery_artifact_sync_failed",
+      "concluida",
+      "concluida",
+      "Guia enviada e obrigacao concluida, mas houve falha ao sincronizar artefatos operacionais.",
+      {
+        attempt_id: String((attemptData as JsonRecord).id),
+        sync_error: artifactSyncWarning,
+      },
+    );
+  }
 
   return jsonResponse({
     ok: true,
+    warning: artifactSyncWarning,
     delivery_attempt: {
       id: String((attemptData as JsonRecord).id),
       status: "sent",
@@ -3268,74 +3397,101 @@ async function ensureInstancesForProfiles(
     const assignedEndMonth = assignedEnd
       ? new Date(Date.UTC(assignedEnd.getUTCFullYear(), assignedEnd.getUTCMonth(), 1))
       : null;
+    const yearlyFixedDates =
+      template.periodicity === "yearly" && asTrimmedString(template.due_rule_type) === "fixed_date"
+        ? normalizeFixedDueDates(template)
+        : [];
 
     const cursor = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), 1));
     while (cursor <= windowEnd) {
-      const currentCompetenceDate = computeCompetenceDate(
-        template.periodicity,
-        cursor,
-        template.competence_reference,
-        profile.yearly_due_month_override ?? template.yearly_due_month,
-      );
+      const competenceCandidates =
+        yearlyFixedDates.length > 0
+          ? yearlyFixedDates
+              .filter((fixedDate) => fixedDate.month === cursor.getUTCMonth() + 1)
+              .map((fixedDate) => ({
+                fixedDate,
+                date: new Date(Date.UTC(cursor.getUTCFullYear(), fixedDate.month - 1, 1)),
+              }))
+          : [
+              {
+                fixedDate: null,
+                date: computeCompetenceDate(
+                  template.periodicity,
+                  cursor,
+                  template.competence_reference,
+                  profile.yearly_due_month_override ?? template.due_fixed_month ?? template.yearly_due_month,
+                ),
+              },
+            ];
 
-      const currentCompetenceKey = competenceKey(currentCompetenceDate);
-      const currentCompetenceLabel = monthLabel(currentCompetenceDate);
-      const currentCompetenceTime = currentCompetenceDate.getTime();
-
-      if (targetCompetenceKey && currentCompetenceKey !== targetCompetenceKey) {
-        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-        continue;
-      }
-
-      if (currentCompetenceTime < assignedStartMonth.getTime()) {
-        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-        continue;
-      }
-
-      if (assignedEndMonth && currentCompetenceTime > assignedEndMonth.getTime()) {
-        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-        continue;
-      }
-
-      if (template.periodicity === "quarterly" && ![0, 3, 6, 9].includes(currentCompetenceDate.getUTCMonth())) {
-        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-        continue;
-      }
-
-      if (template.periodicity === "yearly" && currentCompetenceDate.getUTCMonth() !== (profile.yearly_due_month_override ?? template.yearly_due_month ?? 1) - 1) {
-        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-        continue;
-      }
-
-      const uniqueKey = `${profile.client_id}::${profile.template_id}::${currentCompetenceKey}`;
-      if (!existingKeys.has(uniqueKey)) {
-        const technicalDueDate = computeDueDate(
+      for (const competenceCandidate of competenceCandidates) {
+        const currentCompetenceDate = competenceCandidate.date;
+        const currentFixedDate = competenceCandidate.fixedDate;
+        const technicalDueDate = computeTechnicalDueDate(
           currentCompetenceDate,
-          profile.due_day_override ?? template.due_day,
-          normalizeMonthReference(template.technical_due_month_reference, "vigente"),
+          template,
+          profile.due_day_override,
+          currentFixedDate,
         );
-        const legalDueDate = template.legal_due_day
-          ? computeDueDate(currentCompetenceDate, profile.legal_due_day_override ?? template.legal_due_day)
-          : null;
+        const currentCompetenceKey =
+          currentFixedDate && yearlyFixedDates.length > 1
+            ? toIsoDate(technicalDueDate)
+            : competenceKey(currentCompetenceDate);
+        const currentCompetenceLabel =
+          currentFixedDate
+            ? `${monthLabel(currentCompetenceDate)} - ${technicalDueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })}${currentFixedDate.label ? ` · ${currentFixedDate.label}` : ""}`
+            : monthLabel(currentCompetenceDate);
+        const currentCompetenceTime = currentCompetenceDate.getTime();
 
-        inserts.push({
-          organization_id: profile.organization_id || template.organization_id,
-          client_id: profile.client_id,
-          profile_id: profile.id,
-          template_id: profile.template_id,
-          competence_label: currentCompetenceLabel,
-          competence_date: toIsoDate(currentCompetenceDate),
-          competence_key: currentCompetenceKey,
-          technical_due_date: toIsoDate(technicalDueDate),
-          legal_due_date: legalDueDate ? toIsoDate(legalDueDate) : null,
-          status: "pendente",
-          priority: template.priority,
-          current_assignee: profile.assigned_to,
-          origin: "grow_native",
-          document_required: true,
-          created_by: actorId,
-        });
-        existingKeys.add(uniqueKey);
+        if (targetCompetenceKey && currentCompetenceKey !== targetCompetenceKey) {
+          continue;
+        }
+
+        if (currentCompetenceTime < assignedStartMonth.getTime()) {
+          continue;
+        }
+
+        if (assignedEndMonth && currentCompetenceTime > assignedEndMonth.getTime()) {
+          continue;
+        }
+
+        if (template.periodicity === "quarterly" && ![0, 3, 6, 9].includes(currentCompetenceDate.getUTCMonth())) {
+          continue;
+        }
+
+        if (
+          template.periodicity === "yearly" &&
+          yearlyFixedDates.length === 0 &&
+          currentCompetenceDate.getUTCMonth() !== (profile.yearly_due_month_override ?? template.due_fixed_month ?? template.yearly_due_month ?? 1) - 1
+        ) {
+          continue;
+        }
+
+        const uniqueKey = `${profile.client_id}::${profile.template_id}::${currentCompetenceKey}`;
+        if (!existingKeys.has(uniqueKey)) {
+          const legalDueDate = template.legal_due_day
+            ? computeDueDate(currentCompetenceDate, profile.legal_due_day_override ?? template.legal_due_day)
+            : null;
+
+          inserts.push({
+            organization_id: profile.organization_id || template.organization_id,
+            client_id: profile.client_id,
+            profile_id: profile.id,
+            template_id: profile.template_id,
+            competence_label: currentCompetenceLabel,
+            competence_date: toIsoDate(currentCompetenceDate),
+            competence_key: currentCompetenceKey,
+            technical_due_date: toIsoDate(technicalDueDate),
+            legal_due_date: legalDueDate ? toIsoDate(legalDueDate) : null,
+            status: "pendente",
+            priority: template.priority,
+            current_assignee: profile.assigned_to,
+            origin: "grow_native",
+            document_required: true,
+            created_by: actorId,
+          });
+          existingKeys.add(uniqueKey);
+        }
       }
 
       cursor.setUTCMonth(cursor.getUTCMonth() + 1);
@@ -3810,6 +3966,11 @@ async function handleUpsertTemplate(
     competence_reference: asTrimmedString(payload.competence_reference) || "vigente",
     technical_due_month_reference: normalizeMonthReference(payload.technical_due_month_reference, "vigente"),
     due_day: asInteger(payload.due_day, 10),
+    due_rule_type: asTrimmedString(payload.due_rule_type) || "calendar_day",
+    due_business_day_index: asInteger(payload.due_business_day_index, null),
+    due_fixed_month: asInteger(payload.due_fixed_month, null),
+    due_fixed_day: asInteger(payload.due_fixed_day, null),
+    due_fixed_dates: Array.isArray(payload.due_fixed_dates) ? payload.due_fixed_dates : [],
     yearly_due_month: asInteger(payload.yearly_due_month, null),
     legal_due_day: asInteger(payload.legal_due_day, null),
     priority: asTrimmedString(payload.priority) || "media",

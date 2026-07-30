@@ -46,6 +46,11 @@ export type GrowObligationTemplate = {
   competence_reference: "vigente" | "anterior";
   technical_due_month_reference: "vigente" | "anterior";
   due_day: number;
+  due_rule_type: "calendar_day" | "business_day_from_month_start" | "last_business_day" | "fixed_date";
+  due_business_day_index: number | null;
+  due_fixed_month: number | null;
+  due_fixed_day: number | null;
+  due_fixed_dates: Array<{ month: number; day: number; label?: string | null }> | null;
   yearly_due_month: number | null;
   legal_due_day: number | null;
   priority: "baixa" | "media" | "alta" | "urgente";

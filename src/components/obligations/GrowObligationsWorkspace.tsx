@@ -96,6 +96,11 @@ interface TemplateFormState {
   competence_reference: GrowObligationTemplate["competence_reference"];
   technical_due_month_reference: GrowObligationTemplate["technical_due_month_reference"];
   due_day: string;
+  due_rule_type: GrowObligationTemplate["due_rule_type"];
+  due_business_day_index: string;
+  due_fixed_month: string;
+  due_fixed_day: string;
+  due_fixed_dates: Array<{ month: string; day: string; label: string }>;
   legal_due_day: string;
   priority: GrowObligationInstance["priority"];
   expected_documents: TemplateExpectedDocumentDraft[];
@@ -186,6 +191,38 @@ interface UploadQueueResult {
 const sectors = ["Contabil", "Fiscal", "Departamento Pessoal", "Comercial", "Societario", "Geral"];
 const periodicities: GrowObligationTemplate["periodicity"][] = ["monthly", "quarterly", "yearly", "custom"];
 const priorities: GrowObligationInstance["priority"][] = ["baixa", "media", "alta", "urgente"];
+const dueRuleTypes: GrowObligationTemplate["due_rule_type"][] = [
+  "calendar_day",
+  "business_day_from_month_start",
+  "last_business_day",
+  "fixed_date",
+];
+const dueRuleTypeLabel: Record<GrowObligationTemplate["due_rule_type"], string> = {
+  calendar_day: "Dia corrido do mês",
+  business_day_from_month_start: "Dia útil a partir do início do mês",
+  last_business_day: "Último dia útil do mês",
+  fixed_date: "Data fixa anual",
+};
+const dueRuleTypeDescription: Record<GrowObligationTemplate["due_rule_type"], string> = {
+  calendar_day: "Use para vencimentos em uma data numérica do mês, como dia 10 ou dia 20.",
+  business_day_from_month_start: "Use para regras como 5º dia útil. Sábados e domingos são ignorados.",
+  last_business_day: "Use quando o prazo vence no último dia útil do mês.",
+  fixed_date: "Use para obrigações anuais com dia e mês específicos, como 31 de maio.",
+};
+const monthOptions = [
+  { value: "1", label: "Janeiro" },
+  { value: "2", label: "Fevereiro" },
+  { value: "3", label: "Março" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Maio" },
+  { value: "6", label: "Junho" },
+  { value: "7", label: "Julho" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" },
+];
 const statusOptions: GrowObligationInstance["status"][] = [
   "pendente",
   "em_andamento",
@@ -209,6 +246,60 @@ function slugifyDocumentKey(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return slugifyDocumentKey(value).replace(/_+/g, "-");
+}
+
+function makeFixedDateDraft(month = "", day = "", label = "") {
+  return { month, day, label };
+}
+
+function normalizeFixedDateDrafts(template?: GrowObligationTemplate | null) {
+  const fixedDates = Array.isArray(template?.due_fixed_dates)
+    ? template.due_fixed_dates
+        .map((item) => ({
+          month: Number(item?.month || 0),
+          day: Number(item?.day || 0),
+          label: String(item?.label || ""),
+        }))
+        .filter((item) => item.month >= 1 && item.month <= 12 && item.day >= 1 && item.day <= 31)
+    : [];
+
+  if (fixedDates.length > 0) {
+    return fixedDates.map((item) => makeFixedDateDraft(String(item.month), String(item.day), item.label));
+  }
+
+  if (template?.due_fixed_month || template?.due_fixed_day || template?.yearly_due_month) {
+    return [
+      makeFixedDateDraft(
+        template?.due_fixed_month ? String(template.due_fixed_month) : template?.yearly_due_month ? String(template.yearly_due_month) : "",
+        template?.due_fixed_day ? String(template.due_fixed_day) : template?.due_day ? String(template.due_day) : "",
+      ),
+    ];
+  }
+
+  return [makeFixedDateDraft()];
+}
+
+function sanitizeFixedDates(dates: TemplateFormState["due_fixed_dates"]) {
+  const used = new Set<string>();
+  return dates
+    .map((date) => ({
+      month: Number(date.month || 0),
+      day: Number(date.day || 0),
+      label: date.label.trim(),
+    }))
+    .filter((date) => {
+      if (date.month < 1 || date.month > 12 || date.day < 1 || date.day > 31) return false;
+      const key = `${date.month}-${date.day}`;
+      if (used.has(key)) return false;
+      used.add(key);
+      return true;
+    })
+    .sort((left, right) => left.month - right.month || left.day - right.day)
+    .map((date) => ({
+      month: date.month,
+      day: date.day,
+      ...(date.label ? { label: date.label } : {}),
+    }));
 }
 
 function fileNameWithoutExtension(fileName: string) {
@@ -297,6 +388,11 @@ function makeTemplateForm(template?: GrowObligationTemplate | null): TemplateFor
     competence_reference: template?.competence_reference || "vigente",
     technical_due_month_reference: template?.technical_due_month_reference || "vigente",
     due_day: String(template?.due_day ?? 10),
+    due_rule_type: template?.due_rule_type || "calendar_day",
+    due_business_day_index: template?.due_business_day_index ? String(template.due_business_day_index) : "",
+    due_fixed_month: template?.due_fixed_month ? String(template.due_fixed_month) : template?.yearly_due_month ? String(template.yearly_due_month) : "",
+    due_fixed_day: template?.due_fixed_day ? String(template.due_fixed_day) : "",
+    due_fixed_dates: normalizeFixedDateDrafts(template),
     legal_due_day: template?.legal_due_day ? String(template.legal_due_day) : "",
     priority: template?.priority || "media",
     expected_documents: template?.expected_documents?.length
@@ -392,6 +488,21 @@ function sanitizeExpectedDocuments(documents: TemplateExpectedDocumentDraft[]): 
 
 function validateTemplateForm(form: TemplateFormState, options?: { allowMissingDocuments?: boolean }) {
   if (!form.name.trim()) return "Informe o nome da obrigação.";
+  const dueDay = Number(form.due_day || 0);
+  if (form.due_rule_type === "calendar_day" && (!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31)) {
+    return "Informe um dia corrido entre 1 e 31 para o vencimento técnico.";
+  }
+  const businessDayIndex = Number(form.due_business_day_index || 0);
+  if (
+    form.due_rule_type === "business_day_from_month_start" &&
+    (!Number.isFinite(businessDayIndex) || businessDayIndex < 1 || businessDayIndex > 23)
+  ) {
+    return "Informe qual dia útil deve ser usado, entre 1 e 23.";
+  }
+  const fixedDates = sanitizeFixedDates(form.due_fixed_dates);
+  if (form.due_rule_type === "fixed_date" && fixedDates.length === 0) {
+    return "Informe pelo menos uma data fixa anual válida.";
+  }
   const documents = sanitizeExpectedDocuments(form.expected_documents);
   if (documents.length === 0 && !options?.allowMissingDocuments) return "Cadastre pelo menos um documento esperado.";
   if (form.completion_email_enabled && !form.completion_email_subject.trim()) {
@@ -409,6 +520,8 @@ function validateTemplateForm(form: TemplateFormState, options?: { allowMissingD
 async function upsertTemplateDirectly(payload: TemplateFormState) {
   const organizationId = await getStoredCurrentOrganizationId();
   if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+  const fixedDates = sanitizeFixedDates(payload.due_fixed_dates);
+  const firstFixedDate = fixedDates[0] || null;
 
   const {
     data: { user },
@@ -425,7 +538,12 @@ async function upsertTemplateDirectly(payload: TemplateFormState) {
     competence_reference: payload.competence_reference,
     technical_due_month_reference: payload.technical_due_month_reference,
     due_day: Number(payload.due_day || 10),
-    yearly_due_month: null,
+    due_rule_type: payload.due_rule_type,
+    due_business_day_index: payload.due_business_day_index ? Number(payload.due_business_day_index) : null,
+    due_fixed_month: firstFixedDate?.month ?? null,
+    due_fixed_day: firstFixedDate?.day ?? null,
+    due_fixed_dates: fixedDates,
+    yearly_due_month: firstFixedDate?.month ?? null,
     legal_due_day: payload.legal_due_day ? Number(payload.legal_due_day) : null,
     priority: payload.priority,
     expected_documents: sanitizeExpectedDocuments(payload.expected_documents),
@@ -1271,6 +1389,8 @@ export function GrowObligationsWorkspace({
       const isSystemDefault = isSystemDefaultTemplateForm(payload);
       const validationError = validateTemplateForm(payload, { allowMissingDocuments: isSystemDefault });
       if (validationError) throw new Error(validationError);
+      const fixedDates = sanitizeFixedDates(payload.due_fixed_dates);
+      const firstFixedDate = fixedDates[0] || null;
       const requestPayload = {
         action: "upsert_template",
         id: payload.id,
@@ -1280,6 +1400,12 @@ export function GrowObligationsWorkspace({
         competence_reference: payload.competence_reference,
         technical_due_month_reference: payload.technical_due_month_reference,
         due_day: Number(payload.due_day || 10),
+        due_rule_type: payload.due_rule_type,
+        due_business_day_index: payload.due_business_day_index ? Number(payload.due_business_day_index) : null,
+        due_fixed_month: firstFixedDate?.month ?? null,
+        due_fixed_day: firstFixedDate?.day ?? null,
+        due_fixed_dates: fixedDates,
+        yearly_due_month: firstFixedDate?.month ?? null,
         legal_due_day: payload.legal_due_day ? Number(payload.legal_due_day) : null,
         priority: payload.priority,
         expected_documents: sanitizeExpectedDocuments(payload.expected_documents),
@@ -1574,6 +1700,9 @@ export function GrowObligationsWorkspace({
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao enviar guia ao cliente."),
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+    },
   });
 
   const cancelDeliveryMutation = useMutation({
@@ -2006,12 +2135,6 @@ export function GrowObligationsWorkspace({
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <CardTitle>Central de Documentos</CardTitle>
-                  <CardDescription>Envie PDFs das obrigações e acompanhe a fila de processamento.</CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="rounded-full">PDF</Badge>
-                  <Badge variant="outline" className="rounded-full">Leitura automática</Badge>
-                  <Badge variant="outline" className="rounded-full">Auditoria preservada</Badge>
                 </div>
               </div>
             </CardHeader>
@@ -2422,24 +2545,30 @@ export function GrowObligationsWorkspace({
                     </div>
                     <Badge variant="secondary" className="rounded-full px-3">{deliveryAttempts.length}</Badge>
                   </div>
-                  <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/80">
                     {deliveryAttempts.slice(0, 12).map((attempt) => (
-                      <div key={attempt.id} className="rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-medium">{attempt.recipient_email}</p>
-                          <Badge className="rounded-full" variant={attempt.status === "sent" ? "default" : attempt.status === "failed" ? "destructive" : "outline"}>
-                            {attempt.status}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{attempt.subject}</p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          De: {attempt.verified_from_email} · Reply-to: {attempt.reply_to || "-"} · {formatDateTime(attempt.created_at)}
+                      <div
+                        key={attempt.id}
+                        className="grid min-w-0 grid-cols-[72px_128px_minmax(220px,1.1fr)_minmax(210px,1fr)_minmax(280px,1.4fr)] items-center gap-4 border-b border-border/60 px-4 py-2.5 text-xs last:border-b-0"
+                      >
+                        <Badge className="h-5 w-fit rounded-full px-2 text-[10px]" variant={attempt.status === "sent" ? "default" : attempt.status === "failed" ? "destructive" : "outline"}>
+                          {attempt.status}
+                        </Badge>
+                        <span className="truncate text-[11px] text-muted-foreground" title={formatDateTime(attempt.created_at)}>
+                          {formatDateTime(attempt.created_at)}
+                        </span>
+                        <p className="truncate font-medium" title={attempt.recipient_email}>{attempt.recipient_email}</p>
+                        <p className="truncate text-muted-foreground" title={attempt.subject}>{attempt.subject}</p>
+                        <p
+                          className={`truncate ${attempt.failure_reason ? "text-destructive" : "text-muted-foreground"}`}
+                          title={attempt.failure_reason || `De: ${attempt.verified_from_email} | Reply-to: ${attempt.reply_to || "-"}`}
+                        >
+                          {attempt.failure_reason || `De: ${attempt.verified_from_email} | Reply-to: ${attempt.reply_to || "-"}`}
                         </p>
-                        {attempt.failure_reason ? <p className="mt-2 text-xs text-destructive">{attempt.failure_reason}</p> : null}
                       </div>
                     ))}
                     {deliveryAttempts.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed bg-background/70 p-6 text-center lg:col-span-2">
+                      <div className="p-6 text-center">
                         <p className="text-sm font-medium">Nenhum envio registrado</p>
                         <p className="mt-1 text-xs text-muted-foreground">Quando houver tentativa de envio, ela aparecerá aqui.</p>
                       </div>
@@ -2481,19 +2610,198 @@ export function GrowObligationsWorkspace({
               <span className="text-xs text-muted-foreground group-open:inline hidden">Recolher</span>
             </summary>
             <fieldset className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2"><Label>Nome</Label><Input value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} /></div>
-            <div className="space-y-2"><Label>Setor</Label><Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Periodicidade</Label><Select value={templateForm.periodicity} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, periodicity: value as GrowObligationTemplate["periodicity"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Mes base</Label><Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vigente">{growCompetenceReferenceLabel.vigente}</SelectItem><SelectItem value="anterior">{growCompetenceReferenceLabel.anterior}</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2">
-              <Label>Dia do vencimento técnico</Label>
-              <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
-                <Input
-                  value={templateForm.due_day}
-                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_day: event.target.value }))}
-                  placeholder="Dia"
-                  inputMode="numeric"
-                />
+              <div className="space-y-2">
+                <Label>Nome da obrigação</Label>
+                <Input value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Ex.: DASN-SIMEI" />
+                <p className="text-xs text-muted-foreground">Nome que aparecerá no catálogo, nas tarefas e nas competências geradas.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Setor responsável</Label>
+                <Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Define qual setor visualizará e conduzirá as tarefas desta obrigação.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Periodicidade</Label>
+                <Select
+                  value={templateForm.periodicity}
+                  onValueChange={(value) =>
+                    setTemplateForm((prev) => ({
+                      ...prev,
+                      periodicity: value as GrowObligationTemplate["periodicity"],
+                      due_rule_type: value === "yearly" && prev.due_rule_type === "calendar_day" ? "fixed_date" : prev.due_rule_type,
+                    }))
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Mensal, trimestral ou anual. Obrigações anuais podem usar data fixa.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Competência considerada</Label>
+                <Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vigente">{growCompetenceReferenceLabel.vigente}</SelectItem>
+                    <SelectItem value="anterior">{growCompetenceReferenceLabel.anterior}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Use “anterior” quando a obrigação de um mês se refere ao movimento do mês anterior.</p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Regra do vencimento técnico</Label>
+                <Select
+                  value={templateForm.due_rule_type}
+                  onValueChange={(value) =>
+                    setTemplateForm((prev) => ({
+                      ...prev,
+                      due_rule_type: value as GrowObligationTemplate["due_rule_type"],
+                    }))
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {dueRuleTypes.map((type) => (
+                      <SelectItem key={type} value={type}>{dueRuleTypeLabel[type]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{dueRuleTypeDescription[templateForm.due_rule_type]}</p>
+              </div>
+              {templateForm.due_rule_type === "calendar_day" && (
+                <div className="space-y-2">
+                  <Label>Dia corrido do vencimento</Label>
+                  <Input
+                    value={templateForm.due_day}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_day: event.target.value }))}
+                    placeholder="Ex.: 20"
+                    inputMode="numeric"
+                  />
+                  <p className="text-xs text-muted-foreground">Se o mês tiver menos dias, o sistema usa o último dia do mês.</p>
+                </div>
+              )}
+              {templateForm.due_rule_type === "business_day_from_month_start" && (
+                <div className="space-y-2">
+                  <Label>Nº dia útil</Label>
+                  <Input
+                    value={templateForm.due_business_day_index}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_business_day_index: event.target.value }))}
+                    placeholder="Ex.: 5"
+                    inputMode="numeric"
+                  />
+                  <p className="text-xs text-muted-foreground">Exemplo: informe 5 para vencer no 5º dia útil do mês.</p>
+                </div>
+              )}
+              {templateForm.due_rule_type === "fixed_date" && (
+                <div className="space-y-3 md:col-span-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <Label>Datas fixas anuais</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Adicione uma ou mais datas. O sistema gera uma competência/tarefa anual para cada data cadastrada.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() =>
+                        setTemplateForm((prev) => ({
+                          ...prev,
+                          due_fixed_dates: [...prev.due_fixed_dates, makeFixedDateDraft()],
+                        }))
+                      }
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar data
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {templateForm.due_fixed_dates.map((fixedDate, index) => (
+                      <div key={index} className="grid gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 md:grid-cols-[1fr_110px_1fr_auto]">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Mês</Label>
+                          <Select
+                            value={fixedDate.month}
+                            onValueChange={(value) =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                due_fixed_dates: prev.due_fixed_dates.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, month: value } : item,
+                                ),
+                              }))
+                            }
+                          >
+                            <SelectTrigger><SelectValue placeholder="Mês" /></SelectTrigger>
+                            <SelectContent>
+                              {monthOptions.map((month) => <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Dia</Label>
+                          <Input
+                            value={fixedDate.day}
+                            onChange={(event) =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                due_fixed_dates: prev.due_fixed_dates.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, day: event.target.value } : item,
+                                ),
+                                due_day: index === 0 ? event.target.value : prev.due_day,
+                              }))
+                            }
+                            placeholder="31"
+                            inputMode="numeric"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Identificação opcional</Label>
+                          <Input
+                            value={fixedDate.label}
+                            onChange={(event) =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                due_fixed_dates: prev.due_fixed_dates.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, label: event.target.value } : item,
+                                ),
+                              }))
+                            }
+                            placeholder="Ex.: 1ª parcela, quota única"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 text-muted-foreground hover:text-destructive"
+                            disabled={templateForm.due_fixed_dates.length === 1}
+                            onClick={() =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                due_fixed_dates: prev.due_fixed_dates.filter((_, itemIndex) => itemIndex !== index),
+                              }))
+                            }
+                            aria-label="Remover data fixa anual"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Exemplo: uma obrigação anual pode ter 31/05 e 30/11, cada uma gerando sua própria tarefa no mês correspondente.
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Mês usado para calcular o prazo</Label>
                 <Select
                   value={templateForm.technical_due_month_reference}
                   onValueChange={(value) =>
@@ -2503,19 +2811,32 @@ export function GrowObligationsWorkspace({
                     }))
                   }
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="vigente">{growDueMonthReferenceLabel.vigente}</SelectItem>
                     <SelectItem value="anterior">{growDueMonthReferenceLabel.anterior}</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">Normalmente é o mês vigente. Use anterior apenas quando o prazo cai no mês anterior à competência.</p>
               </div>
-            </div>
-            <div className="space-y-2"><Label>Prioridade</Label><Select value={templateForm.priority} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, priority: value as GrowObligationInstance["priority"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Dia do vencimento legal</Label><Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} /></div>
-            <div className="space-y-2 md:col-span-2"><Label>Observacoes operacionais</Label><Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} /></div>
+              <div className="space-y-2">
+                <Label>Prioridade operacional</Label>
+                <Select value={templateForm.priority} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, priority: value as GrowObligationInstance["priority"] }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Define o destaque inicial da tarefa gerada para essa obrigação.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Dia do vencimento legal</Label>
+                <Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} placeholder="Opcional" inputMode="numeric" />
+                <p className="text-xs text-muted-foreground">Use quando o prazo legal for diferente do prazo técnico interno.</p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Observações operacionais</Label>
+                <Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} />
+                <p className="text-xs text-muted-foreground">Inclua regras fiscais, exceções e orientações que ajudem a equipe a conferir o vencimento.</p>
+              </div>
             </fieldset>
           </details>
 

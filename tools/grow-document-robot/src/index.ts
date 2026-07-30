@@ -145,38 +145,104 @@ function monthLabel(month: string, year: string) {
   return `${year}-${month.padStart(2, "0")}`;
 }
 
+type CompetenceCandidate = {
+  value: string;
+  score: number;
+  source: "file_name" | "file_path" | "pdf_text";
+  reason: string;
+};
+
+function addCompetenceCandidate(
+  candidates: CompetenceCandidate[],
+  value: string,
+  score: number,
+  source: CompetenceCandidate["source"],
+  reason: string,
+) {
+  if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(value)) return;
+  candidates.push({ value, score, source, reason });
+}
+
+function sourceWeight(source: CompetenceCandidate["source"]) {
+  if (source === "file_name") return 1.4;
+  if (source === "file_path") return 1.15;
+  return 1;
+}
+
+function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; source: CompetenceCandidate["source"] }>) {
+  const candidates: CompetenceCandidate[] = [];
+
+  for (const item of sources) {
+    const text = normalizeSearchText(item.value);
+    if (!text) continue;
+    const weight = sourceWeight(item.source);
+
+    const labelledMatches = text.matchAll(/\b(?:competencia|competencia\s+de|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
+    for (const match of labelledMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), 95 * weight, item.source, "rotulo_mes_ano");
+    }
+
+    const labelledYearFirstMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g);
+    for (const match of labelledYearFirstMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[1]), 92 * weight, item.source, "rotulo_ano_mes");
+    }
+
+    const compactLabelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\D{0,24}((0[1-9]|1[0-2])(20\d{2}))\b/g);
+    for (const match of compactLabelledMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 94 * weight, item.source, "rotulo_compacto");
+    }
+
+    const quarterMatches = text.matchAll(/\b([1-4])\s*(?:o|º|°|Âº|Â°)?\s*trimestre\D{0,16}(20\d{2})\b/g);
+    for (const match of quarterMatches) {
+      const quarter = Number(match[1]);
+      const month = String(quarter * 3).padStart(2, "0");
+      addCompetenceCandidate(candidates, `${match[2]}-${month}`, 88 * weight, item.source, "trimestre");
+    }
+
+    const quarterYearFirstMatches = text.matchAll(/\b(20\d{2})\D{0,16}([1-4])\s*(?:o|º|°|Âº|Â°)?\s*trimestre\b/g);
+    for (const match of quarterYearFirstMatches) {
+      const quarter = Number(match[2]);
+      const month = String(quarter * 3).padStart(2, "0");
+      addCompetenceCandidate(candidates, `${match[1]}-${month}`, 86 * weight, item.source, "ano_trimestre");
+    }
+
+    const isoMatches = text.matchAll(/\b(20\d{2})[-_/ .](0?[1-9]|1[0-2])\b/g);
+    for (const match of isoMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[1]), 70 * weight, item.source, "ano_mes");
+    }
+
+    const brMatches = text.matchAll(/\b(0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
+    for (const match of brMatches) {
+      const prefix = text.slice(Math.max(0, match.index - 24), match.index);
+      const datePenalty = /\b(vencimento|pagamento|emissao|data|gerado|emitido)\b/.test(prefix) ? 28 : 0;
+      addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), (70 - datePenalty) * weight, item.source, "mes_ano");
+    }
+
+    const compactMatches = text.matchAll(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/g);
+    for (const match of compactMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 76 * weight, item.source, "compacto_mmaaaa");
+    }
+  }
+
+  const ranked = new Map<string, CompetenceCandidate>();
+  for (const candidate of candidates) {
+    const existing = ranked.get(candidate.value);
+    if (!existing || candidate.score > existing.score) {
+      ranked.set(candidate.value, candidate);
+    }
+  }
+
+  return Array.from(ranked.values())
+    .sort((left, right) => right.score - left.score || right.value.localeCompare(left.value));
+}
+
 function detectCompetenceCandidates(...sources: string[]) {
-  const candidates: string[] = [];
-  const text = normalizeSearchText(sources.filter(Boolean).join("\n"));
-
-  const isoMatches = text.matchAll(/\b(20\d{2})[-/](0?[1-9]|1[0-2])\b/g);
-  for (const match of isoMatches) {
-    candidates.push(monthLabel(match[2], match[1]));
-  }
-
-  const brMatches = text.matchAll(/\b(0?[1-9]|1[0-2])[-/](20\d{2})\b/g);
-  for (const match of brMatches) {
-    candidates.push(monthLabel(match[1], match[2]));
-  }
-
-  const labelledMatches = text.matchAll(/\b(?:competencia|comp|periodo de apuracao|apuracao|referencia|ref|pa)\D{0,24}(0?[1-9]|1[0-2])\D{0,4}(20\d{2})\b/g);
-  for (const match of labelledMatches) {
-    candidates.push(monthLabel(match[1], match[2]));
-  }
-
-  const compactMatches = text.matchAll(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/g);
-  for (const match of compactMatches) {
-    candidates.push(monthLabel(match[2], match[3]));
-  }
-
-  const quarterMatches = text.matchAll(/\b([1-4])\s*(?:o|º|°)?\s*trimestre\D{0,12}(20\d{2})\b/g);
-  for (const match of quarterMatches) {
-    const quarter = Number(match[1]);
-    const month = String(quarter * 3).padStart(2, "0");
-    candidates.push(`${match[2]}-${month}`);
-  }
-
-  return uniqueValues(candidates);
+  return detectCompetenceCandidatesDetailed(
+    sources.filter(Boolean).map((value, index) => ({
+      value,
+      source: index === 0 ? "file_name" : index === 1 ? "file_path" : "pdf_text",
+    })),
+  ).map((candidate) => candidate.value);
 }
 
 function detectCompetence(text: string, filePath = "") {
@@ -350,7 +416,12 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
     const tokens = tokenize(normalizedText);
     const keywords = buildKeywordStats(tokens);
     const cnpjCandidates = detectCnpjCandidates(path.basename(filePath), filePath, normalizedText);
-    const competenceCandidates = detectCompetenceCandidates(path.basename(filePath), filePath, normalizedText);
+    const detailedCompetenceCandidates = detectCompetenceCandidatesDetailed([
+      { value: path.basename(filePath), source: "file_name" },
+      { value: filePath, source: "file_path" },
+      { value: normalizedText, source: "pdf_text" },
+    ]);
+    const competenceCandidates = detailedCompetenceCandidates.map((candidate) => candidate.value);
 
     return {
       extracted_text: normalizedText || null,
@@ -366,6 +437,7 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
         frequent_tokens: keywords,
         detected_cnpjs: cnpjCandidates,
         competence_candidates: competenceCandidates,
+        competence_candidate_details: detailedCompetenceCandidates.slice(0, 8),
         detection_sources: ["file_name", "file_path", "pdf_text"],
         title_guess: preview ? preview.slice(0, 120) : null,
       },
