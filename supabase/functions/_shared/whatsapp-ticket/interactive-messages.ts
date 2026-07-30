@@ -14,6 +14,7 @@ export type WhatsAppAutoServiceAction =
   | "requests"
   | "consult_tasks"
   | "create_task"
+  | "continue_flow"
   | "continue_context"
   | "new_request"
   | "send_document"
@@ -64,6 +65,7 @@ export function parseAutoServiceReplyId(value: string | null | undefined) {
       action === "requests" ||
       action === "consult_tasks" ||
       action === "create_task" ||
+      action === "continue_flow" ||
       action === "continue_context" ||
       action === "new_request" ||
       action === "send_document" ||
@@ -81,22 +83,24 @@ export function parseAutoServiceTextReply(value: string | null | undefined) {
   const text = normalizeReplyText(value);
   if (!text) return { type: "unknown" as const, id: null, action: null };
 
-  if (["menu", "inicio", "iniciar", "oi", "ola", "olÃ¡"].includes(text)) {
+  if (["menu", "inicio", "iniciar", "oi", "ola"].includes(text)) {
     return { type: "action" as const, id: null, action: "menu" as const };
   }
 
-  if ([
-    "atendimento",
-    "falar com atendente",
-    "falar com a equipe",
-    "falar com alguem",
-    "quero falar com alguem",
-    "humano",
-  ].includes(text)) {
+  if (
+    [
+      "atendimento",
+      "falar com atendente",
+      "falar com a equipe",
+      "falar com alguem",
+      "quero falar com alguem",
+      "humano",
+    ].includes(text)
+  ) {
     return { type: "action" as const, id: null, action: "attendance" as const };
   }
 
-  if (["solicitacoes", "solicitacao", "solicitaÃ§Ãµes", "solicitaÃ§Ã£o", "demandas"].includes(text)) {
+  if (["solicitacoes", "solicitacao", "demandas"].includes(text)) {
     return { type: "action" as const, id: null, action: "requests" as const };
   }
 
@@ -112,13 +116,16 @@ export function parseAutoServiceTextReply(value: string | null | undefined) {
     return { type: "action" as const, id: null, action: "continue_context" as const };
   }
 
+  if (["continuar atendimento", "seguir atendimento", "continuar fluxo", "seguir fluxo"].includes(text)) {
+    return { type: "action" as const, id: null, action: "continue_flow" as const };
+  }
+
   if (["encerrar", "encerrar atendimento", "finalizar", "finalizar atendimento", "sair"].includes(text)) {
     return { type: "action" as const, id: null, action: "end_flow" as const };
   }
 
   return { type: "unknown" as const, id: null, action: null };
 }
-
 
 export function buildTicketSelectionInteractivePayload(input: {
   to: string;
@@ -188,7 +195,8 @@ export function buildAutoServiceListPayload(input: {
     interactive: {
       type: "list",
       body: {
-        text: input.bodyText ||
+        text:
+          input.bodyText ||
           "Para direcionarmos seu atendimento corretamente, selecione uma das opções abaixo.",
       },
       action: {
@@ -247,7 +255,8 @@ export function buildAutoServiceButtonPayload(input: {
     interactive: {
       type: "button",
       body: {
-        text: input.bodyText ||
+        text:
+          input.bodyText ||
           "Para direcionarmos seu atendimento corretamente, selecione uma das opções abaixo.",
       },
       action: {
@@ -260,7 +269,37 @@ export function buildAutoServiceButtonPayload(input: {
 export function buildRequestsFlowButtonPayload(input: {
   to: string;
   bodyText?: string;
+  includeAttendance?: boolean;
 }) {
+  const includeAttendance = input.includeAttendance === true;
+  const buttons = [
+    ...(includeAttendance
+      ? [
+          {
+            type: "reply",
+            reply: {
+              id: buildAutoActionRowId("attendance"),
+              title: "Atendimento",
+            },
+          },
+        ]
+      : []),
+    {
+      type: "reply",
+      reply: {
+        id: buildAutoActionRowId("consult_tasks"),
+        title: "Tarefas em andamento",
+      },
+    },
+    {
+      type: "reply",
+      reply: {
+        id: buildAutoActionRowId("create_task"),
+        title: "Criar nova tarefa",
+      },
+    },
+  ];
+
   return {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -269,26 +308,12 @@ export function buildRequestsFlowButtonPayload(input: {
     interactive: {
       type: "button",
       body: {
-        text: input.bodyText ||
-          "Selecione como deseja prosseguir. VocÃª pode consultar tarefas em andamento ou abrir uma nova solicitaÃ§Ã£o para nossa equipe.",
+        text:
+          input.bodyText ||
+          "Selecione como deseja prosseguir. Você pode consultar tarefas em andamento ou abrir uma nova solicitação para nossa equipe.",
       },
       action: {
-        buttons: [
-          {
-            type: "reply",
-            reply: {
-              id: buildAutoActionRowId("consult_tasks"),
-              title: "Tarefas em andamento",
-            },
-          },
-          {
-            type: "reply",
-            reply: {
-              id: buildAutoActionRowId("create_task"),
-              title: "Criar nova tarefa",
-            },
-          },
-        ],
+        buttons,
       },
     },
   };
@@ -298,7 +323,26 @@ export function buildRequestsFlowListPayload(input: {
   to: string;
   bodyText?: string;
   requestTypes: WhatsAppInteractiveTicketOption[];
+  includeAttendance?: boolean;
 }) {
+  const includeAttendance = input.includeAttendance === true;
+  const followupRows = [
+    ...(includeAttendance
+      ? [
+          {
+            id: buildAutoActionRowId("attendance"),
+            title: "Atendimento",
+            description: "Falar diretamente com a equipe.",
+          },
+        ]
+      : []),
+    {
+      id: buildAutoActionRowId("consult_tasks"),
+      title: "Tarefas em andamento",
+      description: "Consultar demandas abertas deste cliente.",
+    },
+  ];
+
   return {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -307,27 +351,22 @@ export function buildRequestsFlowListPayload(input: {
     interactive: {
       type: "list",
       body: {
-        text: input.bodyText ||
-          "Selecione como deseja prosseguir. VocÃª pode consultar tarefas em andamento ou abrir uma nova solicitaÃ§Ã£o para nossa equipe.",
+        text:
+          input.bodyText ||
+          "Selecione como deseja prosseguir. Você pode consultar tarefas em andamento ou abrir uma nova solicitação para nossa equipe.",
       },
       action: {
-        button: "Escolher opÃ§Ã£o",
+        button: "Escolher opção",
         sections: [
           {
             title: "Acompanhamento",
-            rows: [
-              {
-                id: buildAutoActionRowId("consult_tasks"),
-                title: "Tarefas em andamento",
-                description: "Consultar demandas abertas deste cliente.",
-              },
-            ],
+            rows: followupRows,
           },
           {
-            title: "Nova solicitaÃ§Ã£o",
+            title: "Nova solicitação",
             rows: input.requestTypes.slice(0, 10).map((requestType) => ({
               id: buildRequestTypeRowId(requestType.id),
-              title: truncateWhatsAppTitle(requestType.title, "SolicitaÃ§Ã£o"),
+              title: truncateWhatsAppTitle(requestType.title, "Solicitação"),
               description: truncateWhatsAppDescription(requestType.description),
             })),
           },

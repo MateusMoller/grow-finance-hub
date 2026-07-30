@@ -26,7 +26,11 @@ import {
   normalizePortalRequestType,
   normalizeRequestTypeFields,
   normalizeRequestTypeSector,
+  portalRequestFieldTypeLabels,
+  portalRequestFieldTypes,
+  portalRequestFieldTypesWithOptions,
   portalRequestTypesTable,
+  resolvePortalRequestTypesForManagement,
   sortPortalRequestTypes,
   type PortalRequestFieldType,
   type PortalRequestType,
@@ -48,12 +52,10 @@ type RequestTypeDraft = {
   sortOrder: string;
 };
 
-const fieldTypeOptions: { value: PortalRequestFieldType; label: string }[] = [
-  { value: "text", label: "Texto curto" },
-  { value: "textarea", label: "Texto longo" },
-  { value: "date", label: "Data" },
-  { value: "number", label: "Número" },
-];
+const fieldTypeOptions: { value: PortalRequestFieldType; label: string }[] = portalRequestFieldTypes.map((value) => ({
+  value,
+  label: portalRequestFieldTypeLabels[value],
+}));
 
 const emptyDraft = (organizationId: string | null): RequestTypeDraft => ({
   id: null,
@@ -132,7 +134,7 @@ export default function SolicitacoesPage() {
         .map(normalizePortalRequestType)
         .filter((item: PortalRequestType | null): item is PortalRequestType => Boolean(item)),
     );
-    const nextTypes = normalized.length > 0 ? normalized : defaultPortalRequestTypes;
+    const nextTypes = resolvePortalRequestTypesForManagement(normalized.length > 0 ? normalized : defaultPortalRequestTypes);
     setRequestTypes(nextTypes);
 
     const nextSelected = selectedId && nextTypes.some((item) => item.id === selectedId)
@@ -140,7 +142,12 @@ export default function SolicitacoesPage() {
       : nextTypes[0]?.id || null;
     setSelectedId(nextSelected);
     const nextDraftSource = nextTypes.find((item) => item.id === nextSelected) || nextTypes[0] || null;
-    if (nextDraftSource) setDraft(draftFromRequestType(nextDraftSource));
+    if (nextDraftSource) {
+      setDraft(draftFromRequestType(nextDraftSource));
+    } else {
+      setSelectedId(null);
+      setDraft(emptyDraft(organizationId || null));
+    }
   };
 
   useEffect(() => {
@@ -178,11 +185,49 @@ export default function SolicitacoesPage() {
       ...prev,
       fields: prev.fields.map((field, fieldIndex) =>
         fieldIndex === index
-          ? {
-              ...field,
-              ...changes,
-              id: changes.label && !field.label ? normalizeFieldId(changes.label) : field.id,
-            }
+          ? (() => {
+              const nextType = changes.type || field.type;
+              const acceptsOptions = portalRequestFieldTypesWithOptions.has(nextType);
+
+              return {
+                ...field,
+                ...changes,
+                id: changes.label && !field.label ? normalizeFieldId(changes.label) : field.id,
+                options: acceptsOptions ? changes.options || field.options || ["", ""] : undefined,
+              };
+            })()
+          : field,
+      ),
+    }));
+  };
+
+  const handleFieldOptionChange = (fieldIndex: number, optionIndex: number, value: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      fields: prev.fields.map((field, index) => {
+        if (index !== fieldIndex) return field;
+        const options = [...(field.options || [])];
+        options[optionIndex] = value;
+        return { ...field, options };
+      }),
+    }));
+  };
+
+  const handleAddFieldOption = (fieldIndex: number) => {
+    setDraft((prev) => ({
+      ...prev,
+      fields: prev.fields.map((field, index) =>
+        index === fieldIndex ? { ...field, options: [...(field.options || []), ""] } : field,
+      ),
+    }));
+  };
+
+  const handleRemoveFieldOption = (fieldIndex: number, optionIndex: number) => {
+    setDraft((prev) => ({
+      ...prev,
+      fields: prev.fields.map((field, index) =>
+        index === fieldIndex
+          ? { ...field, options: (field.options || []).filter((_, currentIndex) => currentIndex !== optionIndex) }
           : field,
       ),
     }));
@@ -205,18 +250,36 @@ export default function SolicitacoesPage() {
     }
 
     const fields = draft.fields
-      .map((field, index) => ({
-        ...field,
-        id: normalizeFieldId(field.id || field.label) || `campo_${index + 1}`,
-        label: field.label.trim(),
-      }))
+      .map((field, index) => {
+        const options = (field.options || [])
+          .map((option) => option.trim())
+          .filter(Boolean)
+          .slice(0, 20);
+
+        return {
+          id: normalizeFieldId(field.id || field.label) || `campo_${index + 1}`,
+          label: field.label.trim(),
+          type: field.type,
+          required: Boolean(field.required),
+          ...(portalRequestFieldTypesWithOptions.has(field.type) ? { options } : {}),
+        };
+      })
       .filter((field) => field.label);
 
+    const fieldWithoutOptions = fields.find(
+      (field) => portalRequestFieldTypesWithOptions.has(field.type) && (!field.options || field.options.length === 0),
+    );
+    if (fieldWithoutOptions) {
+      toast.error(`Informe ao menos uma opção para o campo: ${fieldWithoutOptions.label}.`);
+      return;
+    }
+
+    const slug = draft.slug.trim() || buildPortalRequestTypeSlug(title);
     setSaving(true);
     const payload = {
       organization_id: organizationId,
       title,
-      slug: draft.slug.trim() || buildPortalRequestTypeSlug(title),
+      slug,
       description: draft.description.trim() || null,
       sector: normalizeRequestTypeSector(draft.sector),
       task_title_template: draft.taskTitleTemplate.trim() || title,
@@ -228,15 +291,35 @@ export default function SolicitacoesPage() {
     };
 
     const shouldUpdate = draft.id && draft.sourceOrganizationId === organizationId;
-    const request = shouldUpdate
-      ? portalRequestTypesTable().update(payload).eq("id", draft.id).select("*").single()
+    let targetId = shouldUpdate ? draft.id : null;
+
+    if (!targetId) {
+      const { data: existingType, error: lookupError } = await portalRequestTypesTable()
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (lookupError) {
+        setSaving(false);
+        toast.error(`Não foi possível validar o tipo existente: ${lookupError.message || "erro desconhecido"}`);
+        return;
+      }
+
+      targetId = existingType && typeof existingType === "object" && "id" in existingType
+        ? String((existingType as { id: unknown }).id || "")
+        : null;
+    }
+
+    const request = targetId
+      ? portalRequestTypesTable().update(payload).eq("id", targetId).select("*").single()
       : portalRequestTypesTable().insert(payload).select("*").single();
 
     const { data, error } = await request;
     setSaving(false);
 
     if (error || !data) {
-      toast.error("Não foi possível salvar o tipo de solicitação.");
+      toast.error(`Não foi possível salvar o tipo de solicitação: ${error?.message || "erro desconhecido"}`);
       return;
     }
 
@@ -253,8 +336,8 @@ export default function SolicitacoesPage() {
   };
 
   const handleDelete = async () => {
-    if (!draft.id || draft.sourceOrganizationId !== organizationId) {
-      toast.error("Tipos padrão não são excluídos. Desative ou salve uma versão da organização.");
+    if (!organizationId) {
+      toast.error("Organização atual não encontrada.");
       return;
     }
 
@@ -262,18 +345,56 @@ export default function SolicitacoesPage() {
     if (!confirmed) return;
 
     setSaving(true);
-    const { error } = await portalRequestTypesTable().delete().eq("id", draft.id);
+    const deletedPayload = {
+      organization_id: organizationId,
+      title: draft.title.trim() || "Solicitação excluída",
+      slug: draft.slug.trim() || buildPortalRequestTypeSlug(draft.title || "solicitacao-excluida"),
+      description: draft.description.trim() || null,
+      sector: normalizeRequestTypeSector(draft.sector),
+      task_title_template: draft.taskTitleTemplate.trim() || draft.title.trim() || "Solicitação excluída",
+      task_description_template: draft.taskDescriptionTemplate.trim() || null,
+      form_fields: normalizeRequestTypeFields(draft.fields),
+      is_active: false,
+      sort_order: Number.parseInt(draft.sortOrder, 10) || 100,
+      created_by: user?.id || null,
+    };
+
+    const shouldUpdate = draft.id && draft.sourceOrganizationId === organizationId;
+    let deleteError: { message?: string } | null = null;
+
+    if (shouldUpdate) {
+      const result = await portalRequestTypesTable().update(deletedPayload).eq("id", draft.id).select("*").single();
+      deleteError = result.error;
+    } else {
+      const { data: existingType, error: lookupError } = await portalRequestTypesTable()
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", deletedPayload.slug)
+        .maybeSingle();
+
+      if (lookupError) {
+        deleteError = lookupError;
+      } else {
+        const targetId = existingType && typeof existingType === "object" && "id" in existingType
+          ? String((existingType as { id: unknown }).id || "")
+          : null;
+        const result = targetId
+          ? await portalRequestTypesTable().update(deletedPayload).eq("id", targetId).select("*").single()
+          : await portalRequestTypesTable().insert(deletedPayload).select("*").single();
+        deleteError = result.error;
+      }
+    }
+
     setSaving(false);
 
-    if (error) {
-      toast.error("Não foi possível excluir.");
+    if (deleteError) {
+      toast.error(`Não foi possível excluir: ${deleteError.message || "erro desconhecido"}`);
       return;
     }
 
     toast.success("Tipo removido.");
     await loadRequestTypes();
   };
-
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -385,7 +506,7 @@ export default function SolicitacoesPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Titulo padrao da tarefa</Label>
+                  <Label>Título padrão da tarefa</Label>
                   <Input
                     value={draft.taskTitleTemplate}
                     onChange={(event) => setDraft((prev) => ({ ...prev, taskTitleTemplate: event.target.value }))}
@@ -401,7 +522,7 @@ export default function SolicitacoesPage() {
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Descricao curta do atalho</Label>
+                  <Label>Descrição curta do atalho</Label>
                   <Input
                     value={draft.description}
                     onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
@@ -409,7 +530,7 @@ export default function SolicitacoesPage() {
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Descricao inicial da tarefa</Label>
+                  <Label>Descrição inicial da tarefa</Label>
                   <Textarea
                     className="min-h-[92px]"
                     value={draft.taskDescriptionTemplate}
@@ -441,8 +562,11 @@ export default function SolicitacoesPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {draft.fields.map((field, index) => (
-                      <div key={`${field.id}-${index}`} className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[1fr_180px_120px_40px] md:items-end">
+                    {draft.fields.map((field, index) => {
+                      const fieldAcceptsOptions = portalRequestFieldTypesWithOptions.has(field.type);
+
+                      return (
+                      <div key={`${field.id}-${index}`} className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_190px_130px_40px] md:items-end">
                         <div className="space-y-2">
                           <Label>Nome do campo</Label>
                           <Input
@@ -485,8 +609,63 @@ export default function SolicitacoesPage() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                        {fieldAcceptsOptions ? (
+                          <div className="space-y-3 rounded-xl border bg-muted/20 p-3 md:col-span-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <Label>Opções disponíveis</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  A numeração abaixo será usada no WhatsApp. O cliente responde apenas com o número.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => handleAddFieldOption(index)}
+                              >
+                                <Plus className="h-4 w-4" />
+                                Opção
+                              </Button>
+                            </div>
+                            <div className="space-y-2">
+                              {(field.options && field.options.length > 0 ? field.options : [""]).map(
+                                (option, optionIndex) => (
+                                  <div key={`${field.id}-option-${optionIndex}`} className="flex items-center gap-2">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-white text-sm font-semibold text-muted-foreground">
+                                      {optionIndex + 1}
+                                    </span>
+                                    <Input
+                                      value={option}
+                                      onChange={(event) => handleFieldOptionChange(index, optionIndex, event.target.value)}
+                                      placeholder={`Texto da opção ${optionIndex + 1}`}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-9 w-9 shrink-0 text-destructive"
+                                      onClick={() => handleRemoveFieldOption(index, optionIndex)}
+                                      disabled={(field.options || []).length <= 1}
+                                      aria-label={`Remover opção ${optionIndex + 1}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        {field.type === "file" ? (
+                          <p className="text-xs text-muted-foreground md:col-span-4">
+                            No portal este campo vira upload. No WhatsApp, o cliente deverá responder com mídia ou documento.
+                          </p>
+                        ) : null}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

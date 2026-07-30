@@ -1,13 +1,25 @@
 import { sectorOptions } from "@/components/portal/types";
 import { supabase } from "@/integrations/supabase/client";
 
-export type PortalRequestFieldType = "text" | "textarea" | "date" | "number";
+export type PortalRequestFieldType =
+  | "text"
+  | "textarea"
+  | "date"
+  | "number"
+  | "email"
+  | "phone"
+  | "select"
+  | "multiselect"
+  | "radio"
+  | "checkbox"
+  | "file";
 
 export interface PortalRequestTypeField {
   id: string;
   label: string;
   type: PortalRequestFieldType;
   required?: boolean;
+  options?: string[];
 }
 
 export interface PortalRequestType {
@@ -48,6 +60,7 @@ interface RequestTypesSelectBuilder extends PromiseLike<RequestTypesManyResult> 
   is(column: string, value: null): RequestTypesSelectBuilder;
   or(filters: string): RequestTypesSelectBuilder;
   order(column: string, options?: { ascending?: boolean }): RequestTypesSelectBuilder;
+  maybeSingle(): PromiseLike<RequestTypesSingleResult>;
 }
 
 interface RequestTypesWriteBuilder extends PromiseLike<RequestTypesSingleResult> {
@@ -124,7 +137,29 @@ export const defaultPortalRequestTypes: PortalRequestType[] = [
   },
 ];
 
-const fieldTypeSet = new Set<PortalRequestFieldType>(["text", "textarea", "date", "number"]);
+export const portalRequestFieldTypeLabels: Record<PortalRequestFieldType, string> = {
+  text: "Texto curto",
+  textarea: "Texto longo",
+  date: "Data",
+  number: "Número",
+  email: "E-mail",
+  phone: "Telefone",
+  select: "Seleção",
+  multiselect: "Múltipla escolha",
+  radio: "Opção única",
+  checkbox: "Sim/Não",
+  file: "Anexo de arquivo",
+};
+
+export const portalRequestFieldTypes = Object.keys(portalRequestFieldTypeLabels) as PortalRequestFieldType[];
+
+export const portalRequestFieldTypesWithOptions = new Set<PortalRequestFieldType>([
+  "select",
+  "multiselect",
+  "radio",
+]);
+
+const fieldTypeSet = new Set<PortalRequestFieldType>(portalRequestFieldTypes);
 
 const normalizeSlug = (value: string) =>
   value
@@ -152,12 +187,20 @@ export const normalizeRequestTypeFields = (value: unknown): PortalRequestTypeFie
       const type = fieldTypeSet.has(source.type as PortalRequestFieldType)
         ? (source.type as PortalRequestFieldType)
         : "text";
+      const rawOptions = Array.isArray((source as { options?: unknown }).options)
+        ? ((source as { options?: unknown[] }).options || [])
+        : [];
+      const options = rawOptions
+        .map((option) => String(option || "").trim())
+        .filter(Boolean)
+        .slice(0, 20);
 
       return {
         id,
         label,
         type,
         required: Boolean(source.required),
+        options: portalRequestFieldTypesWithOptions.has(type) ? options : undefined,
       };
     })
     .filter((field): field is PortalRequestTypeField => Boolean(field));
@@ -199,13 +242,25 @@ export const sortPortalRequestTypes = (items: PortalRequestType[]) =>
   });
 
 export const mergePortalRequestTypesWithDefaults = (items: PortalRequestType[]) => {
-  const activeItems = items.filter((item) => item.is_active);
-  if (activeItems.length === 0) return defaultPortalRequestTypes;
-
   const bySlug = new Map<string, PortalRequestType>();
-  [...defaultPortalRequestTypes, ...activeItems].forEach((item) => {
-    bySlug.set(item.slug, item);
+  [...defaultPortalRequestTypes, ...items].forEach((item) => {
+    const current = bySlug.get(item.slug);
+    if (!current || (!current.organization_id && item.organization_id)) {
+      bySlug.set(item.slug, item);
+    }
   });
 
-  return sortPortalRequestTypes(Array.from(bySlug.values()));
+  return sortPortalRequestTypes(Array.from(bySlug.values()).filter((item) => item.is_active));
+};
+
+export const resolvePortalRequestTypesForManagement = (items: PortalRequestType[]) => {
+  const bySlug = new Map<string, PortalRequestType>();
+  [...defaultPortalRequestTypes, ...items].forEach((item) => {
+    const current = bySlug.get(item.slug);
+    if (!current || (!current.organization_id && item.organization_id)) {
+      bySlug.set(item.slug, item);
+    }
+  });
+
+  return sortPortalRequestTypes(Array.from(bySlug.values()).filter((item) => item.is_active));
 };

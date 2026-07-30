@@ -37,6 +37,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -205,6 +206,7 @@ export default function PortalClientePage() {
   const [newRequestDescription, setNewRequestDescription] = useState("");
   const [selectedRequestTypeId, setSelectedRequestTypeId] = useState<string | null>(null);
   const [requestTypeFieldValues, setRequestTypeFieldValues] = useState<Record<string, string>>({});
+  const [requestTypeFieldFiles, setRequestTypeFieldFiles] = useState<Record<string, File[]>>({});
   const [newRequestFiles, setNewRequestFiles] = useState<File[]>([]);
   const [creatingRequest, setCreatingRequest] = useState(false);
   const requestFilesInputRef = useRef<HTMLInputElement>(null);
@@ -235,7 +237,6 @@ export default function PortalClientePage() {
       const organizationId = clientProfile?.organization_id || effectiveAccess?.organizationId || null;
       let query = portalRequestTypesTable()
         .select("*")
-        .eq("is_active", true)
         .order("sort_order", { ascending: true })
         .order("title", { ascending: true });
 
@@ -750,7 +751,9 @@ export default function PortalClientePage() {
       return {
         id: request.id,
         title: request.title,
-        description: latest?.is_from_team ? `Atualização da equipe: ${latest.content}` : `Status atual: ${statusMeta.label}`,
+        description: latest?.is_from_team
+          ? `Atualização da equipe: ${latest.content}`
+          : `Status atual: ${statusMeta.label}`,
         dueDate: request.updated_at,
         sector: request.sector,
         requestId: request.id,
@@ -789,6 +792,7 @@ export default function PortalClientePage() {
     setNewRequestDescription("");
     setSelectedRequestTypeId(null);
     setRequestTypeFieldValues({});
+    setRequestTypeFieldFiles({});
     setNewRequestFiles([]);
     if (requestFilesInputRef.current) requestFilesInputRef.current.value = "";
   };
@@ -829,11 +833,40 @@ export default function PortalClientePage() {
     setNewRequestTitle(requestType.task_title_template || requestType.title);
     setNewRequestDescription(requestType.task_description_template || "");
     setRequestTypeFieldValues({});
+    setRequestTypeFieldFiles({});
     requestComposerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleRequestTypeFieldChange = (fieldId: string, value: string) => {
     setRequestTypeFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+  };
+
+  const toggleRequestTypeFieldOption = (fieldId: string, option: string, checked: boolean) => {
+    setRequestTypeFieldValues((prev) => {
+      const current = (prev[fieldId] || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const next = checked
+        ? Array.from(new Set([...current, option]))
+        : current.filter((item) => item !== option);
+      return { ...prev, [fieldId]: next.join(", ") };
+    });
+  };
+
+  const handleRequestTypeFieldFileSelection = (fieldId: string, selection: FileList | null) => {
+    const { accepted, rejected } = filterSecureDocuments(Array.from(selection || []));
+    setRequestTypeFieldFiles((prev) => ({ ...prev, [fieldId]: accepted }));
+    if (rejected.length > 0) {
+      toast.error(rejected[0]);
+    }
+  };
+
+  const removeRequestTypeFieldFile = (fieldId: string, index: number) => {
+    setRequestTypeFieldFiles((prev) => ({
+      ...prev,
+      [fieldId]: (prev[fieldId] || []).filter((_, fileIndex) => fileIndex !== index),
+    }));
   };
 
   const handleRequestFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -904,6 +937,10 @@ export default function PortalClientePage() {
     const description = newRequestDescription.trim();
     const fieldLines = selectedRequestType?.form_fields
       .map((field) => {
+        if (field.type === "file") {
+          const files = requestTypeFieldFiles[field.id] || [];
+          return files.length > 0 ? `${field.label}: ${files.map((file) => file.name).join(", ")}` : null;
+        }
         const value = (requestTypeFieldValues[field.id] || "").trim();
         return value ? `${field.label}: ${value}` : null;
       })
@@ -936,16 +973,18 @@ export default function PortalClientePage() {
       toast.error("Descreva o que precisa ser feito.");
       return;
     }
-    const missingRequiredField = selectedRequestType?.form_fields.find(
-      (field) => field.required && !(requestTypeFieldValues[field.id] || "").trim(),
-    );
+    const missingRequiredField = selectedRequestType?.form_fields.find((field) => {
+      if (!field.required) return false;
+      if (field.type === "file") return (requestTypeFieldFiles[field.id] || []).length === 0;
+      return !(requestTypeFieldValues[field.id] || "").trim();
+    });
     if (missingRequiredField) {
       toast.error(`Preencha o campo obrigatório: ${missingRequiredField.label}.`);
       return;
     }
 
     setCreatingRequest(true);
-    const requestCategory = selectedRequestType?.title || "Tarefa generica";
+    const requestCategory = selectedRequestType?.title || "Tarefa genérica";
     const { data: createdRequest, error } = await supabase
       .from("client_requests")
       .insert({
@@ -966,9 +1005,10 @@ export default function PortalClientePage() {
       return;
     }
 
+    const requestTypeFiles = Object.values(requestTypeFieldFiles).flat();
     const uploadResult = await uploadFilesToRequest(
       createdRequest.id,
-      newRequestFiles,
+      [...newRequestFiles, ...requestTypeFiles],
       requestCategory
     );
 
@@ -1154,7 +1194,7 @@ export default function PortalClientePage() {
 
     if (signInError) {
       setChangingPortalPassword(false);
-      toast.error("Senha atual invalida.");
+      toast.error("Senha atual inválida.");
       return;
     }
 
@@ -1233,7 +1273,7 @@ export default function PortalClientePage() {
               <SidebarTrigger />
               <div className="min-w-0">
                 <p className="font-semibold text-sm">Portal do Cliente</p>
-                <p className="hidden text-xs text-muted-foreground sm:block">Solicitacoes, documentos, atendimento e caixa</p>
+                <p className="hidden text-xs text-muted-foreground sm:block">Solicitações, documentos, atendimento e caixa</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1317,7 +1357,7 @@ export default function PortalClientePage() {
                       className="w-full sm:w-auto"
                       onClick={() => setActiveTab("request-history")}
                     >
-                      Ver historico
+                      Ver histórico
                     </Button>
                   </div>
                 </CardHeader>
@@ -1370,7 +1410,7 @@ export default function PortalClientePage() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <label htmlFor="portal-request-title" className="text-sm font-medium">Titulo da tarefa</label>
+                            <label htmlFor="portal-request-title" className="text-sm font-medium">Título da tarefa</label>
                             <Input
                               id="portal-request-title"
                               name="portal_request_title"
@@ -1383,7 +1423,7 @@ export default function PortalClientePage() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label htmlFor="portal-request-description" className="text-sm font-medium">Descricao da tarefa</label>
+                          <label htmlFor="portal-request-description" className="text-sm font-medium">Descrição da tarefa</label>
                           <Textarea
                             id="portal-request-description"
                             name="portal_request_description"
@@ -1406,6 +1446,14 @@ export default function PortalClientePage() {
                             <div className="grid gap-3 md:grid-cols-2">
                               {selectedRequestType.form_fields.map((field) => {
                                 const fieldValue = requestTypeFieldValues[field.id] || "";
+                                const fieldFiles = requestTypeFieldFiles[field.id] || [];
+                                const fieldOptions = field.options || [];
+                                const selectedOptions = new Set(
+                                  fieldValue
+                                    .split(",")
+                                    .map((item) => item.trim())
+                                    .filter(Boolean),
+                                );
                                 const commonProps = {
                                   id: `portal-request-type-field-${field.id}`,
                                   value: fieldValue,
@@ -1417,7 +1465,7 @@ export default function PortalClientePage() {
                                 return (
                                   <div
                                     key={field.id}
-                                    className={`space-y-1.5 ${field.type === "textarea" ? "md:col-span-2" : ""}`}
+                                    className={`space-y-1.5 ${["textarea", "file", "radio", "multiselect"].includes(field.type) ? "md:col-span-2" : ""}`}
                                   >
                                     <label
                                       htmlFor={`portal-request-type-field-${field.id}`}
@@ -1428,10 +1476,114 @@ export default function PortalClientePage() {
                                     </label>
                                     {field.type === "textarea" ? (
                                       <Textarea {...commonProps} rows={3} />
+                                    ) : field.type === "select" ? (
+                                      <Select
+                                        value={fieldValue || undefined}
+                                        onValueChange={(value) => handleRequestTypeFieldChange(field.id, value)}
+                                      >
+                                        <SelectTrigger id={`portal-request-type-field-${field.id}`}>
+                                          <SelectValue placeholder="Selecione..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {fieldOptions.map((option) => (
+                                            <SelectItem key={option} value={option}>
+                                              {option}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    ) : field.type === "radio" ? (
+                                      <div className="grid gap-2 rounded-xl border bg-white p-3 sm:grid-cols-2">
+                                        {fieldOptions.map((option) => (
+                                          <label key={option} className="flex cursor-pointer items-center gap-2 text-sm">
+                                            <input
+                                              type="radio"
+                                              name={`portal-request-type-field-${field.id}`}
+                                              value={option}
+                                              checked={fieldValue === option}
+                                              onChange={() => handleRequestTypeFieldChange(field.id, option)}
+                                            />
+                                            <span>{option}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    ) : field.type === "multiselect" ? (
+                                      <div className="grid gap-2 rounded-xl border bg-white p-3 sm:grid-cols-2">
+                                        {fieldOptions.map((option) => (
+                                          <label key={option} className="flex cursor-pointer items-center gap-2 text-sm">
+                                            <Checkbox
+                                              checked={selectedOptions.has(option)}
+                                              onCheckedChange={(checked) =>
+                                                toggleRequestTypeFieldOption(field.id, option, checked === true)
+                                              }
+                                            />
+                                            <span>{option}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    ) : field.type === "checkbox" ? (
+                                      <label className="flex cursor-pointer items-center gap-2 rounded-xl border bg-white p-3 text-sm">
+                                        <Checkbox
+                                          checked={fieldValue === "Sim"}
+                                          onCheckedChange={(checked) =>
+                                            handleRequestTypeFieldChange(field.id, checked ? "Sim" : "Não")
+                                          }
+                                        />
+                                        <span>Sim</span>
+                                      </label>
+                                    ) : field.type === "file" ? (
+                                      <div className="space-y-2">
+                                        <Input
+                                          id={`portal-request-type-field-${field.id}`}
+                                          type="file"
+                                          accept={SECURE_DOCUMENT_ACCEPT}
+                                          multiple
+                                          onChange={(event) =>
+                                            handleRequestTypeFieldFileSelection(field.id, event.target.files)
+                                          }
+                                        />
+                                        {fieldFiles.length > 0 ? (
+                                          <div className="space-y-2">
+                                            {fieldFiles.map((file, index) => (
+                                              <div
+                                                key={`${field.id}-${file.name}-${index}`}
+                                                className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2"
+                                              >
+                                                <div className="min-w-0">
+                                                  <p className="truncate text-sm font-medium">{file.name}</p>
+                                                  <p className="text-[11px] text-muted-foreground">
+                                                    {(file.size / 1024).toFixed(1)} KB
+                                                  </p>
+                                                </div>
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 shrink-0"
+                                                  aria-label={`Remover arquivo ${file.name}`}
+                                                  onClick={() => removeRequestTypeFieldFile(field.id, index)}
+                                                >
+                                                  <X className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
                                     ) : (
                                       <Input
                                         {...commonProps}
-                                        type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+                                        type={
+                                          field.type === "date"
+                                            ? "date"
+                                            : field.type === "number"
+                                              ? "number"
+                                              : field.type === "email"
+                                                ? "email"
+                                                : field.type === "phone"
+                                                  ? "tel"
+                                                  : "text"
+                                        }
                                       />
                                     )}
                                   </div>
@@ -1505,7 +1657,7 @@ export default function PortalClientePage() {
 
                     <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm leading-relaxed text-muted-foreground">
-                        A tarefa entra no historico do portal com status, mensagens e documentos vinculados.
+                        A tarefa entra no histórico do portal com status, mensagens e documentos vinculados.
                       </p>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <Button
@@ -1514,7 +1666,7 @@ export default function PortalClientePage() {
                           className="w-full sm:w-auto"
                           onClick={() => setActiveTab("request-history")}
                         >
-                          Acompanhar historico
+                          Acompanhar histórico
                         </Button>
                         <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={resetNewRequestForm}>
                           Limpar
@@ -1541,7 +1693,7 @@ export default function PortalClientePage() {
                 <CardHeader className="pb-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-1">
-                      <CardTitle className="text-base">Historico de solicitacoes</CardTitle>
+                      <CardTitle className="text-base">Histórico de solicitações</CardTitle>
                       <p className="text-sm text-muted-foreground">
                         Consulte andamento, retornos da equipe e documentos vinculados em um módulo separado do envio.
                       </p>
@@ -1557,7 +1709,7 @@ export default function PortalClientePage() {
                         className="w-full sm:w-auto"
                         onClick={() => openRequestsHub("freeform")}
                       >
-                        Nova solicitacao
+                        Nova solicitação
                       </Button>
                     </div>
                   </div>
@@ -1571,7 +1723,7 @@ export default function PortalClientePage() {
                         name="portal_request_search"
                         autoComplete="off"
                         className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                        placeholder="Buscar por titulo, categoria ou setor…"
+                        placeholder="Buscar por título, categoria ou setor…"
                         value={requestSearch}
                         onChange={(event) => setRequestSearch(event.target.value)}
                       />
@@ -1598,7 +1750,7 @@ export default function PortalClientePage() {
                   ) : filteredRequests.length === 0 ? (
                     <div className="rounded-2xl border border-dashed p-10 text-center">
                       <MessageSquare className="mx-auto mb-2 h-10 w-10 text-muted-foreground" />
-                      <p className="font-medium">Nenhuma solicitacao encontrada.</p>
+                      <p className="font-medium">Nenhuma solicitação encontrada.</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         Seus pedidos aparecem aqui com status, retorno da equipe e arquivos vinculados.
                       </p>
@@ -1633,7 +1785,7 @@ export default function PortalClientePage() {
                                 </div>
                                 <p className="line-clamp-1 text-sm font-semibold sm:text-base">{request.title}</p>
                                 <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-                                  {request.description || "Sem descricao adicional."}
+                                  {request.description || "Sem descrição adicional."}
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-2 lg:justify-end">
@@ -1657,7 +1809,7 @@ export default function PortalClientePage() {
                                 <p className="mt-1 text-sm font-medium">{requestDocs.length} vinculado(s)</p>
                               </div>
                               <div className="rounded-xl border bg-muted/20 px-3 py-2">
-                                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Ultima interacao</p>
+                                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Última interação</p>
                                 <p className="mt-1 text-sm font-medium">
                                   {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "Sem mensagens"}
                                 </p>
@@ -1897,7 +2049,7 @@ export default function PortalClientePage() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Dica: use uma senha forte com letras, numeros e simbolos.
+                      Dica: use uma senha forte com letras, números e símbolos.
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1918,7 +2070,7 @@ export default function PortalClientePage() {
                         prepareInlineRequest({
                           sector: "Geral",
                           reasonKey: "acesso_portal",
-                          title: "Solicitacao de suporte de acesso ao portal",
+                          title: "Solicitação de suporte de acesso ao portal",
                           description: "Preciso de suporte com acesso e seguranca no portal do cliente.",
                         }, "support")
                       }
@@ -2067,7 +2219,7 @@ export default function PortalClientePage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
                         <span>Aberta em {new Date(selectedRequest.created_at).toLocaleDateString("pt-BR")}</span>
                         <span>Ultima atualizacao em {new Date(selectedRequest.updated_at).toLocaleDateString("pt-BR")}</span>
-                        <span>Ultima interacao: {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "sem mensagens"}</span>
+                        <span>Última interação: {latest ? new Date(latest.created_at).toLocaleDateString("pt-BR") : "sem mensagens"}</span>
                       </div>
                       {selectedRequest.admin_notes && (
                         <div className="rounded-lg border bg-muted/40 p-3">
@@ -2126,7 +2278,7 @@ export default function PortalClientePage() {
                     </h4>
                     {selectedRequestDocuments.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        Nenhum documento vinculado ate o momento.
+                        Nenhum documento vinculado até o momento.
                       </p>
                     ) : (
                       <div className="space-y-2">

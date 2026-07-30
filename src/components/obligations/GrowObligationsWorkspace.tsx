@@ -521,30 +521,6 @@ async function upsertTemplateDirectly(payload: TemplateFormState) {
   return { ok: true, template, fallback: "direct_rls" };
 }
 
-async function updateTemplateMessagesDirectly(payload: TemplateFormState) {
-  const organizationId = await getStoredCurrentOrganizationId();
-  if (!organizationId || !payload.id) throw new Error("Organizacao ativa ou obrigacao nao encontrada.");
-
-  const messageUpdates = {
-    completion_email_enabled: payload.completion_email_enabled,
-    completion_email_subject: payload.completion_email_subject.trim() || null,
-    completion_email_body: payload.completion_email_body.trim() || null,
-    completion_whatsapp_enabled: payload.completion_whatsapp_enabled,
-    completion_whatsapp_body: payload.completion_whatsapp_body.trim() || null,
-  };
-
-  const { data, error } = await supabase
-    .from("obligation_templates")
-    .update(messageUpdates)
-    .eq("organization_id", organizationId)
-    .eq("id", payload.id)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return { ok: true, template: data, fallback: "direct_message_rls" };
-}
-
 async function listTemplateClientsDirectly(): Promise<ClientListResult> {
   const organizationId = await getStoredCurrentOrganizationId();
   if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
@@ -999,14 +975,12 @@ async function registerDocumentUploadDirectly({
   return { ok: true as const, inbox_item: inboxItem, match: effectiveMatch, fallback: "direct_rls" };
 }
 
-async function processAndSendLinkedDocument({
+async function processLinkedDocument({
   organizationId,
   inboxItemId,
-  instanceId,
 }: {
   organizationId: string;
   inboxItemId: string;
-  instanceId: string;
 }) {
   const { error: processError } = await supabase.functions.invoke("obligation-document-processor", {
     body: {
@@ -1016,14 +990,6 @@ async function processAndSendLinkedDocument({
     },
   });
   if (processError) throw processError;
-
-  return invokeGrowObligations({
-    action: "send_delivery",
-    instance_id: instanceId,
-    inbox_item_id: inboxItemId,
-    human_confirmed: true,
-    confirm_duplicate: false,
-  });
 }
 
 function validateUploadQueueItem(item: UploadQueueItem) {
@@ -1332,10 +1298,6 @@ export function GrowObligationsWorkspace({
       try {
         return await invokeGrowObligations(requestPayload);
       } catch (error) {
-        if (isSystemDefault) {
-          console.warn("grow-obligations-module system default message update failed, using safe RLS fallback", error);
-          return await updateTemplateMessagesDirectly(payload);
-        }
         console.warn("grow-obligations-module upsert_template failed, using RLS fallback", error);
         return await upsertTemplateDirectly(payload);
       }
@@ -1507,7 +1469,7 @@ export function GrowObligationsWorkspace({
       const organizationId = await getStoredCurrentOrganizationId();
       if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
 
-      const results: Array<UploadQueueResult & { deliverySent?: boolean; deliveryError?: string | null }> = [];
+      const results: Array<UploadQueueResult & { deliveryError?: string | null }> = [];
       for (const item of uploadQueue) {
         const validationError = validateUploadQueueItem(item);
         if (validationError) throw new Error(validationError);
@@ -1539,18 +1501,16 @@ export function GrowObligationsWorkspace({
           "";
         if (inboxItemId && instanceId && !response.match.reviewRequired) {
           try {
-            await processAndSendLinkedDocument({
+            await processLinkedDocument({
               organizationId,
               inboxItemId,
-              instanceId,
             });
-            results.push({ ...response, deliverySent: true, deliveryError: null });
+            results.push({ ...response, deliveryError: null });
             continue;
           } catch (error) {
             results.push({
               ...response,
-              deliverySent: false,
-              deliveryError: error instanceof Error ? error.message : "Falha ao enviar e-mail ao cliente.",
+              deliveryError: error instanceof Error ? error.message : "Falha ao processar documento vinculado.",
             });
             continue;
           }
@@ -1562,14 +1522,13 @@ export function GrowObligationsWorkspace({
     },
     onSuccess: async (results) => {
       const autoLinked = results.filter((item) => !item.match.reviewRequired).length;
-      const deliverySent = results.filter((item) => item.deliverySent).length;
       const deliveryErrors = results
         .map((item) => item.deliveryError)
         .filter((message): message is string => Boolean(message));
       if (deliveryErrors.length > 0) {
-        toast.error(`${results.length} arquivo(s) enviados. ${autoLinked} vinculado(s). ${deliverySent} e-mail(s) enviado(s). ${deliveryErrors[0]}`);
+        toast.error(`${results.length} arquivo(s) enviados. ${autoLinked} vinculado(s). ${deliveryErrors[0]}`);
       } else {
-        toast.success(`${results.length} arquivo(s) enviados. ${autoLinked} vinculado(s). ${deliverySent} e-mail(s) enviado(s).`);
+        toast.success(`${results.length} arquivo(s) enviados. ${autoLinked} vinculado(s).`);
       }
       setUploadQueue([]);
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
@@ -1691,7 +1650,8 @@ export function GrowObligationsWorkspace({
   const readyDeliveryInstances = useMemo(
     () =>
       (overview?.instances || []).filter((instance) =>
-        instance.status === "pronto_para_envio" || instance.status === "falha_envio",
+        instance.latest_delivery_attempt?.status !== "sent" &&
+        (instance.status === "pronto_para_envio" || instance.status === "falha_envio"),
       ),
     [overview?.instances],
   );
@@ -1947,54 +1907,36 @@ export function GrowObligationsWorkspace({
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end">
-                      {isSystemDefaultTemplate(template) ? (
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl"
+                        onClick={() => {
+                          setTemplateForm({
+                            ...makeTemplateForm(template),
+                            linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
+                          });
+                          setTemplateClientSearch("");
+                          setPendingReferenceFiles({});
+                          setTemplateDialogOpen(true);
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      {!isSystemDefaultTemplate(template) ? (
                         <Button
                           variant="outline"
-                          className="rounded-2xl"
-                          onClick={() => {
-                            setTemplateForm({
-                              ...makeTemplateForm(template),
-                              linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
-                            });
-                            setTemplateClientSearch("");
-                            setPendingReferenceFiles({});
-                            setTemplateDialogOpen(true);
-                          }}
+                          className="rounded-2xl border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          disabled={deleteTemplateMutation.isPending && templateDeleteTarget?.id === template.id}
+                          onClick={() => setTemplateDeleteTarget(template)}
                         >
-                          Editar mensagens
+                          {deleteTemplateMutation.isPending && templateDeleteTarget?.id === template.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="mr-2 h-4 w-4" />
+                          )}
+                          Excluir
                         </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant="outline"
-                            className="rounded-2xl"
-                            onClick={() => {
-                              setTemplateForm({
-                                ...makeTemplateForm(template),
-                                linked_client_ids: buildTemplateLinkedClientIds(overview?.profiles, template.id),
-                              });
-                              setTemplateClientSearch("");
-                              setPendingReferenceFiles({});
-                              setTemplateDialogOpen(true);
-                            }}
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="rounded-2xl border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                            disabled={deleteTemplateMutation.isPending && templateDeleteTarget?.id === template.id}
-                            onClick={() => setTemplateDeleteTarget(template)}
-                          >
-                            {deleteTemplateMutation.isPending && templateDeleteTarget?.id === template.id ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="mr-2 h-4 w-4" />
-                            )}
-                            Excluir
-                          </Button>
-                        </>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -2522,7 +2464,7 @@ export function GrowObligationsWorkspace({
                 <DialogDescription>Configure prazos, automacoes, clientes e documentos esperados em secoes recolhiveis.</DialogDescription>
                 {templateIsSystemDefault ? (
                   <p className="text-xs text-muted-foreground">
-                    Obrigacao padrao do sistema: apenas as mensagens automaticas podem ser editadas. Os demais campos ficam visiveis para conferencia.
+                    Obrigacao padrao do sistema: todos os campos podem ser ajustados. A origem padrao sera preservada e a exclusao permanece protegida.
                   </p>
                 ) : null}
               </div>
@@ -2538,7 +2480,7 @@ export function GrowObligationsWorkspace({
               <span className="text-xs text-muted-foreground group-open:hidden">Expandir</span>
               <span className="text-xs text-muted-foreground group-open:inline hidden">Recolher</span>
             </summary>
-            <fieldset disabled={templateIsSystemDefault} className="grid gap-4 md:grid-cols-2 disabled:opacity-80">
+            <fieldset className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2"><Label>Nome</Label><Input value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} /></div>
             <div className="space-y-2"><Label>Setor</Label><Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Periodicidade</Label><Select value={templateForm.periodicity} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, periodicity: value as GrowObligationTemplate["periodicity"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent></Select></div>
@@ -2696,7 +2638,6 @@ export function GrowObligationsWorkspace({
                   value={templateClientSearch}
                   onChange={(event) => setTemplateClientSearch(event.target.value)}
                   placeholder="Buscar cliente por nome ou CNPJ"
-                  disabled={templateIsSystemDefault}
                 />
               </div>
             </summary>
@@ -2723,10 +2664,10 @@ export function GrowObligationsWorkspace({
                       </p>
                     </div>
                     <div className="grid gap-2">
-                      <Button type="button" variant="outline" size="sm" className="justify-start rounded-lg" disabled={templateIsSystemDefault} onClick={() => setTemplateRegimeClients(regime.code, true)}>
+                      <Button type="button" variant="outline" size="sm" className="justify-start rounded-lg" onClick={() => setTemplateRegimeClients(regime.code, true)}>
                         Selecionar todos: {regime.label}
                       </Button>
-                      <Button type="button" variant="ghost" size="sm" className="justify-start rounded-lg text-muted-foreground" disabled={templateIsSystemDefault} onClick={() => setTemplateRegimeClients(regime.code, false)}>
+                      <Button type="button" variant="ghost" size="sm" className="justify-start rounded-lg text-muted-foreground" onClick={() => setTemplateRegimeClients(regime.code, false)}>
                         Limpar {regime.label}
                       </Button>
                     </div>
@@ -2756,7 +2697,6 @@ export function GrowObligationsWorkspace({
                       className="mt-1 h-4 w-4 accent-primary"
                       type="checkbox"
                       checked={checked}
-                      disabled={templateIsSystemDefault}
                       onChange={(event) =>
                         setTemplateForm((prev) => ({
                           ...prev,
@@ -2783,19 +2723,19 @@ export function GrowObligationsWorkspace({
               </div>
               <span className="ml-auto text-xs text-muted-foreground group-open:hidden">Expandir</span>
               <span className="ml-auto hidden text-xs text-muted-foreground group-open:inline">Recolher</span>
-              <Button type="button" variant="outline" className="rounded-xl" disabled={templateIsSystemDefault} onClick={(event) => { event.stopPropagation(); setTemplateForm((prev) => ({ ...prev, expected_documents: [...prev.expected_documents, makeDocumentDraft()] })); }}><Plus className="mr-2 h-4 w-4" />Adicionar documento esperado</Button>
+              <Button type="button" variant="outline" className="rounded-xl" onClick={(event) => { event.stopPropagation(); setTemplateForm((prev) => ({ ...prev, expected_documents: [...prev.expected_documents, makeDocumentDraft()] })); }}><Plus className="mr-2 h-4 w-4" />Adicionar documento esperado</Button>
             </summary>
             {templateForm.expected_documents.map((document, index) => (
               <div key={`${document.document_type_key || "novo"}-${index}`} className="rounded-xl border border-border/60 bg-background/70 p-4">
                 <div className="grid gap-3 md:grid-cols-[1fr_1fr_120px_auto]">
-                  <div className="space-y-2"><Label>Nome</Label><Input value={document.label} disabled={templateIsSystemDefault} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, label: event.target.value, document_type_key: current.document_type_key || slugifyDocumentKey(event.target.value) } : current) }))} /></div>
-                  <div className="space-y-2"><Label>Apelidos</Label><Input value={document.aliases_text} disabled={templateIsSystemDefault} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, aliases_text: event.target.value } : current) }))} placeholder="folha, pagamento, holerite" /></div>
+                  <div className="space-y-2"><Label>Nome</Label><Input value={document.label} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, label: event.target.value, document_type_key: current.document_type_key || slugifyDocumentKey(event.target.value) } : current) }))} /></div>
+                  <div className="space-y-2"><Label>Apelidos</Label><Input value={document.aliases_text} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, aliases_text: event.target.value } : current) }))} placeholder="folha, pagamento, holerite" /></div>
                   <div className="space-y-3">
-                    <label className="flex items-center justify-between gap-4 text-sm"><span>Obrigatorio</span><input className="h-4 w-4 accent-primary" type="checkbox" checked={document.required} disabled={templateIsSystemDefault} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, required: event.target.checked } : current) }))} /></label>
-                    <label className="flex items-center justify-between gap-4 text-sm"><span>Ativo</span><input className="h-4 w-4 accent-primary" type="checkbox" checked={document.active} disabled={templateIsSystemDefault} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, active: event.target.checked } : current) }))} /></label>
+                    <label className="flex items-center justify-between gap-4 text-sm"><span>Obrigatorio</span><input className="h-4 w-4 accent-primary" type="checkbox" checked={document.required} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, required: event.target.checked } : current) }))} /></label>
+                    <label className="flex items-center justify-between gap-4 text-sm"><span>Ativo</span><input className="h-4 w-4 accent-primary" type="checkbox" checked={document.active} onChange={(event) => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.map((current, currentIndex) => currentIndex === index ? { ...current, active: event.target.checked } : current) }))} /></label>
                   </div>
                   <div className="flex items-start justify-end">
-                    <Button type="button" variant="ghost" size="icon" className="rounded-xl text-destructive" disabled={templateIsSystemDefault} onClick={() => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.length <= 1 ? [makeDocumentDraft()] : prev.expected_documents.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={() => setTemplateForm((prev) => ({ ...prev, expected_documents: prev.expected_documents.length <= 1 ? [makeDocumentDraft()] : prev.expected_documents.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
 
@@ -2805,7 +2745,7 @@ export function GrowObligationsWorkspace({
                     <Input
                       type="file"
                       accept="application/pdf"
-                      disabled={templateIsSystemDefault || referenceUploadKey === `${index}`}
+                      disabled={referenceUploadKey === `${index}`}
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (!file) return;
@@ -2883,7 +2823,7 @@ export function GrowObligationsWorkspace({
                             <p className="text-sm font-medium">{reference.file_name}</p>
                             <p className="text-xs text-muted-foreground">Texto: {reference.text_extraction_status} · OCR: {reference.ocr_status}</p>
                           </div>
-                          <Button variant="ghost" size="icon" className="rounded-xl text-destructive" disabled={templateIsSystemDefault} onClick={() => deleteReferenceMutation.mutate(reference.id)}><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={() => deleteReferenceMutation.mutate(reference.id)}><Trash2 className="h-4 w-4" /></Button>
                         </div>
                       ))}
                     </div>
@@ -2918,7 +2858,6 @@ export function GrowObligationsWorkspace({
                   className="h-4 w-4 accent-primary"
                   type="checkbox"
                   checked={templateForm.is_active}
-                  disabled={templateIsSystemDefault}
                   onChange={(event) => setTemplateForm((prev) => ({ ...prev, is_active: event.target.checked }))}
                 />
               </label>

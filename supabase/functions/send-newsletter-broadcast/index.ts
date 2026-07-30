@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveConfiguredEmailSender, sendEmailViaSmtp } from "../_shared/email/smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,49 +126,6 @@ async function ensureOrganizationFeatureEnabled(
   if (flags && flags[featureKey] === false) {
     throw new Error(`Modulo ${featureKey} desativado para esta organizacao.`);
   }
-}
-
-async function sendEmailViaResend(params: {
-  apiKey: string;
-  from: string;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  idempotencyKey?: string;
-}) {
-  const headers = new Headers({
-    Authorization: `Bearer ${params.apiKey}`,
-    "Content-Type": "application/json",
-  });
-
-  if (params.idempotencyKey) {
-    headers.set("Idempotency-Key", params.idempotencyKey);
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      from: params.from,
-      to: [params.to],
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-    }),
-  });
-
-  if (response.ok) {
-    const data = await response.json().catch(() => null);
-    return { ok: true as const, id: asRecord(data)?.id || null };
-  }
-
-  const responseText = await response.text();
-  return {
-    ok: false as const,
-    status: response.status,
-    message: responseText || "Unknown provider error",
-  };
 }
 
 Deno.serve(async (req) => {
@@ -305,26 +263,22 @@ Deno.serve(async (req) => {
     const htmlBody = buildNewsletterHtml(newsletter.title, newsletter.excerpt, newsletter.content);
     const textBody = buildNewsletterText(newsletter.title, newsletter.excerpt, newsletter.content);
 
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const senderEmail =
-      Deno.env.get("NEWSLETTER_FROM_EMAIL") || "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+    const senderEmail = resolveConfiguredEmailSender("NEWSLETTER_FROM_EMAIL");
 
-    if (!resendApiKey) {
-      return jsonResponse({ error: "Missing RESEND_API_KEY environment variable" }, 500);
+    if (!senderEmail) {
+      return jsonResponse({ error: "Configure NEWSLETTER_FROM_EMAIL ou SMTP_FROM_EMAIL para envio SMTP." }, 500);
     }
 
     let sentCount = 0;
     const failures: string[] = [];
 
     for (const recipient of recipients) {
-      const sendResult = await sendEmailViaResend({
-        apiKey: resendApiKey,
+      const sendResult = await sendEmailViaSmtp({
         from: senderEmail,
         to: recipient,
         subject,
         html: htmlBody,
         text: textBody,
-        idempotencyKey: `newsletter:${newsletter.id}:${recipient}`,
       });
 
       if (!sendResult.ok) {

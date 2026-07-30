@@ -390,8 +390,8 @@ export async function invokeGrowObligations<T>(body: Record<string, unknown>) {
     if (response) {
       let parsedErrorMessage: string | null = null;
       try {
-        const payload = await response.clone().json() as { error?: string };
-        parsedErrorMessage = payload?.error || null;
+        const payload = await response.clone().json() as { error?: string; detail?: string };
+        parsedErrorMessage = [payload?.error, payload?.detail].filter(Boolean).join(" Detalhe: ") || null;
       } catch {
         // Response is not JSON; try text below.
       }

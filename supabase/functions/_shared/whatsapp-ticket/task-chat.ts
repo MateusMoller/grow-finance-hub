@@ -24,10 +24,10 @@ export function formatTicketOpeningMessage(input: {
   return [
     "*Ticket de atendimento criado*",
     "",
-    `*Numero do ticket:* #${input.ticketProtocol}`,
-    `*Titulo:* ${input.taskTitle}`,
-    `*Responsavel:* ${input.responsibleName || "Equipe Grow"}`,
+    `*Número do ticket:* #${input.ticketProtocol}`,
+    `*Título:* ${input.taskTitle}`,
+    `*Responsável:* ${input.responsibleName || "Equipe Grow"}`,
     "",
-    input.message || "Recebemos sua solicitacao e nossa equipe dara continuidade ao atendimento por este ticket.",
+    input.message || "Recebemos sua solicitação e nossa equipe dará continuidade ao atendimento por este ticket.",
   ].join("\n");
 }

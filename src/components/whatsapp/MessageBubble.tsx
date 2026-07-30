@@ -81,6 +81,24 @@ const formatSeconds = (value: number) => {
 
 const waveformBars = [12, 16, 22, 13, 27, 18, 30, 20, 14, 25, 32, 16, 22, 28, 18, 12, 26, 34, 20, 15, 24, 29, 17, 22, 31, 19, 14, 26, 33, 21, 16, 24];
 
+const fixMojibake = (value: string | null | undefined) =>
+  (value || "")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã£/g, "ã")
+    .replace(/Ãµ/g, "õ")
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã‡/g, "Ç")
+    .replace(/Ãƒ/g, "Ã")
+    .replace(/Ã•/g, "Õ")
+    .replace(/Â·/g, "·")
+    .replace(/Âº/g, "º")
+    .replace(/Âª/g, "ª");
+
 function InteractivePreview({ message }: { message: WhatsAppMessage }) {
   const interactive = message.metadata?.interactive;
   if (!interactive) return null;
@@ -93,7 +111,7 @@ function InteractivePreview({ message }: { message: WhatsAppMessage }) {
             key={button.id}
             className="flex h-9 items-center justify-center rounded-md bg-white/70 px-3 text-sm font-semibold text-[#008069] shadow-[0_1px_0_rgba(11,20,26,0.08)]"
           >
-            {button.title}
+            {fixMojibake(button.title)}
           </div>
         ))}
       </div>
@@ -105,18 +123,18 @@ function InteractivePreview({ message }: { message: WhatsAppMessage }) {
       <div className="mt-2 rounded-lg border border-[#d1d7db] bg-white/70">
         <div className="flex items-center justify-center gap-2 border-b border-[#d1d7db] px-3 py-2 text-sm font-semibold text-[#008069]">
           <ListChecks className="h-4 w-4" />
-          {interactive.buttonText || "Escolher opção"}
+          {fixMojibake(interactive.buttonText) || "Escolher opção"}
         </div>
         <div className="max-h-56 overflow-y-auto">
           {interactive.sections.map((section) => (
             <div key={section.title} className="border-b border-[#e9edef] last:border-b-0">
               <div className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#667781]">
-                {section.title}
+                {fixMojibake(section.title)}
               </div>
               {section.rows.map((row) => (
                 <div key={row.id} className="px-3 py-2">
-                  <div className="text-sm font-semibold text-[#111b21]">{row.title}</div>
-                  {row.description && <div className="mt-0.5 text-xs text-[#667781]">{row.description}</div>}
+                  <div className="text-sm font-semibold text-[#111b21]">{fixMojibake(row.title)}</div>
+                  {row.description && <div className="mt-0.5 text-xs text-[#667781]">{fixMojibake(row.description)}</div>}
                 </div>
               ))}
             </div>
@@ -417,7 +435,7 @@ export function MessageBubble({
         </DropdownMenu>
         {message.body && (
           <p className={`whitespace-pre-wrap break-words px-1 pr-12 ${compact ? "text-[14px] leading-[1.4]" : "text-[14.5px] leading-[1.45]"}`}>
-            {message.body}
+            {fixMojibake(message.body)}
           </p>
         )}
         <InteractivePreview message={message} />

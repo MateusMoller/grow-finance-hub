@@ -79,16 +79,111 @@ function normalizeDigits(value: string | null | undefined) {
 
 function normalizeCnpj(value: string | null | undefined) {
   const digits = normalizeDigits(value);
-  return digits.length === 14 ? digits : null;
+  if (digits.length !== 14) return null;
+  if (/^(\d)\1{13}$/.test(digits)) return null;
+  return isValidCnpj(digits) ? digits : null;
 }
 
-function detectCnpj(text: string) {
-  const match = text.match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/);
-  return normalizeCnpj(match?.[0] || null);
+function isValidCnpj(cnpj: string) {
+  const calculateDigit = (length: number) => {
+    const weights = length === 12
+      ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+      : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const sum = weights.reduce((total, weight, index) => total + Number(cnpj[index]) * weight, 0);
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  return calculateDigit(12) === Number(cnpj[12]) && calculateDigit(13) === Number(cnpj[13]);
 }
 
-function detectCompetence(text: string) {
-  const normalized = text.replace(/\s+/g, " ").trim();
+function normalizeReadableText(value: string) {
+  return value
+    .normalize("NFKC")
+    .replace(/\u00a0/g, " ")
+    .replace(/\u00ad/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeSearchText(value: string) {
+  return normalizeReadableText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function uniqueValues<T>(values: T[]) {
+  return Array.from(new Set(values));
+}
+
+function detectCnpjCandidates(...sources: string[]) {
+  const candidates: string[] = [];
+
+  for (const source of sources) {
+    const normalized = normalizeReadableText(source);
+    const formattedMatches = normalized.match(/\d{2}\s*\.?\s*\d{3}\s*\.?\s*\d{3}\s*\/?\s*\d{4}\s*-?\s*\d{2}/g) || [];
+    for (const match of formattedMatches) {
+      const cnpj = normalizeCnpj(match);
+      if (cnpj) candidates.push(cnpj);
+    }
+
+    const digits = normalizeDigits(normalized);
+    for (let index = 0; index <= digits.length - 14; index += 1) {
+      const cnpj = normalizeCnpj(digits.slice(index, index + 14));
+      if (cnpj) candidates.push(cnpj);
+    }
+  }
+
+  return uniqueValues(candidates);
+}
+
+function monthLabel(month: string, year: string) {
+  return `${year}-${month.padStart(2, "0")}`;
+}
+
+function detectCompetenceCandidates(...sources: string[]) {
+  const candidates: string[] = [];
+  const text = normalizeSearchText(sources.filter(Boolean).join("\n"));
+
+  const isoMatches = text.matchAll(/\b(20\d{2})[-/](0?[1-9]|1[0-2])\b/g);
+  for (const match of isoMatches) {
+    candidates.push(monthLabel(match[2], match[1]));
+  }
+
+  const brMatches = text.matchAll(/\b(0?[1-9]|1[0-2])[-/](20\d{2})\b/g);
+  for (const match of brMatches) {
+    candidates.push(monthLabel(match[1], match[2]));
+  }
+
+  const labelledMatches = text.matchAll(/\b(?:competencia|comp|periodo de apuracao|apuracao|referencia|ref|pa)\D{0,24}(0?[1-9]|1[0-2])\D{0,4}(20\d{2})\b/g);
+  for (const match of labelledMatches) {
+    candidates.push(monthLabel(match[1], match[2]));
+  }
+
+  const compactMatches = text.matchAll(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/g);
+  for (const match of compactMatches) {
+    candidates.push(monthLabel(match[2], match[3]));
+  }
+
+  const quarterMatches = text.matchAll(/\b([1-4])\s*(?:o|º|°)?\s*trimestre\D{0,12}(20\d{2})\b/g);
+  for (const match of quarterMatches) {
+    const quarter = Number(match[1]);
+    const month = String(quarter * 3).padStart(2, "0");
+    candidates.push(`${match[2]}-${month}`);
+  }
+
+  return uniqueValues(candidates);
+}
+
+function detectCompetence(text: string, filePath = "") {
+  const candidates = detectCompetenceCandidates(path.basename(filePath), filePath, text);
+  if (candidates.length > 0) return candidates[0];
+
+  const normalized = normalizeReadableText(text).replace(/\s+/g, " ");
   const isoMatch = normalized.match(/\b(20\d{2})[-/](0[1-9]|1[0-2])\b/);
   if (isoMatch) {
     return `${isoMatch[1]}-${isoMatch[2]}`;
@@ -103,6 +198,18 @@ function detectCompetence(text: string) {
 }
 
 function tokenize(text: string) {
+  const ignoredTokens = new Set([
+    "pagina",
+    "documento",
+    "arquivo",
+    "valor",
+    "data",
+    "codigo",
+    "numero",
+    "cnpj",
+    "cpf",
+  ]);
+
   return text
     .toLowerCase()
     .normalize("NFD")
@@ -110,7 +217,7 @@ function tokenize(text: string) {
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
     .map((token) => token.trim())
-    .filter((token) => token.length >= 3 && !/^\d+$/.test(token));
+    .filter((token) => token.length >= 3 && !/^\d+$/.test(token) && !ignoredTokens.has(token));
 }
 
 function buildKeywordStats(tokens: string[]) {
@@ -151,48 +258,115 @@ async function computeFileHash(filePath: string) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+type PdfTextItem = {
+  str: string;
+  transform: number[];
+  width: number;
+  height: number;
+  hasEOL?: boolean;
+};
+
+function isPdfTextItem(value: unknown): value is PdfTextItem {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "str" in value &&
+    typeof (value as { str?: unknown }).str === "string" &&
+    Array.isArray((value as { transform?: unknown }).transform),
+  );
+}
+
+function buildPageText(items: PdfTextItem[]) {
+  const positioned = items
+    .map((item) => ({
+      text: normalizeReadableText(item.str),
+      x: Number(item.transform[4] || 0),
+      y: Number(item.transform[5] || 0),
+      width: Number(item.width || 0),
+      height: Number(item.height || Math.abs(Number(item.transform[3] || 0)) || 10),
+      hasEOL: Boolean(item.hasEOL),
+    }))
+    .filter((item) => item.text.length > 0)
+    .sort((left, right) => Math.abs(right.y - left.y) > 2 ? right.y - left.y : left.x - right.x);
+
+  const lines: Array<typeof positioned> = [];
+  for (const item of positioned) {
+    const line = lines.find((current) => Math.abs((current[0]?.y || 0) - item.y) <= Math.max(2, item.height * 0.45));
+    if (line) {
+      line.push(item);
+    } else {
+      lines.push([item]);
+    }
+  }
+
+  return lines
+    .map((line) => {
+      const ordered = line.sort((left, right) => left.x - right.x);
+      let cursor = ordered[0]?.x || 0;
+      const pieces: string[] = [];
+
+      for (const item of ordered) {
+        const gap = item.x - cursor;
+        if (pieces.length > 0 && gap > Math.max(3, item.height * 0.35)) {
+          pieces.push(" ");
+        }
+        pieces.push(item.text);
+        cursor = item.x + item.width;
+        if (item.hasEOL) pieces.push("\n");
+      }
+
+      return pieces.join("").replace(/[ \t]{2,}/g, " ").trim();
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 async function extractPdfText(filePath: string) {
   const data = await fs.readFile(filePath);
-  const pdf = await getDocument({ data: new Uint8Array(data) }).promise;
+  const pdf = await getDocument({ data: new Uint8Array(data), useSystemFonts: true }).promise;
   const chunks: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const items = textContent.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .filter(Boolean);
+    const textContent = await page.getTextContent({ disableNormalization: false });
+    const items = (textContent.items as unknown[]).filter(isPdfTextItem);
     if (items.length > 0) {
-      chunks.push(items.join(" "));
+      chunks.push(`--- pagina ${pageNumber} ---\n${buildPageText(items)}`);
     }
   }
 
   await pdf.destroy();
 
-  const extractedText = chunks.join("\n").replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
+  const extractedText = normalizeReadableText(chunks.join("\n\n"));
   return { extractedText, pageCount: pdf.numPages };
 }
 
 async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
   try {
     const { extractedText, pageCount } = await extractPdfText(filePath);
-    const normalizedText = extractedText.replace(/\s+/g, " ").trim();
-    const preview = normalizedText ? normalizedText.slice(0, 500) : null;
+    const normalizedText = normalizeReadableText(extractedText);
+    const flattenedText = normalizedText.replace(/\s+/g, " ").trim();
+    const preview = flattenedText ? flattenedText.slice(0, 500) : null;
     const tokens = tokenize(normalizedText);
     const keywords = buildKeywordStats(tokens);
+    const cnpjCandidates = detectCnpjCandidates(path.basename(filePath), filePath, normalizedText);
+    const competenceCandidates = detectCompetenceCandidates(path.basename(filePath), filePath, normalizedText);
 
     return {
       extracted_text: normalizedText || null,
       extracted_text_preview: preview,
-      detected_cnpj: detectCnpj(normalizedText),
-      competence_detected: detectCompetence(normalizedText),
+      detected_cnpj: cnpjCandidates[0] || null,
+      competence_detected: competenceCandidates[0] || detectCompetence(normalizedText, filePath),
       text_extraction_status: normalizedText ? "extracted" : "empty",
       ocr_status: normalizedText ? "not_needed" : "not_available",
       fingerprint_payload: {
-        version: 1,
+        version: 2,
         page_count: pageCount,
         extracted_chars: normalizedText.length,
         frequent_tokens: keywords,
+        detected_cnpjs: cnpjCandidates,
+        competence_candidates: competenceCandidates,
+        detection_sources: ["file_name", "file_path", "pdf_text"],
         title_guess: preview ? preview.slice(0, 120) : null,
       },
       keywords,

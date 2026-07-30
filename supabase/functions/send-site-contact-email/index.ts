@@ -1,3 +1,5 @@
+import { resolveConfiguredEmailSender, sendEmailViaSmtp } from "../_shared/email/smtp.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -37,51 +39,6 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-async function sendEmailViaResend(params: {
-  apiKey: string;
-  from: string;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  replyTo?: string;
-  idempotencyKey?: string;
-}) {
-  const headers = new Headers({
-    Authorization: `Bearer ${params.apiKey}`,
-    "Content-Type": "application/json",
-  });
-
-  if (params.idempotencyKey) {
-    headers.set("Idempotency-Key", params.idempotencyKey);
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      from: params.from,
-      to: [params.to],
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-      reply_to: params.replyTo ? [params.replyTo] : undefined,
-    }),
-  });
-
-  if (response.ok) {
-    const data = await response.json().catch(() => null);
-    return { ok: true as const, id: asRecord(data)?.id || null };
-  }
-
-  const responseText = await response.text();
-  return {
-    ok: false as const,
-    status: response.status,
-    message: responseText || "Unknown provider error",
-  };
 }
 
 function buildEmailHtml(params: {
@@ -167,32 +124,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "message is required" }, 400);
     }
 
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const senderEmail =
-      asTrimmedString(Deno.env.get("SITE_CONTACT_FROM_EMAIL")) ||
-      asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
-      "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+      resolveConfiguredEmailSender("SITE_CONTACT_FROM_EMAIL", "NEWSLETTER_FROM_EMAIL");
     const recipientEmail =
       asTrimmedString(Deno.env.get("SITE_CONTACT_TO_EMAIL")) ||
       "contato@contabilidadegrow.com.br";
 
-    if (!resendApiKey) {
-      return jsonResponse({ error: "Missing RESEND_API_KEY environment variable" }, 500);
+    if (!senderEmail) {
+      return jsonResponse({ error: "Configure SITE_CONTACT_FROM_EMAIL ou SMTP_FROM_EMAIL para envio SMTP." }, 500);
     }
 
     const subject = `Novo contato do site | ${fullName}`;
     const htmlBody = buildEmailHtml({ fullName, companyName, email, phone, message, originPage });
     const textBody = buildEmailText({ fullName, companyName, email, phone, message, originPage });
 
-    const sendResult = await sendEmailViaResend({
-      apiKey: resendApiKey,
+    const sendResult = await sendEmailViaSmtp({
       from: senderEmail,
       to: recipientEmail,
       subject,
       html: htmlBody,
       text: textBody,
       replyTo: email,
-      idempotencyKey: `site-contact:${email}:${Date.now()}`,
     });
 
     if (!sendResult.ok) {

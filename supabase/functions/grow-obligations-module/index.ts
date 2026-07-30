@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendWhatsAppTextMessage } from "../_shared/ai/whatsapp.ts";
 import { normalizePhoneDigits } from "../_shared/ai/utils.ts";
+import { resolveConfiguredEmailSender, sendEmailViaSmtp } from "../_shared/email/smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1238,6 +1239,21 @@ function overlapRatio(source: string[], target: string[]) {
   return matches / Math.max(targetSet.size, sourceSet.size);
 }
 
+function buildDocumentAliasTokens(document: ExpectedDocumentDefinition) {
+  return [document.label, document.document_type_key, ...document.aliases]
+    .flatMap((item) => normalizeToken(item).split("_"))
+    .filter((token) => token.length >= 3);
+}
+
+function buildReferenceFingerprintTokens(fingerprint: JsonRecord) {
+  return Array.from(new Set([
+    ...asStringArray(fingerprint.top_tokens),
+    ...asStringArray(fingerprint.frequent_tokens),
+    ...asStringArray(fingerprint.primary_cues),
+    ...asStringArray(fingerprint.key_phrases),
+  ].map((item) => normalizeToken(item)).filter(Boolean)));
+}
+
 function buildReferenceDocumentCandidates(
   clientId: string,
   templatesMap: Map<string, TemplateRow>,
@@ -1394,20 +1410,22 @@ async function resolveDocumentReferenceMatch(
   const inputTokens = analysis.keywords;
   const inputCues = analysis.primary_cues;
   const fileNameToken = normalizeToken(fileName || "");
+  const extractedTextToken = normalizeToken(analysis.extracted_text || "");
 
   const ranked = candidates.map((candidate) => {
     const referenceTokens = asStringArray(candidate.reference.keywords);
     const referenceCues = asStringArray(candidate.reference.primary_cues);
     const referenceFingerprint = asJsonRecord(candidate.reference.fingerprint_payload);
-    const referenceFingerprintTokens = asStringArray(referenceFingerprint.top_tokens);
-    const aliasScore = [candidate.document.label, ...candidate.document.aliases]
+    const referenceFingerprintTokens = buildReferenceFingerprintTokens(referenceFingerprint);
+    const documentAliasTokens = buildDocumentAliasTokens(candidate.document);
+    const aliasScore = [candidate.document.label, candidate.document.document_type_key, ...candidate.document.aliases]
       .map((item) => normalizeToken(item))
       .filter(Boolean)
-      .some((token) => fileNameToken.includes(token))
-      ? 0.1
+      .some((token) => fileNameToken.includes(token) || extractedTextToken.includes(token))
+      ? 0.18
       : 0;
     const docHintScore = documentTypeKey && documentTypeKey === candidate.document.document_type_key ? 0.15 : 0;
-    const keywordScore = overlapRatio(inputTokens, referenceTokens) * 0.35;
+    const keywordScore = overlapRatio(inputTokens, [...referenceTokens, ...documentAliasTokens]) * 0.35;
     const cueScore = overlapRatio(inputCues, referenceCues) * 0.2;
     const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens) * 0.2;
     const textScore = candidate.reference.extracted_text && analysis.extracted_text
@@ -1445,12 +1463,21 @@ async function resolveDocumentReferenceMatch(
 
   const ambiguous = second && Math.abs(best.totalScore - second.totalScore) <= 0.05;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
+  const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
+  const hasStrongDocumentHint = Boolean(
+    documentTypeKey === best.document.document_type_key ||
+    [best.document.label, best.document.document_type_key, ...best.document.aliases]
+      .map((item) => normalizeToken(item))
+      .filter(Boolean)
+      .some((token) => fileNameToken.includes(token) || extractedTextToken.includes(token)),
+  );
   const autoAllowed = Boolean(
-    analysis.detected_cnpj &&
-    detectedClientByCnpj &&
-    best.totalScore >= 0.9 &&
+    uniqueOpenInstance &&
     !ambiguous &&
-    uniqueOpenInstance,
+    (
+      (analysis.detected_cnpj && detectedClientByCnpj && best.totalScore >= 0.85) ||
+      (hasManualContext && hasStrongDocumentHint && best.totalScore >= 0.75)
+    ),
   );
 
   const reasons = [
@@ -1467,12 +1494,12 @@ async function resolveDocumentReferenceMatch(
 
   const autoLinkBlockReason = autoAllowed
     ? null
-    : !analysis.detected_cnpj
-      ? "Nao foi detectado CNPJ valido no documento."
+    : !uniqueOpenInstance
+      ? "Nao existe uma instancia unica e elegivel para a obrigacao candidata."
       : ambiguous
         ? "Mais de um documento modelo apresentou score parecido."
-        : !uniqueOpenInstance
-          ? "Nao existe uma instancia unica e elegivel para a obrigacao candidata."
+        : !analysis.detected_cnpj && !hasManualContext
+          ? "Nao foi detectado CNPJ valido no documento e nao ha contexto manual suficiente."
           : "Score abaixo do limiar de auto-vinculo.";
 
   return {
@@ -1657,10 +1684,10 @@ function renderCompletionEmailTemplate(
 }
 
 async function resolveActorEmailSender(supabaseAdmin: SupabaseAdmin, actorId: string) {
-  const fallbackFrom =
-    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
-    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
-    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+  const fallbackFrom = resolveConfiguredEmailSender("OBLIGATION_FROM_EMAIL", "NEWSLETTER_FROM_EMAIL");
+  if (!fallbackFrom) {
+    throw new Error("Configure OBLIGATION_FROM_EMAIL ou SMTP_FROM_EMAIL antes de enviar e-mails de obrigacao.");
+  }
   const allowedDomains = asStringArray(
     (Deno.env.get("OBLIGATION_ALLOWED_FROM_DOMAINS") || "")
       .split(",")
@@ -1698,10 +1725,11 @@ async function resolveActorEmailSender(supabaseAdmin: SupabaseAdmin, actorId: st
 }
 
 async function resolveDeliverySender(supabaseAdmin: SupabaseAdmin, actorId: string) {
-  const verifiedFrom =
-    asTrimmedString(Deno.env.get("OBLIGATION_FROM_EMAIL")) ||
-    asTrimmedString(Deno.env.get("NEWSLETTER_FROM_EMAIL")) ||
-    "Grow Contabilidade <contato@contabilidadegrow.com.br>";
+  const verifiedFrom = resolveConfiguredEmailSender("OBLIGATION_FROM_EMAIL", "NEWSLETTER_FROM_EMAIL");
+
+  if (!verifiedFrom) {
+    throw new Error("Configure OBLIGATION_FROM_EMAIL ou SMTP_FROM_EMAIL antes de enviar e-mails de obrigacao.");
+  }
 
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(actorId);
   if (error || !data?.user) {
@@ -1731,7 +1759,26 @@ async function resolveDeliverySender(supabaseAdmin: SupabaseAdmin, actorId: stri
 function sanitizeProviderMessage(value: unknown) {
   const message = asTrimmedString(value);
   if (!message) return "Falha no provedor de e-mail.";
-  return message.slice(0, 700);
+
+  let parsed: JsonRecord | null = null;
+  try {
+    parsed = JSON.parse(message) as JsonRecord;
+  } catch {
+    parsed = null;
+  }
+
+  const providerMessage = asTrimmedString(parsed?.message) || message;
+  const providerName = asTrimmedString(parsed?.name);
+  const domainMatch = providerMessage.match(/The\s+(.+?)\s+domain is not verified/i);
+  if (domainMatch) {
+    return `O dominio do remetente ${domainMatch[1]} nao esta autorizado pelo provedor SMTP. Verifique o remetente configurado ou use uma conta SMTP compativel.`;
+  }
+
+  if (providerName === "validation_error") {
+    return `Erro de validacao do provedor de e-mail: ${providerMessage}`.slice(0, 700);
+  }
+
+  return providerMessage.slice(0, 700);
 }
 
 function buildDeliveryIdempotencyKey(instanceId: string, recipientEmail: string, attachmentIds: string[]) {
@@ -1828,7 +1875,7 @@ async function prepareObligationDelivery(
   }
 
   const requiredStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
-  if (requiredStatus !== "concluida") {
+  if (!["em_revisao", "concluida"].includes(requiredStatus)) {
     throw new Error("A obrigacao ainda nao possui todos os documentos obrigatorios anexados.");
   }
 
@@ -1982,11 +2029,6 @@ async function handleSendDelivery(
     }, 409);
   }
 
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  if (!apiKey) {
-    return jsonResponse({ error: "RESEND_API_KEY nao configurada." }, 500);
-  }
-
   const now = new Date().toISOString();
   const { data: attemptData, error: attemptError } = await supabaseAdmin
     .from("obligation_delivery_attempts")
@@ -2041,15 +2083,13 @@ async function handleSendDelivery(
     return jsonResponse({ error: message }, 400);
   }
 
-  const sendResult = await sendEmailViaResend({
-    apiKey,
+  const sendResult = await sendEmailViaSmtp({
     from: prepared.sender.verifiedFrom,
     replyTo: prepared.sender.replyTo,
     to: prepared.recipientEmail,
     subject: prepared.subject,
     html: prepared.htmlBody,
     text: prepared.textBody,
-    idempotencyKey,
     attachments: attachments.map((attachment) => ({
       filename: attachment.filename,
       content: attachment.content,
@@ -2096,7 +2136,7 @@ async function handleSendDelivery(
     .update({
       status: "sent",
       provider_message_id: sendResult.id,
-      provider_status: 202,
+      provider_status: sendResult.status,
       sent_at: sentAt,
     })
     .eq("id", String((attemptData as JsonRecord).id));
@@ -2157,7 +2197,7 @@ async function handleSendDelivery(
       sender_email: prepared.sender.actorEmail,
       verified_from_email: prepared.sender.verifiedFrom,
       reply_to: prepared.sender.replyTo,
-      resend_email_id: sendResult.id,
+      smtp_message_id: sendResult.id,
     },
   );
 
@@ -2258,53 +2298,6 @@ function buildCompletionEmailBodyHtml(body: string) {
   `;
 }
 
-async function sendEmailViaResend(params: {
-  apiKey: string;
-  from: string;
-  replyTo?: string | null;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  idempotencyKey?: string;
-  attachments?: Array<{ filename: string; content: string; content_type?: string }>;
-}) {
-  const headers = new Headers({
-    Authorization: `Bearer ${params.apiKey}`,
-    "Content-Type": "application/json",
-  });
-
-  if (params.idempotencyKey) {
-    headers.set("Idempotency-Key", params.idempotencyKey);
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      from: params.from,
-      to: [params.to],
-      reply_to: params.replyTo || undefined,
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-      attachments: params.attachments?.length ? params.attachments : undefined,
-    }),
-  });
-
-  if (response.ok) {
-    const data = await response.json().catch(() => null);
-    return { ok: true as const, id: asRecord(data)?.id || null };
-  }
-
-  const responseText = await response.text();
-  return {
-    ok: false as const,
-    status: response.status,
-    message: responseText || "Unknown provider error",
-  };
-}
-
 async function resolveClientWhatsAppTarget(
   supabaseAdmin: SupabaseAdmin,
   client: ClientDeliveryContext,
@@ -2383,22 +2376,7 @@ async function maybeSendCompletionEmail(
     return { attempted: true as const, sent: false as const, reason: "missing_recipient" };
   }
 
-  const resendApiKey = Deno.env.get("RESEND_API_KEY");
   const sender = await resolveActorEmailSender(supabaseAdmin, actorId);
-
-  if (!resendApiKey) {
-    await createInstanceEvent(
-      supabaseAdmin,
-      instance.id,
-      actorId,
-      "completion_email_failed",
-      null,
-      null,
-      "Obrigação concluída, mas a chave de envio de e-mail não está configurada.",
-      { inbox_item_id: inboxItem.id },
-    );
-    return { attempted: true as const, sent: false as const, reason: "missing_api_key" };
-  }
 
   const renderPayload = {
     clientName: client.name,
@@ -2419,15 +2397,13 @@ async function maybeSendCompletionEmail(
   );
   const htmlBody = buildCompletionEmailBodyHtml(textBody);
 
-  const sendResult = await sendEmailViaResend({
-    apiKey: resendApiKey,
+  const sendResult = await sendEmailViaSmtp({
     from: sender.from,
     replyTo: sender.replyTo,
     to: recipientEmail,
     subject,
     html: htmlBody,
     text: textBody,
-    idempotencyKey: `obligation-completion:${instance.id}:${inboxItem.id}:${recipientEmail}`,
   });
 
   if (!sendResult.ok) {
@@ -2466,7 +2442,7 @@ async function maybeSendCompletionEmail(
       sender_email: sender.actorEmail,
       sender_from: sender.from,
       used_actor_as_from: sender.usedActorAsFrom,
-      resend_email_id: sendResult.id,
+      smtp_message_id: sendResult.id,
       subject,
     },
   );
@@ -2584,7 +2560,20 @@ async function determineInstanceDocumentStatus(
     return instance.status;
   }
 
-  const requiredDocuments = asExpectedDocuments(template.expected_documents)
+  const { data: profileData, error: profileError } = await supabaseAdmin
+    .from("client_obligation_profiles")
+    .select("expected_documents_override")
+    .eq("id", instance.profile_id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  const profileOverrideDocuments = asExpectedDocuments((profileData as JsonRecord | null)?.expected_documents_override);
+  const expectedDocuments = profileOverrideDocuments.length > 0
+    ? profileOverrideDocuments
+    : asExpectedDocuments(template.expected_documents);
+
+  const requiredDocuments = expectedDocuments
     .filter((document) => document.active && document.required)
     .map((document) => document.document_type_key);
 
@@ -3552,14 +3541,53 @@ async function buildOverview(
     attemptsByInstance.set(instanceId, list);
   }
 
-  const instances = ((instancesData || []) as InstanceRow[]).map((instance) => ({
-    ...instance,
-    template: templatesMap.get(instance.template_id) || null,
-    client: clientsMap.get(instance.client_id) || null,
-    profile: profilesMap.get(instance.profile_id) || null,
-    delivery_attempts: attemptsByInstance.get(instance.id) || [],
-    latest_delivery_attempt: attemptsByInstance.get(instance.id)?.[0] || null,
-  }));
+  const now = new Date().toISOString();
+  const staleSentInstances: InstanceRow[] = [];
+  const instances = ((instancesData || []) as InstanceRow[]).map((instance) => {
+    const deliveryAttemptsForInstance = attemptsByInstance.get(instance.id) || [];
+    const latestDeliveryAttempt = deliveryAttemptsForInstance[0] || null;
+    const latestAttemptStatus = asTrimmedString(latestDeliveryAttempt?.status);
+    const latestSentAt = asTrimmedString(latestDeliveryAttempt?.sent_at);
+    const shouldReconcileSent =
+      latestAttemptStatus === "sent" &&
+      !["concluida", "cancelada"].includes(instance.status);
+    const effectiveInstance = shouldReconcileSent
+      ? {
+        ...instance,
+        status: "concluida",
+        completed_at: instance.completed_at || latestSentAt || now,
+        last_status_at: latestSentAt || now,
+      }
+      : instance;
+    if (shouldReconcileSent) {
+      staleSentInstances.push(effectiveInstance as InstanceRow);
+    }
+
+    return {
+      ...effectiveInstance,
+      template: templatesMap.get(instance.template_id) || null,
+      client: clientsMap.get(instance.client_id) || null,
+      profile: profilesMap.get(instance.profile_id) || null,
+      delivery_attempts: deliveryAttemptsForInstance,
+      latest_delivery_attempt: latestDeliveryAttempt,
+    };
+  });
+
+  if (staleSentInstances.length > 0) {
+    await Promise.all(
+      staleSentInstances.map((instance) =>
+        supabaseAdmin
+          .from("obligation_instances")
+          .update({
+            status: "concluida",
+            completed_at: instance.completed_at || now,
+            last_status_at: instance.last_status_at || now,
+          })
+          .eq("organization_id", organizationId)
+          .eq("id", instance.id),
+      ),
+    );
+  }
 
   if (!skipOperationalSync) {
     try {
@@ -3711,37 +3739,6 @@ async function handleUpsertTemplate(
     if (existingTemplateError) return jsonResponse({ error: existingTemplateError.message }, 400);
     if (!existingTemplateData) return jsonResponse({ error: "Obrigacao nao encontrada." }, 404);
 
-    const existingTemplate = existingTemplateData as TemplateRow;
-    const baselineSource = asTrimmedString(existingTemplate.baseline_source);
-    if (baselineSource && baselineSource !== "manual") {
-      const systemMessageUpdate = {
-        completion_email_enabled: emailEnabled,
-        completion_email_subject: emailSubject,
-        completion_email_body: emailBody,
-        completion_whatsapp_enabled: asBoolean(payload.completion_whatsapp_enabled, false),
-        completion_whatsapp_body: asTrimmedString(payload.completion_whatsapp_body),
-      };
-
-      const { data: updatedSystemTemplate, error: updateSystemError } = await supabaseAdmin
-        .from("obligation_templates")
-        .update(systemMessageUpdate)
-        .eq("organization_id", organizationId)
-        .eq("id", id)
-        .select("*")
-        .single();
-
-      if (updateSystemError) return jsonResponse({ error: updateSystemError.message }, 400);
-
-      await auditObligationEvent(supabaseAdmin, {
-        organizationId,
-        templateId: id,
-        action: "system_default_template_messages_updated",
-        actorId,
-        metadata: { baseline_source: baselineSource },
-      });
-
-      return jsonResponse({ ok: true, template: updatedSystemTemplate });
-    }
   }
 
   const { data: duplicateTemplatesData, error: duplicateTemplatesError } = await supabaseAdmin
@@ -3844,7 +3841,7 @@ async function handleUpsertTemplate(
   await auditObligationEvent(supabaseAdmin, {
     organizationId,
     templateId: template.id,
-    action: id ? "manual_obligation_template_updated" : "manual_obligation_template_created",
+    action: id ? "obligation_template_updated" : "manual_obligation_template_created",
     actorId,
     metadata: {
       linked_client_ids: linkedClientIds,
