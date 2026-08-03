@@ -508,9 +508,9 @@ export function AppLayout({
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            className="h-12 min-w-0 flex-1 justify-start gap-2 rounded-xl px-2 text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+            className="h-14 min-w-0 flex-1 justify-start gap-2 rounded-2xl border border-sidebar-border/35 bg-sidebar-accent/15 px-2 text-sidebar-foreground shadow-sm transition-all hover:-translate-y-px hover:bg-sidebar-accent/30 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:px-0"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-primary">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-primary ring-1 ring-sidebar-border/40">
               {userProfile.avatarUrl ? (
                 <img src={userProfile.avatarUrl} alt={userDisplayName} className="h-full w-full object-cover" />
               ) : (
@@ -550,10 +550,10 @@ export function AppLayout({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative h-10 w-10 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent">
+          <Button variant="ghost" size="icon" className="relative h-10 w-10 shrink-0 rounded-xl border border-sidebar-border/35 bg-sidebar-accent/15 text-sidebar-foreground shadow-sm transition-all hover:-translate-y-px hover:bg-sidebar-accent/30">
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
+              <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-sidebar" />
             )}
           </Button>
         </DropdownMenuTrigger>

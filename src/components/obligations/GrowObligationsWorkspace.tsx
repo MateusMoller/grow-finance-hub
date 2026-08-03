@@ -1,4 +1,12 @@
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -9,6 +17,7 @@ import {
   Loader2,
   Mail,
   MessageCircle,
+  MousePointer2,
   Plus,
   RefreshCcw,
   Settings2,
@@ -16,6 +25,8 @@ import {
   Trash2,
   UploadCloud,
   Users,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +55,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzePdfDocument, type AnalyzedDocument } from "@/lib/documentRecognition";
@@ -188,6 +200,39 @@ interface UploadQueueResult {
   match: ReferenceMatchPreview["match"];
 }
 
+type ExtractionZoneField = "cnpj" | "competence";
+
+interface ExtractionZoneCircle {
+  field: ExtractionZoneField;
+  label: string;
+  page: number;
+  shape: "rounded_rect";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface ReferenceExtractionZones {
+  version: number;
+  zones: ExtractionZoneCircle[];
+}
+
+type ReferencePreviewTarget =
+  | {
+      kind: "pending";
+      documentTypeKey: string;
+      fileName: string;
+      file: File;
+      zones: ReferenceExtractionZones;
+    }
+  | {
+      kind: "saved";
+      documentTypeKey: string;
+      reference: GrowExpectedDocumentReferenceFile;
+      zones: ReferenceExtractionZones;
+    };
+
 const sectors = ["Contabil", "Fiscal", "Departamento Pessoal", "Comercial", "Societario", "Geral"];
 const periodicities: GrowObligationTemplate["periodicity"][] = ["monthly", "quarterly", "yearly", "custom"];
 const priorities: GrowObligationInstance["priority"][] = ["baixa", "media", "alta", "urgente"];
@@ -235,6 +280,109 @@ const statusOptions: GrowObligationInstance["status"][] = [
   "cancelada",
 ];
 
+const extractionZoneFieldLabels: Record<ExtractionZoneField, string> = {
+  cnpj: "CNPJ",
+  competence: "Competência",
+};
+
+const defaultExtractionZones: ReferenceExtractionZones = {
+  version: 1,
+  zones: [
+    { field: "cnpj", label: "CNPJ", page: 1, shape: "rounded_rect", x: 0.3, y: 0.22, width: 0.24, height: 0.08 },
+    { field: "competence", label: "Competência", page: 1, shape: "rounded_rect", x: 0.68, y: 0.22, width: 0.22, height: 0.08 },
+  ],
+};
+
+function cloneExtractionZones(zones: ReferenceExtractionZones): ReferenceExtractionZones {
+  return {
+    version: zones.version || 1,
+    zones: zones.zones.map((zone) => ({ ...zone })),
+  };
+}
+
+function clampNormalized(value: number, min = 0, max = 1) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeExtractionZones(value: unknown): ReferenceExtractionZones {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const rawZones = Array.isArray(record.zones) ? record.zones : [];
+  const zonesByField = new Map<ExtractionZoneField, ExtractionZoneCircle>();
+
+  for (const item of rawZones) {
+    if (!item || typeof item !== "object") continue;
+    const zone = item as Record<string, unknown>;
+    const field = zone.field === "cnpj" || zone.field === "competence" ? zone.field : null;
+    if (!field) continue;
+    const legacyRadius = Number(zone.r);
+    const width = Number(zone.width);
+    const height = Number(zone.height);
+    zonesByField.set(field, {
+      field,
+      label: typeof zone.label === "string" && zone.label.trim() ? zone.label.trim() : extractionZoneFieldLabels[field],
+      page: Math.max(1, Math.round(Number(zone.page) || 1)),
+      shape: "rounded_rect",
+      x: clampNormalized(Number(zone.x), 0.02, 0.98),
+      y: clampNormalized(Number(zone.y), 0.02, 0.98),
+      width: clampNormalized(Number.isFinite(width) ? width : legacyRadius * 2 || 0.24, 0.06, 0.7),
+      height: clampNormalized(Number.isFinite(height) ? height : legacyRadius * 2 || 0.08, 0.02, 0.35),
+    });
+  }
+
+  return {
+    version: 1,
+    zones: defaultExtractionZones.zones.map((fallback) => zonesByField.get(fallback.field) || { ...fallback }),
+  };
+}
+
+function getReferenceExtractionZones(reference: GrowExpectedDocumentReferenceFile): ReferenceExtractionZones {
+  const payload = reference.fingerprint_payload || {};
+  return normalizeExtractionZones((payload as Record<string, unknown>).extraction_zones);
+}
+
+function mergeExtractionZonesIntoFingerprint(
+  fingerprintPayload: Record<string, unknown>,
+  zones?: ReferenceExtractionZones | null,
+) {
+  if (!zones) return fingerprintPayload;
+  return {
+    ...fingerprintPayload,
+    extraction_zones: cloneExtractionZones(zones),
+  };
+}
+
+async function renderPdfFirstPageToCanvas(fileData: ArrayBuffer, canvas: HTMLCanvasElement) {
+  const [pdfJs, workerUrlModule] = await Promise.all([
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
+  ]);
+  const pdfModule = pdfJs as typeof pdfJs & {
+    GlobalWorkerOptions?: { workerSrc: string };
+  };
+  const workerUrl = String((workerUrlModule as { default?: string }).default || "");
+  if (pdfModule.GlobalWorkerOptions && workerUrl) {
+    pdfModule.GlobalWorkerOptions.workerSrc = workerUrl;
+  }
+
+  const documentTask = pdfModule.getDocument({ data: new Uint8Array(fileData) });
+  const pdf = await documentTask.promise;
+  try {
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1.35 });
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas indisponível para pré-visualização.");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    canvas.style.width = "100%";
+    canvas.style.height = "auto";
+    await page.render({ canvasContext: context, viewport }).promise;
+    return { width: canvas.width, height: canvas.height };
+  } finally {
+    await pdf.destroy();
+  }
+}
+
 function slugifyDocumentKey(value: string) {
   return value
     .normalize("NFD")
@@ -246,6 +394,95 @@ function slugifyDocumentKey(value: string) {
 
 function normalizeTemplateCode(value: string) {
   return slugifyDocumentKey(value).replace(/_+/g, "-");
+}
+
+type LocalDocumentFamily = "salary_receipt" | "fgts" | "inss" | "pis_cofins" | "irpj_csll" | "icms";
+
+const localDocumentFamilyAliases: Array<{ family: LocalDocumentFamily; aliases: string[] }> = [
+  {
+    family: "salary_receipt",
+    aliases: [
+      "recibo_salario",
+      "recibo_de_salario",
+      "recsal",
+      "rec_sal",
+      "recibo",
+      "holerite",
+      "contracheque",
+      "demonstrativo_pagamento",
+      "demonstrativo_de_pagamento",
+      "recibo_pagamento_salario",
+      "salario",
+      "folha_pagamento",
+      "folha_de_pagamento",
+    ],
+  },
+  { family: "fgts", aliases: ["fgts", "guia_fgts", "fgts_digital", "grf", "guia_recolhimento_fgts"] },
+  { family: "inss", aliases: ["inss", "gps", "guia_inss", "previdencia_social", "contribuicao_previdenciaria"] },
+  { family: "pis_cofins", aliases: ["pis", "cofins", "pis_cofins", "darf_pis", "darf_cofins"] },
+  { family: "irpj_csll", aliases: ["irpj", "csll", "irpj_csll", "darf_irpj", "darf_csll"] },
+  { family: "icms", aliases: ["icms", "efd_icms", "gia", "guia_icms"] },
+];
+
+function detectLocalDocumentFamilies(...sources: unknown[]) {
+  const haystack = sources
+    .flatMap((source) => Array.isArray(source) ? source : [source])
+    .map((source) => slugifyDocumentKey(String(source || "")))
+    .filter(Boolean)
+    .join("_");
+  const families = new Set<LocalDocumentFamily>();
+  if (!haystack) return families;
+
+  for (const entry of localDocumentFamilyAliases) {
+    if (entry.aliases.some((alias) => haystack.includes(slugifyDocumentKey(alias)))) {
+      families.add(entry.family);
+    }
+  }
+  return families;
+}
+
+function hasFamilyOverlap(left: Set<LocalDocumentFamily>, right: Set<LocalDocumentFamily>) {
+  for (const family of left) {
+    if (right.has(family)) return true;
+  }
+  return false;
+}
+
+function scoreLocalDocumentCandidate(
+  template: GrowObligationTemplate,
+  document: GrowExpectedDocument,
+  searchableText: string,
+  detectedFamilies: Set<LocalDocumentFamily>,
+) {
+  const documentTokens = [document.label, document.document_type_key, ...document.aliases]
+    .map((value) => slugifyDocumentKey(String(value || "")))
+    .filter((value) => value.length >= 2);
+  const templateTokens = [template.code, template.name]
+    .map((value) => slugifyDocumentKey(String(value || "")))
+    .filter((value) => value.length >= 2);
+  const candidateFamilies = detectLocalDocumentFamilies(
+    template.code,
+    template.name,
+    document.label,
+    document.document_type_key,
+    document.aliases,
+  );
+  const familyMatched = hasFamilyOverlap(detectedFamilies, candidateFamilies);
+  const familyMismatched = detectedFamilies.size > 0 && candidateFamilies.size > 0 && !familyMatched;
+  const familyRequiredButUnknown = detectedFamilies.size > 0 && candidateFamilies.size === 0;
+  const documentTokenMatched = documentTokens.some((token) => searchableText.includes(token));
+  const templateTokenMatched = templateTokens.some((token) => searchableText.includes(token));
+
+  let score = 0;
+  if (familyMatched) score += 100;
+  if (documentTokenMatched) score += 30;
+  if (templateTokenMatched) score += 8;
+  if (document.has_active_reference) score += 4;
+  if (document.active) score += 2;
+  if (familyMismatched) score -= 1_000;
+  if (familyRequiredButUnknown) score -= 500;
+
+  return { score, familyMatched, documentTokenMatched };
 }
 
 function makeFixedDateDraft(month = "", day = "", label = "") {
@@ -350,6 +587,371 @@ function dueDateForCompetence(competenceDate: Date, day: number) {
   const month = competenceDate.getUTCMonth();
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   return new Date(Date.UTC(year, month, Math.max(1, Math.min(day || 10, lastDay))));
+}
+
+function ReferenceDocumentPreviewDialog({
+  target,
+  open,
+  saving,
+  onOpenChange,
+  onSave,
+}: {
+  target: ReferencePreviewTarget | null;
+  open: boolean;
+  saving: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (zones: ReferenceExtractionZones) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{ field: ExtractionZoneField; mode: "move" | "resize" } | null>(null);
+  const [zones, setZones] = useState<ReferenceExtractionZones>(() => cloneExtractionZones(defaultExtractionZones));
+  const [activeField, setActiveField] = useState<ExtractionZoneField>("cnpj");
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [isRendering, setIsRendering] = useState(false);
+  const [, setPageSize] = useState({ width: 1, height: 1 });
+  const [previewZoom, setPreviewZoom] = useState(100);
+
+  useEffect(() => {
+    if (!target || !open) return;
+    setZones(cloneExtractionZones(target.zones));
+    setActiveField("cnpj");
+    setPreviewZoom(100);
+  }, [open, target]);
+
+  useEffect(() => {
+    if (!target || !open) return;
+    let cancelled = false;
+
+    async function loadPreview() {
+      setIsRendering(true);
+      setRenderError(null);
+      try {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const canvas = canvasRef.current;
+        if (!canvas) throw new Error("Área de pré-visualização ainda não está pronta. Tente abrir novamente.");
+        let data: ArrayBuffer;
+        if (target.kind === "pending") {
+          data = await target.file.arrayBuffer();
+        } else {
+          const { data: blob, error } = await supabase.storage
+            .from(target.reference.storage_bucket || "obligation-files")
+            .download(target.reference.storage_path);
+          if (error || !blob) throw error || new Error("Não foi possível abrir o PDF modelo.");
+          data = await blob.arrayBuffer();
+        }
+        const renderedSize = await renderPdfFirstPageToCanvas(data, canvas);
+        if (!cancelled) setPageSize(renderedSize);
+      } catch (error) {
+        if (!cancelled) {
+          setRenderError(error instanceof Error ? error.message : "Falha ao carregar a pré-visualização.");
+        }
+      } finally {
+        if (!cancelled) setIsRendering(false);
+      }
+    }
+
+    void loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, target]);
+
+  const activeZone = zones.zones.find((zone) => zone.field === activeField) || zones.zones[0];
+
+  const updateZone = (field: ExtractionZoneField, updater: (zone: ExtractionZoneCircle) => ExtractionZoneCircle) => {
+    setZones((current) => ({
+      ...current,
+      zones: current.zones.map((zone) => (zone.field === field ? updater(zone) : zone)),
+    }));
+  };
+
+  const pointerPositionToNormalized = (event: PointerEvent | ReactPointerEvent) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      x: clampNormalized((event.clientX - rect.left) / rect.width, 0.02, 0.98),
+      y: clampNormalized((event.clientY - rect.top) / rect.height, 0.02, 0.98),
+      rect,
+    };
+  };
+
+  const handlePointerMove = (event: PointerEvent) => {
+    const dragState = dragStateRef.current;
+    if (!dragState) return;
+    const position = pointerPositionToNormalized(event);
+    if (!position) return;
+    updateZone(dragState.field, (zone) => {
+      if (dragState.mode === "move") {
+        return {
+          ...zone,
+          x: clampNormalized(position.x, zone.width / 2, 1 - zone.width / 2),
+          y: clampNormalized(position.y, zone.height / 2, 1 - zone.height / 2),
+        };
+      }
+      const nextWidth = Math.abs(position.x - zone.x) * 2;
+      const nextHeight = Math.abs(position.y - zone.y) * 2;
+      return {
+        ...zone,
+        width: clampNormalized(nextWidth, 0.06, 0.7),
+        height: clampNormalized(nextHeight, 0.02, 0.35),
+      };
+    });
+  };
+
+  const stopDrag = () => {
+    dragStateRef.current = null;
+    window.removeEventListener("pointermove", handlePointerMove);
+    window.removeEventListener("pointerup", stopDrag);
+  };
+
+  const startDrag = (event: ReactPointerEvent, field: ExtractionZoneField, mode: "move" | "resize") => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveField(field);
+    dragStateRef.current = { field, mode };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopDrag);
+  };
+
+  const handlePreviewWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -25 : 25;
+    setPreviewZoom((value) => Math.max(75, Math.min(200, value + direction)));
+  };
+
+  useEffect(
+    () => () => {
+      dragStateRef.current = null;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopDrag);
+    },
+    // The cleanup only protects an active pointer drag during unmount; live handlers are registered per drag gesture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex h-[94vh] max-w-6xl flex-col overflow-hidden p-0"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onWheel={(event) => event.stopPropagation()}
+      >
+        <DialogHeader className="shrink-0 border-b border-border/70 bg-background px-6 py-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <DialogTitle>Marcação de leitura do documento</DialogTitle>
+              <DialogDescription className="mt-1 max-w-2xl">
+                Defina exatamente onde o robô deve ler CNPJ e competência neste modelo. As áreas ficam salvas para os próximos anexos.
+              </DialogDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-sky-500" />
+              CNPJ
+              <span className="ml-2 h-2 w-2 rounded-full bg-amber-500" />
+              Competência
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="grid min-h-0 flex-1 gap-0 overflow-hidden md:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="h-full min-h-0 overflow-auto overscroll-contain bg-slate-100/70 p-5" onWheel={handlePreviewWheel}>
+            <div
+              ref={stageRef}
+              className="relative mx-auto rounded-xl border border-border bg-white shadow-sm"
+              style={{
+                width: `${previewZoom}%`,
+                minWidth: previewZoom > 100 ? "760px" : undefined,
+                maxWidth: previewZoom <= 100 ? "760px" : "none",
+              }}
+            >
+              <canvas ref={canvasRef} className="block rounded-xl" />
+              {isRendering ? (
+                <div className="absolute inset-0 grid place-items-center rounded-xl bg-background/70 text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                  Carregando prévia...
+                </div>
+              ) : null}
+              {renderError ? (
+                <div className="absolute inset-0 grid place-items-center rounded-xl bg-background/90 p-6 text-center text-sm text-destructive">
+                  {renderError}
+                </div>
+              ) : null}
+              {!renderError
+                ? zones.zones.map((zone) => {
+                    const selected = zone.field === activeField;
+                    return (
+                      <div
+                        key={zone.field}
+                        className={`absolute cursor-move rounded-lg border-2 transition-shadow ${
+                          zone.field === "cnpj"
+                            ? "border-sky-500 bg-sky-500/10 shadow-[0_0_0_9999px_rgba(14,165,233,0.015)]"
+                            : "border-amber-500 bg-amber-500/10 shadow-[0_0_0_9999px_rgba(245,158,11,0.015)]"
+                        } ${selected ? "ring-4 ring-primary/20" : "hover:ring-2 hover:ring-primary/10"}`}
+                        style={{
+                          left: `${(zone.x - zone.width / 2) * 100}%`,
+                          top: `${(zone.y - zone.height / 2) * 100}%`,
+                          width: `${zone.width * 100}%`,
+                          height: `${zone.height * 100}%`,
+                        }}
+                        onPointerDown={(event) => startDrag(event, zone.field, "move")}
+                      >
+                        <span
+                          className={`absolute -top-7 left-0 rounded-full px-2 py-0.5 text-xs font-medium text-white shadow-sm ${
+                            zone.field === "cnpj" ? "bg-sky-600" : "bg-amber-600"
+                          }`}
+                        >
+                          {zone.label}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Redimensionar ${zone.label}`}
+                          className="absolute bottom-0 right-0 h-4 w-4 translate-x-1/2 translate-y-1/2 cursor-nwse-resize rounded-md border border-background bg-primary shadow"
+                          onPointerDown={(event) => startDrag(event, zone.field, "resize")}
+                        />
+                      </div>
+                    );
+                  })
+                : null}
+            </div>
+          </div>
+          <aside className="h-full min-h-0 space-y-3 overflow-y-auto overscroll-contain border-t border-border/70 bg-background p-3 md:border-l md:border-t-0">
+            <div className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2">
+              <p className="truncate text-sm font-medium" title={target?.kind === "saved" ? target.reference.file_name : target?.fileName}>
+                {target?.kind === "saved" ? target.reference.file_name : target?.fileName}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <p className="px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Leitura</p>
+              {zones.zones.map((zone) => (
+                <Button
+                  key={zone.field}
+                  type="button"
+                  variant={activeField === zone.field ? "default" : "outline"}
+                  className="h-11 w-full justify-start rounded-xl px-3"
+                  onClick={() => setActiveField(zone.field)}
+                >
+                  <span className={`mr-2 h-2.5 w-2.5 rounded-full ${zone.field === "cnpj" ? "bg-sky-500" : "bg-amber-500"}`} />
+                  <span className="flex flex-col items-start">
+                    <span className="text-sm">{zone.label}</span>
+                    <span className="text-xs font-normal opacity-75">
+                      {Math.round(zone.width * 100)}% x {Math.round(zone.height * 100)}%
+                    </span>
+                  </span>
+                </Button>
+              ))}
+            </div>
+            <div className="rounded-xl border border-border/70 bg-background p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <ZoomIn className="h-4 w-4 text-primary" />
+                Zoom
+              </div>
+              <div className="mb-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg"
+                    onClick={() => setPreviewZoom((value) => Math.max(75, value - 25))}
+                    disabled={previewZoom <= 75}
+                    aria-label="Reduzir zoom"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <Slider
+                    value={[previewZoom]}
+                    min={75}
+                    max={200}
+                    step={25}
+                    onValueChange={([value]) => setPreviewZoom(value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg"
+                    onClick={() => setPreviewZoom((value) => Math.min(200, value + 25))}
+                    disabled={previewZoom >= 200}
+                    aria-label="Aumentar zoom"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <MousePointer2 className="h-4 w-4 text-primary" />
+                Ajuste
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Largura</span>
+                    <span>{Math.round((activeZone?.width || 0) * 100)}%</span>
+                  </div>
+                  <Slider
+                    value={[Math.round((activeZone?.width || 0.24) * 100)]}
+                    min={6}
+                    max={70}
+                    step={1}
+                    onValueChange={([value]) =>
+                      updateZone(activeField, (zone) => ({
+                        ...zone,
+                        width: clampNormalized(value / 100, 0.06, 0.7),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Altura</span>
+                    <span>{Math.round((activeZone?.height || 0) * 100)}%</span>
+                  </div>
+                  <Slider
+                    value={[Math.round((activeZone?.height || 0.08) * 100)]}
+                    min={2}
+                    max={35}
+                    step={1}
+                    onValueChange={([value]) =>
+                      updateZone(activeField, (zone) => ({
+                        ...zone,
+                        height: clampNormalized(value / 100, 0.02, 0.35),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full rounded-xl"
+              onClick={() => {
+                setZones(cloneExtractionZones(defaultExtractionZones));
+                setActiveField("cnpj");
+                setPreviewZoom(100);
+              }}
+            >
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              Restaurar padrão
+            </Button>
+          </aside>
+        </div>
+        <DialogFooter className="shrink-0 border-t border-border/70 px-6 py-4">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={() => onSave(zones)} disabled={saving || Boolean(renderError)}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Salvar marcações
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function normalizeClientStatus(value: string | null | undefined) {
@@ -731,12 +1333,14 @@ async function registerReferenceDocumentDirectly({
   file,
   storagePath,
   analysis,
+  extractionZones,
 }: {
   templateId: string;
   documentTypeKey: string;
   file: File;
   storagePath: string;
   analysis: AnalyzedDocument;
+  extractionZones?: ReferenceExtractionZones | null;
 }) {
   const organizationId = await getStoredCurrentOrganizationId();
   if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
@@ -765,8 +1369,8 @@ async function registerReferenceDocumentDirectly({
       extracted_text_preview: analysis.extracted_text_preview,
       text_extraction_status: analysis.text_extraction_status,
       ocr_status: analysis.ocr_status,
-      fingerprint_version: 1,
-      fingerprint_payload: analysis.fingerprint_payload,
+      fingerprint_version: analysis.fingerprint_payload.version || 2,
+      fingerprint_payload: mergeExtractionZonesIntoFingerprint(analysis.fingerprint_payload, extractionZones),
       keywords: analysis.keywords,
       primary_cues: analysis.primary_cues,
       created_by: user.id,
@@ -782,10 +1386,12 @@ async function uploadTemplateReferenceFile({
   templateId,
   documentTypeKey,
   file,
+  extractionZones,
 }: {
   templateId: string;
   documentTypeKey: string;
   file: File;
+  extractionZones?: ReferenceExtractionZones | null;
 }) {
   if (!templateId) throw new Error("Salve o template antes de anexar documentos modelo.");
   if (!documentTypeKey) throw new Error("Defina o documento esperado antes de anexar o modelo.");
@@ -811,7 +1417,10 @@ async function uploadTemplateReferenceFile({
       storage_path: path,
       content_type: file.type || "application/pdf",
       file_size: file.size,
-      analysis,
+      analysis: {
+        ...analysis,
+        fingerprint_payload: mergeExtractionZonesIntoFingerprint(analysis.fingerprint_payload, extractionZones),
+      },
     });
   } catch (error) {
     console.warn("grow-obligations-module upload_reference_document failed, using RLS fallback", error);
@@ -822,11 +1431,48 @@ async function uploadTemplateReferenceFile({
         file,
         storagePath: path,
         analysis,
+        extractionZones,
       });
     } catch (fallbackError) {
       await supabase.storage.from("obligation-files").remove([path]);
       throw fallbackError;
     }
+  }
+}
+
+async function updateReferenceExtractionZonesDirectly(referenceFileId: string, zones: ReferenceExtractionZones) {
+  const currentFingerprint = await supabase
+    .from("expected_document_reference_files")
+    .select("fingerprint_payload")
+    .eq("id", referenceFileId)
+    .single();
+  if (currentFingerprint.error) throw currentFingerprint.error;
+  const fingerprintPayload =
+    currentFingerprint.data?.fingerprint_payload && typeof currentFingerprint.data.fingerprint_payload === "object"
+      ? (currentFingerprint.data.fingerprint_payload as Record<string, unknown>)
+      : {};
+  const { data, error } = await supabase
+    .from("expected_document_reference_files")
+    .update({
+      fingerprint_payload: mergeExtractionZonesIntoFingerprint(fingerprintPayload, zones),
+    })
+    .eq("id", referenceFileId)
+    .select("*")
+    .single();
+  if (error || !data) throw error || new Error("Falha ao salvar marcações do documento modelo.");
+  return { ok: true as const, reference_file: data as GrowExpectedDocumentReferenceFile };
+}
+
+async function updateReferenceExtractionZones(referenceFileId: string, zones: ReferenceExtractionZones) {
+  try {
+    return await invokeGrowObligations<{ ok: true; reference_file: GrowExpectedDocumentReferenceFile }>({
+      action: "update_reference_extraction_zones",
+      reference_file_id: referenceFileId,
+      extraction_zones: zones,
+    });
+  } catch (error) {
+    console.warn("grow-obligations-module update_reference_extraction_zones failed, using RLS fallback", error);
+    return updateReferenceExtractionZonesDirectly(referenceFileId, zones);
   }
 }
 
@@ -938,8 +1584,8 @@ async function registerDocumentUploadDirectly({
     strategy: item.instance_id ? "manual_instance" : "manual_review",
     score: item.instance_id ? 1 : 0.35,
     reasons: item.instance_id
-      ? ["Instancia definida manualmente pelo usuario."]
-      : ["Aguardando validacao humana para vincular o arquivo."],
+      ? ["Competência definida manualmente pelo usuário."]
+      : ["Aguardando validação humana para vincular o arquivo."],
     reviewRequired: !item.instance_id,
     candidateInstanceIds: item.instance_id ? [item.instance_id] : [],
     detectedClientId: item.client_id || null,
@@ -1128,13 +1774,13 @@ function validateUploadQueueItem(item: UploadQueueItem) {
 function matchStrategyLabel(strategy: MatchStrategy | null | undefined) {
   switch (strategy) {
     case "manual_instance":
-      return "Instancia manual";
+      return "Competência manual";
     case "direct_expected_doc":
       return "Documento modelo";
     case "alias_match":
       return "Alias";
     case "single_open_instance":
-      return "Instancia aberta";
+      return "Competência aberta";
     case "manual_review":
     default:
       return "Revisao manual";
@@ -1255,28 +1901,43 @@ function buildLocalDocumentPreview(
     ? clients.find((client) => client.cnpj?.replace(/\D/g, "") === item.analysis.detected_cnpj)
     : null;
   const effectiveClientId = item.client_id || detectedClient?.id || null;
-  const searchableText = `${item.file.name} ${item.analysis.extracted_text_preview || ""} ${item.analysis.extracted_text || ""}`.toLowerCase();
-  const inferredTemplate =
-    templates.find((template) => {
-      const tokens = [
-        template.code,
-        template.name,
-        ...template.expected_documents.flatMap((document) => [document.label, ...document.aliases]),
-      ]
-        .map((value) => String(value || "").trim().toLowerCase())
-        .filter((value) => value.length >= 2);
-      return tokens.some((token) => searchableText.includes(token));
-    }) || null;
-  const effectiveTemplate = templates.find((template) => template.id === item.template_id) || inferredTemplate;
+  const searchableText = slugifyDocumentKey(
+    `${item.file.name} ${item.analysis.extracted_text_preview || ""} ${item.analysis.extracted_text || ""} ${item.analysis.keywords.join(" ")}`,
+  );
+  const fileNameFamilies = detectLocalDocumentFamilies(item.file.name);
+  const detectedFamiliesFromContent = detectLocalDocumentFamilies(
+    item.file.name,
+    item.analysis.extracted_text_preview,
+    item.analysis.extracted_text,
+    item.analysis.keywords,
+    item.analysis.primary_cues,
+  );
+  const detectedFamilies = fileNameFamilies.size > 0 ? fileNameFamilies : detectedFamiliesFromContent;
+  const rankedDocuments = templates
+    .flatMap((template) => template.expected_documents
+      .filter((document) => document.active)
+      .map((document) => ({
+        template,
+        document,
+        ...scoreLocalDocumentCandidate(template, document, searchableText, detectedFamilies),
+      })))
+    .filter((candidate) => detectedFamilies.size === 0 || candidate.familyMatched)
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+  const inferredDocumentCandidate = rankedDocuments[0] || null;
+  const effectiveTemplate =
+    templates.find((template) => template.id === item.template_id) ||
+    inferredDocumentCandidate?.template ||
+    null;
   const documentDefinition =
     effectiveTemplate?.expected_documents.find((document) => document.document_type_key === item.document_type_key) ||
+    (inferredDocumentCandidate?.template.id === effectiveTemplate?.id ? inferredDocumentCandidate.document : null) ||
     effectiveTemplate?.expected_documents.find((document) => {
-      const tokens = [document.label, ...document.aliases]
-        .map((value) => String(value || "").trim().toLowerCase())
+      const tokens = [document.label, document.document_type_key, ...document.aliases]
+        .map((value) => slugifyDocumentKey(String(value || "")))
         .filter((value) => value.length >= 2);
       return tokens.some((token) => searchableText.includes(token));
     }) ||
-    effectiveTemplate?.expected_documents.find((document) => document.active) ||
     null;
   const effectiveCompetence = item.suggested_competence_label || item.analysis.competence_detected || null;
   const manuallySelectedInstance = item.instance_id
@@ -1343,6 +2004,8 @@ export function GrowObligationsWorkspace({
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [referenceUploadKey, setReferenceUploadKey] = useState<string | null>(null);
   const [pendingReferenceFiles, setPendingReferenceFiles] = useState<Record<string, File[]>>({});
+  const [pendingReferenceZones, setPendingReferenceZones] = useState<Record<string, ReferenceExtractionZones>>({});
+  const [referencePreviewTarget, setReferencePreviewTarget] = useState<ReferencePreviewTarget | null>(null);
   const [isDraggingUpload, setIsDraggingUpload] = useState(false);
   const [templateClientSearch, setTemplateClientSearch] = useState("");
   const [deliveryRecipientByInstance, setDeliveryRecipientByInstance] = useState<Record<string, string>>({});
@@ -1449,11 +2112,17 @@ export function GrowObligationsWorkspace({
         const uploadedReferences: Array<{ documentTypeKey: string; reference: GrowExpectedDocumentReferenceFile }> = [];
         for (const [documentTypeKey, files] of pendingEntries) {
           for (const file of files) {
-            const result = await uploadTemplateReferenceFile({ templateId: savedTemplateId, documentTypeKey, file });
+            const result = await uploadTemplateReferenceFile({
+              templateId: savedTemplateId,
+              documentTypeKey,
+              file,
+              extractionZones: pendingReferenceZones[documentTypeKey] || normalizeExtractionZones(null),
+            });
             uploadedReferences.push({ documentTypeKey, reference: result.reference_file });
           }
         }
         setPendingReferenceFiles({});
+        setPendingReferenceZones({});
         setTemplateForm((prev) => ({
           ...prev,
           expected_documents: prev.expected_documents.map((document) => {
@@ -1509,12 +2178,12 @@ export function GrowObligationsWorkspace({
         event_comment: payload.event_comment,
       }),
     onSuccess: async () => {
-      toast.success("Instancia atualizada.");
+      toast.success("Competência atualizada.");
       setInstanceDialogOpen(false);
       setInstanceForm(null);
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao atualizar instancia."),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao atualizar competência."),
   });
 
   const documentResolveMutation = useMutation({
@@ -1541,6 +2210,16 @@ export function GrowObligationsWorkspace({
     mutationFn: uploadTemplateReferenceFile,
     onSuccess: async (response, variables) => {
       toast.success("Documento modelo anexado.");
+      setPendingReferenceFiles((prev) => {
+        const next = { ...prev };
+        delete next[variables.documentTypeKey];
+        return next;
+      });
+      setPendingReferenceZones((prev) => {
+        const next = { ...prev };
+        delete next[variables.documentTypeKey];
+        return next;
+      });
       setTemplateForm((prev) => ({
         ...prev,
         expected_documents: prev.expected_documents.map((document) =>
@@ -1587,6 +2266,28 @@ export function GrowObligationsWorkspace({
     onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao remover documento modelo."),
   });
 
+  const updateReferenceZonesMutation = useMutation({
+    mutationFn: ({ referenceFileId, zones }: { referenceFileId: string; zones: ReferenceExtractionZones }) =>
+      updateReferenceExtractionZones(referenceFileId, zones),
+    onSuccess: async (response) => {
+      toast.success("Marcações do documento modelo salvas.");
+      const updatedReference = response.reference_file;
+      setReferencePreviewTarget(null);
+      setTemplateForm((prev) => ({
+        ...prev,
+        expected_documents: prev.expected_documents.map((document) => ({
+          ...document,
+          reference_files: (document.reference_files || []).map((reference) =>
+            reference.id === updatedReference.id ? updatedReference : reference,
+          ),
+        })),
+      }));
+      await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
+      await queryClient.invalidateQueries({ queryKey: ["grow-obligations", "catalog-templates"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Falha ao salvar marcações."),
+  });
+
   const uploadQueueMutation = useMutation({
     mutationFn: async () => {
       if (uploadQueue.length === 0) {
@@ -1602,14 +2303,16 @@ export function GrowObligationsWorkspace({
 
         const path = buildSecureStoragePath(
           ["grow-obligations", item.client_id || item.preview?.match.detectedClientId || "sem-cliente", new Date().toISOString().slice(0, 7)],
-          item.file.name,
+          buildUniqueReferenceFileName(item.file.name),
         );
 
         const { error: uploadError } = await supabase.storage.from("obligation-files").upload(path, item.file, {
           contentType: item.file.type || undefined,
           upsert: false,
         });
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          throw new Error(`Falha ao anexar ${item.file.name}: ${uploadError.message}`);
+        }
 
         let response: UploadQueueResult;
         try {
@@ -1877,15 +2580,32 @@ export function GrowObligationsWorkspace({
       return;
     }
     try {
-      const preview = buildLocalDocumentPreview(item, overview, {
-        clients: activeTemplateClients,
-        templates: catalogTemplates,
+      const preview = await invokeGrowObligations<ReferenceMatchPreview>({
+        action: "preview_document_match",
+        client_id: item.client_id || initialClientId || null,
+        instance_id: item.instance_id || null,
+        template_id: item.template_id || null,
+        document_type_key: item.document_type_key || null,
+        suggested_competence_label: item.suggested_competence_label || item.analysis.competence_detected || null,
+        file_name: item.file.name,
+        analysis: item.analysis,
       });
       setUploadQueue((prev) =>
         prev.map((current) => (current.id === item.id ? applyPreviewAutofill(current, preview) : current)),
       );
     } catch (error) {
-      setUploadQueue((prev) => prev.map((current) => (current.id === item.id ? { ...current, preview: null, previewError: error instanceof Error ? error.message : "Falha no preview.", isPreviewing: false } : current)));
+      console.warn("grow-obligations preview_document_match failed, using local fallback", error);
+      try {
+        const preview = buildLocalDocumentPreview(item, overview, {
+          clients: activeTemplateClients,
+          templates: catalogTemplates,
+        });
+        setUploadQueue((prev) =>
+          prev.map((current) => (current.id === item.id ? applyPreviewAutofill(current, preview) : current)),
+        );
+      } catch (fallbackError) {
+        setUploadQueue((prev) => prev.map((current) => (current.id === item.id ? { ...current, preview: null, previewError: fallbackError instanceof Error ? fallbackError.message : "Falha no preview.", isPreviewing: false } : current)));
+      }
     }
   }
 
@@ -2356,8 +3076,8 @@ export function GrowObligationsWorkspace({
                 <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium">RobÃ´ local Grow</p>
-                      <p className="text-xs text-muted-foreground">Fila de ingestÃ£o contÃ­nua para pastas monitoradas no Windows.</p>
+                      <p className="text-sm font-medium">Robô local Grow</p>
+                      <p className="text-xs text-muted-foreground">Fila de ingestão contínua para pastas monitoradas no Windows.</p>
                     </div>
                     <Badge variant="secondary">{robotJobs.length} job(s)</Badge>
                   </div>
@@ -2382,8 +3102,8 @@ export function GrowObligationsWorkspace({
                   <div className="rounded-xl border bg-background/80 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-medium">Como ativar o robÃ´ na operaÃ§Ã£o</p>
-                        <p className="text-xs text-muted-foreground">Guia curto para deixar a ingestÃ£o contÃ­nua funcionando sem depender da tela aberta.</p>
+                        <p className="text-sm font-medium">Como ativar o robô na operação</p>
+                        <p className="text-xs text-muted-foreground">Guia curto para deixar a ingestão contínua funcionando sem depender da tela aberta.</p>
                       </div>
                       <Badge variant="outline">Automacao controlada</Badge>
                     </div>
@@ -2391,17 +3111,17 @@ export function GrowObligationsWorkspace({
                       <div className="rounded-xl border border-dashed p-3">
                         <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Entrada</p>
                         <p className="mt-2 text-sm font-medium">C:/Grow/Entrada-eContinuo</p>
-                        <p className="mt-1 text-xs text-muted-foreground">O colaborador so precisa salvar o PDF nessa pasta. O robÃ´ detecta sozinho.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">O colaborador so precisa salvar o PDF nessa pasta. O robô detecta sozinho.</p>
                       </div>
                       <div className="rounded-xl border border-dashed p-3">
                         <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Config local</p>
                         <p className="mt-2 text-sm font-medium">tools/grow-document-robot/runtime/config.local.json</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Esse arquivo guarda maquina, pasta monitorada, credenciais e estado local do robÃ´.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Esse arquivo guarda maquina, pasta monitorada, credenciais e estado local do robô.</p>
                       </div>
                       <div className="rounded-xl border border-dashed p-3">
                         <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Execucao</p>
                         <p className="mt-2 text-sm font-medium">npm.cmd run robot:start</p>
-                        <p className="mt-1 text-xs text-muted-foreground">O backend classifica, conclui a obrigaÃ§Ã£o, gera protocolo e publica no portal quando houver match confiavel.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">O backend classifica, conclui a obrigação, gera protocolo e publica no portal quando houver match confiavel.</p>
                       </div>
                     </div>
                     <div className="mt-4 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">
@@ -2420,29 +3140,21 @@ export function GrowObligationsWorkspace({
                             </div>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {job.robot_machine_id || "maquina nao informada"} Â· {job.robot_origin_path || "origem local nao informada"} Â· {formatDateTime(job.created_at)}
+                            {job.robot_machine_id || "maquina nao informada"} · {job.robot_origin_path || "origem local nao informada"} · {formatDateTime(job.created_at)}
                           </p>
                           {job.last_error ? <p className="mt-2 text-xs text-destructive">{job.last_error}</p> : null}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Nenhuma falha recente do robÃ´ local.</p>
+                    <p className="text-xs text-muted-foreground">Nenhuma falha recente do robô local.</p>
                   )}
                 </div>
 
                 )}
 
                 <div className="space-y-3">
-                  {uploadQueue.map((item) => {
-                    const queueInstances = overview.instances.filter((instance) => {
-                      const filterClientId = item.client_id || item.preview?.match.detectedClientId || "";
-                      if (filterClientId && instance.client_id !== filterClientId) return false;
-                      if (item.template_id && instance.template_id !== item.template_id) return false;
-                      return true;
-                    });
-
-                    return (
+                  {uploadQueue.map((item) => (
                       <div key={item.id} className="rounded-3xl border border-border/70 p-4">
                         <div className="flex flex-col gap-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2457,16 +3169,16 @@ export function GrowObligationsWorkspace({
                             </Button>
                           </div>
 
-                          <div className="grid gap-3 md:grid-cols-2">
+                          <div className="grid gap-3 md:grid-cols-3">
                             <div className="space-y-2">
-                              <Label>Cliente (auxilio manual)</Label>
+                              <Label>Cliente</Label>
                               <Select value={item.client_id || "none"} onValueChange={(value) => updateQueueItem(item.id, { client_id: value === "none" ? "" : value, instance_id: "" })}>
                                 <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                                 <SelectContent><SelectItem value="none">Sem cliente manual</SelectItem>{activeTemplateClients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent>
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label>Documento esperado (auxilio manual)</Label>
+                              <Label>Documento esperado</Label>
                               <Select value={item.document_type_key ? `${item.template_id}::${item.document_type_key}` : "none"} onValueChange={(value) => {
                                 if (value === "none") {
                                   updateQueueItem(item.id, { template_id: "", document_type_key: "", instance_id: "" });
@@ -2480,14 +3192,7 @@ export function GrowObligationsWorkspace({
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label>Instancia opcional</Label>
-                              <Select value={item.instance_id || "none"} onValueChange={(value) => updateQueueItem(item.id, { instance_id: value === "none" ? "" : value })}>
-                                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                                <SelectContent><SelectItem value="none">Sem instancia manual</SelectItem>{queueInstances.map((instance) => <SelectItem key={instance.id} value={instance.id}>{buildInstanceLabel(instance)}</SelectItem>)}</SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Competencia sugerida</Label>
+                              <Label>Competência da obrigação</Label>
                               <Input value={item.suggested_competence_label} onChange={(event) => updateQueueItem(item.id, { suggested_competence_label: event.target.value })} />
                             </div>
                           </div>
@@ -2519,8 +3224,7 @@ export function GrowObligationsWorkspace({
                           <Textarea value={item.notes} onChange={(event) => setUploadQueue((prev) => prev.map((current) => current.id === item.id ? { ...current, notes: event.target.value } : current))} placeholder="Observacoes internas" rows={2} />
                         </div>
                       </div>
-                    );
-                  })}
+                    ))}
                 </div>
 
                 {uploadQueueValidationError && (
@@ -2649,7 +3353,7 @@ export function GrowObligationsWorkspace({
                     <SelectItem value="anterior">{growCompetenceReferenceLabel.anterior}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Use “anterior” quando a obrigação de um mês se refere ao movimento do mês anterior.</p>
+                <p className="text-xs text-muted-foreground">Use ?anterior? quando a obrigação de um mês se refere ao movimento do mês anterior.</p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label>Regra do vencimento técnico</Label>
@@ -3092,12 +3796,24 @@ export function GrowObligationsWorkspace({
                             ),
                           }));
                         }
-                        if (!templateForm.id || !document.document_type_key) {
+                        if (file) {
+                          const zones = pendingReferenceZones[documentTypeKey] || normalizeExtractionZones(null);
                           setPendingReferenceFiles((prev) => ({
                             ...prev,
                             [documentTypeKey]: [file],
                           }));
-                          toast.success("PDF modelo selecionado. Ele sera anexado ao salvar a obrigacao.");
+                          setPendingReferenceZones((prev) => ({
+                            ...prev,
+                            [documentTypeKey]: zones,
+                          }));
+                          setReferencePreviewTarget({
+                            kind: "pending",
+                            documentTypeKey,
+                            fileName: file.name,
+                            file,
+                            zones,
+                          });
+                          toast.success("PDF modelo selecionado. Ajuste as marcações antes de salvar a obrigação.");
                           event.target.value = "";
                           return;
                         }
@@ -3106,6 +3822,7 @@ export function GrowObligationsWorkspace({
                           templateId: templateForm.id,
                           documentTypeKey,
                           file,
+                          extractionZones: pendingReferenceZones[documentTypeKey] || normalizeExtractionZones(null),
                         });
                       }}
                     />
@@ -3116,22 +3833,48 @@ export function GrowObligationsWorkspace({
                         <div key={`${document.document_type_key || slugifyDocumentKey(document.label)}-${file.name}`} className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 p-3">
                           <div className="space-y-1">
                             <p className="text-sm font-medium">{file.name}</p>
-                            <p className="text-xs text-muted-foreground">Pendente para anexar ao salvar a obrigacao.</p>
+                            <p className="text-xs text-muted-foreground">Pendente para anexar ao salvar a obrigação.</p>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="rounded-xl text-destructive"
-                            onClick={() =>
-                              setPendingReferenceFiles((prev) => {
-                                const next = { ...prev };
-                                delete next[document.document_type_key || slugifyDocumentKey(document.label)];
-                                return next;
-                              })
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              onClick={() => {
+                                const documentTypeKey = document.document_type_key || slugifyDocumentKey(document.label);
+                                setReferencePreviewTarget({
+                                  kind: "pending",
+                                  documentTypeKey,
+                                  fileName: file.name,
+                                  file,
+                                  zones: pendingReferenceZones[documentTypeKey] || normalizeExtractionZones(null),
+                                });
+                              }}
+                            >
+                              Ajustar leitura
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="rounded-xl text-destructive"
+                              onClick={() => {
+                                const documentTypeKey = document.document_type_key || slugifyDocumentKey(document.label);
+                                setPendingReferenceFiles((prev) => {
+                                  const next = { ...prev };
+                                  delete next[documentTypeKey];
+                                  return next;
+                                });
+                                setPendingReferenceZones((prev) => {
+                                  const next = { ...prev };
+                                  delete next[documentTypeKey];
+                                  return next;
+                                });
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3144,7 +3887,25 @@ export function GrowObligationsWorkspace({
                             <p className="text-sm font-medium">{reference.file_name}</p>
                             <p className="text-xs text-muted-foreground">Texto: {reference.text_extraction_status} · OCR: {reference.ocr_status}</p>
                           </div>
-                          <Button variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={() => deleteReferenceMutation.mutate(reference.id)}><Trash2 className="h-4 w-4" /></Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              onClick={() =>
+                                setReferencePreviewTarget({
+                                  kind: "saved",
+                                  documentTypeKey: reference.document_type_key,
+                                  reference,
+                                  zones: getReferenceExtractionZones(reference),
+                                })
+                              }
+                            >
+                              Ajustar leitura
+                            </Button>
+                            <Button variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={() => deleteReferenceMutation.mutate(reference.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3196,6 +3957,7 @@ export function GrowObligationsWorkspace({
                 setTemplateDialogOpen(false);
                 setTemplateClientSearch("");
                 setPendingReferenceFiles({});
+                setPendingReferenceZones({});
               }}
             >Cancelar</Button>
             {templateValidationError && <p className="mr-auto text-sm text-orange-600">{templateValidationError}</p>}
@@ -3203,6 +3965,43 @@ export function GrowObligationsWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReferenceDocumentPreviewDialog
+        open={Boolean(referencePreviewTarget)}
+        target={referencePreviewTarget}
+        saving={updateReferenceZonesMutation.isPending || uploadReferenceMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open && !updateReferenceZonesMutation.isPending) setReferencePreviewTarget(null);
+        }}
+        onSave={(zones) => {
+          if (!referencePreviewTarget) return;
+          const normalizedZones = normalizeExtractionZones(zones);
+          if (referencePreviewTarget.kind === "pending") {
+            setPendingReferenceZones((prev) => ({
+              ...prev,
+              [referencePreviewTarget.documentTypeKey]: normalizedZones,
+            }));
+            if (templateForm.id) {
+              setReferenceUploadKey(referencePreviewTarget.documentTypeKey);
+              uploadReferenceMutation.mutate({
+                templateId: templateForm.id,
+                documentTypeKey: referencePreviewTarget.documentTypeKey,
+                file: referencePreviewTarget.file,
+                extractionZones: normalizedZones,
+              });
+              setReferencePreviewTarget(null);
+              return;
+            }
+            setReferencePreviewTarget(null);
+            toast.success("Marcações salvas para anexar junto com a obrigação.");
+            return;
+          }
+          updateReferenceZonesMutation.mutate({
+            referenceFileId: referencePreviewTarget.reference.id,
+            zones: normalizedZones,
+          });
+        }}
+      />
 
       <AlertDialog open={Boolean(templateDeleteTarget)} onOpenChange={(open) => !open && setTemplateDeleteTarget(null)}>
         <AlertDialogContent>
@@ -3258,7 +4057,7 @@ export function GrowObligationsWorkspace({
 
       <Dialog open={Boolean(documentResolutionId)} onOpenChange={(open) => !open && setDocumentResolutionId(null)}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Revisar vinculo do documento</DialogTitle><DialogDescription>Escolha a instancia correta para concluir a triagem.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Revisar vínculo do documento</DialogTitle><DialogDescription>Escolha a competência correta para concluir a triagem.</DialogDescription></DialogHeader>
           {documentInResolution && (
             <div className="space-y-4 py-2">
               <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 text-sm">
@@ -3287,3 +4086,4 @@ export function GrowObligationsWorkspace({
     </div>
   );
 }
+

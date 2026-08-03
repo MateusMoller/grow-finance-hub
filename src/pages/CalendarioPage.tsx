@@ -4,6 +4,11 @@ import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,14 +28,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertCircle,
+  Building2,
   CalendarDays,
-  CheckCircle2,
-  Clock,
+  ChevronDown,
+  ClipboardList,
   Loader2,
-  Pencil,
   Plus,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,13 +44,10 @@ import {
   normalizeSectorCode,
 } from "@/lib/userPermissions";
 import {
-  addDays,
-  endOfDay,
   endOfMonth,
   format,
   isSameDay,
   parseISO,
-  startOfDay,
   startOfMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,6 +69,59 @@ interface CalendarEntry {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+type ObligationInstanceStatus =
+  | "pendente"
+  | "em_andamento"
+  | "aguardando_documento"
+  | "em_revisao"
+  | "pronto_para_envio"
+  | "enviando"
+  | "falha_envio"
+  | "concluida"
+  | "atrasada"
+  | "cancelada";
+
+interface CalendarObligationInstance {
+  id: string;
+  template_id: string;
+  client_id: string;
+  competence_label: string;
+  technical_due_date: string;
+  status: ObligationInstanceStatus;
+  priority: EntryPriority;
+  completed_at: string | null;
+  updated_at: string;
+  template: {
+    id: string;
+    name: string;
+    sector: string;
+  } | null;
+  client: {
+    id: string;
+    name: string;
+    cnpj: string | null;
+  } | null;
+}
+
+interface ObligationDayGroup {
+  templateId: string;
+  name: string;
+  sector: string;
+  instances: CalendarObligationInstance[];
+  doneCount: number;
+}
+
+interface CalendarTask {
+  id: string;
+  title: string;
+  client_name: string | null;
+  sector: string;
+  priority: string;
+  due_date: string | null;
+  status: string;
+  integration_source: string | null;
 }
 
 interface CalendarFormState {
@@ -95,28 +148,30 @@ const priorityLabels: Record<EntryPriority, string> = {
   urgente: "Urgente",
 };
 
-const priorityClasses: Record<EntryPriority, string> = {
-  baixa: "bg-muted text-muted-foreground",
-  media: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  alta: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  urgente: "bg-destructive/10 text-destructive",
+const obligationStatusLabels: Record<ObligationInstanceStatus, string> = {
+  pendente: "Pendente",
+  em_andamento: "Em andamento",
+  aguardando_documento: "Aguardando documento",
+  em_revisao: "Em revisão",
+  pronto_para_envio: "Pronta para envio",
+  enviando: "Enviando",
+  falha_envio: "Falha no envio",
+  concluida: "Feita",
+  atrasada: "Atrasada",
+  cancelada: "Cancelada",
 };
 
-const typeClasses: Record<EntryType, string> = {
-  evento: "bg-primary/10 text-primary",
-  obrigação: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-};
-
-const statusLabels: Record<EntryStatus, string> = {
-  pending: "Pendente",
-  completed: "Concluído",
-  cancelled: "Cancelado",
-};
-
-const statusClasses: Record<EntryStatus, string> = {
-  pending: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-  completed: "bg-primary/10 text-primary",
-  cancelled: "bg-destructive/10 text-destructive",
+const obligationStatusClasses: Record<ObligationInstanceStatus, string> = {
+  pendente: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  em_andamento: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  aguardando_documento: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  em_revisao: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  pronto_para_envio: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
+  enviando: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
+  falha_envio: "bg-destructive/10 text-destructive",
+  concluida: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  atrasada: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  cancelada: "bg-muted text-muted-foreground",
 };
 
 const makeFormState = (date: Date): CalendarFormState => ({
@@ -138,22 +193,21 @@ export default function CalendarioPage() {
   const availableSectorOptions = collaboratorSector
     ? sectorOptions.filter(({ code }) => code === collaboratorSector)
     : sectorOptions;
-  const canDeleteEvents = effectiveAccess?.primaryRole === "admin";
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [events, setEvents] = useState<CalendarEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [obligationInstances, setObligationInstances] = useState<CalendarObligationInstance[]>([]);
+  const [loadingObligations, setLoadingObligations] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEntry | null>(null);
   const [form, setForm] = useState<CalendarFormState>(makeFormState(new Date()));
   const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const monthKey = format(selectedDate, "yyyy-MM");
 
   const loadMonthEvents = useCallback(async (baseDate: Date) => {
-    setLoading(true);
 
     const from = startOfMonth(baseDate).toISOString();
     const to = endOfMonth(baseDate).toISOString();
@@ -168,56 +222,138 @@ export default function CalendarioPage() {
     if (error) {
       toast.error("Erro ao carregar eventos do calendário");
       setEvents([]);
-      setLoading(false);
       return;
     }
 
     setEvents((data || []) as CalendarEntry[]);
-    setLoading(false);
   }, []);
+
+  const loadMonthTasks = useCallback(async (baseDate: Date) => {
+    const from = format(startOfMonth(baseDate), "yyyy-MM-dd");
+    const to = format(endOfMonth(baseDate), "yyyy-MM-dd");
+
+    const { data, error } = await supabase
+      .from("kanban_tasks")
+      .select("id, title, client_name, sector, priority, due_date, status, integration_source")
+      .not("due_date", "is", null)
+      .gte("due_date", from)
+      .lte("due_date", to)
+      .neq("status", "archived")
+      .order("due_date", { ascending: true });
+
+    if (error) {
+      toast.error("Erro ao carregar tarefas do calendário");
+      setTasks([]);
+      return;
+    }
+
+    const normalizedData = ((data || []) as CalendarTask[]).filter((task) => {
+      if (!collaboratorSector) return true;
+      return normalizeSectorCode(task.sector || "") === collaboratorSector;
+    });
+
+    setTasks(normalizedData);
+  }, [collaboratorSector]);
+
+  const loadMonthObligations = useCallback(async (baseDate: Date) => {
+    setLoadingObligations(true);
+
+    const from = format(startOfMonth(baseDate), "yyyy-MM-dd");
+    const to = format(endOfMonth(baseDate), "yyyy-MM-dd");
+
+    const { data, error } = await supabase
+      .from("obligation_instances")
+      .select(`
+        id,
+        template_id,
+        client_id,
+        competence_label,
+        technical_due_date,
+        status,
+        priority,
+        completed_at,
+        updated_at,
+        template:obligation_templates(id, name, sector),
+        client:clients(id, name, cnpj)
+      `)
+      .gte("technical_due_date", from)
+      .lte("technical_due_date", to)
+      .neq("status", "cancelada")
+      .order("technical_due_date", { ascending: true });
+
+    if (error) {
+      toast.error("Erro ao carregar obrigações do calendário");
+      setObligationInstances([]);
+      setLoadingObligations(false);
+      return;
+    }
+
+    const normalizedData = ((data || []) as unknown as CalendarObligationInstance[])
+      .filter((instance) => {
+        if (!collaboratorSector) return true;
+        return normalizeSectorCode(instance.template?.sector || "") === collaboratorSector;
+      });
+
+    setObligationInstances(normalizedData);
+    setLoadingObligations(false);
+  }, [collaboratorSector]);
 
   useEffect(() => {
     const [year, month] = monthKey.split("-").map(Number);
     if (!year || !month) return;
-    void loadMonthEvents(new Date(year, month - 1, 1));
-  }, [loadMonthEvents, monthKey]);
+    const monthDate = new Date(year, month - 1, 1);
+    void loadMonthEvents(monthDate);
+    void loadMonthTasks(monthDate);
+    void loadMonthObligations(monthDate);
+  }, [loadMonthEvents, loadMonthObligations, loadMonthTasks, monthKey]);
+
+  const selectedDayObligationGroups = useMemo<ObligationDayGroup[]>(() => {
+    const groups = new Map<string, ObligationDayGroup>();
+
+    obligationInstances
+      .filter((instance) => isSameDay(parseISO(`${instance.technical_due_date}T12:00:00`), selectedDate))
+      .forEach((instance) => {
+        const templateId = instance.template?.id || instance.template_id;
+        const group = groups.get(templateId) || {
+          templateId,
+          name: instance.template?.name || "Obrigação sem nome",
+          sector: instance.template?.sector || "Geral",
+          instances: [],
+          doneCount: 0,
+        };
+
+        group.instances.push(instance);
+        if (instance.status === "concluida") {
+          group.doneCount += 1;
+        }
+        groups.set(templateId, group);
+      });
+
+    return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [obligationInstances, selectedDate]);
 
   const selectedDayEvents = useMemo(() => {
     return events.filter((event) => isSameDay(parseISO(event.due_at), selectedDate));
   }, [events, selectedDate]);
 
-  const upcomingObligations = useMemo(() => {
-    const today = startOfDay(new Date());
-    const nextWeek = endOfDay(addDays(today, 7));
-
-    return events
-      .filter((event) => {
-        const date = parseISO(event.due_at);
-        return (
-          event.entry_type === "obrigação"
-          && event.status !== "completed"
-          && date >= today
-          && date <= nextWeek
-        );
-      })
-      .sort((a, b) => +new Date(a.due_at) - +new Date(b.due_at))
-      .slice(0, 8);
-  }, [events]);
-
-  const stats = {
-    total: events.length,
-    obligations: events.filter((event) => event.entry_type === "obrigação").length,
-    pending: events.filter((event) => event.status === "pending").length,
-  };
+  const selectedDayTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (!task.due_date || task.integration_source === "grow_obligation_task") return false;
+      return isSameDay(parseISO(`${task.due_date}T12:00:00`), selectedDate);
+    });
+  }, [tasks, selectedDate]);
 
   const eventDays = useMemo(
-    () => events.map((event) => parseISO(event.due_at)),
-    [events]
+    () => [
+      ...events.map((event) => parseISO(event.due_at)),
+      ...tasks.filter((task) => task.due_date && task.integration_source !== "grow_obligation_task").map((task) => parseISO(`${task.due_date}T12:00:00`)),
+    ],
+    [events, tasks]
   );
 
   const obligationDays = useMemo(
-    () => events.filter((event) => event.entry_type === "obrigação").map((event) => parseISO(event.due_at)),
-    [events]
+    () => obligationInstances.map((instance) => parseISO(`${instance.technical_due_date}T12:00:00`)),
+    [obligationInstances]
   );
 
   const openNewDialog = () => {
@@ -225,24 +361,6 @@ export default function CalendarioPage() {
     setForm({
       ...makeFormState(selectedDate),
       sector: collaboratorSector ? SECTOR_LABELS[collaboratorSector] : SECTOR_LABELS.geral,
-    });
-    setDialogOpen(true);
-  };
-
-  const openEditDialog = (event: CalendarEntry) => {
-    const date = parseISO(event.due_at);
-    const normalizedSector = normalizeSectorCode(event.sector);
-    setEditingEvent(event);
-    setForm({
-      title: event.title,
-      description: event.description || "",
-      entry_type: event.entry_type,
-      priority: event.priority,
-      sector: normalizedSector ? SECTOR_LABELS[normalizedSector] : event.sector,
-      date: format(date, "yyyy-MM-dd"),
-      time: format(date, "HH:mm"),
-      all_day: event.all_day,
-      status: event.status,
     });
     setDialogOpen(true);
   };
@@ -323,49 +441,6 @@ export default function CalendarioPage() {
     await loadMonthEvents(selectedDate);
   };
 
-  const deleteEvent = async (eventId: string) => {
-    const confirmDelete = window.confirm("Deseja realmente excluir este registro?");
-    if (!confirmDelete) return;
-
-    setUpdatingId(eventId);
-
-    const { error } = await supabase
-      .from("calendar_events")
-      .delete()
-      .eq("id", eventId);
-
-    setUpdatingId(null);
-
-    if (error) {
-      toast.error("Erro ao excluir evento");
-      return;
-    }
-
-    toast.success("Registro excluído");
-    await loadMonthEvents(selectedDate);
-  };
-
-  const toggleCompleted = async (event: CalendarEntry) => {
-    setUpdatingId(event.id);
-
-    const nextStatus: EntryStatus = event.status === "completed" ? "pending" : "completed";
-
-    const { error } = await supabase
-      .from("calendar_events")
-      .update({ status: nextStatus })
-      .eq("id", event.id);
-
-    setUpdatingId(null);
-
-    if (error) {
-      toast.error("Erro ao atualizar status");
-      return;
-    }
-
-    toast.success(nextStatus === "completed" ? "Marcado como concluído" : "Reaberto como pendente");
-    await loadMonthEvents(selectedDate);
-  };
-
   return (
     <AppLayout>
       <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -382,22 +457,7 @@ export default function CalendarioPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <p className="text-xs text-muted-foreground">Registros no mês</p>
-            <p className="text-2xl font-bold mt-1">{stats.total}</p>
-          </div>
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <p className="text-xs text-muted-foreground">Obrigações</p>
-            <p className="text-2xl font-bold mt-1 text-orange-600">{stats.obligations}</p>
-          </div>
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <p className="text-xs text-muted-foreground">Pendentes</p>
-            <p className="text-2xl font-bold mt-1 text-amber-600">{stats.pending}</p>
-          </div>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-[minmax(430px,0.9fr)_minmax(0,1.1fr)]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(430px,0.8fr)_minmax(0,1.2fr)]">
           <div className="h-fit min-w-0 rounded-xl border bg-card p-6 shadow-sm">
             <div className="flex justify-center overflow-hidden">
             <Calendar
@@ -436,7 +496,7 @@ export default function CalendarioPage() {
             </div>
           </div>
 
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0">
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between gap-2 border-b p-5">
                 <div>
@@ -444,117 +504,126 @@ export default function CalendarioPage() {
                     Agenda de {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    {selectedDayEvents.length} registro(s) neste dia
+                    {selectedDayObligationGroups.reduce((total, group) => total + group.instances.length, 0)} obrigação(ões), {selectedDayTasks.length} tarefa(s) e {selectedDayEvents.length} registro(s)
                   </p>
                 </div>
               </div>
 
-              {loading ? (
-                <div className="flex min-h-[180px] justify-center p-8">
+              {loadingObligations ? (
+                <div className="flex min-h-[360px] justify-center p-8">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>
-              ) : selectedDayEvents.length === 0 ? (
-                <div className="flex min-h-[180px] flex-col items-center justify-center p-6 text-center">
+              ) : selectedDayObligationGroups.length === 0 && selectedDayTasks.length === 0 && selectedDayEvents.length === 0 ? (
+                <div className="flex min-h-[360px] flex-col items-center justify-center p-6 text-center">
                   <CalendarDays className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="font-medium">Sem registros neste dia</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Clique em "Novo registro" para adicionar um evento ou obrigação.
+                  <p className="font-medium">Sem itens neste dia</p>
+                  <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                    Selecione um dia marcado no calendário para acompanhar obrigações, tarefas e registros.
                   </p>
                 </div>
               ) : (
-                <div className="divide-y">
-                  {selectedDayEvents.map((event) => (
-                    <div key={event.id} className="p-4 space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium mr-auto">{event.title}</p>
-                        <Badge variant="outline" className={`border-0 ${typeClasses[event.entry_type]}`}>
-                          {event.entry_type === "obrigação" ? "Obrigação" : "Evento"}
-                        </Badge>
-                        <Badge variant="outline" className={`border-0 ${priorityClasses[event.priority]}`}>
-                          {priorityLabels[event.priority]}
-                        </Badge>
-                        <Badge variant="outline" className={`border-0 ${statusClasses[event.status]}`}>
-                          {statusLabels[event.status]}
-                        </Badge>
-                      </div>
+                <div className="space-y-3 p-4">
+                  {selectedDayObligationGroups.map((group) => (
+                    <Collapsible key={group.templateId}>
+                      <div className="rounded-xl border bg-background/60 shadow-sm">
+                        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="truncate font-semibold">{group.name}</h3>
+                              <Badge variant="outline" className="border-0 bg-muted text-muted-foreground">
+                                {group.sector}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {group.doneCount}/{group.instances.length} feita(s)
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <Badge
+                              variant="outline"
+                              className={group.doneCount === group.instances.length ? "border-0 bg-emerald-100 text-emerald-700" : "border-0 bg-amber-100 text-amber-700"}
+                            >
+                              {group.doneCount === group.instances.length ? "Completa" : "Em aberto"}
+                            </Badge>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                          </div>
+                        </CollapsibleTrigger>
 
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {event.all_day ? "Dia todo" : format(parseISO(event.due_at), "HH:mm")}
-                        </span>
-                        <span>Setor: {event.sector}</span>
+                        <CollapsibleContent>
+                          <div className="divide-y border-t">
+                            {group.instances.map((instance) => (
+                              <div key={instance.id} className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                                  <Building2 className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium">{instance.client?.name || "Cliente sem nome"}</p>
+                                  <p className="text-xs text-muted-foreground">Competência {instance.competence_label}</p>
+                                </div>
+                                <Badge variant="outline" className={`shrink-0 border-0 ${obligationStatusClasses[instance.status] || "bg-muted text-muted-foreground"}`}>
+                                  {obligationStatusLabels[instance.status] || instance.status}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
                       </div>
-
-                      {event.description && (
-                        <p className="text-sm text-muted-foreground">{event.description}</p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5"
-                          onClick={() => openEditDialog(event)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> Editar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={event.status === "completed" ? "secondary" : "default"}
-                          className="gap-1.5"
-                          onClick={() => toggleCompleted(event)}
-                          disabled={updatingId === event.id}
-                        >
-                          {updatingId === event.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          )}
-                          {event.status === "completed" ? "Reabrir" : "Concluir"}
-                        </Button>
-                        {canDeleteEvents && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive gap-1.5"
-                            onClick={() => deleteEvent(event.id)}
-                            disabled={updatingId === event.id}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Excluir
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+                    </Collapsible>
                   ))}
-                </div>
-              )}
-            </div>
 
-            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-              <div className="border-b p-5">
-                <h2 className="font-semibold">Próximas obrigações (7 dias)</h2>
-              </div>
-              {upcomingObligations.length === 0 ? (
-                <div className="p-6 text-sm text-muted-foreground">
-                  Nenhuma obrigação pendente para os próximos dias.
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {upcomingObligations.map((event) => (
-                    <div key={event.id} className="p-4 flex items-center gap-3">
-                      <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{event.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(parseISO(event.due_at), "dd/MM/yyyy")} {event.all_day ? "· Dia todo" : `· ${format(parseISO(event.due_at), "HH:mm")}`}
+                  {(selectedDayTasks.length > 0 || selectedDayEvents.length > 0) && (
+                    <div className="rounded-xl border bg-background/60 shadow-sm">
+                      <div className="border-b p-4">
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                          <h3 className="font-semibold">Outras tarefas e registros</h3>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Itens do dia que não fazem parte do agrupamento de obrigações.
                         </p>
                       </div>
+                      <div className="divide-y">
+                        {selectedDayTasks.map((task) => (
+                          <div key={`task-${task.id}`} className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{task.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {task.client_name || "Sem cliente"} · {task.sector || "Sem setor"}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="shrink-0 border-0 bg-blue-100 text-blue-700">
+                              Tarefa
+                            </Badge>
+                            <Badge variant="outline" className="shrink-0 border-0 bg-muted text-muted-foreground">
+                              {task.status}
+                            </Badge>
+                          </div>
+                        ))}
+
+                        {selectedDayEvents.map((event) => (
+                          <div key={`event-${event.id}`} className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{event.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {event.all_day ? "Dia todo" : format(parseISO(event.due_at), "HH:mm")} · {event.sector}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="shrink-0 border-0 bg-primary/10 text-primary">
+                              Registro
+                            </Badge>
+                            <Badge variant="outline" className="shrink-0 border-0 bg-muted text-muted-foreground">
+                              {event.status === "completed" ? "Concluído" : event.status === "cancelled" ? "Cancelado" : "Pendente"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
+
+
           </div>
         </div>
       </div>

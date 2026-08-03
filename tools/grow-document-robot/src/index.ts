@@ -164,9 +164,17 @@ function addCompetenceCandidate(
 }
 
 function sourceWeight(source: CompetenceCandidate["source"]) {
-  if (source === "file_name") return 1.4;
+  if (source === "file_name") return 1.45;
   if (source === "file_path") return 1.15;
   return 1;
+}
+
+function hasCompetenceContext(value: string) {
+  return /\b(competencia|comp|periodo|apuracao|referencia|ref|pa|mes\s+base|mes\s+referencia|folha\s+de|salario\s+de)\b/.test(value);
+}
+
+function hasDateContext(value: string) {
+  return /\b(vencimento|pagamento|emissao|data|gerado|emitido|recolhimento|validade|processamento)\b/.test(value);
 }
 
 function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; source: CompetenceCandidate["source"] }>) {
@@ -208,19 +216,36 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
 
     const isoMatches = text.matchAll(/\b(20\d{2})[-_/ .](0?[1-9]|1[0-2])\b/g);
     for (const match of isoMatches) {
-      addCompetenceCandidate(candidates, monthLabel(match[2], match[1]), 70 * weight, item.source, "ano_mes");
+      const prefix = text.slice(Math.max(0, match.index - 36), match.index);
+      const score = hasCompetenceContext(prefix)
+        ? 86
+        : item.source === "file_name"
+          ? 76
+          : hasDateContext(prefix)
+            ? 22
+            : 42;
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[1]), score * weight, item.source, "ano_mes");
     }
 
     const brMatches = text.matchAll(/\b(0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
     for (const match of brMatches) {
-      const prefix = text.slice(Math.max(0, match.index - 24), match.index);
-      const datePenalty = /\b(vencimento|pagamento|emissao|data|gerado|emitido)\b/.test(prefix) ? 28 : 0;
-      addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), (70 - datePenalty) * weight, item.source, "mes_ano");
+      const prefix = text.slice(Math.max(0, match.index - 36), match.index);
+      const score = hasCompetenceContext(prefix)
+        ? 88
+        : item.source === "file_name"
+          ? 78
+          : hasDateContext(prefix)
+            ? 20
+            : 45;
+      addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), score * weight, item.source, "mes_ano");
     }
 
     const compactMatches = text.matchAll(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/g);
     for (const match of compactMatches) {
-      addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 76 * weight, item.source, "compacto_mmaaaa");
+      const prefix = text.slice(Math.max(0, match.index - 36), match.index);
+      if (item.source === "pdf_text" && !hasCompetenceContext(prefix)) continue;
+      const score = item.source === "file_name" ? 82 : item.source === "file_path" ? 68 : 72;
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), score * weight, item.source, "compacto_mmaaaa");
     }
   }
 
@@ -298,6 +323,14 @@ function buildKeywordStats(tokens: string[]) {
     .map(([token]) => token);
 }
 
+function buildDocumentAnalysisTokens(filePath: string, extractedText: string) {
+  return tokenize([
+    path.basename(filePath),
+    path.dirname(filePath),
+    extractedText,
+  ].join(" "));
+}
+
 async function ensureParentDir(filePath: string) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 }
@@ -330,6 +363,19 @@ type PdfTextItem = {
   width: number;
   height: number;
   hasEOL?: boolean;
+};
+
+type PositionedTextPage = {
+  page: number;
+  width: number;
+  height: number;
+  items: Array<{
+    text: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
 };
 
 function isPdfTextItem(value: unknown): value is PdfTextItem {
@@ -387,33 +433,140 @@ function buildPageText(items: PdfTextItem[]) {
     .join("\n");
 }
 
+function buildPositionedTextPage(pageNumber: number, pageWidth: number, pageHeight: number, items: PdfTextItem[]): PositionedTextPage {
+  const positionedItems = items
+    .map((item) => {
+      const text = normalizeReadableText(item.str);
+      const width = Number(item.width || 0);
+      const height = Number(item.height || Math.abs(Number(item.transform[3] || 0)) || 8);
+      const x = Number(item.transform[4] || 0);
+      const y = Number(item.transform[5] || 0);
+      if (!text || pageWidth <= 0 || pageHeight <= 0) return null;
+      return {
+        text,
+        x: Math.max(0, Math.min(1, x / pageWidth)),
+        y: Math.max(0, Math.min(1, (pageHeight - y - height) / pageHeight)),
+        width: Math.max(0.001, Math.min(1, width / pageWidth)),
+        height: Math.max(0.001, Math.min(1, height / pageHeight)),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  return {
+    page: pageNumber,
+    width: pageWidth,
+    height: pageHeight,
+    items: positionedItems,
+  };
+}
+
+function bucketNumber(value: number, step: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  return String(Math.round(value / step) * step);
+}
+
+function normalizeLayoutLabel(value: string) {
+  return normalizeReadableText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildLineLayoutPattern(line: string) {
+  const compact = normalizeReadableText(line);
+  const tokenCount = compact.split(/\s+/).filter(Boolean).length;
+  const numberCount = (compact.match(/\d+/g) || []).length;
+  const punctuation = Array.from(new Set((compact.match(/[.:/%$,-]/g) || []).slice(0, 8))).join("");
+  const hasCurrency = /R\$/i.test(compact) || /\bvalor\b/i.test(compact);
+  const hasDate = /\d{1,2}[/. -]\d{1,2}[/. -]\d{2,4}/.test(compact) || /\d{1,2}[/. -]\d{4}/.test(compact);
+
+  return [
+    `len:${bucketNumber(compact.length, 12)}`,
+    `tok:${bucketNumber(tokenCount, 2)}`,
+    `num:${bucketNumber(numberCount, 1)}`,
+    punctuation ? `p:${punctuation}` : "p:none",
+    hasCurrency ? "money" : null,
+    hasDate ? "date" : null,
+  ].filter(Boolean).join("|");
+}
+
+function extractLayoutFieldLabels(lines: string[]) {
+  const labels = lines
+    .map((line) => {
+      const match = line.match(/^([^:]{3,48}):/);
+      if (match) return normalizeLayoutLabel(match[1]);
+      const knownField = line.match(/\b(cnpj|cpf|competencia|referencia|periodo|vencimento|valor|codigo|salario|funcionario|empregado|empresa)\b/i);
+      return knownField ? normalizeLayoutLabel(knownField[1]) : "";
+    })
+    .filter((label) => label.length >= 3);
+
+  return Array.from(new Set(labels)).slice(0, 40);
+}
+
+function buildLayoutSignature(pageTexts: string[], pageCount: number, text: string) {
+  const pages = pageTexts.length > 0 ? pageTexts : [text];
+  const allLines = pages
+    .flatMap((pageText) => pageText.split(/\r?\n/))
+    .map((line) => normalizeReadableText(line))
+    .filter(Boolean);
+
+  return {
+    version: 1,
+    page_count: pageCount,
+    line_count: allLines.length,
+    char_count_bucket: bucketNumber(normalizeReadableText(text).length, 200),
+    page_patterns: pages
+      .map((pageText) =>
+        pageText
+          .split(/\r?\n/)
+          .map((line) => normalizeReadableText(line))
+          .filter(Boolean)
+          .slice(0, 30)
+          .map(buildLineLayoutPattern)
+          .join(" > "),
+      )
+      .filter(Boolean)
+      .slice(0, 5),
+    line_patterns: allLines.slice(0, 80).map(buildLineLayoutPattern),
+    field_labels: extractLayoutFieldLabels(allLines),
+  };
+}
+
 async function extractPdfText(filePath: string) {
   const data = await fs.readFile(filePath);
   const pdf = await getDocument({ data: new Uint8Array(data), useSystemFonts: true }).promise;
   const chunks: string[] = [];
+  const pageTexts: string[] = [];
+  const positionedTextPages: PositionedTextPage[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
     const textContent = await page.getTextContent({ disableNormalization: false });
     const items = (textContent.items as unknown[]).filter(isPdfTextItem);
     if (items.length > 0) {
-      chunks.push(`--- pagina ${pageNumber} ---\n${buildPageText(items)}`);
+      const pageText = buildPageText(items);
+      pageTexts.push(pageText);
+      chunks.push(`--- pagina ${pageNumber} ---\n${pageText}`);
+      positionedTextPages.push(buildPositionedTextPage(pageNumber, viewport.width, viewport.height, items));
     }
   }
 
   await pdf.destroy();
 
   const extractedText = normalizeReadableText(chunks.join("\n\n"));
-  return { extractedText, pageCount: pdf.numPages };
+  return { extractedText, pageCount: pdf.numPages, pageTexts, positionedTextPages };
 }
 
 async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
   try {
-    const { extractedText, pageCount } = await extractPdfText(filePath);
+    const { extractedText, pageCount, pageTexts, positionedTextPages } = await extractPdfText(filePath);
     const normalizedText = normalizeReadableText(extractedText);
     const flattenedText = normalizedText.replace(/\s+/g, " ").trim();
     const preview = flattenedText ? flattenedText.slice(0, 500) : null;
-    const tokens = tokenize(normalizedText);
+    const tokens = buildDocumentAnalysisTokens(filePath, normalizedText);
     const keywords = buildKeywordStats(tokens);
     const cnpjCandidates = detectCnpjCandidates(path.basename(filePath), filePath, normalizedText);
     const detailedCompetenceCandidates = detectCompetenceCandidatesDetailed([
@@ -431,9 +584,12 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
       text_extraction_status: normalizedText ? "extracted" : "empty",
       ocr_status: normalizedText ? "not_needed" : "not_available",
       fingerprint_payload: {
-        version: 2,
+        version: 3,
         page_count: pageCount,
         extracted_chars: normalizedText.length,
+        line_count: normalizedText.split(/\r?\n/).filter((line) => line.trim()).length,
+        layout_signature: buildLayoutSignature(pageTexts, pageCount, normalizedText),
+        positioned_text_pages: positionedTextPages,
         frequent_tokens: keywords,
         detected_cnpjs: cnpjCandidates,
         competence_candidates: competenceCandidates,

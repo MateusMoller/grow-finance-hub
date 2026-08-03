@@ -56,17 +56,17 @@ type MatchResult = {
   reviewRequired: boolean;
   documentDefinition: ExpectedDocumentDefinition | null;
   candidateInstanceIds: string[];
-  detectedClientId?: string | null;
-  detectedCnpj?: string | null;
-  competenceDetected?: string | null;
-  referenceFileId?: string | null;
-  referenceMatchScore?: number;
-  referenceMatchReasons?: string[];
-  textExtractionStatus?: string;
-  ocrStatus?: string;
-  extractedTextPreview?: string | null;
-  fingerprintPayload?: JsonRecord;
-  autoLinkBlockReason?: string | null;
+  detectedClientId? : string | null;
+  detectedCnpj? : string | null;
+  competenceDetected? : string | null;
+  referenceFileId? : string | null;
+  referenceMatchScore? : number;
+  referenceMatchReasons? : string[];
+  textExtractionStatus? : string;
+  ocrStatus? : string;
+  extractedTextPreview? : string | null;
+  fingerprintPayload? : JsonRecord;
+  autoLinkBlockReason? : string | null;
 };
 
 type ReferenceFileRow = {
@@ -106,7 +106,7 @@ type DocumentAnalysisPayload = {
 
 type TemplateRow = {
   id: string;
-  organization_id?: string;
+  organization_id? : string;
   code: string;
   name: string;
   sector: string;
@@ -114,11 +114,11 @@ type TemplateRow = {
   competence_reference: string;
   technical_due_month_reference: string;
   due_day: number;
-  due_rule_type?: string | null;
-  due_business_day_index?: number | null;
-  due_fixed_month?: number | null;
-  due_fixed_day?: number | null;
-  due_fixed_dates?: unknown;
+  due_rule_type? : string | null;
+  due_business_day_index? : number | null;
+  due_fixed_month? : number | null;
+  due_fixed_day? : number | null;
+  due_fixed_dates? : unknown;
   yearly_due_month: number | null;
   legal_due_day: number | null;
   priority: string;
@@ -133,8 +133,8 @@ type TemplateRow = {
   completion_email_body: string | null;
   completion_whatsapp_enabled: boolean;
   completion_whatsapp_body: string | null;
-  baseline_source?: string | null;
-  catalog_review_status?: string | null;
+  baseline_source? : string | null;
+  catalog_review_status? : string | null;
 };
 
 type ClientDeliveryContext = {
@@ -151,18 +151,18 @@ type ClientDeliveryContext = {
 
 type ProfileRow = {
   id: string;
-  organization_id?: string;
+  organization_id? : string;
   client_id: string;
   template_id: string;
-  source_kind?: string | null;
-  source_load_id?: string | null;
-  source_load_item_id?: string | null;
-  applied_regime?: string | null;
-  application_batch_id?: string | null;
-  inactivation_reason?: string | null;
-  sync_status?: string | null;
-  conditional_review_reason?: string | null;
-  conditional_skip_reason?: string | null;
+  source_kind? : string | null;
+  source_load_id? : string | null;
+  source_load_item_id? : string | null;
+  applied_regime? : string | null;
+  application_batch_id? : string | null;
+  inactivation_reason? : string | null;
+  sync_status? : string | null;
+  conditional_review_reason? : string | null;
+  conditional_skip_reason? : string | null;
   assigned_to: string | null;
   start_date: string;
   end_date: string | null;
@@ -177,7 +177,7 @@ type ProfileRow = {
 
 type InstanceRow = {
   id: string;
-  organization_id?: string;
+  organization_id? : string;
   client_id: string;
   profile_id: string;
   template_id: string;
@@ -232,13 +232,13 @@ type DefaultApplicationSummary = {
   conditional_skipped: number;
   inactivated_prior_regime: number;
   inactivated: number;
-  unsupported_clients?: number;
-  processed_clients?: number;
+  unsupported_clients? : number;
+  processed_clients? : number;
   add: number;
   keep: number;
 };
 
-function resolveRowOrganizationId(...rows: Array<{ organization_id?: string | null } | null | undefined>) {
+function resolveRowOrganizationId(...rows: Array<{ organization_id? : string | null } | null | undefined>) {
   for (const row of rows) {
     const organizationId = asTrimmedString(row?.organization_id);
     if (organizationId) return organizationId;
@@ -248,7 +248,7 @@ function resolveRowOrganizationId(...rows: Array<{ organization_id?: string | nu
 
 type IngestionJobRow = {
   id: string;
-  organization_id?: string;
+  organization_id? : string;
   source_kind: string;
   status: string;
   classification_status: string;
@@ -282,9 +282,9 @@ type IngestionJobRow = {
 
 type InboxRow = {
   id: string;
-  organization_id?: string;
+  organization_id? : string;
   ingestion_job_id: string | null;
-  created_by?: string | null;
+  created_by? : string | null;
   client_id: string | null;
   suggested_client_id: string | null;
   detected_client_id: string | null;
@@ -345,7 +345,7 @@ type DeliveryAttachment = {
   id: string;
   filename: string;
   content: string;
-  content_type?: string | null;
+  content_type? : string | null;
   storage_bucket: string;
   storage_path: string;
 };
@@ -402,7 +402,7 @@ function normalizeEmail(value: unknown): string | null {
   return email;
 }
 
-function formatEmailAddress(email: string, name?: string | null) {
+function formatEmailAddress(email: string, name? : string | null) {
   const safeEmail = normalizeEmail(email);
   if (!safeEmail) return null;
   const safeName = asTrimmedString(name)?.replace(/[<>"\r\n]/g, " ").replace(/\s+/g, " ").trim();
@@ -477,7 +477,7 @@ function asBoolean(value: unknown, fallback = false) {
   if (typeof value === "number") return value > 0;
   const token = String(value || "").trim().toLowerCase();
   if (["1", "true", "sim", "yes"].includes(token)) return true;
-  if (["0", "false", "nao", "não", "no"].includes(token)) return false;
+  if (["0", "false", "nao", "n?o", "no"].includes(token)) return false;
   return fallback;
 }
 
@@ -617,14 +617,17 @@ function competenceKey(date: Date) {
 }
 
 function currentCompetenceGenerationWindow(now = new Date()) {
-  const targetCompetenceDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const cursorStart = new Date(targetCompetenceDate);
-  const cursorEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const targetOperationalDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  if (now.getUTCDate() >= 27) {
+    targetOperationalDate.setUTCMonth(targetOperationalDate.getUTCMonth() + 1);
+  }
+  const cursorStart = new Date(targetOperationalDate);
+  const cursorEnd = new Date(Date.UTC(targetOperationalDate.getUTCFullYear(), targetOperationalDate.getUTCMonth() + 1, 1));
 
   return {
     cursorStart,
     cursorEnd,
-    targetCompetenceKey: competenceKey(targetCompetenceDate),
+    targetOperationalMonthKey: competenceKey(targetOperationalDate),
   };
 }
 
@@ -637,7 +640,7 @@ function computeCompetenceDate(
   periodicity: string,
   cursor: Date,
   competenceReference: string,
-  yearlyDueMonth?: number | null,
+  yearlyDueMonth? : number | null,
 ) {
   let baseDate: Date;
 
@@ -708,7 +711,7 @@ function normalizeFixedDueDates(template: Pick<TemplateRow, "due_fixed_dates" | 
   const used = new Set<string>();
   const rawDates = Array.isArray(template.due_fixed_dates) ? template.due_fixed_dates : [];
 
-  const addEntry = (monthValue: unknown, dayValue: unknown, labelValue?: unknown) => {
+  const addEntry = (monthValue: unknown, dayValue: unknown, labelValue? : unknown) => {
     const month = Math.max(1, Math.min(12, Number(monthValue || 0)));
     const day = Math.max(1, Math.min(31, Number(dayValue || 0)));
     if (!Number.isFinite(month) || !Number.isFinite(day)) return;
@@ -735,12 +738,13 @@ function normalizeFixedDueDates(template: Pick<TemplateRow, "due_fixed_dates" | 
 }
 
 function computeTechnicalDueDate(
+  operationalDate: Date,
   competenceDate: Date,
   template: Pick<TemplateRow, "due_day" | "due_rule_type" | "due_business_day_index" | "due_fixed_month" | "due_fixed_day" | "technical_due_month_reference">,
-  dueDayOverride?: number | null,
-  fixedDate?: Pick<FixedDueDateEntry, "month" | "day"> | null,
+  dueDayOverride? : number | null,
+  fixedDate? : Pick<FixedDueDateEntry, "month" | "day"> | null,
 ) {
-  const dueBaseDate = new Date(Date.UTC(competenceDate.getUTCFullYear(), competenceDate.getUTCMonth(), 1));
+  const dueBaseDate = new Date(Date.UTC(operationalDate.getUTCFullYear(), operationalDate.getUTCMonth(), 1));
   if (normalizeMonthReference(template.technical_due_month_reference, "vigente") === "anterior") {
     dueBaseDate.setUTCMonth(dueBaseDate.getUTCMonth() - 1);
   }
@@ -765,7 +769,7 @@ function computeTechnicalDueDate(
   }
 
   return computeDueDate(
-    competenceDate,
+    operationalDate,
     dueDayOverride ?? template.due_day,
     normalizeMonthReference(template.technical_due_month_reference, "vigente"),
   );
@@ -887,7 +891,7 @@ async function assertOrganizationFeatureEnabled(
   }
 }
 
-async function loadClientsMap(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+async function loadClientsMap(supabaseAdmin: SupabaseAdmin, organizationId? : string) {
   let query = supabaseAdmin
     .from("clients")
     .select("id, organization_id, name, cnpj, regime, sector, status, email, phone, contact, obligation_completion_whatsapp_enabled")
@@ -958,7 +962,7 @@ function buildEmptyOverview(warnings: string[] = []) {
   };
 }
 
-async function loadTemplatesMap(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+async function loadTemplatesMap(supabaseAdmin: SupabaseAdmin, organizationId? : string) {
   let query = supabaseAdmin
     .from("obligation_templates")
     .select("*")
@@ -971,7 +975,7 @@ async function loadTemplatesMap(supabaseAdmin: SupabaseAdmin, organizationId?: s
   return new Map((data || []).map((row) => [String((row as JsonRecord).id), row as TemplateRow]));
 }
 
-async function loadProfilesMap(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+async function loadProfilesMap(supabaseAdmin: SupabaseAdmin, organizationId? : string) {
   let query = supabaseAdmin
     .from("client_obligation_profiles")
     .select("*")
@@ -986,8 +990,8 @@ async function loadProfilesMap(supabaseAdmin: SupabaseAdmin, organizationId?: st
 
 async function loadReferenceFilesMap(
   supabaseAdmin: SupabaseAdmin,
-  organizationId?: string,
-  options: { includeAnalysisPayload?: boolean } = {},
+  organizationId? : string,
+  options: { includeAnalysisPayload? : boolean } = {},
 ) {
   const selectColumns = options.includeAnalysisPayload
     ? "*"
@@ -1038,7 +1042,7 @@ async function loadReferenceFilesMap(
   return { byTemplateDocument, byId, rows };
 }
 
-async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin, organizationId?: string) {
+async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin, organizationId? : string) {
   let query = supabaseAdmin
     .from("document_ingestion_jobs")
     .select("*")
@@ -1146,7 +1150,7 @@ function buildEligibleInstanceCandidates(
   }: {
     clientId: string;
     exactCompetence: string | null;
-    templateIds?: Set<string>;
+    templateIds? : Set<string>;
   },
 ) {
   const competenceCandidates = buildCompetenceCandidates(exactCompetence);
@@ -1194,7 +1198,7 @@ async function resolveDocumentMatch(
     documentTypeKey,
     strategy: "manual_review",
     score: 0.45,
-    reasons: ["Aguardando validação humana para vincular o arquivo."],
+    reasons: ["Aguardando valida??o humana para vincular o arquivo."],
     reviewRequired: true,
     documentDefinition: null,
     candidateInstanceIds: [],
@@ -1217,10 +1221,10 @@ async function resolveDocumentMatch(
       documentTypeKey,
       strategy: "manual_instance",
       score: 1,
-      reasons: ["Instância definida manualmente pelo usuário."],
+      reasons: ["Inst?ncia definida manualmente pelo usu?rio."],
       reviewRequired: false,
       documentDefinition: resolveExpectedDocument(template, documentTypeKey),
-      candidateInstanceIds: instance ? [instance.id] : [],
+      candidateInstanceIds: instance ?[instance.id] : [],
     };
   }
 
@@ -1253,8 +1257,8 @@ async function resolveDocumentMatch(
         strategy: "direct_expected_doc",
         score: 0.95,
         reasons: [
-          "Documento esperado informado pelo usuário.",
-          `Competência compatível: ${exactCandidates[0].instance.competence_label}.`,
+          "Documento esperado informado pelo usu?rio.",
+          `Compet?ncia compat?vel: ${exactCandidates[0].instance.competence_label}.`,
         ],
         reviewRequired: false,
         documentDefinition: resolveExpectedDocument(exactCandidates[0].template, documentTypeKey),
@@ -1276,7 +1280,7 @@ async function resolveDocumentMatch(
           documentTypeKey,
           strategy: "single_open_instance",
           score: 0.75,
-          reasons: ["Documento esperado informado e apenas uma instância elegível aberta encontrada."],
+          reasons: ["Documento esperado informado e apenas uma compet?ncia aberta encontrada."],
           reviewRequired: true,
           documentDefinition: resolveExpectedDocument(openCandidates[0].template, documentTypeKey),
           candidateInstanceIds: openCandidates.map((item) => item.instance.id),
@@ -1304,7 +1308,7 @@ async function resolveDocumentMatch(
         score: 0.9,
         reasons: [
           "Documento identificado pelos apelidos no nome do arquivo.",
-          `Competência compatível: ${exactCandidates[0].instance.competence_label}.`,
+          `Compet?ncia compat?vel: ${exactCandidates[0].instance.competence_label}.`,
         ],
         reviewRequired: false,
         documentDefinition: aliasDefinition,
@@ -1326,7 +1330,7 @@ async function resolveDocumentMatch(
     candidateInstanceIds,
     documentDefinition: templateId ? resolveExpectedDocument(templatesMap.get(templateId) || null, documentTypeKey) : null,
     reasons: candidateInstanceIds.length > 1
-      ? ["Mais de uma instância elegível encontrada. Revisão humana necessária."]
+      ?["Mais de uma compet?ncia eleg?vel encontrada. Revis?o humana necess?ria."]
       : emptyResult.reasons,
   };
 }
@@ -1358,6 +1362,204 @@ function buildReferenceFingerprintTokens(fingerprint: JsonRecord) {
     ...asStringArray(fingerprint.primary_cues),
     ...asStringArray(fingerprint.key_phrases),
   ].map((item) => normalizeToken(item)).filter(Boolean)));
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function asJsonArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function buildLayoutPatternFromLine(line: string) {
+  const compact = String(line || "").replace(/\s+/g, " ").trim();
+  const tokenCount = compact.split(/\s+/).filter(Boolean).length;
+  const numberCount = (compact.match(/\d+/g) || []).length;
+  const punctuation = Array.from(new Set((compact.match(/[.:/%$,-]/g) || []).slice(0, 8))).join("");
+  const bucket = (input: number, step: number) => input > 0 ? String(Math.round(input / step) * step) : "0";
+  return [
+    `len:${bucket(compact.length, 12)}`,
+    `tok:${bucket(tokenCount, 2)}`,
+    `num:${bucket(numberCount, 1)}`,
+    punctuation ? `p:${punctuation}` : "p:none",
+    /R\$/i.test(compact) || /\bvalor\b/i.test(compact) ? "money" : null,
+    /\d{1,2}[/. -]\d{1,2}[/. -]\d{2,4}/.test(compact) || /\d{1,2}[/. -]\d{4}/.test(compact) ? "date" : null,
+  ].filter(Boolean).join("|");
+}
+
+function buildComparableLayoutSignature(fingerprint: JsonRecord) {
+  const explicit = asJsonRecord(fingerprint.layout_signature);
+  const explicitLinePatterns = asStringArray(explicit.line_patterns);
+  const explicitPagePatterns = asStringArray(explicit.page_patterns);
+  const explicitFieldLabels = asStringArray(explicit.field_labels);
+  const hasExplicitSignature = explicitLinePatterns.length > 0 || explicitPagePatterns.length > 0 || explicitFieldLabels.length > 0;
+
+  if (hasExplicitSignature) {
+    return {
+      hasExplicitSignature: true,
+      pageCount: asNumber(explicit.page_count, asNumber(fingerprint.page_count, 0)),
+      lineCount: asNumber(explicit.line_count, asNumber(fingerprint.line_count, 0)),
+      charCount: asNumber(fingerprint.char_count || fingerprint.extracted_chars, 0),
+      pagePatterns: explicitPagePatterns,
+      linePatterns: explicitLinePatterns,
+      fieldLabels: explicitFieldLabels,
+    };
+  }
+
+  const legacyLines = [
+    ...(asTrimmedString(fingerprint.extracted_text)?.split(/\r?\n/).slice(0, 80) || []),
+    ...(asTrimmedString(fingerprint.extracted_text_preview)?.split(/\r?\n/).slice(0, 40) || []),
+    ...asStringArray(fingerprint.key_phrases),
+    ...asStringArray(fingerprint.primary_cues),
+    asTrimmedString(fingerprint.probable_title),
+    asTrimmedString(fingerprint.title_guess),
+    ...asJsonArray(fingerprint.competence_candidate_details).map((item) => asTrimmedString((item as JsonRecord | null)?.value)),
+  ].filter(Boolean);
+
+  return {
+    hasExplicitSignature: false,
+    pageCount: asNumber(fingerprint.page_count, 0),
+    lineCount: asNumber(fingerprint.line_count, 0),
+    charCount: asNumber(fingerprint.char_count || fingerprint.extracted_chars, 0),
+    pagePatterns: legacyLines.slice(0, 30).map(buildLayoutPatternFromLine),
+    linePatterns: legacyLines.slice(0, 80).map(buildLayoutPatternFromLine),
+    fieldLabels: asStringArray(fingerprint.detected_fields),
+  };
+}
+
+function jaccardSimilarity(left: string[], right: string[]) {
+  const leftSet = new Set(left.map((item) => String(item || "").trim()).filter(Boolean));
+  const rightSet = new Set(right.map((item) => String(item || "").trim()).filter(Boolean));
+  if (leftSet.size === 0 || rightSet.size === 0) return 0;
+
+  let intersection = 0;
+  for (const item of leftSet) {
+    if (rightSet.has(item)) intersection += 1;
+  }
+
+  const union = new Set([...leftSet, ...rightSet]).size;
+  return union > 0 ? intersection / union : 0;
+}
+
+function closenessRatio(left: number, right: number) {
+  if (!left || !right) return 0;
+  return 1 - Math.min(1, Math.abs(left - right) / Math.max(left, right));
+}
+
+function computeLayoutSimilarity(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord) {
+  const input = buildComparableLayoutSignature(inputFingerprint);
+  const reference = buildComparableLayoutSignature(referenceFingerprint);
+  const usable =
+    (input.linePatterns.length > 0 || input.pagePatterns.length > 0) &&
+    (reference.linePatterns.length > 0 || reference.pagePatterns.length > 0);
+
+  if (!usable) {
+    return { score: 0, usable: false, explicit: input.hasExplicitSignature && reference.hasExplicitSignature };
+  }
+
+  const lineScore = jaccardSimilarity(input.linePatterns, reference.linePatterns);
+  const pageScore = jaccardSimilarity(input.pagePatterns, reference.pagePatterns);
+  const fieldScore = jaccardSimilarity(input.fieldLabels, reference.fieldLabels);
+  const pageCountScore = input.pageCount && reference.pageCount
+    ? input.pageCount === reference.pageCount
+      ? 1
+      : Math.abs(input.pageCount - reference.pageCount) === 1
+        ? 0.6
+        : 0
+    : 0;
+  const lineCountScore = closenessRatio(input.lineCount, reference.lineCount);
+  const charScore = closenessRatio(input.charCount, reference.charCount);
+
+  const structuralScore =
+    lineScore * 0.42 +
+    pageScore * 0.2 +
+    fieldScore * 0.18 +
+    pageCountScore * 0.1 +
+    lineCountScore * 0.06 +
+    charScore * 0.04;
+
+  return {
+    score: Math.max(0, Math.min(1, structuralScore)),
+    usable: true,
+    explicit: input.hasExplicitSignature && reference.hasExplicitSignature,
+  };
+}
+
+type DocumentFamily = "salary_receipt" | "fgts" | "inss" | "pis_cofins" | "irpj_csll" | "icms";
+
+const documentFamilyAliases: Array<{ family: DocumentFamily; aliases: string[] }> = [
+  {
+    family: "salary_receipt",
+    aliases: [
+      "recibo_salario",
+      "recibo_de_salario",
+      "recsal",
+      "rec_sal",
+      "recibo",
+      "holerite",
+      "contracheque",
+      "demonstrativo_pagamento",
+      "demonstrativo_de_pagamento",
+      "recibo_pagamento_salario",
+      "salario",
+      "folha_pagamento",
+      "folha_de_pagamento",
+    ],
+  },
+  {
+    family: "fgts",
+    aliases: ["fgts", "guia_fgts", "fgts_digital", "grf", "guia_recolhimento_fgts"],
+  },
+  {
+    family: "inss",
+    aliases: ["inss", "gps", "guia_inss", "previdencia_social", "contribuicao_previdenciaria"],
+  },
+  {
+    family: "pis_cofins",
+    aliases: ["pis", "cofins", "pis_cofins", "darf_pis", "darf_cofins"],
+  },
+  {
+    family: "irpj_csll",
+    aliases: ["irpj", "csll", "irpj_csll", "darf_irpj", "darf_csll"],
+  },
+  {
+    family: "icms",
+    aliases: ["icms", "efd_icms", "gia", "guia_icms"],
+  },
+];
+
+function detectDocumentFamiliesFromText(...sources: Array<unknown>): Set<DocumentFamily> {
+  const haystack = sources
+    .flatMap((source) => Array.isArray(source) ? source : [source])
+    .map((source) => normalizeToken(source))
+    .filter(Boolean)
+    .join("_");
+  const families = new Set<DocumentFamily>();
+  if (!haystack) return families;
+
+  for (const entry of documentFamilyAliases) {
+    if (entry.aliases.some((alias) => haystack.includes(normalizeToken(alias)))) {
+      families.add(entry.family);
+    }
+  }
+
+  return families;
+}
+
+function compareDocumentFamilies(inputFamilies: Set<DocumentFamily>, candidateFamilies: Set<DocumentFamily>) {
+  if (inputFamilies.size === 0 || candidateFamilies.size === 0) {
+    return { score: 0, matched: false, mismatched: false };
+  }
+
+  for (const family of inputFamilies) {
+    if (candidateFamilies.has(family)) {
+      return { score: 0.08, matched: true, mismatched: false };
+    }
+  }
+
+  return { score: -0.35, matched: false, mismatched: true };
 }
 
 function buildReferenceDocumentCandidates(
@@ -1443,10 +1645,10 @@ async function resolveDocumentReferenceMatch(
       documentTypeKey,
       strategy: "manual_instance",
       score: 1,
-      reasons: ["Instancia definida manualmente pelo usuario."],
+      reasons: ["Compet?ncia definida manualmente pelo usu?rio."],
       reviewRequired: false,
       documentDefinition: resolveExpectedDocument(template, documentTypeKey),
-      candidateInstanceIds: instance ? [instance.id] : [],
+      candidateInstanceIds: instance ?[instance.id] : [],
       detectedClientId: effectiveClientId,
       autoLinkBlockReason: null,
     };
@@ -1456,7 +1658,7 @@ async function resolveDocumentReferenceMatch(
     return {
       ...emptyResult,
       reasons: analysis.detected_cnpj
-        ? ["CNPJ detectado nao corresponde a nenhum cliente da Grow."]
+        ?["CNPJ detectado nao corresponde a nenhum cliente da Grow."]
         : ["Nao foi possivel detectar CNPJ valido no documento."],
       autoLinkBlockReason: "CNPJ obrigatorio para auto-vinculo.",
     };
@@ -1509,43 +1711,72 @@ async function resolveDocumentReferenceMatch(
           : "Cliente selecionado manualmente.",
         "Nenhuma obrigacao ativa elegivel foi encontrada para este arquivo e competencia.",
       ],
-      autoLinkBlockReason: "Cadastre/vincule a obrigacao ao cliente ou selecione a instancia manualmente.",
+      autoLinkBlockReason: "Cadastre/vincule a obriga??o ao cliente ou selecione a compet?ncia manualmente.",
     };
   }
 
   const inputTokens = analysis.keywords;
   const inputCues = analysis.primary_cues;
   const fileNameToken = normalizeToken(fileName || "");
-  const extractedTextToken = normalizeToken(analysis.extracted_text || "");
+  const contentDocumentFamilies = detectDocumentFamiliesFromText(
+    analysis.extracted_text,
+    analysis.keywords,
+    analysis.primary_cues,
+    asStringArray(analysis.fingerprint_payload?.frequent_tokens),
+    asStringArray(analysis.fingerprint_payload?.primary_cues),
+  );
+  const inputDocumentFamilies = contentDocumentFamilies;
 
   const ranked = candidates.map((candidate) => {
     const referenceTokens = asStringArray(candidate.reference.keywords);
     const referenceCues = asStringArray(candidate.reference.primary_cues);
     const referenceFingerprint = asJsonRecord(candidate.reference.fingerprint_payload);
+    const referenceFingerprintForLayout = {
+      ...referenceFingerprint,
+      extracted_text: candidate.reference.extracted_text,
+      extracted_text_preview: candidate.reference.extracted_text_preview,
+    };
     const referenceFingerprintTokens = buildReferenceFingerprintTokens(referenceFingerprint);
     const documentAliasTokens = buildDocumentAliasTokens(candidate.document);
+    const candidateDocumentFamilies = detectDocumentFamiliesFromText(
+      candidate.template.name,
+      candidate.template.code,
+      candidate.document.label,
+      candidate.document.document_type_key,
+      candidate.document.aliases,
+      referenceTokens,
+      referenceCues,
+      referenceFingerprintTokens,
+    );
+    const familyMatch = compareDocumentFamilies(inputDocumentFamilies, candidateDocumentFamilies);
     const aliasScore = [candidate.document.label, candidate.document.document_type_key, ...candidate.document.aliases]
       .map((item) => normalizeToken(item))
       .filter(Boolean)
-      .some((token) => fileNameToken.includes(token) || extractedTextToken.includes(token))
-      ? 0.18
+      .some((token) => fileNameToken.includes(token))
+      ? 0.03
       : 0;
-    const docHintScore = documentTypeKey && documentTypeKey === candidate.document.document_type_key ? 0.15 : 0;
-    const keywordScore = overlapRatio(inputTokens, [...referenceTokens, ...documentAliasTokens]) * 0.35;
-    const cueScore = overlapRatio(inputCues, referenceCues) * 0.2;
-    const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens) * 0.2;
-    const textScore = candidate.reference.extracted_text && analysis.extracted_text
-      ? overlapRatio(
-          inputTokens,
-          analysis.extracted_text.includes(candidate.reference.extracted_text.slice(0, 80)) ? referenceTokens : referenceTokens,
-        ) * 0.1
+    const docHintScore = documentTypeKey && documentTypeKey === candidate.document.document_type_key ? 0.08 : 0;
+    const keywordScore = overlapRatio(inputTokens, [...referenceTokens, ...documentAliasTokens]);
+    const cueScore = overlapRatio(inputCues, referenceCues);
+    const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens);
+    const layoutMatch = computeLayoutSimilarity(analysis.fingerprint_payload, referenceFingerprintForLayout);
+    const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
+    const zoneCompetence = zoneSignals.competence || effectiveCompetence;
+    const structuralScore = layoutMatch.usable
+      ? (layoutMatch.score * (layoutMatch.explicit ? 0.74 : 0.48))
       : 0;
-    const cnpjScore = detectedClientByCnpj ? 0.2 : 0;
-    const totalScore = Math.min(1, keywordScore + cueScore + fingerprintScore + textScore + aliasScore + docHintScore + cnpjScore);
+    const textSupportScore = layoutMatch.usable
+      ? keywordScore * 0.04 + cueScore * 0.04 + fingerprintScore * 0.03
+      : keywordScore * 0.18 + cueScore * 0.12 + fingerprintScore * 0.1;
+    const cnpjScore = detectedClientByCnpj ? 0.08 : 0;
+    const totalScore = Math.max(
+      0,
+      Math.min(1, structuralScore + textSupportScore + aliasScore + docHintScore + cnpjScore + familyMatch.score),
+    );
 
     const eligibleInstances = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
       clientId: effectiveClientId,
-      exactCompetence: effectiveCompetence,
+      exactCompetence: zoneCompetence,
       templateIds: new Set([candidate.template.id]),
     });
 
@@ -1553,6 +1784,13 @@ async function resolveDocumentReferenceMatch(
       ...candidate,
       eligibleInstances,
       totalScore: Number(totalScore.toFixed(2)),
+      layoutScore: Number(layoutMatch.score.toFixed(2)),
+      layoutUsable: layoutMatch.usable,
+      layoutExplicit: layoutMatch.explicit,
+      familyMatched: familyMatch.matched,
+      familyMismatched: familyMatch.mismatched,
+      zoneSignals,
+      zoneCompetence,
     };
   }).sort((left, right) => right.totalScore - left.totalScore);
 
@@ -1568,21 +1806,31 @@ async function resolveDocumentReferenceMatch(
   }
 
   const ambiguous = second && Math.abs(best.totalScore - second.totalScore) <= 0.05;
+  const zoneClientByCnpj = best.zoneSignals.cnpj
+    ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === best.zoneSignals.cnpj) || null
+    : null;
+  const zoneClientMismatch = Boolean(zoneClientByCnpj && zoneClientByCnpj.id !== effectiveClientId);
+  const finalDetectedClientId = zoneClientByCnpj?.id || effectiveClientId;
+  const finalDetectedCnpj = best.zoneSignals.cnpj || analysis.detected_cnpj;
+  const finalCompetence = best.zoneSignals.competence || effectiveCompetence;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
   const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
   const hasStrongDocumentHint = Boolean(
     documentTypeKey === best.document.document_type_key ||
+    best.familyMatched ||
+    (best.layoutUsable && best.layoutScore >= 0.68) ||
     [best.document.label, best.document.document_type_key, ...best.document.aliases]
       .map((item) => normalizeToken(item))
       .filter(Boolean)
-      .some((token) => fileNameToken.includes(token) || extractedTextToken.includes(token)),
+      .some((token) => fileNameToken.includes(token)),
   );
   const autoAllowed = Boolean(
     uniqueOpenInstance &&
     !ambiguous &&
+    !zoneClientMismatch &&
     (
-      (analysis.detected_cnpj && detectedClientByCnpj && best.totalScore >= 0.85) ||
-      (hasManualContext && hasStrongDocumentHint && best.totalScore >= 0.75)
+      (analysis.detected_cnpj && detectedClientByCnpj && best.totalScore >= 0.82 && (!best.layoutUsable || best.layoutScore >= 0.55)) ||
+      (hasManualContext && hasStrongDocumentHint && best.totalScore >= 0.72)
     ),
   );
 
@@ -1594,16 +1842,35 @@ async function resolveDocumentReferenceMatch(
     `Score do modelo: ${best.totalScore.toFixed(2)}.`,
   ];
 
-  if (effectiveCompetence) {
-    reasons.push(`Competencia considerada: ${effectiveCompetence}.`);
+  if (best.layoutUsable) {
+    reasons.push(`Semelhanca estrutural com o modelo: ${best.layoutScore.toFixed(2)}.`);
+  } else {
+    reasons.push("Documento modelo sem assinatura estrutural completa; reanexe o PDF modelo para melhorar a precisao.");
+  }
+  if (finalCompetence) {
+    reasons.push(`Competencia considerada: ${finalCompetence}.`);
+  }
+  if (best.zoneSignals.cnpjText || best.zoneSignals.competenceText) {
+    reasons.push("CNPJ/competencia lidos nas areas predefinidas do documento modelo.");
+  }
+  if (zoneClientMismatch) {
+    reasons.push("O CNPJ lido na area predefinida aponta para outro cliente; revisao humana necessaria.");
+  }
+  if (best.familyMatched) {
+    reasons.push("Tipo documental confirmado por pistas do arquivo/modelo.");
+  }
+  if (best.familyMismatched) {
+    reasons.push("Existe divergencia entre o tipo documental detectado no arquivo e o modelo candidato.");
   }
 
   const autoLinkBlockReason = autoAllowed
     ? null
     : !uniqueOpenInstance
-      ? "Nao existe uma instancia unica e elegivel para a obrigacao candidata."
+      ? "N?o existe uma compet?ncia ?nica e eleg?vel para a obriga??o candidata."
       : ambiguous
         ? "Mais de um documento modelo apresentou score parecido."
+        : zoneClientMismatch
+          ? "CNPJ lido na area predefinida nao pertence ao cliente usado no roteamento."
         : !analysis.detected_cnpj && !hasManualContext
           ? "Nao foi detectado CNPJ valido no documento e nao ha contexto manual suficiente."
           : "Score abaixo do limiar de auto-vinculo.";
@@ -1619,9 +1886,9 @@ async function resolveDocumentReferenceMatch(
     reviewRequired: !autoAllowed,
     documentDefinition: best.document,
     candidateInstanceIds: best.eligibleInstances.map((item) => item.instance.id),
-    detectedClientId: effectiveClientId,
-    detectedCnpj: analysis.detected_cnpj,
-    competenceDetected: effectiveCompetence,
+    detectedClientId: finalDetectedClientId,
+    detectedCnpj: finalDetectedCnpj,
+    competenceDetected: finalCompetence,
     referenceFileId: best.reference.id,
     referenceMatchScore: best.totalScore,
     referenceMatchReasons: reasons,
@@ -1640,8 +1907,8 @@ async function createInstanceEvent(
   eventType: string,
   fromStatus: string | null,
   toStatus: string | null,
-  comment?: string | null,
-  metadata?: JsonRecord,
+  comment? : string | null,
+  metadata? : JsonRecord,
 ) {
   const { error } = await supabaseAdmin
     .from("obligation_instance_events")
@@ -1727,7 +1994,7 @@ async function upsertIngestionJob(
     robotOriginPath: string | null;
     robotMachineId: string | null;
     createdBy: string;
-    metadata?: JsonRecord;
+    metadata? : JsonRecord;
   },
 ) {
   const row = {
@@ -1875,7 +2142,7 @@ function sanitizeProviderMessage(value: unknown) {
 
   const providerMessage = asTrimmedString(parsed?.message) || message;
   const providerName = asTrimmedString(parsed?.name);
-  const domainMatch = providerMessage.match(/The\s+(.+?)\s+domain is not verified/i);
+  const domainMatch = providerMessage.match(/The\s+(.+? )\s+domain is not verified/i);
   if (domainMatch) {
     return `O dominio do remetente ${domainMatch[1]} nao esta autorizado pelo provedor SMTP. Verifique o remetente configurado ou use uma conta SMTP compativel.`;
   }
@@ -1934,7 +2201,7 @@ async function prepareObligationDelivery(
   payload: JsonRecord,
 ): Promise<DeliveryPreparation> {
   const instanceId = asTrimmedString(payload.instance_id);
-  if (!instanceId) throw new Error("Instancia da obrigacao e obrigatoria.");
+  if (!instanceId) throw new Error("Compet?ncia da obriga??o ? obrigat?ria.");
 
   const { data: instanceData, error: instanceError } = await supabaseAdmin
     .from("obligation_instances")
@@ -1942,7 +2209,7 @@ async function prepareObligationDelivery(
     .eq("organization_id", organizationId)
     .eq("id", instanceId)
     .single();
-  if (instanceError || !instanceData) throw new Error("Instancia da obrigacao nao encontrada.");
+  if (instanceError || !instanceData) throw new Error("Compet?ncia da obriga??o n?o encontrada.");
 
   const instance = instanceData as InstanceRow;
   const [{ data: templateData, error: templateError }, { data: clientData, error: clientError }] = await Promise.all([
@@ -2262,7 +2529,7 @@ async function handleSendDelivery(
     .select("*")
     .single();
   if (instanceUpdateError || !updatedInstanceData) {
-    throw instanceUpdateError || new Error("Falha ao concluir instancia apos envio.");
+    throw instanceUpdateError || new Error("Falha ao concluir compet?ncia ap?s envio.");
   }
 
   await Promise.all([
@@ -2354,7 +2621,7 @@ async function handleCancelDelivery(
   const attemptId = asTrimmedString(payload.attempt_id);
   const reason = asTrimmedString(payload.reason) || "Envio cancelado manualmente.";
   if (!instanceId && !attemptId) {
-    return jsonResponse({ error: "Informe a instancia ou tentativa de envio para cancelar." }, 400);
+    return jsonResponse({ error: "Informe a compet?ncia ou tentativa de envio para cancelar." }, 400);
   }
 
   let query = supabaseAdmin
@@ -2499,7 +2766,7 @@ async function maybeSendCompletionEmail(
       "completion_email_failed",
       null,
       null,
-      "Obrigação concluída, mas o cliente não possui e-mail válido cadastrado.",
+      "Obriga??o conclu?da, mas o cliente n?o possui e-mail v?lido cadastrado.",
       { inbox_item_id: inboxItem.id },
     );
     return { attempted: true as const, sent: false as const, reason: "missing_recipient" };
@@ -2516,12 +2783,12 @@ async function maybeSendCompletionEmail(
   };
 
   const subject = renderCompletionEmailTemplate(
-    template.completion_email_subject || "{{obrigacao_nome}} concluída - {{competencia}}",
+    template.completion_email_subject || "{{obrigacao_nome}} conclu?da - {{competencia}}",
     renderPayload,
   );
   const textBody = renderCompletionEmailTemplate(
     template.completion_email_body ||
-      "Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}.",
+      "Ol?, {{cliente_nome}}.\n\nA obriga??o {{obrigacao_nome}} referente ? compet?ncia {{competencia}} foi conclu?da.\n\nSetor respons?vel: {{setor}}.\nPrazo t?cnico: {{prazo_tecnico}}.",
     renderPayload,
   );
   const htmlBody = buildCompletionEmailBodyHtml(textBody);
@@ -2543,7 +2810,7 @@ async function maybeSendCompletionEmail(
       "completion_email_failed",
       null,
       null,
-      "Obrigação concluída, mas houve falha no disparo do e-mail automático.",
+      "Obriga??o conclu?da, mas houve falha no disparo do e-mail autom?tico.",
       {
         inbox_item_id: inboxItem.id,
         provider_status: sendResult.status,
@@ -2564,7 +2831,7 @@ async function maybeSendCompletionEmail(
     "completion_email_sent",
     null,
     null,
-    `E-mail automático enviado para ${recipientEmail}.`,
+    `E-mail autom?tico enviado para ${recipientEmail}.`,
     {
       inbox_item_id: inboxItem.id,
       recipient_email: recipientEmail,
@@ -2604,7 +2871,7 @@ async function maybeSendCompletionWhatsApp(
       "completion_whatsapp_failed",
       null,
       null,
-      "ObrigaÃ§Ã£o concluÃ­da, mas o cliente nÃ£o possui WhatsApp vÃ¡lido cadastrado.",
+      "Obriga??o conclu?da, mas o cliente n?o possui WhatsApp v?lido cadastrado.",
       { inbox_item_id: inboxItem.id },
     );
     return { attempted: true as const, sent: false as const, reason: "missing_recipient" };
@@ -2620,7 +2887,7 @@ async function maybeSendCompletionWhatsApp(
 
   const messageBody = renderCompletionEmailTemplate(
     template.completion_whatsapp_body ||
-      "OlÃ¡, {{cliente_nome}}.\n\nA obrigaÃ§Ã£o {{obrigacao_nome}} referente Ã  competÃªncia {{competencia}} foi concluÃ­da.\n\nSetor responsÃ¡vel: {{setor}}.\nPrazo tÃ©cnico: {{prazo_tecnico}}.",
+      "Ol?, {{cliente_nome}}.\n\nA obriga??o {{obrigacao_nome}} referente ? compet?ncia {{competencia}} foi conclu?da.\n\nSetor respons?vel: {{setor}}.\nPrazo t?cnico: {{prazo_tecnico}}.",
     renderPayload,
   );
 
@@ -2634,7 +2901,7 @@ async function maybeSendCompletionWhatsApp(
         "completion_whatsapp_failed",
         null,
         null,
-        "ObrigaÃ§Ã£o concluÃ­da, mas o WhatsApp automÃ¡tico nÃ£o foi enviado porque a integraÃ§Ã£o nÃ£o estÃ¡ configurada.",
+        "Obriga??o conclu?da, mas o WhatsApp autom?tico n?o foi enviado porque a integra??o n?o est? configurada.",
         {
           inbox_item_id: inboxItem.id,
           recipient_phone: target.phoneDigits,
@@ -2651,7 +2918,7 @@ async function maybeSendCompletionWhatsApp(
       "completion_whatsapp_sent",
       null,
       null,
-      `WhatsApp automÃ¡tico enviado para ${target.phoneDigits}.`,
+      `WhatsApp autom?tico enviado para ${target.phoneDigits}.`,
       {
         inbox_item_id: inboxItem.id,
         recipient_phone: target.phoneDigits,
@@ -2668,7 +2935,7 @@ async function maybeSendCompletionWhatsApp(
       "completion_whatsapp_failed",
       null,
       null,
-      "ObrigaÃ§Ã£o concluÃ­da, mas houve falha no disparo do WhatsApp automÃ¡tico.",
+      "Obriga??o conclu?da, mas houve falha no disparo do WhatsApp autom?tico.",
       {
         inbox_item_id: inboxItem.id,
         recipient_phone: target.phoneDigits,
@@ -2753,7 +3020,7 @@ async function applyDocumentOperationalFlow(
   return await applyDocumentOperationalFlowV2(supabaseAdmin, actorId, inboxItem);
   const now = new Date().toISOString();
   if (nextStatus !== "aguardando_documento" && failedAutomaticDeliveries.length > 0) {
-    executionNotes = `Documento anexado e obrigaÃ§Ã£o concluÃ­da automaticamente. ${failedAutomaticDeliveries.join(" e ")} nÃ£o pÃ´de ser enviado.`;
+    executionNotes = `Documento anexado e obriga??o conclu?da automaticamente. ${failedAutomaticDeliveries.join(" e ")} n?o p?de ser enviado.`;
   }
 
   await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
@@ -2784,7 +3051,7 @@ async function applyDocumentOperationalFlow(
       application_status: "pending",
       communication_status: "pending",
       publication_status: "pending",
-      execution_notes: "Aguardando vinculação manual da instância.",
+      execution_notes: "Aguardando vincula??o manual da compet?ncia.",
     });
 
     return { processed: false, reason: "awaiting_link" };
@@ -2801,8 +3068,8 @@ async function applyDocumentOperationalFlow(
       processing_status: "failed",
       processing_completed_at: now,
       execution_status: "failed",
-      last_processing_error: instanceError?.message || "Instância vinculada não encontrada.",
-      execution_notes: "Falha ao localizar a instância vinculada para executar a obrigação.",
+      last_processing_error: instanceError?.message || "Inst?ncia vinculada n?o encontrada.",
+      execution_notes: "Falha ao localizar a compet?ncia vinculada para executar a obriga??o.",
     });
 
     return { processed: false, reason: "missing_instance" };
@@ -2819,8 +3086,8 @@ async function applyDocumentOperationalFlow(
       processing_status: "failed",
       processing_completed_at: now,
       execution_status: "failed",
-      last_processing_error: "Template ou cliente da instância não encontrado.",
-      execution_notes: "Falha ao carregar o contexto operacional da obrigação.",
+      last_processing_error: "Template ou cliente da compet?ncia n?o encontrado.",
+      execution_notes: "Falha ao carregar o contexto operacional da obriga??o.",
     });
 
     return { processed: false, reason: "missing_context" };
@@ -2853,7 +3120,7 @@ async function applyDocumentOperationalFlow(
       processing_completed_at: now,
       execution_status: "failed",
       last_processing_error: fileError.message,
-      execution_notes: "Falha ao anexar o arquivo na instância da obrigação.",
+      execution_notes: "Falha ao anexar o arquivo na compet?ncia da obriga??o.",
     });
 
     return { processed: false, reason: "file_upsert_failed" };
@@ -2896,8 +3163,8 @@ async function applyDocumentOperationalFlow(
         processing_status: "failed",
         processing_completed_at: now,
         execution_status: "failed",
-        last_processing_error: updateError?.message || "Falha ao atualizar o status da obrigação.",
-        execution_notes: "Documento anexado, mas a execução automática da obrigação falhou.",
+        last_processing_error: updateError?.message || "Falha ao atualizar o status da obriga??o.",
+        execution_notes: "Documento anexado, mas a execu??o autom?tica da obriga??o falhou.",
       });
 
       return { processed: false, reason: "instance_update_failed" };
@@ -2911,7 +3178,7 @@ async function applyDocumentOperationalFlow(
       "status_change",
       instance.status,
       nextStatus,
-      "Status ajustado automaticamente após recebimento do documento.",
+      "Status ajustado automaticamente ap?s recebimento do documento.",
       { inbox_item_id: inboxItem.id },
     );
   }
@@ -2929,15 +3196,15 @@ async function applyDocumentOperationalFlow(
     ];
 
   const failedAutomaticDeliveries = [
-    emailResult.attempted && !emailResult.sent ? "o e-mail automÃ¡tico" : null,
-    whatsappResult.attempted && !whatsappResult.sent ? "o WhatsApp automÃ¡tico" : null,
+    emailResult.attempted && !emailResult.sent ? "o e-mail autom?tico" : null,
+    whatsappResult.attempted && !whatsappResult.sent ? "o WhatsApp autom?tico" : null,
   ].filter((value): value is string => Boolean(value));
 
   let executionNotes = nextStatus === "aguardando_documento"
-    ? "Documento anexado. A obrigação ainda aguarda outros documentos obrigatórios."
+    ? "Documento anexado. A obriga??o ainda aguarda outros documentos obrigat?rios."
     : emailResult.attempted && !emailResult.sent
-      ? "Documento anexado e obrigação concluída automaticamente. O e-mail automático não pôde ser enviado."
-      : "Documento anexado e obrigação concluída automaticamente.";
+      ? "Documento anexado e obriga??o conclu?da automaticamente. O e-mail autom?tico n?o p?de ser enviado."
+      : "Documento anexado e obriga??o conclu?da automaticamente.";
 
   await markInboxProcessingState(supabaseAdmin, inboxItem.id, {
     processing_status: "processed",
@@ -3001,7 +3268,7 @@ async function applyDocumentOperationalFlowV2(
       execution_status: "pending",
       classification_status: "review_required",
       application_status: "pending",
-      execution_notes: "Aguardando vinculacao manual da instancia.",
+      execution_notes: "Aguardando vincula??o manual da compet?ncia.",
     });
     await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
       status: "review_required",
@@ -3024,13 +3291,13 @@ async function applyDocumentOperationalFlowV2(
       processing_completed_at: now,
       execution_status: "failed",
       application_status: "failed",
-      last_processing_error: instanceError?.message || "Instancia vinculada nao encontrada.",
-      execution_notes: "Falha ao localizar a instancia vinculada para executar a obrigacao.",
+      last_processing_error: instanceError?.message || "Compet?ncia vinculada n?o encontrada.",
+      execution_notes: "Falha ao localizar a compet?ncia vinculada para executar a obriga??o.",
     });
     await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
       status: "failed",
       application_status: "failed",
-      last_error: instanceError?.message || "Instancia vinculada nao encontrada.",
+      last_error: instanceError?.message || "Compet?ncia vinculada n?o encontrada.",
       completed_at: now,
     });
     return { processed: false, reason: "missing_instance" };
@@ -3048,13 +3315,13 @@ async function applyDocumentOperationalFlowV2(
       processing_completed_at: now,
       execution_status: "failed",
       application_status: "failed",
-      last_processing_error: "Template ou cliente da instancia nao encontrado.",
+      last_processing_error: "Template ou cliente da compet?ncia n?o encontrado.",
       execution_notes: "Falha ao carregar o contexto operacional da obrigacao.",
     });
     await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
       status: "failed",
       application_status: "failed",
-      last_error: "Template ou cliente da instancia nao encontrado.",
+      last_error: "Template ou cliente da compet?ncia n?o encontrado.",
       completed_at: now,
     });
     return { processed: false, reason: "missing_context" };
@@ -3090,7 +3357,7 @@ async function applyDocumentOperationalFlowV2(
       execution_status: "failed",
       application_status: "failed",
       last_processing_error: fileError.message,
-      execution_notes: "Falha ao anexar o arquivo na instancia da obrigacao.",
+      execution_notes: "Falha ao anexar o arquivo na compet?ncia da obriga??o.",
     });
     await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
       status: "failed",
@@ -3263,20 +3530,20 @@ async function syncInstanceArtifacts(
   template: TemplateRow,
   clientName: string,
 ) {
-  const obligationTitle = `${template.name} · ${clientName}`;
+  const obligationTitle = `${template.name} ? ${clientName}`;
   const integrationKey = `instance:${instance.id}`;
   const taskIntegrationKey = `instance:${instance.id}`;
   const instanceDone = instance.status === "concluida" || instance.status === "cancelada";
   const dueDate = `${instance.technical_due_date}T09:00:00.000Z`;
   const organizationId = resolveRowOrganizationId(instance, template);
   if (!organizationId) {
-    throw new Error("Organizacao da instancia de obrigacao nao encontrada para sincronizar calendario e tarefas.");
+    throw new Error("Organiza??o da compet?ncia de obriga??o n?o encontrada para sincronizar calend?rio e tarefas.");
   }
 
   const payload = {
     organization_id: organizationId,
-    title: `${template.name} · ${instance.competence_label}`,
-    description: `${clientName}\nCompetência: ${instance.competence_label}`,
+    title: `${template.name} ? ${instance.competence_label}`,
+    description: `${clientName}\nCompet?ncia: ${instance.competence_label}`,
     entry_type: "obrigacao",
     priority: instance.priority,
     sector: template.sector,
@@ -3332,7 +3599,7 @@ async function syncInstanceArtifacts(
   const taskPayload = {
     organization_id: organizationId,
     title: obligationTitle,
-    description: `Obrigação Grow\nCompetência: ${instance.competence_label}`,
+    description: `Obriga??o Grow\nCompet?ncia: ${instance.competence_label}`,
     sector: template.sector,
     client_name: clientName,
     assignee: instance.current_assignee,
@@ -3366,7 +3633,7 @@ async function ensureInstancesForProfiles(
   actorId: string,
   windowStart: Date,
   windowEnd: Date,
-  targetCompetenceKey?: string,
+  targetOperationalMonthKey?: string,
 ) {
   if (profiles.length === 0) return { created: 0 };
 
@@ -3428,6 +3695,7 @@ async function ensureInstancesForProfiles(
         const currentCompetenceDate = competenceCandidate.date;
         const currentFixedDate = competenceCandidate.fixedDate;
         const technicalDueDate = computeTechnicalDueDate(
+          cursor,
           currentCompetenceDate,
           template,
           profile.due_day_override,
@@ -3439,11 +3707,12 @@ async function ensureInstancesForProfiles(
             : competenceKey(currentCompetenceDate);
         const currentCompetenceLabel =
           currentFixedDate
-            ? `${monthLabel(currentCompetenceDate)} - ${technicalDueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })}${currentFixedDate.label ? ` · ${currentFixedDate.label}` : ""}`
+            ? `${monthLabel(currentCompetenceDate)} - ${technicalDueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })}${currentFixedDate.label ? ` ? ${currentFixedDate.label}` : ""}`
             : monthLabel(currentCompetenceDate);
         const currentCompetenceTime = currentCompetenceDate.getTime();
+        const currentOperationalMonthKey = competenceKey(cursor);
 
-        if (targetCompetenceKey && currentCompetenceKey !== targetCompetenceKey) {
+        if (targetOperationalMonthKey && currentOperationalMonthKey !== targetOperationalMonthKey) {
           continue;
         }
 
@@ -3470,7 +3739,7 @@ async function ensureInstancesForProfiles(
         const uniqueKey = `${profile.client_id}::${profile.template_id}::${currentCompetenceKey}`;
         if (!existingKeys.has(uniqueKey)) {
           const legalDueDate = template.legal_due_day
-            ? computeDueDate(currentCompetenceDate, profile.legal_due_day_override ?? template.legal_due_day)
+            ? computeDueDate(cursor, profile.legal_due_day_override ?? template.legal_due_day)
             : null;
 
           inserts.push({
@@ -3519,7 +3788,7 @@ async function ensureInstancesForProfiles(
       "instance_created",
       null,
       row.status,
-      `Competência ${row.competence_label} gerada automaticamente.`,
+      `Compet?ncia ${row.competence_label} gerada automaticamente.`,
     );
     await syncInstanceArtifacts(supabaseAdmin, row, template, client.name);
   }
@@ -3557,7 +3826,7 @@ async function markOverdueInstances(supabaseAdmin: SupabaseAdmin, actorId: strin
       "status_change",
       row.status,
       "atrasada",
-      "Obrigação marcada como atrasada automaticamente.",
+      "Obriga??o marcada como atrasada automaticamente.",
     );
 
     const template = templatesMap.get(row.template_id);
@@ -3610,7 +3879,7 @@ async function buildOverview(
         actorId,
         currentGenerationWindow.cursorStart,
         currentGenerationWindow.cursorEnd,
-        currentGenerationWindow.targetCompetenceKey,
+        currentGenerationWindow.targetOperationalMonthKey,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha ao sincronizar competencias.";
@@ -3866,7 +4135,7 @@ async function handleUpsertTemplate(
   const name = asTrimmedString(payload.name);
   const codeSource = asTrimmedString(payload.code) || name;
   if (!name || !codeSource) {
-    return jsonResponse({ error: "Nome e código da obrigação são obrigatórios." }, 400);
+    return jsonResponse({ error: "Nome e c?digo da obriga??o s?o obrigat?rios." }, 400);
   }
 
   const expectedDocuments = asExpectedDocuments(payload.expected_documents);
@@ -4096,7 +4365,7 @@ async function handleUpsertTemplate(
         actorId,
         currentGenerationWindow.cursorStart,
         currentGenerationWindow.cursorEnd,
-        currentGenerationWindow.targetCompetenceKey,
+        currentGenerationWindow.targetOperationalMonthKey,
       );
     }
   }
@@ -4298,7 +4567,7 @@ async function handleUpsertProfile(
   const clientId = asTrimmedString(payload.client_id);
   const templateId = asTrimmedString(payload.template_id);
   if (!clientId || !templateId) {
-    return jsonResponse({ error: "Cliente e obrigação são obrigatórios." }, 400);
+    return jsonResponse({ error: "Cliente e obriga??o s?o obrigat?rios." }, 400);
   }
 
   const row = {
@@ -4354,7 +4623,7 @@ async function handleUpsertProfile(
     actorId,
     currentGenerationWindow.cursorStart,
     currentGenerationWindow.cursorEnd,
-    currentGenerationWindow.targetCompetenceKey,
+    currentGenerationWindow.targetOperationalMonthKey,
   );
 
   return jsonResponse({ ok: true, profile: data });
@@ -4388,7 +4657,7 @@ async function handleGenerateInstances(
     actorId,
     currentGenerationWindow.cursorStart,
     currentGenerationWindow.cursorEnd,
-    currentGenerationWindow.targetCompetenceKey,
+    currentGenerationWindow.targetOperationalMonthKey,
   );
 
   return jsonResponse({ ok: true, created_instances: result.created });
@@ -4400,7 +4669,7 @@ async function handleUpdateInstance(
   payload: JsonRecord,
 ) {
   const instanceId = asTrimmedString(payload.instance_id);
-  if (!instanceId) return jsonResponse({ error: "Instância obrigatória." }, 400);
+  if (!instanceId) return jsonResponse({ error: "Inst?ncia obrigat?ria." }, 400);
 
   const { data: currentData, error: currentError } = await supabaseAdmin
     .from("obligation_instances")
@@ -4409,7 +4678,7 @@ async function handleUpdateInstance(
     .single();
 
   if (currentError || !currentData) {
-    return jsonResponse({ error: "Instância não encontrada." }, 404);
+    return jsonResponse({ error: "Inst?ncia n?o encontrada." }, 404);
   }
 
   const current = currentData as InstanceRow;
@@ -4441,7 +4710,7 @@ async function handleUpdateInstance(
     .single();
 
   if (updateError || !updatedData) {
-    return jsonResponse({ error: updateError?.message || "Falha ao atualizar instância." }, 400);
+    return jsonResponse({ error: updateError?.message || "Falha ao atualizar compet?ncia." }, 400);
   }
 
   const updated = updatedData as InstanceRow;
@@ -4475,7 +4744,7 @@ async function handleRegisterDocumentUpload(
   const storagePath = asTrimmedString(payload.storage_path);
   const storageBucket = asTrimmedString(payload.storage_bucket) || "obligation-files";
   if (!fileName || !storagePath) {
-    return jsonResponse({ error: "Arquivo e caminho de storage são obrigatórios." }, 400);
+    return jsonResponse({ error: "Arquivo e caminho de storage s?o obrigat?rios." }, 400);
   }
 
   const providedInstanceId = asTrimmedString(payload.instance_id);
@@ -4517,7 +4786,7 @@ async function handleRegisterDocumentUpload(
     suggested_competence_label: suggestedCompetenceLabel,
     identification_confidence: confidence,
     status: resolvedInstanceId ? "linked" : "pending_review",
-    blocking_reason: resolvedInstanceId ? null : "Aguardando validação humana para vincular o arquivo.",
+    blocking_reason: resolvedInstanceId ? null : "Aguardando valida??o humana para vincular o arquivo.",
     notes: asTrimmedString(payload.notes),
     created_by: actorId,
     reviewed_by: resolvedInstanceId ? actorId : null,
@@ -4569,7 +4838,7 @@ async function handleResolveDocument(
   const inboxItemId = asTrimmedString(payload.inbox_item_id);
   const decision = asTrimmedString(payload.decision);
   if (!inboxItemId || !decision) {
-    return jsonResponse({ error: "Documento e decisão são obrigatórios." }, 400);
+    return jsonResponse({ error: "Documento e decis?o s?o obrigat?rios." }, 400);
   }
 
   const { data: inboxItem, error: inboxError } = await supabaseAdmin
@@ -4579,7 +4848,7 @@ async function handleResolveDocument(
     .single();
 
   if (inboxError || !inboxItem) {
-    return jsonResponse({ error: "Documento não encontrado." }, 404);
+    return jsonResponse({ error: "Documento n?o encontrado." }, 404);
   }
 
   if (decision === "reject") {
@@ -4600,7 +4869,7 @@ async function handleResolveDocument(
 
   const instanceId = asTrimmedString(payload.instance_id);
   if (!instanceId) {
-    return jsonResponse({ error: "Selecione a instância de obrigação para vincular o documento." }, 400);
+    return jsonResponse({ error: "Selecione a compet?ncia da obriga??o para vincular o documento." }, 400);
   }
 
   const { error: inboxUpdateError } = await supabaseAdmin
@@ -4648,7 +4917,7 @@ async function handleRegisterDocumentUploadNative(
   const storagePath = asTrimmedString(payload.storage_path);
   const storageBucket = asTrimmedString(payload.storage_bucket) || "obligation-files";
   if (!fileName || !storagePath) {
-    return jsonResponse({ error: "Arquivo e caminho de storage sÃ£o obrigatÃ³rios." }, 400);
+    return jsonResponse({ error: "Arquivo e caminho de storage s?o obrigat?rios." }, 400);
   }
 
   const clientId = asTrimmedString(payload.client_id);
@@ -4736,7 +5005,7 @@ async function handleRegisterDocumentUploadNative(
     review_required: match.reviewRequired,
     classification_status: autoLinked ? "classified" : "review_required",
     status: autoLinked ? "linked" : "pending_review",
-    blocking_reason: autoLinked ? null : "Aguardando validaÃ§Ã£o humana para vincular o arquivo.",
+    blocking_reason: autoLinked ? null : "Aguardando valida??o humana para vincular o arquivo.",
     text_extraction_status: match.textExtractionStatus || analysis.text_extraction_status,
     ocr_status: match.ocrStatus || analysis.ocr_status,
     extracted_text_preview: match.extractedTextPreview || analysis.extracted_text_preview,
@@ -4752,8 +5021,8 @@ async function handleRegisterDocumentUploadNative(
     communication_status: "pending",
     publication_status: "pending",
     execution_notes: autoLinked
-      ? "Documento aguardando aplicação automática na obrigação."
-      : "Documento aguardando revisão humana para vinculação.",
+      ? "Documento aguardando aplica??o autom?tica na obriga??o."
+      : "Documento aguardando revis?o humana para vincula??o.",
     archive_path: null,
     robot_origin_path: robotOriginPath,
     robot_machine_id: robotMachineId,
@@ -4810,7 +5079,7 @@ async function handleResolveDocumentNative(
   const inboxItemId = asTrimmedString(payload.inbox_item_id);
   const decision = asTrimmedString(payload.decision);
   if (!inboxItemId || !decision) {
-    return jsonResponse({ error: "Documento e decisÃ£o sÃ£o obrigatÃ³rios." }, 400);
+    return jsonResponse({ error: "Documento e decis?o s?o obrigat?rios." }, 400);
   }
 
   const { data: inboxItem, error: inboxError } = await supabaseAdmin
@@ -4821,7 +5090,7 @@ async function handleResolveDocumentNative(
     .single();
 
   if (inboxError || !inboxItem) {
-    return jsonResponse({ error: "Documento nÃ£o encontrado." }, 404);
+    return jsonResponse({ error: "Documento n?o encontrado." }, 404);
   }
 
   if (decision === "reject") {
@@ -4863,7 +5132,7 @@ async function handleResolveDocumentNative(
 
   const instanceId = asTrimmedString(payload.instance_id);
   if (!instanceId) {
-    return jsonResponse({ error: "Selecione a instÃ¢ncia de obrigaÃ§Ã£o para vincular o documento." }, 400);
+    return jsonResponse({ error: "Selecione a compet?ncia da obriga??o para vincular o documento." }, 400);
   }
 
   const { error: inboxUpdateError } = await supabaseAdmin
@@ -4878,7 +5147,7 @@ async function handleResolveDocumentNative(
       processing_started_at: null,
       processing_completed_at: null,
       execution_status: "pending",
-      execution_notes: "Documento aguardando aplicação operacional após revisão manual.",
+      execution_notes: "Documento aguardando aplica??o operacional ap?s revis?o manual.",
       last_processing_error: null,
       notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
       reviewed_by: actorId,
@@ -4929,7 +5198,7 @@ async function handlePreviewDocumentMatch(
 ) {
   const fileName = asTrimmedString(payload.file_name);
   if (!fileName) {
-    return jsonResponse({ error: "Nome do arquivo Ã© obrigatÃ³rio para o preview." }, 400);
+    return jsonResponse({ error: "Nome do arquivo ? obrigat?rio para o preview." }, 400);
   }
 
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
@@ -4956,7 +5225,7 @@ async function handlePreviewDocumentMatch(
         documentTypeKey: asTrimmedString(payload.document_type_key),
         strategy: "manual_review",
         score: 0.1,
-        reasons: ["Nao foi possivel calcular o roteamento automatico. Selecione cliente, obrigacao e instancia manualmente."],
+        reasons: ["N?o foi poss?vel calcular o roteamento autom?tico. Selecione cliente, obriga??o e compet?ncia manualmente."],
         reviewRequired: true,
         documentDefinition: null,
         candidateInstanceIds: [],
@@ -5007,7 +5276,7 @@ async function handleUploadReferenceDocument(
     extracted_text_preview: analysis.extracted_text_preview,
     text_extraction_status: analysis.text_extraction_status,
     ocr_status: analysis.ocr_status,
-    fingerprint_version: asInteger(payload.fingerprint_version, 1) || 1,
+    fingerprint_version: asNumber(asJsonRecord(analysis.fingerprint_payload).version, asInteger(payload.fingerprint_version, 2) || 2),
     fingerprint_payload: analysis.fingerprint_payload,
     keywords: analysis.keywords,
     primary_cues: analysis.primary_cues,
@@ -5070,12 +5339,27 @@ async function handleReprocessReferenceDocument(
   const referenceId = asTrimmedString(payload.reference_file_id);
   if (!referenceId) return jsonResponse({ error: "reference_file_id e obrigatorio." }, 400);
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  const { data: currentReference, error: currentReferenceError } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .select("fingerprint_payload")
+    .eq("id", referenceId)
+    .eq("organization_id", organizationId)
+    .single();
+  if (currentReferenceError || !currentReference) {
+    return jsonResponse({ error: currentReferenceError?.message || "Documento modelo nao encontrado." }, 404);
+  }
+  const currentFingerprint = asJsonRecord((currentReference as JsonRecord).fingerprint_payload);
+  const nextFingerprint = {
+    ...analysis.fingerprint_payload,
+    extraction_zones: asJsonRecord(analysis.fingerprint_payload).extraction_zones || currentFingerprint.extraction_zones,
+  };
   const updates = {
     extracted_text: analysis.extracted_text,
     extracted_text_preview: analysis.extracted_text_preview,
     text_extraction_status: analysis.text_extraction_status,
     ocr_status: analysis.ocr_status,
-    fingerprint_payload: analysis.fingerprint_payload,
+    fingerprint_version: asNumber(asJsonRecord(nextFingerprint).version, 2),
+    fingerprint_payload: nextFingerprint,
     keywords: analysis.keywords,
     primary_cues: analysis.primary_cues,
   };
@@ -5087,6 +5371,176 @@ async function handleReprocessReferenceDocument(
     .select("*")
     .single();
   if (error || !data) return jsonResponse({ error: error?.message || "Falha ao reprocessar documento modelo." }, 400);
+  return jsonResponse({ ok: true, reference_file: data });
+}
+
+function normalizeReferenceExtractionZones(value: unknown) {
+  const record = asJsonRecord(value);
+  const rawZones = Array.isArray(record.zones) ? record.zones : [];
+  const allowedFields = new Set(["cnpj", "competence"]);
+  const zones = rawZones
+    .map((item) => {
+      const zone = asJsonRecord(item);
+      const field = asTrimmedString(zone.field);
+      if (!field || !allowedFields.has(field)) return null;
+      const x = Math.max(0.02, Math.min(0.98, asNumber(zone.x, 0.5)));
+      const y = Math.max(0.02, Math.min(0.98, asNumber(zone.y, 0.5)));
+      const legacyRadius = asNumber(zone.r, 0);
+      const width = Math.max(0.06, Math.min(0.7, asNumber(zone.width, legacyRadius ? legacyRadius * 2 : 0.24)));
+      const height = Math.max(0.02, Math.min(0.35, asNumber(zone.height, legacyRadius ? legacyRadius * 2 : 0.08)));
+      return {
+        field,
+        label: asTrimmedString(zone.label) || (field === "cnpj" ? "CNPJ" : "Compet?ncia"),
+        page: Math.max(1, asInteger(zone.page, 1) || 1),
+        shape: "rounded_rect",
+        x,
+        y,
+        width,
+        height,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    version: 1,
+    zones,
+  };
+}
+
+function detectCnpjInText(value: string | null | undefined) {
+  const text = asTrimmedString(value) || "";
+  const formatted = text.match(/\d{2}[.\s]? \d{3}[.\s]? \d{3}[/\s]? \d{4}[-\s]? \d{2}/);
+  if (formatted?.[0]) return normalizeCnpj(formatted[0]);
+  const compact = text.match(/(?:^|[^0-9])(\d{14})(?:[^0-9]|$)/);
+  return compact?.[1] ? normalizeCnpj(compact[1]) : null;
+}
+
+function toCompetenceKey(year: string, month: string) {
+  const yearValue = Number(year);
+  const monthValue = Number(month);
+  if (!Number.isFinite(yearValue) || !Number.isFinite(monthValue)) return null;
+  if (yearValue < 2000 || yearValue > 2100 || monthValue < 1 || monthValue > 12) return null;
+  return `${yearValue}-${String(monthValue).padStart(2, "0")}`;
+}
+
+function detectCompetenceInText(value: string | null | undefined) {
+  const text = normalizeToken(value || "").replace(/_/g, " ");
+  if (!text) return null;
+  const labelled = text.match(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base|folha de|salario de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/);
+  if (labelled) return toCompetenceKey(labelled[2], labelled[1]);
+  const labelledYearFirst = text.match(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/);
+  if (labelledYearFirst) return toCompetenceKey(labelledYearFirst[1], labelledYearFirst[2]);
+  const monthYear = text.match(/\b(0?[1-9]|1[0-2])\D{0,4}(20\d{2})\b/);
+  if (monthYear) return toCompetenceKey(monthYear[2], monthYear[1]);
+  const yearMonth = text.match(/\b(20\d{2})\D{0,4}(0?[1-9]|1[0-2])\b/);
+  if (yearMonth) return toCompetenceKey(yearMonth[1], yearMonth[2]);
+  const compact = text.match(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/);
+  return compact ? toCompetenceKey(compact[3], compact[2]) : null;
+}
+
+function rectOverlapRatio(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number },
+) {
+  const x1 = Math.max(left.x, right.x);
+  const y1 = Math.max(left.y, right.y);
+  const x2 = Math.min(left.x + left.width, right.x + right.width);
+  const y2 = Math.min(left.y + left.height, right.y + right.height);
+  const overlap = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const rightArea = Math.max(0.000001, right.width * right.height);
+  return overlap / rightArea;
+}
+
+function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord, field: "cnpj" | "competence") {
+  const zones = normalizeReferenceExtractionZones(referenceFingerprint.extraction_zones).zones as JsonRecord[];
+  const zone = zones.find((item) => asTrimmedString(item.field) === field);
+  if (!zone) return null;
+  const pages = asJsonArray(inputFingerprint.positioned_text_pages);
+  const pageNumber = Math.max(1, asInteger(zone.page, 1) || 1);
+  const page = pages.map(asJsonRecord).find((item) => asInteger(item.page, 0) === pageNumber);
+  if (!page) return null;
+
+  const rect = {
+    x: Math.max(0, asNumber(zone.x, 0.5) - asNumber(zone.width, 0.2) / 2),
+    y: Math.max(0, asNumber(zone.y, 0.5) - asNumber(zone.height, 0.08) / 2),
+    width: asNumber(zone.width, 0.2),
+    height: asNumber(zone.height, 0.08),
+  };
+  const items = asJsonArray(page.items)
+    .map(asJsonRecord)
+    .map((item) => ({
+      text: asTrimmedString(item.text) || "",
+      x: asNumber(item.x, 0),
+      y: asNumber(item.y, 0),
+      width: asNumber(item.width, 0.001),
+      height: asNumber(item.height, 0.001),
+    }))
+    .filter((item) => item.text && rectOverlapRatio(rect, item) >= 0.15)
+    .sort((left, right) => Math.abs(left.y - right.y) > 0.006 ? left.y - right.y : left.x - right.x);
+
+  if (items.length === 0) return null;
+  const lines: Array<typeof items> = [];
+  for (const item of items) {
+    const line = lines.find((current) => Math.abs((current[0]?.y || 0) - item.y) <= Math.max(0.006, item.height * 0.8));
+    if (line) line.push(item);
+    else lines.push([item]);
+  }
+  return lines
+    .map((line) => line.sort((left, right) => left.x - right.x).map((item) => item.text).join(" "))
+    .join("\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim() || null;
+}
+
+function extractZoneSignals(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord) {
+  const cnpjText = extractTextFromZone(inputFingerprint, referenceFingerprint, "cnpj");
+  const competenceText = extractTextFromZone(inputFingerprint, referenceFingerprint, "competence");
+  return {
+    cnpjText,
+    competenceText,
+    cnpj: detectCnpjInText(cnpjText),
+    competence: detectCompetenceInText(competenceText),
+  };
+}
+
+async function handleUpdateReferenceExtractionZones(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const referenceId = asTrimmedString(payload.reference_file_id);
+  if (!referenceId) return jsonResponse({ error: "reference_file_id e obrigatorio." }, 400);
+
+  const extractionZones = normalizeReferenceExtractionZones(payload.extraction_zones);
+  const { data: reference, error: referenceError } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .select("fingerprint_payload")
+    .eq("id", referenceId)
+    .eq("organization_id", organizationId)
+    .single();
+
+  if (referenceError || !reference) {
+    return jsonResponse({ error: referenceError?.message || "Documento modelo nao encontrado." }, 404);
+  }
+
+  const fingerprintPayload = asJsonRecord((reference as JsonRecord).fingerprint_payload);
+  const { data, error } = await supabaseAdmin
+    .from("expected_document_reference_files")
+    .update({
+      fingerprint_payload: {
+        ...fingerprintPayload,
+        extraction_zones: extractionZones,
+      },
+    })
+    .eq("id", referenceId)
+    .eq("organization_id", organizationId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return jsonResponse({ error: error?.message || "Falha ao salvar marcacoes do documento modelo." }, 400);
+  }
+
   return jsonResponse({ ok: true, reference_file: data });
 }
 
@@ -5464,11 +5918,11 @@ async function insertDefaultDecision(
     templateId: string | null;
     decisionType: string;
     reason: string;
-    loadItemId?: string | null;
-    currentProfileId?: string | null;
-    evidenceSource?: string | null;
-    syncEffect?: string;
-    autoApplied?: boolean;
+    loadItemId? : string | null;
+    currentProfileId? : string | null;
+    evidenceSource? : string | null;
+    syncEffect? : string;
+    autoApplied? : boolean;
   },
 ) {
   const { data, error } = await supabaseAdmin
@@ -5567,11 +6021,11 @@ async function auditObligationEvent(
   supabaseAdmin: SupabaseAdmin,
   params: {
     organizationId: string;
-    clientId?: string | null;
-    templateId?: string | null;
+    clientId? : string | null;
+    templateId? : string | null;
     action: string;
     actorId: string;
-    metadata?: JsonRecord;
+    metadata? : JsonRecord;
   },
 ) {
   const { error } = await supabaseAdmin.from("obligation_audit_events").insert({
@@ -6496,6 +6950,10 @@ Deno.serve(async (req) => {
 
     if (action === "reprocess_reference_document") {
       return await handleReprocessReferenceDocument(supabaseAdmin, organizationId, payload);
+    }
+
+    if (action === "update_reference_extraction_zones") {
+      return await handleUpdateReferenceExtractionZones(supabaseAdmin, organizationId, payload);
     }
 
     if (action === "process_document_queue") {

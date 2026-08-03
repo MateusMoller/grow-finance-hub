@@ -80,8 +80,8 @@ export const growCompetenceReferenceLabel: Record<GrowObligationTemplate["compet
 };
 
 export const growDueMonthReferenceLabel: Record<GrowObligationTemplate["technical_due_month_reference"], string> = {
-  vigente: "Mes vigente",
-  anterior: "Mes anterior",
+  vigente: "Mês vigente",
+  anterior: "Mês anterior",
 };
 
 export type GrowClientSummary = {
