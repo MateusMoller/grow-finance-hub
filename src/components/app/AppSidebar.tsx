@@ -12,6 +12,9 @@ import {
   UserCog,
   Lightbulb,
   ChevronDown,
+  BookOpen,
+  FileUp,
+  ListChecks,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -31,6 +34,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
@@ -46,6 +52,12 @@ interface SidebarItem {
   url: string;
   icon: ComponentType<{ className?: string }>;
   badgeCount?: number;
+  subItems?: Array<{
+    title: string;
+    url: string;
+    icon: ComponentType<{ className?: string }>;
+    tab: string;
+  }>;
 }
 
 const mainItems = [
@@ -61,7 +73,16 @@ const operationalItems = [
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
   { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
-  { title: "Obrigações", url: "/app/obrigacoes", icon: FileSpreadsheet },
+  {
+    title: "Obrigações",
+    url: "/app/obrigacoes",
+    icon: FileSpreadsheet,
+    subItems: [
+      { title: "Central de documentos", url: "/app/obrigacoes?tab=documentos", icon: FileUp, tab: "documentos" },
+      { title: "Catálogo", url: "/app/obrigacoes?tab=catalogo", icon: BookOpen, tab: "catalogo" },
+      { title: "Lista de entregas", url: "/app/obrigacoes?tab=entregas", icon: ListChecks, tab: "entregas" },
+    ],
+  },
 ];
 
 const systemItems = [
@@ -130,7 +151,51 @@ function SidebarSection({
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
           <SidebarGroupContent className="pl-2">
             <SidebarMenu className="gap-1 border-l border-sidebar-border/35 pl-2">
-              {items.map((item) => (
+              {items.map((item) => item.subItems?.length ? (
+                <Collapsible
+                  key={item.title}
+                  asChild
+                  defaultOpen={location.pathname === item.url}
+                  className="group/item"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild disabled={collapsed}>
+                      <SidebarMenuButton
+                        className={cn(
+                          "h-9 rounded-xl px-2 text-sidebar-foreground/72 transition-all hover:translate-x-0.5 hover:bg-sidebar-accent/35 hover:text-sidebar-foreground",
+                          location.pathname === item.url && "bg-sidebar-accent/70 font-semibold text-sidebar-primary shadow-sm ring-1 ring-sidebar-border/35",
+                        )}
+                      >
+                        <item.icon className="mr-2 h-4 w-4 text-sidebar-foreground/60" />
+                        {!collapsed && <span className="min-w-0 flex-1 truncate">{item.title}</span>}
+                        {!collapsed && <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform group-data-[state=open]/item:rotate-180" />}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub className="mr-0">
+                        {item.subItems.map((subItem) => {
+                          const activeTab = new URLSearchParams(location.search).get("tab") || "documentos";
+                          return (
+                            <SidebarMenuSubItem key={subItem.tab}>
+                              <SidebarMenuSubButton asChild isActive={location.pathname === item.url && activeTab === subItem.tab}>
+                                <NavLink
+                                  to={subItem.url}
+                                  onClick={() => {
+                                    if (isMobile) setOpenMobile(false);
+                                  }}
+                                >
+                                  <subItem.icon />
+                                  <span>{subItem.title}</span>
+                                </NavLink>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              ) : (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink

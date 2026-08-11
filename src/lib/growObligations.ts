@@ -30,6 +30,12 @@ export type GrowExpectedDocumentReferenceFile = {
   fingerprint_payload: Record<string, unknown>;
   keywords: string[];
   primary_cues: string[];
+  model_version: number;
+  validation_status: "draft" | "validating" | "approved" | "inactive";
+  validation_sample_count: number;
+  validation_correct_count: number;
+  validation_false_positive_count: number;
+  last_validated_at: string | null;
   created_at: string;
 };
 
@@ -186,7 +192,9 @@ export type GrowObligationDeliveryAttempt = {
   verified_from_email: string;
   display_sender_context: string | null;
   reply_to: string | null;
-  recipient_email: string;
+  delivery_channel?: "email" | "whatsapp";
+  recipient_email: string | null;
+  recipient_phone?: string | null;
   subject: string;
   message_body: string;
   attachment_file_ids: string[];
@@ -259,6 +267,12 @@ export type GrowDocumentInboxItem = {
   protocol_number: string | null;
   protocol_issued_at: string | null;
   processed_automatically: boolean;
+  recognition_evidence: Record<string, unknown>;
+  original_match_snapshot: Record<string, unknown>;
+  correction_reason: string | null;
+  corrected_by: string | null;
+  corrected_at: string | null;
+  recognition_decision: "pending" | "automatic" | "manual_review" | "manual_corrected" | "rejected";
   notes: string | null;
   created_at: string;
   client: GrowClientSummary | null;
@@ -320,6 +334,13 @@ export type GrowObligationsOverviewPayload = {
     robot_completed_today: number;
     robot_review_required: number;
     robot_failed_total: number;
+    document_models_total: number;
+    document_models_configured: number;
+    document_models_approved: number;
+    document_models_validating: number;
+    recognition_automatic: number;
+    recognition_corrected: number;
+    recognition_rejected: number;
   };
   clients: GrowClientSummary[];
   templates: GrowObligationTemplate[];

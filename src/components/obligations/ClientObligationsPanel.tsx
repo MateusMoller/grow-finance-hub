@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, Plus } from "lucide-react";
+import { CalendarDays, ClipboardList, Link2, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { ObligationDeliveryCard } from "@/components/obligations/ObligationDeliveryCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,6 +26,7 @@ import {
   invokeGrowObligations,
   type GrowClientSnapshotPayload,
   type GrowObligationInstance,
+  type GrowObligationDeliveryAttempt,
   type GrowObligationProfile,
   type GrowObligationTemplate,
 } from "@/lib/growObligations";
@@ -41,12 +43,73 @@ interface ProfileDraft {
 }
 
 const snapshotKey = (clientId: string) => ["grow-obligations-client", clientId];
+const taskKey = (clientId: string, instanceIds: string[]) => ["grow-obligations-client-tasks", clientId, instanceIds];
+const attemptsKey = (clientId: string, instanceIds: string[]) => ["grow-obligations-client-attempts", clientId, instanceIds];
+
+type InstanceFilter = "pending" | "completed" | "all";
+
+type LinkedObligationTask = {
+  id: string;
+  integration_task_id: string | null;
+};
+
+const openInstanceStatuses = new Set<GrowObligationInstance["status"]>([
+  "pendente",
+  "em_andamento",
+  "aguardando_documento",
+  "em_revisao",
+  "pronto_para_envio",
+  "enviando",
+  "falha_envio",
+  "atrasada",
+]);
 
 const buildToday = () => new Date().toISOString().slice(0, 10);
 
 const toTemplate = (row: unknown): GrowObligationTemplate => row as GrowObligationTemplate;
 const toProfile = (row: unknown): GrowObligationProfile => row as GrowObligationProfile;
 const toInstance = (row: unknown): GrowObligationInstance => row as GrowObligationInstance;
+
+const formatMonthYear = (value: string) =>
+  new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
+
+async function loadLinkedTasks(instanceIds: string[]): Promise<LinkedObligationTask[]> {
+  if (instanceIds.length === 0) return [];
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
+
+  const integrationTaskIds = instanceIds.map((instanceId) => `instance:${instanceId}`);
+  const batches = Array.from({ length: Math.ceil(integrationTaskIds.length / 100) }, (_, index) =>
+    integrationTaskIds.slice(index * 100, (index + 1) * 100),
+  );
+  const responses = await Promise.all(
+    batches.map((batch) =>
+      supabase
+        .from("kanban_tasks")
+        .select("id, integration_task_id")
+        .eq("organization_id", organizationId)
+        .eq("integration_source", "grow_obligation_task")
+        .in("integration_task_id", batch),
+    ),
+  );
+
+  const failedResponse = responses.find((response) => response.error);
+  if (failedResponse?.error) throw failedResponse.error;
+  return responses.flatMap((response) => (response.data || []) as LinkedObligationTask[]);
+}
+
+async function loadDeliveryAttempts(instanceIds: string[]): Promise<GrowObligationDeliveryAttempt[]> {
+  if (instanceIds.length === 0) return [];
+  const organizationId = await getStoredCurrentOrganizationId();
+  if (!organizationId) throw new Error("Organização ativa não encontrada.");
+  const responses = await Promise.all(
+    Array.from({ length: Math.ceil(instanceIds.length / 100) }, (_, index) => instanceIds.slice(index * 100, (index + 1) * 100))
+      .map((batch) => supabase.from("obligation_delivery_attempts").select("*").eq("organization_id", organizationId).in("instance_id", batch).order("created_at", { ascending: false })),
+  );
+  const failed = responses.find((response) => response.error);
+  if (failed?.error) throw failed.error;
+  return responses.flatMap((response) => (response.data || []) as GrowObligationDeliveryAttempt[]);
+}
 
 function getProfileDecisionState(profile: GrowObligationProfile) {
   if (!profile.is_active && profile.inactivation_reason === "regime_change") {
@@ -159,21 +222,21 @@ async function loadClientSnapshotDirectly(clientId: string): Promise<GrowClientS
 
 async function loadClientSnapshot(clientId: string): Promise<GrowClientSnapshotPayload> {
   try {
-    const snapshot = await invokeGrowObligations<GrowClientSnapshotPayload>({
+    return await loadClientSnapshotDirectly(clientId);
+  } catch (error) {
+    console.warn("Direct client obligation snapshot failed, using edge-function fallback", error);
+    return invokeGrowObligations<GrowClientSnapshotPayload>({
       action: "list_client_snapshot",
       client_id: clientId,
     });
-    if ((snapshot.profiles || []).length > 0 || (snapshot.instances || []).length > 0) return snapshot;
-  } catch (error) {
-    console.warn("grow-obligations-module list_client_snapshot failed, using RLS fallback", error);
   }
-
-  return loadClientSnapshotDirectly(clientId);
 }
 
 export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps) {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [instanceFilter, setInstanceFilter] = useState<InstanceFilter>("pending");
+  const [competenceMonthFilter, setCompetenceMonthFilter] = useState("latest");
   const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
     template_id: "",
     start_date: buildToday(),
@@ -187,6 +250,73 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
   });
 
   const snapshot = snapshotQuery.data;
+  const instanceIds = useMemo(() => (snapshot?.instances || []).map((instance) => instance.id), [snapshot?.instances]);
+
+  const linkedTasksQuery = useQuery({
+    queryKey: taskKey(clientId, instanceIds),
+    queryFn: () => loadLinkedTasks(instanceIds),
+    enabled: instanceIds.length > 0,
+  });
+
+  const deliveryAttemptsQuery = useQuery({
+    queryKey: attemptsKey(clientId, instanceIds),
+    queryFn: () => loadDeliveryAttempts(instanceIds),
+    enabled: instanceIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const taskByInstanceId = useMemo(() => {
+    const tasks = new Map<string, LinkedObligationTask>();
+    for (const task of linkedTasksQuery.data || []) {
+      const integrationId = task.integration_task_id || "";
+      if (integrationId.startsWith("instance:")) tasks.set(integrationId.slice("instance:".length), task);
+    }
+    return tasks;
+  }, [linkedTasksQuery.data]);
+
+  const attemptsByInstanceId = useMemo(() => {
+    const attempts = new Map<string, GrowObligationDeliveryAttempt[]>();
+    for (const attempt of deliveryAttemptsQuery.data || []) {
+      const current = attempts.get(attempt.instance_id) || [];
+      current.push(attempt);
+      attempts.set(attempt.instance_id, current);
+    }
+    return attempts;
+  }, [deliveryAttemptsQuery.data]);
+
+  const competenceMonths = useMemo(() => {
+    const months = new Map<string, string>();
+    for (const instance of snapshot?.instances || []) {
+      const monthKey = instance.competence_date.slice(0, 7);
+      if (!months.has(monthKey)) months.set(monthKey, formatMonthYear(`${monthKey}-01`));
+    }
+    return Array.from(months, ([value, label]) => ({ value, label })).sort((left, right) =>
+      right.value.localeCompare(left.value),
+    );
+  }, [snapshot?.instances]);
+
+  const effectiveCompetenceMonth =
+    competenceMonthFilter === "latest" ? competenceMonths[0]?.value || "all" : competenceMonthFilter;
+
+  const monthInstances = useMemo(() => {
+    const instances = snapshot?.instances || [];
+    if (effectiveCompetenceMonth === "all") return instances;
+    return instances.filter((instance) => instance.competence_date.startsWith(effectiveCompetenceMonth));
+  }, [effectiveCompetenceMonth, snapshot?.instances]);
+
+  const instanceSummary = useMemo(() => {
+    return {
+      pending: monthInstances.filter((instance) => openInstanceStatuses.has(instance.status)).length,
+      completed: monthInstances.filter((instance) => instance.status === "concluida").length,
+      total: monthInstances.length,
+    };
+  }, [monthInstances]);
+
+  const filteredInstances = useMemo(() => {
+    if (instanceFilter === "pending") return monthInstances.filter((instance) => openInstanceStatuses.has(instance.status));
+    if (instanceFilter === "completed") return monthInstances.filter((instance) => instance.status === "concluida");
+    return monthInstances;
+  }, [instanceFilter, monthInstances]);
 
   const availableTemplates = useMemo(() => {
     const assigned = new Set((snapshot?.profiles || []).map((profile) => profile.template_id));
@@ -289,7 +419,7 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
                     {isBlocked ? <Badge variant="destructive">Bloqueada</Badge> : null}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Vigência inicial: {new Date(`${profile.start_date}T00:00:00`).toLocaleDateString("pt-BR")}
+                    Mês de vinculação: {formatMonthYear(profile.start_date)}
                     {profile.due_day_override ? ` · vencimento customizado dia ${profile.due_day_override}` : ""}
                   </p>
                   {profile.sync_status === "skipped" && (
@@ -309,6 +439,77 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
               })
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Lista de entregas</CardTitle>
+            <CardDescription>
+              Obrigações geradas para este cliente, com documentos, leitura e andamento da entrega.
+            </CardDescription>
+          </div>
+          <div className="w-full space-y-2 sm:w-64">
+            <Label htmlFor="competence-month-filter">Competência mensal</Label>
+            <Select value={competenceMonthFilter} onValueChange={setCompetenceMonthFilter}>
+              <SelectTrigger id="competence-month-filter" className="rounded-xl">
+                <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Selecione a competência" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="latest" disabled={competenceMonths.length === 0}>
+                  {competenceMonths[0] ? `Mais recente · ${competenceMonths[0].label}` : "Nenhuma competência disponível"}
+                </SelectItem>
+                {competenceMonths.slice(1).map((month) => (
+                  <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                ))}
+                <SelectItem value="all">Todas as competências</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar lista de entregas">
+            {([
+              ["pending", `Pendentes (${instanceSummary.pending})`],
+              ["completed", `Concluídas (${instanceSummary.completed})`],
+              ["all", `Todas (${instanceSummary.total})`],
+            ] as const).map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={instanceFilter === value ? "default" : "outline"}
+                className="rounded-xl"
+                onClick={() => setInstanceFilter(value)}
+                aria-pressed={instanceFilter === value}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+
+          {filteredInstances.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+              <ClipboardList className="mx-auto h-8 w-8 text-muted-foreground/60" />
+              <p className="mt-3 text-sm font-medium">
+                {instanceSummary.total === 0 ? "Nenhuma competência foi gerada ainda." : "Nenhuma competência neste filtro."}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                As novas instâncias aparecerão aqui e permanecerão disponíveis após a conclusão.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredInstances.map((instance) => {
+                const attempts = attemptsByInstanceId.get(instance.id) || [];
+                const deliveryInstance = { ...instance, delivery_attempts: attempts, latest_delivery_attempt: attempts[0] || null };
+                return <ObligationDeliveryCard key={instance.id} instance={deliveryInstance} taskId={taskByInstanceId.get(instance.id)?.id} />;
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 

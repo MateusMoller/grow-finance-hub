@@ -255,7 +255,7 @@ export default function ClientsPage() {
         cnpj: client.cnpj ? formatCnpjValue(client.cnpj) : client.cnpj,
         regime: normalizeRegime(client.regime),
         email: client.email ? normalizeEmail(client.email) : client.email,
-        phone: client.phone ? formatPhoneValue(client.phone) : client.phone,
+        phone: client.phone ? normalizePhoneDigits(client.phone) : client.phone,
       })),
     );
   }, [currentOrganizationId]);
@@ -341,7 +341,7 @@ export default function ClientsPage() {
           appliedCount += 1;
         }
         if (!next.phone.trim() && cnpjData.phone) {
-          next.phone = formatPhoneValue(cnpjData.phone);
+          next.phone = normalizePhoneDigits(cnpjData.phone);
           appliedCount += 1;
         }
         if (!next.email.trim() && cnpjData.email) {
@@ -388,7 +388,7 @@ export default function ClientsPage() {
     const normalizedName = newClient.name.trim();
     const normalizedContact = newClient.contact.trim();
     const normalizedCnpj = normalizeCnpjForSave(newClient.cnpj);
-    const normalizedPhone = formatPhoneValue(newClient.phone);
+    const normalizedPhone = normalizePhoneDigits(newClient.phone);
     const phoneDigits = normalizePhoneDigits(normalizedPhone);
     const password = newClient.portalPassword.trim() || "123456";
     const entityType = newClient.entityType;
@@ -875,11 +875,11 @@ export default function ClientsPage() {
               <div className="space-y-2">
                 <Label>Telefone</Label>
                 <Input
-                  placeholder="(11) 99999-9999"
+                  placeholder="11999999999"
                   value={newClient.phone}
-                  onChange={(event) => setNewClient((prev) => ({ ...prev, phone: formatPhoneValue(event.target.value) }))}
+                  onChange={(event) => setNewClient((prev) => ({ ...prev, phone: event.target.value }))}
                   inputMode="tel"
-                  maxLength={15}
+                  maxLength={20}
                   autoComplete="tel"
                 />
               </div>

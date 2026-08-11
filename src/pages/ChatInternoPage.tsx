@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/components/app/AppLayout";
-import { ModuleContextPill } from "@/components/app/ModuleContextPill";
+import { ChatDateDivider } from "@/components/chat/ChatDateDivider";
+import { getChatDateKey } from "@/lib/chatDate";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Building2,
+  ArrowLeft,
   ChevronDown,
   Check,
   CheckCheck,
@@ -476,6 +478,7 @@ export default function ChatInternoPage() {
   const [taskReferenceOptions, setTaskReferenceOptions] = useState<TaskReferenceOption[]>([]);
   const [clientReferenceOptions, setClientReferenceOptions] = useState<ClientReferenceOption[]>([]);
   const [activeChat, setActiveChat] = useState<ActiveChat>({ type: "group" });
+  const [showMobileConversationList, setShowMobileConversationList] = useState(true);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(() => new Set());
   const [showCustomization, setShowCustomization] = useState(false);
   const [chatDensity, setChatDensity] = useState<ChatDensity>(() =>
@@ -1078,33 +1081,20 @@ export default function ChatInternoPage() {
   }
 
   return (
-    <AppLayout>
-      <div className="mx-auto flex h-[calc(100svh-5.25rem)] min-h-[600px] w-full max-w-none flex-col gap-3 px-0 sm:px-1">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <ModuleContextPill icon={MessageSquare} label="Comunicação interna" className="mb-1" />
-            <h1 className="font-heading text-xl font-bold leading-tight">Chat Interno</h1>
-            <p className="text-xs text-muted-foreground sm:text-sm">
-              Canais internos e conversas diretas da equipe.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 rounded-full px-3 text-xs"
-              onClick={() => setShowCustomization((current) => !current)}
-            >
-              <Palette className="h-3.5 w-3.5" />
-              Personalizar
-            </Button>
-          </div>
-        </div>
-
+    <AppLayout hideFooter flushContentTop>
+      <div className="relative flex h-[calc(100svh-4rem)] min-h-0 w-full max-w-none flex-col">
         {showCustomization && (
-          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
-            <div className="flex flex-wrap items-center gap-4 text-xs">
+          <div className="absolute left-3 right-3 top-[4.75rem] z-30 rounded-2xl border border-[#d1d7db] bg-background/95 px-4 py-3 shadow-xl backdrop-blur sm:left-auto sm:right-4 sm:w-[38rem]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Personalizar conversa</p>
+                <p className="text-xs text-muted-foreground">Ajuste a leitura e a aparência das mensagens.</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setShowCustomization(false)} aria-label="Fechar personalização">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-xs">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-muted-foreground">Mensagens</span>
                 {(["comfortable", "compact"] as ChatDensity[]).map((item) => (
@@ -1154,21 +1144,39 @@ export default function ChatInternoPage() {
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border bg-card shadow-sm lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col overflow-hidden border-r bg-card">
-            <div className="border-b bg-muted/30 px-3 py-2.5">
-              <p className="text-[15px] font-semibold">Conversas</p>
+        <div className="grid min-h-0 flex-1 overflow-hidden border-y border-[#d1d7db] bg-[#efeae2] shadow-sm lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)]">
+          <aside className={`${showMobileConversationList ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden border-r border-[#d1d7db] bg-white lg:flex`}>
+            <div className="flex min-h-[4.5rem] items-center justify-between gap-3 border-b border-[#d1d7db] bg-[#f0f2f5] px-4 py-2.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                  <MessageSquare className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="truncate font-heading text-base font-bold">Chat Interno</h1>
+                  <p className="truncate text-[11px] text-muted-foreground">Conversas da equipe</p>
+                </div>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full" onClick={() => setShowCustomization((current) => !current)} aria-label="Personalizar chat">
+                <Palette className="h-4 w-4" />
+              </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-card">
+            <div className="border-b border-[#e9edef] bg-white px-4 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Conversas</p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white">
               <button
                 type="button"
                 className={`w-full border-b px-3 py-0 text-left transition ${
                   activeChat.type === "group"
-                    ? "bg-muted/60"
-                    : "hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                    ? "bg-[#f0f2f5]"
+                    : "hover:bg-[#f5f6f6] focus-visible:bg-[#f0f2f5] focus-visible:outline-none"
                 }`}
-                onClick={() => setActiveChat({ type: "group" })}
+                onClick={() => {
+                  setActiveChat({ type: "group" });
+                  setShowMobileConversationList(false);
+                }}
               >
                 <div className="flex min-h-[4.55rem] items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
@@ -1199,7 +1207,7 @@ export default function ChatInternoPage() {
                 </div>
               </button>
 
-              <div className="border-b px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="border-b border-[#e9edef] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 Conversas pessoais
               </div>
 
@@ -1225,12 +1233,13 @@ export default function ChatInternoPage() {
                         type="button"
                         className={`w-full border-b px-3 py-0 text-left transition ${
                           isActive
-                            ? "bg-muted/60"
-                            : "hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+                            ? "bg-[#f0f2f5]"
+                            : "hover:bg-[#f5f6f6] focus-visible:bg-[#f0f2f5] focus-visible:outline-none"
                         }`}
-                        onClick={() =>
-                          setActiveChat({ type: "direct", targetUserId: contact.userId })
-                        }
+                        onClick={() => {
+                          setActiveChat({ type: "direct", targetUserId: contact.userId });
+                          setShowMobileConversationList(false);
+                        }}
                       >
                         <div className="flex min-h-[4.55rem] items-center gap-3">
                           <div className="relative shrink-0">
@@ -1273,9 +1282,12 @@ export default function ChatInternoPage() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col overflow-hidden bg-card">
-            <div className="flex min-h-[3.9rem] flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
+          <section className={`${showMobileConversationList ? "hidden" : "flex"} min-h-0 flex-col overflow-hidden bg-[#efeae2] lg:flex`}>
+            <div className="flex min-h-[4.5rem] items-center justify-between gap-2 border-b border-[#d1d7db] bg-[#f0f2f5] px-3 py-2 sm:px-4">
               <div className="flex min-w-0 items-center gap-3">
+                <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full lg:hidden" onClick={() => setShowMobileConversationList(true)} aria-label="Voltar para conversas">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
                 <div className="relative">
                   {activeChat.type === "group" ? (
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
@@ -1304,7 +1316,7 @@ export default function ChatInternoPage() {
                   </p>
                 </div>
               </div>
-              <Badge variant="outline" className="h-7 gap-1.5 rounded-full px-2.5 text-xs">
+              <Badge variant="outline" className="hidden h-7 gap-1.5 rounded-full border-[#d1d7db] bg-white/70 px-2.5 text-xs sm:flex">
                 <UserRound className="h-3.5 w-3.5" /> {participantsInCurrentChat} participante(s)
               </Badge>
             </div>
@@ -1325,8 +1337,11 @@ export default function ChatInternoPage() {
                 </div>
               ) : (
                 <AnimatePresence initial={false}>
-                  {messages.map((message) => {
+                  {messages.map((message, index) => {
                     const isOwn = message.user_id === user?.id;
+                    const showDateDivider =
+                      index === 0 ||
+                      getChatDateKey(messages[index - 1].created_at) !== getChatDateKey(message.created_at);
                     const attachment = parseInternalChatAttachment(message.content);
                     const referenceMessage = attachment ? null : parseInternalChatReference(message.content);
                     const replyMessage = attachment || referenceMessage ? null : parseInternalChatReply(message.content);
@@ -1336,6 +1351,8 @@ export default function ChatInternoPage() {
                       (isOwn ? "Voce" : `Usuário ${message.user_id.slice(0, 6)}`);
 
                     return (
+                      <Fragment key={message.id}>
+                      {showDateDivider ? <ChatDateDivider timestamp={message.created_at} /> : null}
                       <motion.div
                         key={message.id}
                         initial={{ opacity: 0, y: 8 }}
@@ -1472,6 +1489,7 @@ export default function ChatInternoPage() {
                           ) : null}
                         </div>
                       </motion.div>
+                      </Fragment>
                     );
                   })}
                 </AnimatePresence>
@@ -1480,7 +1498,7 @@ export default function ChatInternoPage() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="border-t bg-card px-4 py-3">
+            <div className="border-t border-[#d1d7db] bg-[#f0f2f5] px-3 py-2.5 sm:px-4">
               <div className="mx-auto max-w-[58rem]">
                 {selectedReply && (
                   <div className="mb-2">
@@ -1526,7 +1544,7 @@ export default function ChatInternoPage() {
                 )}
               </div>
               <div className="mx-auto max-w-[58rem]">
-                <div className="flex items-end gap-2 rounded-[1.65rem] bg-background px-2 py-1.5 shadow-sm ring-1 ring-black/5 transition focus-within:ring-primary/30">
+                <div className="flex items-end gap-2 rounded-[1.65rem] bg-white px-2 py-1.5 shadow-sm ring-1 ring-black/5 transition focus-within:ring-primary/30">
                 <input
                   ref={fileInputRef}
                   type="file"

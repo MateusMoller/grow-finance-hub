@@ -7,14 +7,14 @@ export default function ObrigacoesPage() {
   const searchParams = new URLSearchParams(location.search);
   const requestedTab = searchParams.get("tab");
   const defaultTab =
-    requestedTab === "catalogo" || requestedTab === "documentos"
+    requestedTab === "catalogo" || requestedTab === "documentos" || requestedTab === "entregas"
       ? requestedTab
       : "documentos";
 
   return (
     <AppLayout>
       <div className="max-w-7xl space-y-6">
-        <GrowObligationsWorkspace defaultTab={defaultTab} />
+        <GrowObligationsWorkspace key={defaultTab} defaultTab={defaultTab} />
       </div>
     </AppLayout>
   );

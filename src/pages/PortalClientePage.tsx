@@ -1160,8 +1160,32 @@ export default function PortalClientePage() {
   const handleDownloadDocument = async (document: PortalClientDocument) =>
     handleDownloadStoredFile("client-documents", document.file_path);
 
-  const handleDownloadObligationDocument = async (document: PortalObligationDocument) =>
-    handleDownloadStoredFile(document.storage_bucket, document.storage_path);
+  const handleDownloadObligationDocument = async (document: PortalObligationDocument) => {
+    const { data, error } = await supabase.storage.from(document.storage_bucket).createSignedUrl(document.storage_path, 120);
+
+    if (error || !data?.signedUrl) {
+      toast.error("Não foi possível gerar o link de download.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+
+    if (!user?.id || !clientProfile?.id || !clientProfile.organization_id) return;
+    const { error: accessError } = await supabase.from("obligation_document_access_events").insert({
+      organization_id: clientProfile.organization_id,
+      client_id: clientProfile.id,
+      instance_id: document.instance_id,
+      file_id: document.id,
+      user_id: user.id,
+      access_type: "download",
+      access_channel: "portal",
+      source_context: "portal_obligations",
+      user_agent: navigator.userAgent,
+      referrer: window.document.referrer || null,
+    });
+
+    if (accessError) console.warn("Falha ao registrar acesso ao documento da obrigação.", accessError);
+  };
 
   const handlePortalPasswordChange = async () => {
     const accountEmail = user?.email?.trim().toLowerCase();

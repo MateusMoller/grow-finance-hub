@@ -55,6 +55,12 @@ verify_jwt = true
 [functions.grow-obligations-module]
 verify_jwt = true
 
+[functions.obligation-document-access]
+verify_jwt = false
+
+[functions.d]
+verify_jwt = false
+
 [functions.lookup-cnpj]
 verify_jwt = true
 

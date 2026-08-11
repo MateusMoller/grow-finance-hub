@@ -39,7 +39,17 @@ O robo:
 - registra a ingestao no `grow-obligations-module` como `source_kind = local_robot`
 - persiste fila local para sobreviver a reinicios e falhas de rede
 
-## Configuracao local
+## Instalacao simplificada
+
+Na raiz do projeto, execute apenas:
+
+```powershell
+npm.cmd run robot:setup
+```
+
+O assistente solicita a pasta monitorada e o login do usuario do robo. Em seguida ele cria a configuracao, protege a senha com a criptografia do usuario atual do Windows, valida a conexao, instala a inicializacao automatica e inicia o monitoramento.
+
+## Configuracao local avancada
 
 Arquivo preparado:
 

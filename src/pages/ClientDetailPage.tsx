@@ -1224,7 +1224,7 @@ export default function ClientDetailPage() {
       ...(c as ClientRecord),
       cnpj: c.cnpj ? formatCnpjValue(c.cnpj) : c.cnpj,
       email: c.email ? normalizeEmail(c.email) : c.email,
-      phone: c.phone ? formatPhoneValue(c.phone) : c.phone,
+      phone: c.phone ? normalizePhoneDigits(c.phone) : c.phone,
     };
     setClient(normalizedClient);
     setClientForm(normalizedClient);
@@ -1447,8 +1447,8 @@ export default function ClientDetailPage() {
       }
 
       if (!String(clientForm.phone || "").trim() && cnpjData.phone) {
-        const formatted = formatPhoneValue(cnpjData.phone);
-        setClientForm((prev) => ({ ...prev, phone: formatted }));
+        const phoneDigits = normalizePhoneDigits(cnpjData.phone);
+        setClientForm((prev) => ({ ...prev, phone: phoneDigits }));
         appliedCount += 1;
       }
 
@@ -1582,7 +1582,7 @@ export default function ClientDetailPage() {
     if (!id || saving) return;
     const normalizedEmail = normalizeEmail(clientForm.email);
     const normalizedCnpj = normalizeCnpjForSave(clientForm.cnpj);
-    const normalizedPhone = formatPhoneValue(clientForm.phone || "");
+    const normalizedPhone = normalizePhoneDigits(clientForm.phone || "");
     const phoneDigits = normalizePhoneDigits(normalizedPhone);
 
     if ((clientForm.cnpj || "").trim() && !normalizedCnpj) {
@@ -2781,15 +2781,15 @@ export default function ClientDetailPage() {
                   <Input
                     value={clientForm.phone || ""}
                     onChange={(e) => {
-                      const nextPhone = formatPhoneValue(e.target.value);
+                      const nextPhone = e.target.value;
                       setClientForm((p) => ({ ...p, phone: nextPhone }));
                       const parsed = splitPhoneForCadastro(nextPhone);
                       handleDataFieldChange("cadastro_clientes", "ddd", parsed.ddd);
                       handleDataFieldChange("cadastro_clientes", "telefone", parsed.phone);
                     }}
-                    placeholder="(00) 00000-0000"
+                    placeholder="11999999999"
                     inputMode="tel"
-                    maxLength={15}
+                    maxLength={20}
                     autoComplete="tel"
                   />
                 </div>

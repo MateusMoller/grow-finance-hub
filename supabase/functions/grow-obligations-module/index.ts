@@ -87,8 +87,15 @@ type ReferenceFileRow = {
   ocr_status: string;
   fingerprint_version: number;
   fingerprint_payload: unknown;
+  recognition_evidence: unknown;
   keywords: unknown;
   primary_cues: unknown;
+  model_version: number;
+  validation_status: string;
+  validation_sample_count: number;
+  validation_correct_count: number;
+  validation_false_positive_count: number;
+  last_validated_at: string | null;
   created_at: string;
 };
 
@@ -341,14 +348,7 @@ type InboxRow = {
   updated_at: string;
 };
 
-type DeliveryAttachment = {
-  id: string;
-  filename: string;
-  content: string;
-  content_type? : string | null;
-  storage_bucket: string;
-  storage_path: string;
-};
+type DeliveryDocumentLink = { fileId: string; label: string; url: string };
 
 type DeliveryPreparation = {
   organizationId: string;
@@ -363,10 +363,11 @@ type DeliveryPreparation = {
     actorEmail: string;
     displaySenderContext: string;
   };
-  recipientEmail: string;
+  deliveryChannel: "email" | "whatsapp";
+  recipientEmail: string | null;
+  recipientPhone: string | null;
   subject: string;
   textBody: string;
-  htmlBody: string;
   warnings: string[];
 };
 
@@ -602,177 +603,6 @@ function toIsoDate(date: Date) {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function monthLabel(date: Date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${month}/${year}`;
-}
-
-function competenceKey(date: Date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
-
-function currentCompetenceGenerationWindow(now = new Date()) {
-  const targetOperationalDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  if (now.getUTCDate() >= 27) {
-    targetOperationalDate.setUTCMonth(targetOperationalDate.getUTCMonth() + 1);
-  }
-  const cursorStart = new Date(targetOperationalDate);
-  const cursorEnd = new Date(Date.UTC(targetOperationalDate.getUTCFullYear(), targetOperationalDate.getUTCMonth() + 1, 1));
-
-  return {
-    cursorStart,
-    cursorEnd,
-    targetOperationalMonthKey: competenceKey(targetOperationalDate),
-  };
-}
-
-function clampDay(day: number, year: number, monthIndex: number) {
-  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
-  return Math.max(1, Math.min(day, lastDay));
-}
-
-function computeCompetenceDate(
-  periodicity: string,
-  cursor: Date,
-  competenceReference: string,
-  yearlyDueMonth? : number | null,
-) {
-  let baseDate: Date;
-
-  if (periodicity === "yearly") {
-    const dueMonthIndex = Math.max(0, Math.min(11, (yearlyDueMonth || 1) - 1));
-    baseDate = new Date(Date.UTC(cursor.getUTCFullYear(), dueMonthIndex, 1));
-  } else {
-    baseDate = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1));
-  }
-
-  if (competenceReference === "anterior") {
-    baseDate.setUTCMonth(baseDate.getUTCMonth() - 1);
-  }
-
-  return baseDate;
-}
-
-function computeDueDate(
-  competenceDate: Date,
-  dueDay: number,
-  dueMonthReference: "vigente" | "anterior" = "vigente",
-) {
-  const dueBaseDate = new Date(Date.UTC(competenceDate.getUTCFullYear(), competenceDate.getUTCMonth(), 1));
-  if (dueMonthReference === "anterior") {
-    dueBaseDate.setUTCMonth(dueBaseDate.getUTCMonth() - 1);
-  }
-  const year = dueBaseDate.getUTCFullYear();
-  const monthIndex = dueBaseDate.getUTCMonth();
-  const day = clampDay(dueDay, year, monthIndex);
-  return new Date(Date.UTC(year, monthIndex, day));
-}
-
-function isUtcBusinessDay(date: Date) {
-  const weekday = date.getUTCDay();
-  return weekday !== 0 && weekday !== 6;
-}
-
-function nthBusinessDayOfMonth(year: number, monthIndex: number, index: number) {
-  const targetIndex = Math.max(1, Math.min(23, Math.trunc(index || 1)));
-  const cursor = new Date(Date.UTC(year, monthIndex, 1));
-  let seen = 0;
-  while (cursor.getUTCMonth() === monthIndex) {
-    if (isUtcBusinessDay(cursor)) {
-      seen += 1;
-      if (seen === targetIndex) return new Date(cursor);
-    }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return lastBusinessDayOfMonth(year, monthIndex);
-}
-
-function lastBusinessDayOfMonth(year: number, monthIndex: number) {
-  const cursor = new Date(Date.UTC(year, monthIndex + 1, 0));
-  while (!isUtcBusinessDay(cursor)) {
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
-  }
-  return cursor;
-}
-
-type FixedDueDateEntry = {
-  month: number;
-  day: number;
-  label: string | null;
-};
-
-function normalizeFixedDueDates(template: Pick<TemplateRow, "due_fixed_dates" | "due_fixed_month" | "due_fixed_day" | "yearly_due_month" | "due_day">): FixedDueDateEntry[] {
-  const entries: FixedDueDateEntry[] = [];
-  const used = new Set<string>();
-  const rawDates = Array.isArray(template.due_fixed_dates) ? template.due_fixed_dates : [];
-
-  const addEntry = (monthValue: unknown, dayValue: unknown, labelValue? : unknown) => {
-    const month = Math.max(1, Math.min(12, Number(monthValue || 0)));
-    const day = Math.max(1, Math.min(31, Number(dayValue || 0)));
-    if (!Number.isFinite(month) || !Number.isFinite(day)) return;
-    const key = `${month}-${day}`;
-    if (used.has(key)) return;
-    used.add(key);
-    entries.push({
-      month,
-      day,
-      label: asTrimmedString(labelValue),
-    });
-  };
-
-  rawDates.forEach((value) => {
-    const record = asRecord(value);
-    addEntry(record.month, record.day, record.label);
-  });
-
-  if (entries.length === 0) {
-    addEntry(template.due_fixed_month || template.yearly_due_month || 1, template.due_fixed_day || template.due_day || 1);
-  }
-
-  return entries.sort((left, right) => left.month - right.month || left.day - right.day);
-}
-
-function computeTechnicalDueDate(
-  operationalDate: Date,
-  competenceDate: Date,
-  template: Pick<TemplateRow, "due_day" | "due_rule_type" | "due_business_day_index" | "due_fixed_month" | "due_fixed_day" | "technical_due_month_reference">,
-  dueDayOverride? : number | null,
-  fixedDate? : Pick<FixedDueDateEntry, "month" | "day"> | null,
-) {
-  const dueBaseDate = new Date(Date.UTC(operationalDate.getUTCFullYear(), operationalDate.getUTCMonth(), 1));
-  if (normalizeMonthReference(template.technical_due_month_reference, "vigente") === "anterior") {
-    dueBaseDate.setUTCMonth(dueBaseDate.getUTCMonth() - 1);
-  }
-
-  const year = dueBaseDate.getUTCFullYear();
-  const monthIndex = dueBaseDate.getUTCMonth();
-  const ruleType = asTrimmedString(template.due_rule_type) || "calendar_day";
-
-  if (ruleType === "business_day_from_month_start") {
-    return nthBusinessDayOfMonth(year, monthIndex, template.due_business_day_index || dueDayOverride || template.due_day);
-  }
-
-  if (ruleType === "last_business_day") {
-    return lastBusinessDayOfMonth(year, monthIndex);
-  }
-
-  if (ruleType === "fixed_date") {
-    const fixedMonthIndex = Math.max(0, Math.min(11, (fixedDate?.month || template.due_fixed_month || monthIndex + 1) - 1));
-    const fixedYear = competenceDate.getUTCFullYear();
-    const fixedDay = clampDay(fixedDate?.day || template.due_fixed_day || dueDayOverride || template.due_day, fixedYear, fixedMonthIndex);
-    return new Date(Date.UTC(fixedYear, fixedMonthIndex, fixedDay));
-  }
-
-  return computeDueDate(
-    operationalDate,
-    dueDayOverride ?? template.due_day,
-    normalizeMonthReference(template.technical_due_month_reference, "vigente"),
-  );
 }
 
 async function buildAuthContext(req: Request) {
@@ -1014,6 +844,12 @@ async function loadReferenceFilesMap(
         "fingerprint_version",
         "keywords",
         "primary_cues",
+        "model_version",
+        "validation_status",
+        "validation_sample_count",
+        "validation_correct_count",
+        "validation_false_positive_count",
+        "last_validated_at",
         "created_at",
       ].join(", ");
   let query = supabaseAdmin
@@ -1563,7 +1399,7 @@ function compareDocumentFamilies(inputFamilies: Set<DocumentFamily>, candidateFa
 }
 
 function buildReferenceDocumentCandidates(
-  clientId: string,
+  clientId: string | null,
   templatesMap: Map<string, TemplateRow>,
   profiles: ProfileRow[],
   referenceFilesMap: Map<string, ReferenceFileRow[]>,
@@ -1571,7 +1407,7 @@ function buildReferenceDocumentCandidates(
   const matches: Array<MatchCandidate & { reference: ReferenceFileRow }> = [];
 
   for (const profile of profiles) {
-    if (profile.client_id !== clientId || !profile.is_active) continue;
+    if ((clientId && profile.client_id !== clientId) || !profile.is_active) continue;
     const template = templatesMap.get(profile.template_id);
     if (!template || !template.is_active) continue;
 
@@ -1596,9 +1432,10 @@ async function resolveDocumentReferenceMatch(
     suggestedCompetenceLabel: string | null;
     fileName: string | null;
     analysis: DocumentAnalysisPayload;
+    organizationId: string;
   },
 ) {
-  const { clientId, instanceId, templateId, documentTypeKey, suggestedCompetenceLabel, fileName, analysis } = payload;
+  const { clientId, instanceId, templateId, documentTypeKey, suggestedCompetenceLabel, fileName, analysis, organizationId } = payload;
   const emptyResult: MatchResult = {
     resolvedInstanceId: null,
     suggestedTemplateId: templateId,
@@ -1622,17 +1459,73 @@ async function resolveDocumentReferenceMatch(
     autoLinkBlockReason: "Candidato insuficiente para auto-vinculo.",
   };
 
-  const templatesMap = await loadTemplatesMap(supabaseAdmin);
-  const profilesMap = await loadProfilesMap(supabaseAdmin);
-  const clientsMap = await loadClientsMap(supabaseAdmin);
-  const referenceFiles = await loadReferenceFilesMap(supabaseAdmin);
+  const [templatesMap, profilesMap, clientsMap, referenceFiles] = await Promise.all([
+    loadTemplatesMap(supabaseAdmin, organizationId),
+    loadProfilesMap(supabaseAdmin, organizationId),
+    loadClientsMap(supabaseAdmin, organizationId),
+    loadReferenceFilesMap(supabaseAdmin, organizationId),
+  ]);
 
   const detectedClientByCnpj = analysis.detected_cnpj
     ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === analysis.detected_cnpj) || null
     : null;
 
-  const effectiveClientId = detectedClientByCnpj?.id || clientId || null;
-  const effectiveCompetence = analysis.competence_detected || suggestedCompetenceLabel || null;
+  let effectiveClientId = detectedClientByCnpj?.id || clientId || null;
+  let effectiveCompetence = analysis.competence_detected || suggestedCompetenceLabel || null;
+  let configuredReferenceId: string | null = null;
+
+  const configuredModels = Array.from(
+    new Map(
+      buildReferenceDocumentCandidates(null, templatesMap, Array.from(profilesMap.values()), referenceFiles.byTemplateDocument)
+        .filter((candidate) => normalizeReferenceExtractionZones(asJsonRecord(candidate.reference.fingerprint_payload).extraction_zones).zones.length > 0)
+        .map((candidate) => [candidate.reference.id, candidate]),
+    ).values(),
+  )
+    .map((candidate) => {
+      const referenceFingerprint = asJsonRecord(candidate.reference.fingerprint_payload);
+      const layout = computeLayoutSimilarity(analysis.fingerprint_payload, {
+        ...referenceFingerprint,
+        extracted_text: candidate.reference.extracted_text,
+        extracted_text_preview: candidate.reference.extracted_text_preview,
+      });
+      return { candidate, referenceFingerprint, layout, zoneSignals: extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint) };
+    })
+    .filter((item) => item.layout.usable)
+    .sort((left, right) => right.layout.score - left.layout.score);
+
+  const configuredModel = configuredModels[0];
+  const configuredModelIsUnique = Boolean(
+    configuredModel &&
+    configuredModel.layout.score >= 0.68 &&
+    (!configuredModels[1] || configuredModel.layout.score - configuredModels[1].layout.score > 0.05),
+  );
+
+  if (configuredModelIsUnique && configuredModel) {
+    const zoneClient = configuredModel.zoneSignals.cnpj
+      ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === configuredModel.zoneSignals.cnpj) || null
+      : null;
+    configuredReferenceId = configuredModel.candidate.reference.id;
+
+    if (!zoneClient || !configuredModel.zoneSignals.competence) {
+      return {
+        ...emptyResult,
+        suggestedTemplateId: configuredModel.candidate.template.id,
+        documentTypeKey: configuredModel.candidate.document.document_type_key,
+        referenceFileId: configuredReferenceId,
+        referenceMatchScore: Number(configuredModel.layout.score.toFixed(2)),
+        reasons: [
+          `Modelo configurado reconhecido: ${configuredModel.candidate.reference.file_name}.`,
+          !zoneClient ? "O CNPJ nao foi lido com seguranca na area marcada." : "Cliente identificado pela area marcada de CNPJ.",
+          !configuredModel.zoneSignals.competence ? "A competencia nao foi lida com seguranca na area marcada." : "Competencia identificada pela area marcada.",
+          "O conteudo fora das areas marcadas e o nome do arquivo foram ignorados.",
+        ],
+        autoLinkBlockReason: "Modelo reconhecido, mas as areas obrigatorias exigem correcao manual.",
+      };
+    }
+
+    effectiveClientId = zoneClient.id;
+    effectiveCompetence = configuredModel.zoneSignals.competence;
+  }
 
   if (instanceId && effectiveClientId) {
     const instances = await loadInstancesForClient(supabaseAdmin, effectiveClientId);
@@ -1667,7 +1560,11 @@ async function resolveDocumentReferenceMatch(
   const instances = await loadInstancesForClient(supabaseAdmin, effectiveClientId);
   const clientProfiles = Array.from(profilesMap.values()).filter((profile) => profile.client_id === effectiveClientId && profile.is_active);
   const candidates = buildReferenceDocumentCandidates(effectiveClientId, templatesMap, clientProfiles, referenceFiles.byTemplateDocument)
-    .filter((candidate) => (!templateId || candidate.template.id === templateId) && (!documentTypeKey || candidate.document.document_type_key === documentTypeKey));
+    .filter((candidate) =>
+      (!configuredReferenceId || candidate.reference.id === configuredReferenceId) &&
+      (!templateId || candidate.template.id === templateId) &&
+      (!documentTypeKey || candidate.document.document_type_key === documentTypeKey)
+    );
 
   if (candidates.length === 0) {
     const fallbackMatch = await resolveDocumentMatch(supabaseAdmin, {
@@ -1717,7 +1614,6 @@ async function resolveDocumentReferenceMatch(
 
   const inputTokens = analysis.keywords;
   const inputCues = analysis.primary_cues;
-  const fileNameToken = normalizeToken(fileName || "");
   const contentDocumentFamilies = detectDocumentFamiliesFromText(
     analysis.extracted_text,
     analysis.keywords,
@@ -1749,12 +1645,7 @@ async function resolveDocumentReferenceMatch(
       referenceFingerprintTokens,
     );
     const familyMatch = compareDocumentFamilies(inputDocumentFamilies, candidateDocumentFamilies);
-    const aliasScore = [candidate.document.label, candidate.document.document_type_key, ...candidate.document.aliases]
-      .map((item) => normalizeToken(item))
-      .filter(Boolean)
-      .some((token) => fileNameToken.includes(token))
-      ? 0.03
-      : 0;
+    const aliasScore = 0;
     const docHintScore = documentTypeKey && documentTypeKey === candidate.document.document_type_key ? 0.08 : 0;
     const keywordScore = overlapRatio(inputTokens, [...referenceTokens, ...documentAliasTokens]);
     const cueScore = overlapRatio(inputCues, referenceCues);
@@ -1815,20 +1706,41 @@ async function resolveDocumentReferenceMatch(
   const finalCompetence = best.zoneSignals.competence || effectiveCompetence;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
   const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
+  const hasConfiguredZoneAuthority = Boolean(
+    configuredReferenceId &&
+    best.reference.id === configuredReferenceId &&
+    best.zoneSignals.cnpj &&
+    best.zoneSignals.competence &&
+    best.layoutUsable &&
+    best.layoutScore >= 0.68 &&
+    best.reference.validation_status === "approved",
+  );
   const hasStrongDocumentHint = Boolean(
     documentTypeKey === best.document.document_type_key ||
     best.familyMatched ||
     (best.layoutUsable && best.layoutScore >= 0.68) ||
-    [best.document.label, best.document.document_type_key, ...best.document.aliases]
-      .map((item) => normalizeToken(item))
-      .filter(Boolean)
-      .some((token) => fileNameToken.includes(token)),
+    false,
+  );
+  // A low structural score alone must not block a deterministic business
+  // route. Older reference fingerprints may not contain the current layout
+  // signature, while CNPJ + competence + document family still identify one
+  // and only one eligible instance. Ambiguity and family mismatch remain hard
+  // blockers below.
+  const hasDeterministicBusinessRoute = Boolean(
+    analysis.detected_cnpj &&
+    detectedClientByCnpj &&
+    finalCompetence &&
+    uniqueOpenInstance &&
+    best.familyMatched &&
+    !best.familyMismatched
   );
   const autoAllowed = Boolean(
     uniqueOpenInstance &&
     !ambiguous &&
     !zoneClientMismatch &&
     (
+      hasConfiguredZoneAuthority ||
+      hasDeterministicBusinessRoute ||
       (analysis.detected_cnpj && detectedClientByCnpj && best.totalScore >= 0.82 && (!best.layoutUsable || best.layoutScore >= 0.55)) ||
       (hasManualContext && hasStrongDocumentHint && best.totalScore >= 0.72)
     ),
@@ -1853,6 +1765,9 @@ async function resolveDocumentReferenceMatch(
   if (best.zoneSignals.cnpjText || best.zoneSignals.competenceText) {
     reasons.push("CNPJ/competencia lidos nas areas predefinidas do documento modelo.");
   }
+  if (configuredReferenceId && best.reference.validation_status !== "approved") {
+    reasons.push("O modelo ainda nao foi aprovado com amostras reais; vinculo automatico bloqueado.");
+  }
   if (zoneClientMismatch) {
     reasons.push("O CNPJ lido na area predefinida aponta para outro cliente; revisao humana necessaria.");
   }
@@ -1873,6 +1788,8 @@ async function resolveDocumentReferenceMatch(
           ? "CNPJ lido na area predefinida nao pertence ao cliente usado no roteamento."
         : !analysis.detected_cnpj && !hasManualContext
           ? "Nao foi detectado CNPJ valido no documento e nao ha contexto manual suficiente."
+          : configuredReferenceId && best.reference.validation_status !== "approved"
+            ? "Modelo em validacao. Confirme amostras reais antes de habilitar vinculo automatico."
           : "Score abaixo do limiar de auto-vinculo.";
 
   return {
@@ -1881,7 +1798,9 @@ async function resolveDocumentReferenceMatch(
     suggestedTemplateId: best.template.id,
     documentTypeKey: best.document.document_type_key,
     strategy: autoAllowed ? "direct_expected_doc" : "manual_review",
-    score: autoAllowed ? best.totalScore : Math.max(0.55, best.totalScore),
+    score: autoAllowed
+      ? hasConfiguredZoneAuthority ? Math.max(0.92, best.totalScore) : best.totalScore
+      : Math.max(0.55, best.totalScore),
     reasons,
     reviewRequired: !autoAllowed,
     documentDefinition: best.document,
@@ -2154,44 +2073,73 @@ function sanitizeProviderMessage(value: unknown) {
   return providerMessage.slice(0, 700);
 }
 
-function buildDeliveryIdempotencyKey(instanceId: string, recipientEmail: string, attachmentIds: string[]) {
+function buildDeliveryIdempotencyKey(instanceId: string, channel: string, recipient: string, attachmentIds: string[]) {
   const attachments = attachmentIds.slice().sort().join(",");
-  return `obligation-delivery:${instanceId}:${recipientEmail}:${attachments}`;
+  return `obligation-delivery:${instanceId}:${channel}:${recipient}:${attachments}`;
 }
 
-async function downloadDeliveryAttachments(
+function encodeBase64Url(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function normalizeBrazilWhatsAppRecipient(value: string | null | undefined) {
+  const digits = normalizePhoneDigits(value);
+  if (!digits) return null;
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits.length >= 10 && digits.length <= 15 ? digits : null;
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function createDeliveryDocumentLinks(
   supabaseAdmin: SupabaseAdmin,
-  files: Array<JsonRecord>,
-): Promise<DeliveryAttachment[]> {
-  const attachments: DeliveryAttachment[] = [];
+  prepared: DeliveryPreparation,
+  deliveryAttemptId: string,
+): Promise<DeliveryDocumentLink[]> {
+  const supabaseUrl = asTrimmedString(Deno.env.get("SUPABASE_URL"));
+  if (!supabaseUrl) throw new Error("URL publica do servico de documentos nao configurada.");
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const links: DeliveryDocumentLink[] = [];
 
-  for (const file of files) {
-    const id = asTrimmedString(file.id);
-    const storageBucket = asTrimmedString(file.storage_bucket) || "obligation-files";
+  for (const file of prepared.files) {
+    const fileId = asTrimmedString(file.id);
     const storagePath = asTrimmedString(file.storage_path);
-    const filename = asTrimmedString(file.file_name) || storagePath?.split("/").pop() || "guia.pdf";
-    if (!id || !storagePath) continue;
-
-    const { data, error } = await supabaseAdmin.storage.from(storageBucket).download(storagePath);
-    if (error || !data) {
-      throw new Error(`Nao foi possivel carregar o anexo ${filename}.`);
-    }
-
-    const bytes = new Uint8Array(await data.arrayBuffer());
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-
-    attachments.push({
-      id,
-      filename,
-      content: btoa(binary),
-      content_type: asTrimmedString(file.content_type),
-      storage_bucket: storageBucket,
-      storage_path: storagePath,
+    if (!fileId || !storagePath) continue;
+    const token = encodeBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+    const tokenDigest = await sha256Hex(token);
+    const { error } = await supabaseAdmin.from("obligation_document_delivery_links").insert({
+      organization_id: prepared.organizationId,
+      client_id: prepared.client.id,
+      instance_id: prepared.instance.id,
+      file_id: fileId,
+      delivery_attempt_id: deliveryAttemptId,
+      token_digest: tokenDigest,
+      recipient_email: prepared.recipientEmail,
+      recipient_phone: prepared.recipientPhone,
+      access_channel: prepared.deliveryChannel === "whatsapp" ? "whatsapp_link" : "email_link",
+      expires_at: expiresAt,
+    });
+    if (error) throw error;
+    links.push({
+      fileId,
+      label: asTrimmedString(prepared.template.name) || "Documento da obrigação",
+      url: `${supabaseUrl.replace(/\/$/, "")}/functions/v1/d?t=${encodeURIComponent(token)}`,
     });
   }
 
-  return attachments;
+  if (links.length === 0) throw new Error("Nao foi possivel gerar o link do documento.");
+  return links;
+}
+
+function appendDocumentLinksToText(body: string, links: DeliveryDocumentLink[]) {
+  const list = links.map((link, index) => `${index + 1}. ${link.label}: ${link.url}`).join("\n");
+  return `${body}\n\n${list}`;
 }
 
 async function prepareObligationDelivery(
@@ -2201,6 +2149,7 @@ async function prepareObligationDelivery(
   payload: JsonRecord,
 ): Promise<DeliveryPreparation> {
   const instanceId = asTrimmedString(payload.instance_id);
+  const deliveryChannel = asTrimmedString(payload.delivery_channel) === "whatsapp" ? "whatsapp" : "email";
   if (!instanceId) throw new Error("Compet?ncia da obriga??o ? obrigat?ria.");
 
   const { data: instanceData, error: instanceError } = await supabaseAdmin
@@ -2243,7 +2192,7 @@ async function prepareObligationDelivery(
     obligation_completion_whatsapp_enabled: asBoolean(clientRecord.obligation_completion_whatsapp_enabled, false),
   };
 
-  if (!template.completion_email_enabled) {
+  if (deliveryChannel === "email" && !template.completion_email_enabled) {
     throw new Error("Esta obrigacao nao esta configurada para envio por e-mail.");
   }
 
@@ -2260,9 +2209,18 @@ async function prepareObligationDelivery(
     .in("triage_status", ["accepted", "reviewed"])
     .order("created_at", { ascending: true });
   if (filesError) throw filesError;
-  const files = ((filesData || []) as Array<JsonRecord>).filter((file) => asTrimmedString(file.storage_path));
+  const requestedInboxItemIds = Array.from(new Set([
+    asTrimmedString(payload.inbox_item_id),
+    ...(Array.isArray(payload.inbox_item_ids) ? payload.inbox_item_ids.map(asTrimmedString) : []),
+  ].filter((value): value is string => Boolean(value))));
+  const availableFiles = ((filesData || []) as Array<JsonRecord>).filter((file) => asTrimmedString(file.storage_path));
+  const files = requestedInboxItemIds.length > 0
+    ? availableFiles.filter((file) => requestedInboxItemIds.includes(asTrimmedString(file.inbox_item_id) || ""))
+    : availableFiles;
   if (files.length === 0) {
-    throw new Error("Nao ha guia anexada para enviar ao cliente.");
+    throw new Error(requestedInboxItemIds.length > 0
+      ? "O arquivo recém-anexado não foi localizado para envio."
+      : "Nao ha guia anexada para enviar ao cliente.");
   }
 
   const inboxItemId =
@@ -2281,9 +2239,21 @@ async function prepareObligationDelivery(
     inboxItem = (inboxData || null) as InboxRow | null;
   }
 
-  const recipientEmail = normalizeEmail(payload.recipient_email) || normalizeEmail(client.email);
-  if (!recipientEmail) {
+  const recipientEmail = deliveryChannel === "email"
+    ? normalizeEmail(payload.recipient_email) || normalizeEmail(client.email)
+    : null;
+  if (deliveryChannel === "email" && !recipientEmail) {
     throw new Error("O cliente nao possui e-mail valido cadastrado. Informe um destinatario revisado.");
+  }
+  const clientWhatsAppTarget = deliveryChannel === "whatsapp"
+    ? await resolveClientWhatsAppTarget(supabaseAdmin, client)
+    : null;
+  const requestedPhone = normalizePhoneDigits(asTrimmedString(payload.recipient_phone));
+  const recipientPhone = deliveryChannel === "whatsapp"
+    ? normalizeBrazilWhatsAppRecipient(requestedPhone || clientWhatsAppTarget?.phoneDigits)
+    : null;
+  if (deliveryChannel === "whatsapp" && !recipientPhone) {
+    throw new Error("O cliente nao possui WhatsApp valido cadastrado. Informe um telefone com DDD.");
   }
 
   const sender = await resolveDeliverySender(supabaseAdmin, actorId);
@@ -2299,14 +2269,17 @@ async function prepareObligationDelivery(
     renderPayload,
   );
   const textBody = renderCompletionEmailTemplate(
-    template.completion_email_body ||
-      "Ola, {{cliente_nome}}.\n\nSegue anexa a guia da obrigacao {{obrigacao_nome}} referente a competencia {{competencia}}.\n\nSetor responsavel: {{setor}}.",
+    (deliveryChannel === "whatsapp" ? template.completion_whatsapp_body : template.completion_email_body) ||
+      "Ola, {{cliente_nome}}.\n\nA guia da obrigacao {{obrigacao_nome}} referente a competencia {{competencia}} esta disponivel no link seguro abaixo.\n\nSetor responsavel: {{setor}}.",
     renderPayload,
   );
 
   const warnings = [];
-  if (recipientEmail !== normalizeEmail(client.email)) {
+  if (deliveryChannel === "email" && recipientEmail !== normalizeEmail(client.email)) {
     warnings.push("Destinatario alterado manualmente em relacao ao e-mail principal do cliente.");
+  }
+  if (deliveryChannel === "whatsapp" && requestedPhone && recipientPhone !== normalizeBrazilWhatsAppRecipient(clientWhatsAppTarget?.phoneDigits)) {
+    warnings.push("Destinatario alterado manualmente em relacao ao WhatsApp principal do cliente.");
   }
   if (instance.status === "concluida") {
     warnings.push("Esta obrigacao ja esta concluida; confirme duplicidade antes de reenviar.");
@@ -2320,10 +2293,11 @@ async function prepareObligationDelivery(
     inboxItem,
     files,
     sender,
+    deliveryChannel,
     recipientEmail,
+    recipientPhone,
     subject,
     textBody,
-    htmlBody: buildCompletionEmailBodyHtml(textBody),
     warnings,
   };
 }
@@ -2343,7 +2317,9 @@ async function handlePrepareDelivery(
         client_id: prepared.client.id,
         client_name: prepared.client.name,
         inbox_item_id: prepared.inboxItem?.id || null,
+        delivery_channel: prepared.deliveryChannel,
         recipient_email: prepared.recipientEmail,
+        recipient_phone: prepared.recipientPhone,
         verified_from_email: prepared.sender.verifiedFrom,
         reply_to: prepared.sender.replyTo,
         display_sender_context: prepared.sender.displaySenderContext,
@@ -2384,13 +2360,29 @@ async function handleSendDelivery(
   const deliveryAttemptToken = new Date().toISOString();
   const idempotencyKey =
     asTrimmedString(payload.idempotency_key) ||
-    `${buildDeliveryIdempotencyKey(prepared.instance.id, prepared.recipientEmail, attachmentIds)}:${deliveryAttemptToken}`;
+    `${buildDeliveryIdempotencyKey(prepared.instance.id, prepared.deliveryChannel, prepared.recipientEmail || prepared.recipientPhone || "", attachmentIds)}:${deliveryAttemptToken}`;
+
+  const { data: idempotentAttempt, error: idempotentAttemptError } = await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .select("id,status,provider_message_id,delivery_channel,sent_at")
+    .eq("organization_id", organizationId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+  if (idempotentAttemptError) throw idempotentAttemptError;
+  if (idempotentAttempt && asTrimmedString(idempotentAttempt.status) === "sent") {
+    return jsonResponse({
+      ok: true,
+      idempotent: true,
+      delivery_attempt: idempotentAttempt,
+    });
+  }
 
   const { data: existingSent, error: existingError } = await supabaseAdmin
     .from("obligation_delivery_attempts")
-    .select("id, sent_at, recipient_email")
+    .select("id, sent_at, recipient_email, recipient_phone, delivery_channel")
     .eq("organization_id", organizationId)
     .eq("instance_id", prepared.instance.id)
+    .eq("delivery_channel", prepared.deliveryChannel)
     .eq("status", "sent")
     .limit(1)
     .maybeSingle();
@@ -2415,7 +2407,9 @@ async function handleSendDelivery(
       verified_from_email: prepared.sender.verifiedFrom,
       display_sender_context: prepared.sender.displaySenderContext,
       reply_to: prepared.sender.replyTo,
+      delivery_channel: prepared.deliveryChannel,
       recipient_email: prepared.recipientEmail,
+      recipient_phone: prepared.recipientPhone,
       subject: prepared.subject,
       message_body: prepared.textBody,
       attachment_file_ids: attachmentIds,
@@ -2423,6 +2417,7 @@ async function handleSendDelivery(
       idempotency_key: idempotencyKey,
       human_confirmed_at: now,
       metadata: {
+        delivery_channel: prepared.deliveryChannel,
         duplicate_confirmed: duplicateConfirmed,
         attachment_count: attachmentIds.length,
       },
@@ -2439,11 +2434,11 @@ async function handleSendDelivery(
     .eq("organization_id", organizationId)
     .eq("id", prepared.instance.id);
 
-  let attachments: DeliveryAttachment[];
+  let documentLinks: DeliveryDocumentLink[];
   try {
-    attachments = await downloadDeliveryAttachments(supabaseAdmin, prepared.files);
+    documentLinks = await createDeliveryDocumentLinks(supabaseAdmin, prepared, String((attemptData as JsonRecord).id));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao preparar anexos.";
+    const message = error instanceof Error ? error.message : "Falha ao gerar links seguros.";
     await supabaseAdmin
       .from("obligation_delivery_attempts")
       .update({ status: "failed", failure_reason: message, failed_at: new Date().toISOString() })
@@ -2456,27 +2451,52 @@ async function handleSendDelivery(
     return jsonResponse({ error: message }, 400);
   }
 
-  const sendResult = await sendEmailViaSmtp({
-    from: prepared.sender.verifiedFrom,
-    replyTo: prepared.sender.replyTo,
-    to: prepared.recipientEmail,
-    subject: prepared.subject,
-    html: prepared.htmlBody,
-    text: prepared.textBody,
-    attachments: attachments.map((attachment) => ({
-      filename: attachment.filename,
-      content: attachment.content,
-      content_type: attachment.content_type || undefined,
-    })),
-  });
+  const deliveryTextBody = appendDocumentLinksToText(prepared.textBody, documentLinks);
+  const deliveryHtmlBody = buildCompletionEmailBodyHtml(prepared.textBody, documentLinks);
+  await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .update({ message_body: deliveryTextBody, metadata: { delivery_channel: prepared.deliveryChannel, duplicate_confirmed: duplicateConfirmed, link_count: documentLinks.length, delivery_mode: "secure_links" } })
+    .eq("id", String((attemptData as JsonRecord).id));
 
-  if (!sendResult.ok) {
-    const failureReason = sanitizeProviderMessage(sendResult.message);
+  let providerMessageId: string | null = null;
+  let providerStatus = 200;
+  let providerFailure: string | null = null;
+  try {
+    if (prepared.deliveryChannel === "whatsapp") {
+      const whatsappResult = await sendWhatsAppTextMessage(prepared.recipientPhone || "", deliveryTextBody);
+      if (!whatsappResult.sent) {
+        providerFailure = "A integracao do WhatsApp nao esta configurada para esta organizacao.";
+        providerStatus = 503;
+      } else {
+        const response = asJsonRecord(whatsappResult.response);
+        const messages = Array.isArray(response.messages) ? response.messages : [];
+        providerMessageId = asTrimmedString(asJsonRecord(messages[0]).id);
+      }
+    } else {
+      const emailResult = await sendEmailViaSmtp({
+        from: prepared.sender.verifiedFrom,
+        replyTo: prepared.sender.replyTo,
+        to: prepared.recipientEmail || "",
+        subject: prepared.subject,
+        html: deliveryHtmlBody,
+        text: deliveryTextBody,
+      });
+      providerStatus = emailResult.status;
+      providerMessageId = emailResult.id;
+      if (!emailResult.ok) providerFailure = sanitizeProviderMessage(emailResult.message);
+    }
+  } catch (error) {
+    providerStatus = 502;
+    providerFailure = error instanceof Error ? error.message : "Falha desconhecida no provedor de entrega.";
+  }
+
+  if (providerFailure) {
+    const failureReason = sanitizeProviderMessage(providerFailure);
     await supabaseAdmin
       .from("obligation_delivery_attempts")
       .update({
         status: "failed",
-        provider_status: sendResult.status,
+        provider_status: providerStatus,
         failure_reason: failureReason,
         failed_at: new Date().toISOString(),
       })
@@ -2493,14 +2513,14 @@ async function handleSendDelivery(
       "delivery_failed",
       prepared.instance.status,
       "falha_envio",
-      "Falha no envio da guia por e-mail.",
+      `Falha no envio da guia por ${prepared.deliveryChannel === "whatsapp" ? "WhatsApp" : "e-mail"}.`,
       {
         attempt_id: String((attemptData as JsonRecord).id),
-        provider_status: sendResult.status,
+        provider_status: providerStatus,
         failure_reason: failureReason,
       },
     );
-    return jsonResponse({ error: "Falha ao enviar e-mail ao cliente.", detail: failureReason }, 502);
+    return jsonResponse({ error: `Falha ao enviar ${prepared.deliveryChannel === "whatsapp" ? "WhatsApp" : "e-mail"} ao cliente.`, detail: failureReason }, 502);
   }
 
   const sentAt = new Date().toISOString();
@@ -2508,8 +2528,8 @@ async function handleSendDelivery(
     .from("obligation_delivery_attempts")
     .update({
       status: "sent",
-      provider_message_id: sendResult.id,
-      provider_status: sendResult.status,
+      provider_message_id: providerMessageId,
+      provider_status: providerStatus,
       sent_at: sentAt,
     })
     .eq("id", String((attemptData as JsonRecord).id));
@@ -2537,7 +2557,7 @@ async function handleSendDelivery(
       ? markInboxProcessingState(supabaseAdmin, prepared.inboxItem.id, {
         communication_status: "sent",
         publication_status: "published",
-        execution_notes: "Guia enviada ao cliente por e-mail com confirmacao humana.",
+        execution_notes: `Guia enviada ao cliente por ${prepared.deliveryChannel === "whatsapp" ? "WhatsApp" : "e-mail"} com confirmacao humana.`,
         processed_automatically: true,
       })
       : Promise.resolve(),
@@ -2553,7 +2573,8 @@ async function handleSendDelivery(
       .from("obligation_instance_files")
       .update({ publication_status: "published" })
       .eq("organization_id", organizationId)
-      .eq("instance_id", prepared.instance.id),
+      .eq("instance_id", prepared.instance.id)
+      .in("id", attachmentIds),
   ]);
 
   await createInstanceEvent(
@@ -2563,14 +2584,16 @@ async function handleSendDelivery(
     "delivery_sent",
     prepared.instance.status,
     "concluida",
-    `Guia enviada por e-mail para ${prepared.recipientEmail}.`,
+    `Guia enviada por ${prepared.deliveryChannel === "whatsapp" ? "WhatsApp" : "e-mail"} para ${prepared.recipientEmail || prepared.recipientPhone}.`,
     {
       attempt_id: String((attemptData as JsonRecord).id),
       recipient_email: prepared.recipientEmail,
+      recipient_phone: prepared.recipientPhone,
+      delivery_channel: prepared.deliveryChannel,
       sender_email: prepared.sender.actorEmail,
       verified_from_email: prepared.sender.verifiedFrom,
       reply_to: prepared.sender.replyTo,
-      smtp_message_id: sendResult.id,
+      provider_message_id: providerMessageId,
     },
   );
 
@@ -2604,11 +2627,87 @@ async function handleSendDelivery(
     delivery_attempt: {
       id: String((attemptData as JsonRecord).id),
       status: "sent",
-      provider_message_id: sendResult.id,
+      provider_message_id: providerMessageId,
+      delivery_channel: prepared.deliveryChannel,
       sent_at: sentAt,
     },
     instance: updatedInstanceData,
   });
+}
+
+async function handleSendConfiguredDelivery(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const instanceId = asTrimmedString(payload.instance_id);
+  if (!instanceId) return jsonResponse({ error: "Competencia da obrigacao e obrigatoria." }, 400);
+
+  const { data: instance, error: instanceError } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("id, template_id")
+    .eq("organization_id", organizationId)
+    .eq("id", instanceId)
+    .single();
+  if (instanceError || !instance) return jsonResponse({ error: "Competencia da obrigacao nao encontrada." }, 404);
+
+  const { data: template, error: templateError } = await supabaseAdmin
+    .from("obligation_templates")
+    .select("completion_email_enabled, completion_whatsapp_enabled")
+    .eq("organization_id", organizationId)
+    .eq("id", instance.template_id)
+    .single();
+  if (templateError || !template) return jsonResponse({ error: "Configuracao da obrigacao nao encontrada." }, 404);
+
+  const configuredChannels: Array<"email" | "whatsapp"> = [];
+  if (asBoolean(template.completion_email_enabled, false)) configuredChannels.push("email");
+  if (asBoolean(template.completion_whatsapp_enabled, false)) configuredChannels.push("whatsapp");
+  if (configuredChannels.length === 0) {
+    return jsonResponse({ error: "A obrigacao nao possui canal de entrega configurado." }, 400);
+  }
+
+  const confirmDuplicate = asBoolean(payload.confirm_duplicate, false);
+  const { data: sentAttempts, error: sentAttemptsError } = await supabaseAdmin
+    .from("obligation_delivery_attempts")
+    .select("delivery_channel")
+    .eq("organization_id", organizationId)
+    .eq("instance_id", instanceId)
+    .eq("status", "sent");
+  if (sentAttemptsError) return jsonResponse({ error: sentAttemptsError.message }, 400);
+  const alreadySentChannels = new Set((sentAttempts || []).map((attempt) => asTrimmedString(attempt.delivery_channel) || "email"));
+  const channelsToSend = confirmDuplicate
+    ? configuredChannels
+    : configuredChannels.filter((channel) => !alreadySentChannels.has(channel));
+
+  if (channelsToSend.length === 0) {
+    return jsonResponse({ ok: true, already_sent: true, channels: configuredChannels });
+  }
+
+  const results: Array<JsonRecord> = [];
+  const baseIdempotencyKey = asTrimmedString(payload.idempotency_key);
+  for (const channel of channelsToSend) {
+    const response = await handleSendDelivery(supabaseAdmin, actorId, organizationId, {
+      ...payload,
+      action: "send_delivery",
+      delivery_channel: channel,
+      human_confirmed: true,
+      confirm_duplicate: confirmDuplicate,
+      idempotency_key: baseIdempotencyKey ? `${baseIdempotencyKey}:${channel}` : null,
+    });
+    const result = await response.json().catch(() => ({ error: "Resposta de envio invalida." })) as JsonRecord;
+    results.push({ channel, ok: response.ok, ...result });
+  }
+
+  const failures = results.filter((result) => result.ok !== true);
+  if (failures.length > 0) {
+    return jsonResponse({
+      error: "Um ou mais canais configurados nao foram enviados.",
+      channels: results,
+    }, 502);
+  }
+
+  return jsonResponse({ ok: true, channels: results });
 }
 
 async function handleCancelDelivery(
@@ -2684,14 +2783,14 @@ async function handleCancelDelivery(
   return jsonResponse({ ok: true, delivery_attempt: { id: String(attemptRecord.id), status: "cancelled" } });
 }
 
-function buildCompletionEmailBodyHtml(body: string) {
-  return `
-    <div style="background:#f8fafc;padding:24px 12px;font-family:Arial,sans-serif;color:#0f172a;">
-      <div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e2e8f0;">
-        <div style="white-space:pre-line;font-size:14px;line-height:1.6;">${escapeHtml(body)}</div>
-      </div>
-    </div>
-  `;
+function buildCompletionEmailBodyHtml(body: string, documentLinks: DeliveryDocumentLink[] = []) {
+  const messageHtml = escapeHtml(body).replace(/\r?\n/g, "<br>");
+  const linksHtml = documentLinks.length === 0
+    ? ""
+    : `<br><br>${documentLinks
+      .map((link) => `${escapeHtml(link.label)}: <a href="${escapeHtml(link.url)}">Clique aqui</a>`)
+      .join("<br>")}`;
+  return `${messageHtml}${linksHtml}`;
 }
 
 async function resolveClientWhatsAppTarget(
@@ -2715,7 +2814,7 @@ async function resolveClientWhatsAppTarget(
     entries.set(fieldName, fieldValue);
   }
 
-  const cadastroWhatsApp = normalizePhoneDigits(entries.get("whatsapp"));
+  const cadastroWhatsApp = normalizeBrazilWhatsAppRecipient(entries.get("whatsapp"));
   if (cadastroWhatsApp) {
     return {
       phoneDigits: cadastroWhatsApp,
@@ -2723,7 +2822,7 @@ async function resolveClientWhatsAppTarget(
     };
   }
 
-  const cadastroPhone = combineDddAndPhone(entries.get("ddd"), entries.get("telefone"));
+  const cadastroPhone = normalizeBrazilWhatsAppRecipient(combineDddAndPhone(entries.get("ddd"), entries.get("telefone")));
   if (cadastroPhone) {
     return {
       phoneDigits: cadastroPhone,
@@ -2731,7 +2830,7 @@ async function resolveClientWhatsAppTarget(
     };
   }
 
-  const clientPhone = normalizePhoneDigits(client.phone);
+  const clientPhone = normalizeBrazilWhatsAppRecipient(client.phone);
   if (clientPhone) {
     return {
       phoneDigits: clientPhone,
@@ -3386,8 +3485,13 @@ async function applyDocumentOperationalFlowV2(
   );
 
   const documentStatus = await determineInstanceDocumentStatus(supabaseAdmin, instance, template);
-  const deliveryRequired = documentStatus === "concluida" && template.completion_email_enabled;
-  const nextStatus = deliveryRequired ? "pronto_para_envio" : documentStatus;
+  const documentsComplete = ["em_revisao", "concluida"].includes(documentStatus);
+  const deliveryRequired = template.completion_email_enabled || template.completion_whatsapp_enabled;
+  const nextStatus = ["concluida", "cancelada"].includes(instance.status)
+    ? instance.status
+    : documentsComplete
+      ? deliveryRequired ? "pronto_para_envio" : "em_revisao"
+      : "em_andamento";
   let updatedInstance = instance;
   const justCompleted = nextStatus === "concluida" && instance.status !== "concluida";
   const justReadyForDelivery = nextStatus === "pronto_para_envio" && instance.status !== "pronto_para_envio";
@@ -3439,12 +3543,15 @@ async function applyDocumentOperationalFlowV2(
       "status_change",
       instance.status,
       nextStatus,
-      nextStatus === "em_revisao"
-        ? "Documentos obrigatorios anexados. Tarefa enviada automaticamente para revisao."
-        : deliveryRequired
-        ? "Documentos obrigatorios anexados. Aguardando confirmacao humana para envio ao cliente."
-        : "Status ajustado automaticamente apos recebimento do documento.",
-      { inbox_item_id: inboxItem.id, protocol_number: protocolNumber, delivery_required: deliveryRequired },
+      documentsComplete
+        ? "Documentos obrigatorios vinculados automaticamente. Tarefa movida para Revisao."
+        : "Documento vinculado automaticamente. Tarefa movida para Em Andamento enquanto aguarda os demais documentos.",
+      {
+        inbox_item_id: inboxItem.id,
+        protocol_number: protocolNumber,
+        delivery_required: deliveryRequired,
+        documents_complete: documentsComplete,
+      },
     );
   }
 
@@ -3468,13 +3575,9 @@ async function applyDocumentOperationalFlowV2(
   await syncInstanceArtifacts(supabaseAdmin, updatedInstance, template, client.name);
 
   const communicationStatus = deliveryRequired ? "pending" : "not_applicable";
-  let executionNotes = nextStatus === "aguardando_documento"
-    ? "Documento anexado. A obrigacao ainda aguarda outros documentos obrigatorios."
-    : nextStatus === "em_revisao"
-      ? "Documento esperado anexado na competencia correta. Tarefa enviada automaticamente para revisao."
-      : deliveryRequired
-        ? "Documento anexado. Obrigacao pronta para revisao e envio manual ao cliente."
-        : "Documento anexado e obrigacao concluida automaticamente.";
+  let executionNotes = documentsComplete
+    ? "Documentos obrigatorios anexados. Tarefa movida automaticamente para Revisao."
+    : "Documento anexado. Tarefa movida para Em Andamento; a obrigacao ainda aguarda outros documentos obrigatorios.";
   if (protocolNumber && nextStatus === "concluida") {
     executionNotes = `${executionNotes} Protocolo ${protocolNumber}.`;
   }
@@ -3521,6 +3624,64 @@ async function applyDocumentOperationalFlowV2(
     completed_at: now,
   });
 
+  if (deliveryRequired && documentsComplete) {
+    const robotSubmissionId = asTrimmedString(asJsonRecord(inboxItem.recognition_evidence).robot_submission_id);
+    const isNewRobotSubmission = inboxItem.source_kind === "local_robot" && Boolean(robotSubmissionId);
+    const deliveryResponse = await handleSendConfiguredDelivery(supabaseAdmin, actorId, inboxItem.organization_id, {
+      action: "send_configured_delivery",
+      instance_id: updatedInstance.id,
+      inbox_item_ids: [inboxItem.id],
+      confirm_duplicate: isNewRobotSubmission,
+      idempotency_key: robotSubmissionId ? `robot:${robotSubmissionId}` : null,
+    });
+    const deliveryResult = await deliveryResponse.json().catch(() => ({ error: "Resposta de entrega invalida." })) as JsonRecord;
+    if (!deliveryResponse.ok) {
+      const deliveryError = asTrimmedString(deliveryResult.error) || "Falha ao entregar documento pelos canais configurados.";
+      await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+        status: "failed",
+        communication_status: "failed",
+        publication_status: "pending",
+        last_error: deliveryError,
+        completed_at: new Date().toISOString(),
+      });
+      return {
+        processed: false,
+        reason: "delivery_failed",
+        nextStatus: "falha_envio",
+        archivePath,
+        protocolNumber,
+        communicationStatus: "failed",
+        deliveryRequired: true,
+        deliveryError,
+      };
+    }
+    await Promise.all([
+      supabaseAdmin
+        .from("document_inbox_items")
+        .update({ communication_status: "sent", publication_status: "published" })
+        .eq("id", inboxItem.id),
+      supabaseAdmin
+        .from("obligation_instance_files")
+        .update({ publication_status: "published" })
+        .eq("storage_bucket", inboxItem.storage_bucket)
+        .eq("storage_path", inboxItem.storage_path),
+      updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
+        communication_status: "sent",
+        publication_status: "published",
+        last_error: null,
+      }),
+    ]);
+    return {
+      processed: true,
+      nextStatus: "concluida",
+      archivePath,
+      protocolNumber,
+      communicationStatus: "sent",
+      deliveryRequired: true,
+      delivery: deliveryResult,
+    };
+  }
+
   return { processed: true, nextStatus, archivePath, protocolNumber, communicationStatus, deliveryRequired };
 }
 
@@ -3531,53 +3692,16 @@ async function syncInstanceArtifacts(
   clientName: string,
 ) {
   const obligationTitle = `${template.name} ? ${clientName}`;
-  const integrationKey = `instance:${instance.id}`;
   const taskIntegrationKey = `instance:${instance.id}`;
   const instanceDone = instance.status === "concluida" || instance.status === "cancelada";
-  const dueDate = `${instance.technical_due_date}T09:00:00.000Z`;
   const organizationId = resolveRowOrganizationId(instance, template);
   if (!organizationId) {
-    throw new Error("Organiza??o da compet?ncia de obriga??o n?o encontrada para sincronizar calend?rio e tarefas.");
-  }
-
-  const payload = {
-    organization_id: organizationId,
-    title: `${template.name} ? ${instance.competence_label}`,
-    description: `${clientName}\nCompet?ncia: ${instance.competence_label}`,
-    entry_type: "obrigacao",
-    priority: instance.priority,
-    sector: template.sector,
-    due_at: dueDate,
-    all_day: true,
-    status: instanceDone ? "completed" : "pending",
-    integration_source: "grow_obligation",
-    integration_key: integrationKey,
-  };
-
-  const { data: existingEvent, error: eventLookupError } = await supabaseAdmin
-    .from("calendar_events")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("integration_source", "grow_obligation")
-    .eq("integration_key", integrationKey)
-    .maybeSingle();
-
-  if (eventLookupError) throw eventLookupError;
-
-  if (existingEvent?.id) {
-    const { error } = await supabaseAdmin
-      .from("calendar_events")
-      .update(payload)
-      .eq("id", existingEvent.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabaseAdmin.from("calendar_events").insert(payload);
-    if (error) throw error;
+    throw new Error("Organiza??o da compet?ncia de obriga??o n?o encontrada para sincronizar tarefas.");
   }
 
   const { data: existingTask, error: taskLookupError } = await supabaseAdmin
     .from("kanban_tasks")
-    .select("id")
+    .select("id, status")
     .eq("organization_id", organizationId)
     .eq("integration_source", "grow_obligation_task")
     .eq("integration_task_id", taskIntegrationKey)
@@ -3585,7 +3709,7 @@ async function syncInstanceArtifacts(
 
   if (taskLookupError) throw taskLookupError;
 
-  const taskStatus =
+  const synchronizedTaskStatus =
     instance.status === "concluida" || instance.status === "cancelada"
       ? "done"
       : instance.status === "em_revisao"
@@ -3595,6 +3719,9 @@ async function syncInstanceArtifacts(
           : instance.status === "atrasada"
             ? "todo"
             : "backlog";
+  const taskStatus = existingTask?.status === "archived" && instanceDone
+    ? "archived"
+    : synchronizedTaskStatus;
 
   const taskPayload = {
     organization_id: organizationId,
@@ -3626,174 +3753,27 @@ async function syncInstanceArtifacts(
   if (error) throw error;
 }
 
-async function ensureInstancesForProfiles(
+async function invokeCanonicalObligationGeneration(
   supabaseAdmin: SupabaseAdmin,
-  profiles: ProfileRow[],
-  templatesMap: Map<string, TemplateRow>,
+  organizationId: string,
   actorId: string,
-  windowStart: Date,
-  windowEnd: Date,
-  targetOperationalMonthKey?: string,
+  clientId?: string | null,
 ) {
-  if (profiles.length === 0) return { created: 0 };
-
-  const profileIds = profiles.map((profile) => profile.id);
-  const { data: existingRows, error: existingError } = await supabaseAdmin
-    .from("obligation_instances")
-    .select("id, client_id, template_id, competence_key")
-    .in("profile_id", profileIds);
-
-  if (existingError) throw existingError;
-
-  const existingKeys = new Set(
-    (existingRows || []).map((row) =>
-      `${String((row as JsonRecord).client_id)}::${String((row as JsonRecord).template_id)}::${String((row as JsonRecord).competence_key)}`,
-    ),
-  );
-
-  const inserts: JsonRecord[] = [];
-
-  for (const profile of profiles) {
-    if (!profile.is_active) continue;
-    const template = templatesMap.get(profile.template_id);
-    if (!template || !template.is_active) continue;
-
-    const assignedStart = new Date(`${profile.start_date}T00:00:00.000Z`);
-    const assignedStartMonth = new Date(Date.UTC(assignedStart.getUTCFullYear(), assignedStart.getUTCMonth(), 1));
-    const assignedEnd = profile.end_date ? new Date(`${profile.end_date}T00:00:00.000Z`) : null;
-    const assignedEndMonth = assignedEnd
-      ? new Date(Date.UTC(assignedEnd.getUTCFullYear(), assignedEnd.getUTCMonth(), 1))
-      : null;
-    const yearlyFixedDates =
-      template.periodicity === "yearly" && asTrimmedString(template.due_rule_type) === "fixed_date"
-        ? normalizeFixedDueDates(template)
-        : [];
-
-    const cursor = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), 1));
-    while (cursor <= windowEnd) {
-      const competenceCandidates =
-        yearlyFixedDates.length > 0
-          ? yearlyFixedDates
-              .filter((fixedDate) => fixedDate.month === cursor.getUTCMonth() + 1)
-              .map((fixedDate) => ({
-                fixedDate,
-                date: new Date(Date.UTC(cursor.getUTCFullYear(), fixedDate.month - 1, 1)),
-              }))
-          : [
-              {
-                fixedDate: null,
-                date: computeCompetenceDate(
-                  template.periodicity,
-                  cursor,
-                  template.competence_reference,
-                  profile.yearly_due_month_override ?? template.due_fixed_month ?? template.yearly_due_month,
-                ),
-              },
-            ];
-
-      for (const competenceCandidate of competenceCandidates) {
-        const currentCompetenceDate = competenceCandidate.date;
-        const currentFixedDate = competenceCandidate.fixedDate;
-        const technicalDueDate = computeTechnicalDueDate(
-          cursor,
-          currentCompetenceDate,
-          template,
-          profile.due_day_override,
-          currentFixedDate,
-        );
-        const currentCompetenceKey =
-          currentFixedDate && yearlyFixedDates.length > 1
-            ? toIsoDate(technicalDueDate)
-            : competenceKey(currentCompetenceDate);
-        const currentCompetenceLabel =
-          currentFixedDate
-            ? `${monthLabel(currentCompetenceDate)} - ${technicalDueDate.toLocaleDateString("pt-BR", { timeZone: "UTC" })}${currentFixedDate.label ? ` ? ${currentFixedDate.label}` : ""}`
-            : monthLabel(currentCompetenceDate);
-        const currentCompetenceTime = currentCompetenceDate.getTime();
-        const currentOperationalMonthKey = competenceKey(cursor);
-
-        if (targetOperationalMonthKey && currentOperationalMonthKey !== targetOperationalMonthKey) {
-          continue;
-        }
-
-        if (currentCompetenceTime < assignedStartMonth.getTime()) {
-          continue;
-        }
-
-        if (assignedEndMonth && currentCompetenceTime > assignedEndMonth.getTime()) {
-          continue;
-        }
-
-        if (template.periodicity === "quarterly" && ![0, 3, 6, 9].includes(currentCompetenceDate.getUTCMonth())) {
-          continue;
-        }
-
-        if (
-          template.periodicity === "yearly" &&
-          yearlyFixedDates.length === 0 &&
-          currentCompetenceDate.getUTCMonth() !== (profile.yearly_due_month_override ?? template.due_fixed_month ?? template.yearly_due_month ?? 1) - 1
-        ) {
-          continue;
-        }
-
-        const uniqueKey = `${profile.client_id}::${profile.template_id}::${currentCompetenceKey}`;
-        if (!existingKeys.has(uniqueKey)) {
-          const legalDueDate = template.legal_due_day
-            ? computeDueDate(cursor, profile.legal_due_day_override ?? template.legal_due_day)
-            : null;
-
-          inserts.push({
-            organization_id: profile.organization_id || template.organization_id,
-            client_id: profile.client_id,
-            profile_id: profile.id,
-            template_id: profile.template_id,
-            competence_label: currentCompetenceLabel,
-            competence_date: toIsoDate(currentCompetenceDate),
-            competence_key: currentCompetenceKey,
-            technical_due_date: toIsoDate(technicalDueDate),
-            legal_due_date: legalDueDate ? toIsoDate(legalDueDate) : null,
-            status: "pendente",
-            priority: template.priority,
-            current_assignee: profile.assigned_to,
-            origin: "grow_native",
-            document_required: true,
-            created_by: actorId,
-          });
-          existingKeys.add(uniqueKey);
-        }
-      }
-
-      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-    }
-  }
-
-  if (inserts.length === 0) return { created: 0 };
-
-  const { data: insertedInstances, error: insertError } = await supabaseAdmin
-    .from("obligation_instances")
-    .insert(inserts)
-    .select("*");
-
-  if (insertError) throw insertError;
-
-  const clientsMap = await loadClientsMap(supabaseAdmin);
-  for (const row of (insertedInstances || []) as InstanceRow[]) {
-    const template = templatesMap.get(row.template_id);
-    const client = clientsMap.get(row.client_id);
-    if (!template || !client) continue;
-    await createInstanceEvent(
-      supabaseAdmin,
-      row.id,
-      actorId,
-      "instance_created",
-      null,
-      row.status,
-      `Compet?ncia ${row.competence_label} gerada automaticamente.`,
-    );
-    await syncInstanceArtifacts(supabaseAdmin, row, template, client.name);
-  }
-
-  return { created: inserts.length };
+  const { data, error } = await supabaseAdmin.rpc("generate_obligation_occurrences", {
+    _base_date: toIsoDate(new Date()),
+    _organization_id: organizationId,
+    _client_id: clientId || null,
+    _actor_id: actorId,
+    _source: "manual_rpc",
+  });
+  if (error) throw error;
+  const result = asRecord(Array.isArray(data) ? data[0] : data);
+  return {
+    runId: asTrimmedString(result.run_id),
+    operationalMonth: asTrimmedString(result.operational_month),
+    created: Number(result.created_instances || 0),
+    createdTasks: Number(result.created_tasks || 0),
+  };
 }
 
 async function markOverdueInstances(supabaseAdmin: SupabaseAdmin, actorId: string) {
@@ -3851,42 +3831,29 @@ async function buildOverview(
   filters: JsonRecord = {},
 ) {
   const skipOperationalSync = asBoolean(filters.skip_operational_sync, false);
+  const [templatesSource, profilesSource, clientsSource, referenceFiles] = await Promise.all([
+    loadTemplatesMap(supabaseAdmin, organizationId),
+    loadProfilesMap(supabaseAdmin, organizationId),
+    loadClientsMap(supabaseAdmin, organizationId),
+    loadReferenceFilesMap(supabaseAdmin, organizationId, {
+      includeAnalysisPayload: !skipOperationalSync,
+    }),
+  ]);
   const templatesMap = new Map(
-    filterByOrganization(Array.from((await loadTemplatesMap(supabaseAdmin, organizationId)).values()) as unknown as JsonRecord[], organizationId)
+    filterByOrganization(Array.from(templatesSource.values()) as unknown as JsonRecord[], organizationId)
       .map((template) => [String(template.id), template as unknown as TemplateRow]),
   );
   const profilesMap = new Map(
-    filterByOrganization(Array.from((await loadProfilesMap(supabaseAdmin, organizationId)).values()) as unknown as JsonRecord[], organizationId)
+    filterByOrganization(Array.from(profilesSource.values()) as unknown as JsonRecord[], organizationId)
       .map((profile) => [String(profile.id), profile as unknown as ProfileRow]),
   );
   const clientsMap = new Map(
-    filterByOrganization(Array.from((await loadClientsMap(supabaseAdmin, organizationId)).values()) as unknown as JsonRecord[], organizationId)
+    filterByOrganization(Array.from(clientsSource.values()) as unknown as JsonRecord[], organizationId)
       .map((client) => [String(client.id), client]),
   );
-  const referenceFiles = await loadReferenceFilesMap(supabaseAdmin, organizationId, {
-    includeAnalysisPayload: !skipOperationalSync,
-  });
   const overviewWarnings: string[] = [];
 
-  const currentGenerationWindow = currentCompetenceGenerationWindow();
-
   if (!skipOperationalSync) {
-    try {
-      await ensureInstancesForProfiles(
-        supabaseAdmin,
-        Array.from(profilesMap.values()),
-        templatesMap,
-        actorId,
-        currentGenerationWindow.cursorStart,
-        currentGenerationWindow.cursorEnd,
-        currentGenerationWindow.targetOperationalMonthKey,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Falha ao sincronizar competencias.";
-      overviewWarnings.push(`Sincronizacao de competencias nao concluida: ${message}`);
-      console.error("grow-obligations overview ensureInstancesForProfiles failed", { message });
-    }
-
     try {
       await markOverdueInstances(supabaseAdmin, actorId);
     } catch (error) {
@@ -3913,18 +3880,48 @@ async function buildOverview(
   if (documentCompetence) documentsQuery = documentsQuery.ilike("suggested_competence_label", `%${documentCompetence}%`);
   if (documentSenderUserId && documentSenderUserId !== "all") documentsQuery = documentsQuery.eq("created_by", documentSenderUserId);
 
+  let instancesQuery = supabaseAdmin
+    .from("obligation_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .is("superseded_by_instance_id", null)
+    .order("technical_due_date", { ascending: true })
+    .limit(240);
+  const instanceStatus = asTrimmedString(filters.instance_status);
+  const instanceClientId = asTrimmedString(filters.instance_client_id);
+  const instanceSector = asTrimmedString(filters.instance_sector);
+  const instancePriority = asTrimmedString(filters.instance_priority);
+  const instanceCompetence = asTrimmedString(filters.instance_competence);
+  const instanceDueFrom = asTrimmedString(filters.instance_due_from);
+  const instanceDueTo = asTrimmedString(filters.instance_due_to);
+  if (instanceStatus && instanceStatus !== "all") instancesQuery = instancesQuery.eq("status", instanceStatus);
+  if (instanceClientId && instanceClientId !== "all") instancesQuery = instancesQuery.eq("client_id", instanceClientId);
+  if (instancePriority && instancePriority !== "all") instancesQuery = instancesQuery.eq("priority", instancePriority);
+  if (instanceSector && instanceSector !== "all") {
+    const templateIds = Array.from(templatesMap.values())
+      .filter((template) => template.sector === instanceSector)
+      .map((template) => template.id);
+    instancesQuery = instancesQuery.in(
+      "template_id",
+      templateIds.length > 0 ? templateIds : ["00000000-0000-0000-0000-000000000000"],
+    );
+  }
+  if (/^\d{4}-\d{2}$/.test(instanceCompetence || "")) {
+    const [year, month] = instanceCompetence!.split("-").map(Number);
+    const competenceStart = `${instanceCompetence}-01`;
+    const competenceEnd = toIsoDate(new Date(Date.UTC(year, month, 1)));
+    instancesQuery = instancesQuery.gte("competence_date", competenceStart).lt("competence_date", competenceEnd);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(instanceDueFrom || "")) instancesQuery = instancesQuery.gte("technical_due_date", instanceDueFrom!);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(instanceDueTo || "")) instancesQuery = instancesQuery.lte("technical_due_date", instanceDueTo!);
+
   const [
     { data: instancesData, error: instancesError },
     { data: docsData, error: docsError },
     { data: attemptsData, error: attemptsError },
     ingestionJobs,
   ] = await Promise.all([
-    supabaseAdmin
-      .from("obligation_instances")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .order("technical_due_date", { ascending: true })
-      .limit(240),
+    instancesQuery,
     documentsQuery,
     supabaseAdmin
       .from("obligation_delivery_attempts")
@@ -4104,6 +4101,15 @@ async function buildOverview(
     robot_completed_today: jobs.filter((job) => job.source_kind === "local_robot" && job.status === "completed" && job.completed_at && new Date(job.completed_at) >= startOfToday).length,
     robot_review_required: jobs.filter((job) => job.source_kind === "local_robot" && job.status === "review_required").length,
     robot_failed_total: jobs.filter((job) => job.source_kind === "local_robot" && job.status === "failed").length,
+    document_models_total: referenceFiles.rows.length,
+    document_models_configured: referenceFiles.rows.filter((reference) =>
+      normalizeReferenceExtractionZones(asJsonRecord(reference.fingerprint_payload).extraction_zones).zones.length >= 2
+    ).length,
+    document_models_approved: referenceFiles.rows.filter((reference) => reference.validation_status === "approved").length,
+    document_models_validating: referenceFiles.rows.filter((reference) => reference.validation_status === "validating").length,
+    recognition_automatic: documents.filter((item) => item.recognition_decision === "automatic").length,
+    recognition_corrected: documents.filter((item) => item.recognition_decision === "manual_corrected").length,
+    recognition_rejected: documents.filter((item) => item.recognition_decision === "rejected").length,
   };
 
   return {
@@ -4291,12 +4297,9 @@ async function handleUpsertTemplate(
     const existingProfiles = (existingProfilesData || []) as ProfileRow[];
     const existingProfilesByClientId = new Map(existingProfiles.map((profile) => [profile.client_id, profile]));
     const today = toIsoDate(new Date());
-    const templatesMap = await loadTemplatesMap(supabaseAdmin);
-    const activatedProfiles: ProfileRow[] = [];
-
-    for (const clientId of linkedClientIds) {
+    const profileRows = linkedClientIds.map((clientId) => {
       const existingProfile = existingProfilesByClientId.get(clientId);
-      const profileRow = {
+      return {
         organization_id: organizationId,
         client_id: clientId,
         template_id: template.id,
@@ -4321,53 +4324,70 @@ async function handleUpsertTemplate(
         conditional_skip_reason: null,
         created_by: actorId,
       };
+    });
 
-      const { data: syncedProfile, error: syncedProfileError } = await supabaseAdmin
+    let activatedProfiles: ProfileRow[] = [];
+    if (profileRows.length > 0) {
+      const { data: syncedProfiles, error: syncedProfilesError } = await supabaseAdmin
         .from("client_obligation_profiles")
-        .upsert(profileRow, { onConflict: "client_id,template_id" })
-        .select("*")
-        .single();
+        .upsert(profileRows, { onConflict: "client_id,template_id" })
+        .select("*");
+      if (syncedProfilesError) return jsonResponse({ error: syncedProfilesError.message }, 400);
+      activatedProfiles = (syncedProfiles || []) as ProfileRow[];
 
-      if (syncedProfileError) return jsonResponse({ error: syncedProfileError.message }, 400);
-      activatedProfiles.push(syncedProfile as ProfileRow);
-      await auditObligationEvent(supabaseAdmin, {
-        organizationId,
-        clientId,
-        templateId: template.id,
-        action: "manual_obligation_linked_to_client",
-        actorId,
-        metadata: { source: "template_linked_client_ids" },
-      });
+      const { error: auditLinksError } = await supabaseAdmin.from("obligation_audit_events").insert(
+        activatedProfiles.map((profile) => ({
+          organization_id: organizationId,
+          client_id: profile.client_id,
+          template_id: template.id,
+          action: "manual_obligation_linked_to_client",
+          actor_id: actorId,
+          metadata: { source: "template_linked_client_ids" },
+        })),
+      );
+      if (auditLinksError) console.warn("bulk obligation link audit failed", auditLinksError.message);
     }
 
     const profilesToDeactivate = existingProfiles.filter(
       (profile) => profile.is_active && !linkedClientIds.includes(profile.client_id),
     );
 
-    for (const profile of profilesToDeactivate) {
+    if (profilesToDeactivate.length > 0) {
       const { error: deactivateError } = await supabaseAdmin
         .from("client_obligation_profiles")
         .update({
           is_active: false,
-          end_date: profile.end_date || today,
+          end_date: today,
         })
-        .eq("id", profile.id);
+        .in("id", profilesToDeactivate.map((profile) => profile.id));
 
       if (deactivateError) return jsonResponse({ error: deactivateError.message }, 400);
     }
 
+    const generationWarnings: string[] = [];
     if (activatedProfiles.length > 0) {
-      const currentGenerationWindow = currentCompetenceGenerationWindow();
-      await ensureInstancesForProfiles(
-        supabaseAdmin,
-        activatedProfiles,
-        templatesMap,
-        actorId,
-        currentGenerationWindow.cursorStart,
-        currentGenerationWindow.cursorEnd,
-        currentGenerationWindow.targetOperationalMonthKey,
-      );
+      const clientIds = Array.from(new Set(activatedProfiles.map((profile) => profile.client_id)));
+      const batchSize = 12;
+      for (let index = 0; index < clientIds.length; index += batchSize) {
+        const batch = clientIds.slice(index, index + batchSize);
+        const results = await Promise.allSettled(
+          batch.map((clientId) => invokeCanonicalObligationGeneration(supabaseAdmin, organizationId, actorId, clientId)),
+        );
+        results.forEach((result, resultIndex) => {
+          if (result.status === "rejected") {
+            const message = result.reason instanceof Error ? result.reason.message : String(result.reason || "Falha desconhecida");
+            generationWarnings.push(`${batch[resultIndex]}: ${message}`);
+          }
+        });
+      }
     }
+
+    return jsonResponse({
+      ok: true,
+      template: data,
+      linked_profiles: activatedProfiles.length,
+      generation_warnings: generationWarnings,
+    });
   }
 
   return jsonResponse({ ok: true, template: data });
@@ -4605,7 +4625,6 @@ async function handleUpsertProfile(
   const { data, error } = await query;
   if (error) return jsonResponse({ error: error.message }, 400);
 
-  const templatesMap = await loadTemplatesMap(supabaseAdmin);
   const profile = data as ProfileRow;
   await auditObligationEvent(supabaseAdmin, {
     organizationId,
@@ -4615,16 +4634,7 @@ async function handleUpsertProfile(
     actorId,
     metadata: { profile_id: profile.id, source: "client_obligations_panel" },
   });
-  const currentGenerationWindow = currentCompetenceGenerationWindow();
-  await ensureInstancesForProfiles(
-    supabaseAdmin,
-    [profile],
-    templatesMap,
-    actorId,
-    currentGenerationWindow.cursorStart,
-    currentGenerationWindow.cursorEnd,
-    currentGenerationWindow.targetOperationalMonthKey,
-  );
+  await invokeCanonicalObligationGeneration(supabaseAdmin, organizationId, actorId, profile.client_id);
 
   return jsonResponse({ ok: true, profile: data });
 }
@@ -4647,20 +4657,20 @@ async function handleGenerateInstances(
   const { data: profilesData, error: profilesError } = await profilesQuery;
   if (profilesError) return jsonResponse({ error: profilesError.message }, 400);
 
-  const templatesMap = await loadTemplatesMap(supabaseAdmin);
-  const currentGenerationWindow = currentCompetenceGenerationWindow();
-
-  const result = await ensureInstancesForProfiles(
+  const result = await invokeCanonicalObligationGeneration(
     supabaseAdmin,
-    (profilesData || []) as ProfileRow[],
-    templatesMap,
+    organizationId,
     actorId,
-    currentGenerationWindow.cursorStart,
-    currentGenerationWindow.cursorEnd,
-    currentGenerationWindow.targetOperationalMonthKey,
+    clientId,
   );
 
-  return jsonResponse({ ok: true, created_instances: result.created });
+  return jsonResponse({
+    ok: true,
+    run_id: result.runId,
+    operational_month: result.operationalMonth,
+    created_instances: result.created,
+    created_tasks: result.createdTasks,
+  });
 }
 
 async function handleUpdateInstance(
@@ -4683,6 +4693,20 @@ async function handleUpdateInstance(
 
   const current = currentData as InstanceRow;
   const nextStatus = asTrimmedString(payload.status) || current.status;
+  const requestedDueDate = asTrimmedString(payload.technical_due_date);
+  if (requestedDueDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDueDate)) {
+    return jsonResponse({ error: "Prazo técnico inválido." }, 400);
+  }
+  if (nextStatus === "em_revisao" && current.status !== "em_revisao") {
+    const templatesMap = await loadTemplatesMap(supabaseAdmin);
+    const template = templatesMap.get(current.template_id);
+    if (!template) return jsonResponse({ error: "Obrigacao vinculada nao encontrada." }, 404);
+
+    const documentStatus = await determineInstanceDocumentStatus(supabaseAdmin, current, template);
+    if (!["em_revisao", "concluida"].includes(documentStatus)) {
+      return jsonResponse({ error: "A obrigacao so pode ir para revisao depois que todos os documentos obrigatorios forem anexados." }, 400);
+    }
+  }
   if (nextStatus === "concluida" && current.status !== "concluida") {
     const templatesMap = await loadTemplatesMap(supabaseAdmin);
     const template = templatesMap.get(current.template_id);
@@ -4696,7 +4720,10 @@ async function handleUpdateInstance(
   const updates = {
     status: nextStatus,
     priority: asTrimmedString(payload.priority) || current.priority,
-    current_assignee: asTrimmedString(payload.current_assignee) ?? current.current_assignee,
+    current_assignee: Object.prototype.hasOwnProperty.call(payload, "current_assignee")
+      ? asTrimmedString(payload.current_assignee)
+      : current.current_assignee,
+    technical_due_date: requestedDueDate || current.technical_due_date,
     completion_notes: asTrimmedString(payload.completion_notes) ?? current.completion_notes,
     completed_at: nextStatus === "concluida" ? new Date().toISOString() : null,
     last_status_at: current.status !== nextStatus ? new Date().toISOString() : current.updated_at,
@@ -4714,14 +4741,24 @@ async function handleUpdateInstance(
   }
 
   const updated = updatedData as InstanceRow;
+  const operationalFieldsChanged =
+    current.priority !== updated.priority ||
+    current.current_assignee !== updated.current_assignee ||
+    current.technical_due_date !== updated.technical_due_date;
   await createInstanceEvent(
     supabaseAdmin,
     updated.id,
     actorId,
-    "status_change",
+    current.status !== updated.status ? "status_change" : "operational_update",
     current.status,
     updated.status,
-    asTrimmedString(payload.event_comment),
+    asTrimmedString(payload.event_comment) || (operationalFieldsChanged ? "Dados operacionais atualizados pela tarefa vinculada." : null),
+    {
+      source: asTrimmedString(payload.update_source) || "obligations_module",
+      priority: updated.priority,
+      current_assignee: updated.current_assignee,
+      technical_due_date: updated.technical_due_date,
+    },
   );
 
   const templatesMap = await loadTemplatesMap(supabaseAdmin);
@@ -4871,6 +4908,10 @@ async function handleResolveDocument(
   if (!instanceId) {
     return jsonResponse({ error: "Selecione a compet?ncia da obriga??o para vincular o documento." }, 400);
   }
+  const suppliedCorrectionReason = asTrimmedString(payload.notes);
+  if (!suppliedCorrectionReason) {
+    return jsonResponse({ error: "Informe o motivo da confirmacao ou correcao manual." }, 400);
+  }
 
   const { error: inboxUpdateError } = await supabaseAdmin
     .from("document_inbox_items")
@@ -4925,6 +4966,7 @@ async function handleRegisterDocumentUploadNative(
   const fileHash = asTrimmedString(payload.file_hash);
   const robotOriginPath = asTrimmedString(payload.robot_origin_path);
   const robotMachineId = asTrimmedString(payload.robot_machine_id);
+  const robotSubmissionId = asTrimmedString(payload.robot_submission_id);
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
   const duplicateJob = await findDuplicateIngestionJob(supabaseAdmin, {
     sourceKind,
@@ -4933,7 +4975,17 @@ async function handleRegisterDocumentUploadNative(
     fileSize: asInteger(payload.file_size, null),
     robotMachineId,
   });
-  if (duplicateJob && duplicateJob.status !== "failed") {
+  // A hash match is terminal only after the complete operational flow succeeds.
+  // Review-required/failed classifications must be evaluated again because the
+  // robot's extractor or the configured document model may have been corrected
+  // since the first attempt. Returning those stale results here permanently
+  // trapped the local file in retry without ever applying the newer analysis.
+  if (
+    duplicateJob &&
+    duplicateJob.status === "completed" &&
+    ["sent", "not_applicable"].includes(asTrimmedString(duplicateJob.communication_status) || "") &&
+    (!robotSubmissionId || asTrimmedString(asJsonRecord(duplicateJob.metadata).robot_submission_id) === robotSubmissionId)
+  ) {
     return jsonResponse({
       ok: true,
       duplicate: true,
@@ -4950,8 +5002,12 @@ async function handleRegisterDocumentUploadNative(
     suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
     fileName,
     analysis,
+    organizationId,
   });
-  const autoLinked = Boolean(match.resolvedInstanceId && !match.reviewRequired && match.score >= 0.9);
+  // resolveDocumentReferenceMatch is the single owner of the safety decision.
+  // Reapplying a fixed score threshold here discarded deterministic routes
+  // (valid CNPJ + competence + family + one instance) that it had approved.
+  const autoLinked = Boolean(match.resolvedInstanceId && !match.reviewRequired);
   const ingestionJob = await upsertIngestionJob(supabaseAdmin, {
     organizationId,
     sourceKind,
@@ -4972,6 +5028,7 @@ async function handleRegisterDocumentUploadNative(
       competence_detected: match.competenceDetected || null,
       match_strategy: match.strategy,
       match_score: match.score,
+      robot_submission_id: robotSubmissionId,
     },
   });
 
@@ -5011,6 +5068,17 @@ async function handleRegisterDocumentUploadNative(
     extracted_text_preview: match.extractedTextPreview || analysis.extracted_text_preview,
     fingerprint_payload: match.fingerprintPayload || analysis.fingerprint_payload,
     auto_link_block_reason: match.autoLinkBlockReason || null,
+    recognition_evidence: {
+      model_reference_id: match.referenceFileId || null,
+      detected_cnpj: match.detectedCnpj || null,
+      detected_competence: match.competenceDetected || null,
+      model_score: match.referenceMatchScore || 0,
+      reasons: match.reasons,
+      extraction_zones: asJsonRecord(match.fingerprintPayload || analysis.fingerprint_payload).extraction_zones || null,
+      filename_used_for_decision: false,
+      robot_submission_id: robotSubmissionId,
+    },
+    recognition_decision: autoLinked ? "automatic" : "manual_review",
     processing_status: autoLinked ? "queued" : "queued",
     processing_attempts: 0,
     processing_started_at: null,
@@ -5060,6 +5128,8 @@ async function handleRegisterDocumentUploadNative(
     publication_status: "pending",
     review_required: !autoLinked,
     instance_id: autoLinked ? match.resolvedInstanceId : null,
+    last_error: null,
+    completed_at: null,
   });
 
   let processingResult: JsonRecord | null = null;
@@ -5067,7 +5137,19 @@ async function handleRegisterDocumentUploadNative(
     processingResult = await applyDocumentOperationalFlowV2(supabaseAdmin, actorId, inboxItem as InboxRow) as unknown as JsonRecord;
   }
 
-  return jsonResponse({ ok: true, inbox_item: inboxItem, ingestion_job: ingestionJob, match, processing_result: processingResult });
+  return jsonResponse({
+    ok: true,
+    inbox_item: inboxItem,
+    ingestion_job: {
+      ...ingestionJob,
+      status: autoLinked ? "ingested" : "review_required",
+      classification_status: autoLinked ? "classified" : "review_required",
+      review_required: !autoLinked,
+      last_error: null,
+    },
+    match,
+    processing_result: processingResult,
+  });
 }
 
 async function handleResolveDocumentNative(
@@ -5113,6 +5195,19 @@ async function handleResolveDocumentNative(
         notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
         reviewed_by: actorId,
         reviewed_at: new Date().toISOString(),
+        recognition_decision: "rejected",
+        original_match_snapshot: (inboxItem as JsonRecord).original_match_snapshot || {
+          suggested_client_id: (inboxItem as JsonRecord).suggested_client_id,
+          detected_client_id: (inboxItem as JsonRecord).detected_client_id,
+          suggested_template_id: (inboxItem as JsonRecord).suggested_template_id,
+          suggested_instance_id: (inboxItem as JsonRecord).suggested_instance_id,
+          competence_detected: (inboxItem as JsonRecord).competence_detected,
+          matched_by: (inboxItem as JsonRecord).matched_by,
+          match_score: (inboxItem as JsonRecord).match_score,
+        },
+        correction_reason: asTrimmedString(payload.notes) || "Documento rejeitado manualmente.",
+        corrected_by: actorId,
+        corrected_at: new Date().toISOString(),
       })
       .eq("id", inboxItemId)
       .eq("organization_id", organizationId);
@@ -5127,6 +5222,20 @@ async function handleResolveDocumentNative(
       review_required: true,
       completed_at: new Date().toISOString(),
     });
+    await recordDocumentModelValidation(supabaseAdmin, {
+      organizationId,
+      referenceFileId: asTrimmedString((inboxItem as JsonRecord).reference_file_id),
+      inboxItemId,
+      expectedClientId: null,
+      expectedTemplateId: null,
+      expectedCompetence: null,
+      actualClientId: asTrimmedString((inboxItem as JsonRecord).detected_client_id),
+      actualTemplateId: asTrimmedString((inboxItem as JsonRecord).suggested_template_id),
+      actualCompetence: asTrimmedString((inboxItem as JsonRecord).competence_detected),
+      result: "false_positive",
+      actorId,
+      evidence: { decision: "rejected", reason: asTrimmedString(payload.notes) },
+    });
     return jsonResponse({ ok: true });
   }
 
@@ -5135,11 +5244,40 @@ async function handleResolveDocumentNative(
     return jsonResponse({ error: "Selecione a compet?ncia da obriga??o para vincular o documento." }, 400);
   }
 
+  const { data: correctedInstance, error: correctedInstanceError } = await supabaseAdmin
+    .from("obligation_instances")
+    .select("id,client_id,template_id,competence_key,competence_label")
+    .eq("organization_id", organizationId)
+    .eq("id", instanceId)
+    .is("superseded_by_instance_id", null)
+    .single();
+  if (correctedInstanceError || !correctedInstance) {
+    return jsonResponse({ error: "A competencia selecionada nao pertence a esta empresa." }, 400);
+  }
+
+  const correctionReason = suppliedCorrectionReason;
+  const originalMatchSnapshot = (inboxItem as JsonRecord).original_match_snapshot || {
+    suggested_client_id: (inboxItem as JsonRecord).suggested_client_id,
+    detected_client_id: (inboxItem as JsonRecord).detected_client_id,
+    suggested_template_id: (inboxItem as JsonRecord).suggested_template_id,
+    suggested_instance_id: (inboxItem as JsonRecord).suggested_instance_id,
+    competence_detected: (inboxItem as JsonRecord).competence_detected,
+    matched_by: (inboxItem as JsonRecord).matched_by,
+    match_score: (inboxItem as JsonRecord).match_score,
+  };
+
   const { error: inboxUpdateError } = await supabaseAdmin
     .from("document_inbox_items")
     .update({
       status: "linked",
       linked_instance_id: instanceId,
+      suggested_instance_id: instanceId,
+      client_id: correctedInstance.client_id,
+      detected_client_id: correctedInstance.client_id,
+      suggested_client_id: correctedInstance.client_id,
+      suggested_template_id: correctedInstance.template_id,
+      competence_detected: correctedInstance.competence_key,
+      suggested_competence_label: correctedInstance.competence_label,
       matched_by: "manual_review",
       review_required: false,
       blocking_reason: null,
@@ -5152,11 +5290,54 @@ async function handleResolveDocumentNative(
       notes: asTrimmedString(payload.notes) || asTrimmedString((inboxItem as JsonRecord).notes),
       reviewed_by: actorId,
       reviewed_at: new Date().toISOString(),
+      recognition_decision: "manual_corrected",
+      original_match_snapshot: originalMatchSnapshot,
+      correction_reason: correctionReason,
+      corrected_by: actorId,
+      corrected_at: new Date().toISOString(),
     })
     .eq("id", inboxItemId)
     .eq("organization_id", organizationId);
 
   if (inboxUpdateError) throw inboxUpdateError;
+
+  await auditObligationEvent(supabaseAdmin, {
+    organizationId,
+    clientId: correctedInstance.client_id,
+    templateId: correctedInstance.template_id,
+    action: "document_match_manually_corrected",
+    actorId,
+    metadata: {
+      inbox_item_id: inboxItemId,
+      instance_id: instanceId,
+      correction_reason: correctionReason,
+      original_match: originalMatchSnapshot,
+    },
+  });
+
+  const originalClientId = asTrimmedString((inboxItem as JsonRecord).detected_client_id);
+  const originalTemplateId = asTrimmedString((inboxItem as JsonRecord).suggested_template_id);
+  const originalCompetence = asTrimmedString((inboxItem as JsonRecord).competence_detected);
+  const validationResult =
+    originalClientId === correctedInstance.client_id &&
+    originalTemplateId === correctedInstance.template_id &&
+    originalCompetence === correctedInstance.competence_key
+      ? "correct"
+      : "false_positive";
+  await recordDocumentModelValidation(supabaseAdmin, {
+    organizationId,
+    referenceFileId: asTrimmedString((inboxItem as JsonRecord).reference_file_id),
+    inboxItemId,
+    expectedClientId: correctedInstance.client_id,
+    expectedTemplateId: correctedInstance.template_id,
+    expectedCompetence: correctedInstance.competence_key,
+    actualClientId: originalClientId,
+    actualTemplateId: originalTemplateId,
+    actualCompetence: originalCompetence,
+    result: validationResult,
+    actorId,
+    evidence: { decision: "manual_accept", correction_reason: correctionReason },
+  });
 
   await updateIngestionJob(supabaseAdmin, asTrimmedString((inboxItem as JsonRecord).ingestion_job_id), {
     status: "ingested",
@@ -5166,7 +5347,7 @@ async function handleResolveDocumentNative(
     publication_status: "pending",
     review_required: false,
     instance_id: instanceId,
-    detected_client_id: asTrimmedString((inboxItem as JsonRecord).detected_client_id),
+    detected_client_id: correctedInstance.client_id,
   });
 
   const refreshedInbox = {
@@ -5194,6 +5375,7 @@ async function handleResolveDocumentNative(
 
 async function handlePreviewDocumentMatch(
   supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
   payload: JsonRecord,
 ) {
   const fileName = asTrimmedString(payload.file_name);
@@ -5211,6 +5393,7 @@ async function handlePreviewDocumentMatch(
       suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
       fileName,
       analysis,
+      organizationId,
     });
 
     return jsonResponse({ ok: true, match });
@@ -5280,6 +5463,9 @@ async function handleUploadReferenceDocument(
     fingerprint_payload: analysis.fingerprint_payload,
     keywords: analysis.keywords,
     primary_cues: analysis.primary_cues,
+    validation_status: normalizeReferenceExtractionZones(asJsonRecord(analysis.fingerprint_payload).extraction_zones).zones.length >= 2
+      ? "validating"
+      : "draft",
     created_by: actorId,
   };
 
@@ -5341,7 +5527,7 @@ async function handleReprocessReferenceDocument(
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
   const { data: currentReference, error: currentReferenceError } = await supabaseAdmin
     .from("expected_document_reference_files")
-    .select("fingerprint_payload")
+    .select("fingerprint_payload,model_version")
     .eq("id", referenceId)
     .eq("organization_id", organizationId)
     .single();
@@ -5349,6 +5535,12 @@ async function handleReprocessReferenceDocument(
     return jsonResponse({ error: currentReferenceError?.message || "Documento modelo nao encontrado." }, 404);
   }
   const currentFingerprint = asJsonRecord((currentReference as JsonRecord).fingerprint_payload);
+  const { error: clearSamplesError } = await supabaseAdmin
+    .from("document_model_validation_samples")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("reference_file_id", referenceId);
+  if (clearSamplesError) return jsonResponse({ error: clearSamplesError.message }, 400);
   const nextFingerprint = {
     ...analysis.fingerprint_payload,
     extraction_zones: asJsonRecord(analysis.fingerprint_payload).extraction_zones || currentFingerprint.extraction_zones,
@@ -5362,6 +5554,13 @@ async function handleReprocessReferenceDocument(
     fingerprint_payload: nextFingerprint,
     keywords: analysis.keywords,
     primary_cues: analysis.primary_cues,
+    model_version: Math.max(1, asInteger((currentReference as JsonRecord).model_version, 1) || 1) + 1,
+    validation_status: "validating",
+    validation_sample_count: 0,
+    validation_correct_count: 0,
+    validation_false_positive_count: 0,
+    validated_at: null,
+    validated_by: null,
   };
   const { data, error } = await supabaseAdmin
     .from("expected_document_reference_files")
@@ -5409,7 +5608,7 @@ function normalizeReferenceExtractionZones(value: unknown) {
 
 function detectCnpjInText(value: string | null | undefined) {
   const text = asTrimmedString(value) || "";
-  const formatted = text.match(/\d{2}[.\s]? \d{3}[.\s]? \d{3}[/\s]? \d{4}[-\s]? \d{2}/);
+  const formatted = text.match(/\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2}/);
   if (formatted?.[0]) return normalizeCnpj(formatted[0]);
   const compact = text.match(/(?:^|[^0-9])(\d{14})(?:[^0-9]|$)/);
   return compact?.[1] ? normalizeCnpj(compact[1]) : null;
@@ -5426,6 +5625,13 @@ function toCompetenceKey(year: string, month: string) {
 function detectCompetenceInText(value: string | null | undefined) {
   const text = normalizeToken(value || "").replace(/_/g, " ");
   if (!text) return null;
+  const monthNames: Record<string, string> = {
+    janeiro: "01", fevereiro: "02", marco: "03", abril: "04",
+    maio: "05", junho: "06", julho: "07", agosto: "08",
+    setembro: "09", outubro: "10", novembro: "11", dezembro: "12",
+  };
+  const namedMonth = text.match(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\D{0,8}(20\d{2})\b/);
+  if (namedMonth) return toCompetenceKey(namedMonth[2], monthNames[namedMonth[1]]);
   const labelled = text.match(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base|folha de|salario de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/);
   if (labelled) return toCompetenceKey(labelled[2], labelled[1]);
   const labelledYearFirst = text.match(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/);
@@ -5514,7 +5720,7 @@ async function handleUpdateReferenceExtractionZones(
   const extractionZones = normalizeReferenceExtractionZones(payload.extraction_zones);
   const { data: reference, error: referenceError } = await supabaseAdmin
     .from("expected_document_reference_files")
-    .select("fingerprint_payload")
+    .select("fingerprint_payload,model_version")
     .eq("id", referenceId)
     .eq("organization_id", organizationId)
     .single();
@@ -5524,6 +5730,12 @@ async function handleUpdateReferenceExtractionZones(
   }
 
   const fingerprintPayload = asJsonRecord((reference as JsonRecord).fingerprint_payload);
+  const { error: clearSamplesError } = await supabaseAdmin
+    .from("document_model_validation_samples")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("reference_file_id", referenceId);
+  if (clearSamplesError) return jsonResponse({ error: clearSamplesError.message }, 400);
   const { data, error } = await supabaseAdmin
     .from("expected_document_reference_files")
     .update({
@@ -5531,6 +5743,13 @@ async function handleUpdateReferenceExtractionZones(
         ...fingerprintPayload,
         extraction_zones: extractionZones,
       },
+      model_version: Math.max(1, asInteger((reference as JsonRecord).model_version, 1) || 1) + 1,
+      validation_status: extractionZones.zones.length >= 2 ? "validating" : "draft",
+      validation_sample_count: 0,
+      validation_correct_count: 0,
+      validation_false_positive_count: 0,
+      validated_at: null,
+      validated_by: null,
     })
     .eq("id", referenceId)
     .eq("organization_id", organizationId)
@@ -5587,17 +5806,56 @@ async function handleProcessDocumentQueue(
 
 async function handleClientSnapshot(
   supabaseAdmin: SupabaseAdmin,
-  actorId: string,
+  _actorId: string,
   organizationId: string,
   clientId: string,
 ) {
-  const overview = await buildOverview(supabaseAdmin, actorId, organizationId);
+  const [templatesResult, profilesResult, instancesResult] = await Promise.all([
+    supabaseAdmin
+      .from("obligation_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true }),
+    supabaseAdmin
+      .from("client_obligation_profiles")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .order("is_active", { ascending: false })
+      .order("start_date", { ascending: false }),
+    supabaseAdmin
+      .from("obligation_instances")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("client_id", clientId)
+      .order("competence_key", { ascending: false }),
+  ]);
+
+  if (templatesResult.error) return jsonResponse({ error: templatesResult.error.message }, 400);
+  if (profilesResult.error) return jsonResponse({ error: profilesResult.error.message }, 400);
+  if (instancesResult.error) return jsonResponse({ error: instancesResult.error.message }, 400);
+
+  const templates = (templatesResult.data || []) as TemplateRow[];
+  const templatesMap = new Map(templates.map((template) => [String(template.id), template]));
+  const profiles = ((profilesResult.data || []) as ProfileRow[]).map((profile) => ({
+    ...profile,
+    template: templatesMap.get(profile.template_id) || null,
+    client: null,
+  }));
+  const profilesMap = new Map(profiles.map((profile) => [String(profile.id), profile]));
+  const instances = ((instancesResult.data || []) as InstanceRow[]).map((instance) => ({
+    ...instance,
+    template: templatesMap.get(instance.template_id) || null,
+    profile: profilesMap.get(instance.profile_id) || null,
+    client: null,
+  }));
+
   return jsonResponse({
     ok: true,
     client_id: clientId,
-    profiles: overview.profiles.filter((profile) => String((profile.client || {}).id || profile.client_id) === clientId),
-    instances: overview.instances.filter((instance) => String((instance.client || {}).id || instance.client_id) === clientId),
-    templates: overview.templates,
+    profiles,
+    instances,
+    templates,
   });
 }
 
@@ -6038,6 +6296,63 @@ async function auditObligationEvent(
   });
 
   if (error) console.warn("obligation audit failed", error.message);
+}
+
+async function recordDocumentModelValidation(
+  supabaseAdmin: SupabaseAdmin,
+  params: {
+    organizationId: string;
+    referenceFileId: string | null;
+    inboxItemId: string;
+    expectedClientId: string | null;
+    expectedTemplateId: string | null;
+    expectedCompetence: string | null;
+    actualClientId: string | null;
+    actualTemplateId: string | null;
+    actualCompetence: string | null;
+    result: "correct" | "false_positive" | "false_negative" | "review_required";
+    actorId: string;
+    evidence?: JsonRecord;
+  },
+) {
+  if (!params.referenceFileId) return;
+  const { error } = await supabaseAdmin.from("document_model_validation_samples").upsert({
+    organization_id: params.organizationId,
+    reference_file_id: params.referenceFileId,
+    inbox_item_id: params.inboxItemId,
+    expected_client_id: params.expectedClientId,
+    expected_template_id: params.expectedTemplateId,
+    expected_competence: params.expectedCompetence,
+    actual_client_id: params.actualClientId,
+    actual_template_id: params.actualTemplateId,
+    actual_competence: params.actualCompetence,
+    result: params.result,
+    evidence: params.evidence || {},
+    tested_by: params.actorId,
+    tested_at: new Date().toISOString(),
+  }, { onConflict: "reference_file_id,inbox_item_id" });
+  if (error) throw error;
+
+  const { data: samples, error: samplesError } = await supabaseAdmin
+    .from("document_model_validation_samples")
+    .select("result")
+    .eq("organization_id", params.organizationId)
+    .eq("reference_file_id", params.referenceFileId);
+  if (samplesError) throw samplesError;
+  const results = (samples || []).map((sample) => String((sample as JsonRecord).result));
+  const correct = results.filter((result) => result === "correct").length;
+  const falsePositives = results.filter((result) => result === "false_positive").length;
+  const approved = results.length >= 5 && correct >= 4 && falsePositives === 0;
+  const { error: updateError } = await supabaseAdmin.from("expected_document_reference_files").update({
+    validation_status: approved ? "approved" : "validating",
+    validation_sample_count: results.length,
+    validation_correct_count: correct,
+    validation_false_positive_count: falsePositives,
+    last_validated_at: new Date().toISOString(),
+    validated_at: approved ? new Date().toISOString() : null,
+    validated_by: approved ? params.actorId : null,
+  }).eq("organization_id", params.organizationId).eq("id", params.referenceFileId);
+  if (updateError) throw updateError;
 }
 
 async function applyDefaultLoadForClient(
@@ -6924,12 +7239,16 @@ Deno.serve(async (req) => {
       return await handleSendDelivery(supabaseAdmin, user.id, organizationId, payload);
     }
 
+    if (action === "send_configured_delivery") {
+      return await handleSendConfiguredDelivery(supabaseAdmin, user.id, organizationId, payload);
+    }
+
     if (action === "cancel_delivery") {
       return await handleCancelDelivery(supabaseAdmin, user.id, organizationId, payload);
     }
 
     if (action === "preview_document_match") {
-      return await handlePreviewDocumentMatch(supabaseAdmin, payload);
+      return await handlePreviewDocumentMatch(supabaseAdmin, organizationId, payload);
     }
 
     if (action === "preview_reference_match") {
@@ -6968,7 +7287,10 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ error: "Unknown action" }, 400);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
+    const errorRecord = asRecord(error);
+    const message = error instanceof Error
+      ? error.message
+      : asTrimmedString(errorRecord?.message) || asTrimmedString(errorRecord?.details) || "Falha inesperada ao processar obrigacoes.";
     console.error("grow-obligations-module request failed", { message });
     return jsonResponse({ error: message }, 500);
   }

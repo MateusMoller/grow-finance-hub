@@ -1,6 +1,8 @@
 import { MessageCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { ChatDateDivider } from "@/components/chat/ChatDateDivider";
+import { getChatDateKey } from "@/lib/chatDate";
 import { ConversationHeader } from "@/components/whatsapp/ConversationHeader";
 import type { WhatsAppClientLinkOption, WhatsAppExistingTaskOption, WhatsAppQuickTaskDraft } from "@/components/whatsapp/ConversationHeader";
 import {
@@ -175,17 +177,25 @@ export function ConversationPanel({
           </div>
         ) : (
           <div className={`mx-auto flex w-full max-w-[56rem] flex-col ${chatDensity === "compacta" ? "gap-1" : "gap-1.5"}`}>
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                contactInitials={contactInitials}
-                bubbleTone={bubbleTone}
-                compact={chatDensity === "compacta"}
-                taskContexts={taskContextByMessageId.get(message.id) || []}
-                onReply={setReplyReference}
-              />
-            ))}
+            {messages.map((message, index) => {
+              const showDateDivider =
+                index === 0 ||
+                getChatDateKey(messages[index - 1].created_at) !== getChatDateKey(message.created_at);
+
+              return (
+                <Fragment key={message.id}>
+                  {showDateDivider ? <ChatDateDivider timestamp={message.created_at} /> : null}
+                  <MessageBubble
+                    message={message}
+                    contactInitials={contactInitials}
+                    bubbleTone={bubbleTone}
+                    compact={chatDensity === "compacta"}
+                    taskContexts={taskContextByMessageId.get(message.id) || []}
+                    onReply={setReplyReference}
+                  />
+                </Fragment>
+              );
+            })}
           </div>
         )}
       </div>

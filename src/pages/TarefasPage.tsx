@@ -106,6 +106,7 @@ interface Task {
   comments: number;
   requestId: string | null;
   integrationSource: string | null;
+  integrationTaskId: string | null;
 }
 
 interface KanbanTaskRow {
@@ -124,6 +125,7 @@ interface KanbanTaskRow {
   subtasks?: unknown;
   request_id?: string | null;
   integration_source?: string | null;
+  integration_task_id?: string | null;
 }
 
 type KanbanTaskSnapshot = Tables<"kanban_tasks">;
@@ -264,6 +266,7 @@ const mapRowToTask = (row: KanbanTaskRow): Task => ({
   comments: 0,
   requestId: row.request_id || null,
   integrationSource: row.integration_source || null,
+  integrationTaskId: row.integration_task_id || null,
 });
 
 const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
@@ -1003,6 +1006,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   <TaskOriginRibbon
                     requestId={task.requestId}
                     integrationSource={task.integrationSource}
+                    integrationTaskId={task.integrationTaskId}
                   />
                   <div className="flex items-start gap-3 pr-10 sm:pr-12">
                     <div

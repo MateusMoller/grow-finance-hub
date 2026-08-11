@@ -75,6 +75,7 @@ import {
   type TaskAssigneeOption,
 } from "@/lib/taskAssignees";
 import { normalizeSectorCode, type SectorCode } from "@/lib/userPermissions";
+import { resolveTaskOrigin } from "@/lib/taskOrigin";
 import {
   createTaskRelations,
   deleteTaskRelation,
@@ -164,15 +165,69 @@ const normalizeVisibleSector = (value: string) =>
 const isObligationTask = (task: Pick<KanbanTaskItem, "integration_source">) =>
   task.integration_source === obligationTaskSource;
 
-const getTaskOriginFilterValue = (task: Pick<KanbanTaskItem, "request_id" | "integration_source">) => {
-  if (isObligationTask(task)) return "obligations";
-  if (task.request_id) return "portal";
+const getTaskOriginFilterValue = (
+  task: Pick<KanbanTaskItem, "request_id" | "integration_source" | "integration_task_id">,
+) => {
+  const origin = resolveTaskOrigin({
+    requestId: task.request_id,
+    integrationSource: task.integration_source,
+    integrationTaskId: task.integration_task_id,
+  });
+  if (origin === "obrigacoes") return "obligations";
+  if (origin === "portal") return "portal";
   return "internal";
 };
 
 const getObligationInstanceId = (task: Pick<KanbanTaskItem, "integration_task_id">) => {
   const value = task.integration_task_id || "";
   return value.startsWith("instance:") ? value.slice("instance:".length) : "";
+};
+
+const obligationInstanceStatusByTaskStatus: Record<KanbanStatus, string> = {
+  backlog: "pendente",
+  todo: "pendente",
+  doing: "em_andamento",
+  review: "em_revisao",
+  done: "concluida",
+  archived: "concluida",
+};
+
+const obligationPriorityByTaskPriority: Record<string, string> = {
+  baixa: "baixa",
+  media: "media",
+  alta: "alta",
+  urgente: "urgente",
+};
+
+const toObligationPriority = (priority: string) =>
+  obligationPriorityByTaskPriority[
+    priority.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+  ] || "media";
+
+const syncObligationTaskOperationalState = async (
+  task: KanbanTaskItem,
+  updates: {
+    status: KanbanStatus;
+    priority?: string;
+    assignee?: string | null;
+    assigned_to_user_id?: string | null;
+    due_date?: string | null;
+  },
+) => {
+  if (!isObligationTask(task)) return;
+  const instanceId = getObligationInstanceId(task);
+  if (!instanceId) throw new Error("Esta tarefa de obrigação não possui vínculo técnico com a competência.");
+
+  await invokeGrowObligations({
+    action: "update_instance",
+    instance_id: instanceId,
+    status: obligationInstanceStatusByTaskStatus[updates.status],
+    priority: toObligationPriority(updates.priority || task.priority),
+    current_assignee: updates.assigned_to_user_id || updates.assignee || null,
+    technical_due_date: updates.due_date || task.due_date,
+    update_source: "kanban_task",
+    event_comment: "Competência sincronizada pela tarefa operacional vinculada.",
+  });
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -690,6 +745,10 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       }
 
       const instanceStatus = String((data as { status?: string }).status || "");
+      if (newStatus === "review") {
+        return { allowed: true };
+      }
+
       if (!obligationReadyForReviewStatuses.has(instanceStatus)) {
         return {
           allowed: false,
@@ -844,17 +903,11 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    const obligationInstanceId = getObligationInstanceId(currentTask);
-    if (isObligationTask(currentTask) && newStatus === "done" && obligationInstanceId) {
+    if (isObligationTask(currentTask)) {
       try {
-        await invokeGrowObligations({
-          action: "update_instance",
-          instance_id: obligationInstanceId,
-          status: "concluida",
-          event_comment: "Tarefa concluída manualmente após revisão do documento esperado.",
-        });
+        await syncObligationTaskOperationalState(currentTask, { status: newStatus });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Não foi possível concluir a obrigação vinculada.");
+        toast.error(error instanceof Error ? error.message : "Não foi possível atualizar a obrigação vinculada.");
         return;
       }
     }
@@ -925,24 +978,20 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     },
   ) => {
     const previousTask = tasks.find((task) => task.id === taskId);
-    if (previousTask && previousTask.status !== updates.status) {
-      const validation = await validateObligationStatusChange(previousTask, updates.status);
+    if (previousTask) {
+      const validation = previousTask.status !== updates.status
+        ? await validateObligationStatusChange(previousTask, updates.status)
+        : { allowed: true };
       if (!validation.allowed) {
         toast.error(validation.message || "Movimento bloqueado para esta tarefa.");
         return;
       }
 
-      const obligationInstanceId = getObligationInstanceId(previousTask);
-      if (isObligationTask(previousTask) && updates.status === "done" && obligationInstanceId) {
+      if (isObligationTask(previousTask)) {
         try {
-          await invokeGrowObligations({
-            action: "update_instance",
-            instance_id: obligationInstanceId,
-            status: "concluida",
-            event_comment: "Tarefa concluída manualmente após revisão do documento esperado.",
-          });
+          await syncObligationTaskOperationalState(previousTask, updates);
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Não foi possível concluir a obrigação vinculada.");
+          toast.error(error instanceof Error ? error.message : "Não foi possível atualizar a obrigação vinculada.");
           return;
         }
       }
@@ -1886,6 +1935,7 @@ function KanbanCard({
       <TaskOriginRibbon
         requestId={task.request_id}
         integrationSource={task.integration_source}
+        integrationTaskId={task.integration_task_id}
         className="right-2"
       />
       <div className="flex flex-1 flex-col gap-2.5 pr-3">

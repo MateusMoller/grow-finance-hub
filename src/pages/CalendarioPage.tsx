@@ -28,12 +28,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertTriangle,
   Building2,
   CalendarDays,
   ChevronDown,
   ClipboardList,
+  Filter,
   Loader2,
   Plus,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,11 +49,14 @@ import {
 import {
   endOfMonth,
   format,
+  isBefore,
   isSameDay,
   parseISO,
   startOfMonth,
+  startOfToday,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 
 type EntryType = "evento" | "obrigação";
 type EntryPriority = "baixa" | "media" | "alta" | "urgente";
@@ -113,6 +119,17 @@ interface ObligationDayGroup {
   doneCount: number;
 }
 
+interface ObligationDateGroup {
+  date: string;
+  groups: ObligationDayGroup[];
+  total: number;
+  done: number;
+  overdue: number;
+}
+
+type CalendarPeriodMode = "day" | "month";
+type CalendarStatusFilter = "all" | ObligationInstanceStatus;
+
 interface CalendarTask {
   id: string;
   title: string;
@@ -122,6 +139,7 @@ interface CalendarTask {
   due_date: string | null;
   status: string;
   integration_source: string | null;
+  integration_task_id: string | null;
 }
 
 interface CalendarFormState {
@@ -186,8 +204,53 @@ const makeFormState = (date: Date): CalendarFormState => ({
   status: "pending",
 });
 
+const obligationStatusOrder: Record<ObligationInstanceStatus, number> = {
+  atrasada: 0,
+  falha_envio: 1,
+  em_revisao: 2,
+  aguardando_documento: 3,
+  pendente: 4,
+  em_andamento: 5,
+  pronto_para_envio: 6,
+  enviando: 7,
+  concluida: 8,
+  cancelada: 9,
+};
+
+function isOperationallyOverdue(instance: CalendarObligationInstance) {
+  return instance.status !== "concluida" && instance.status !== "cancelada" &&
+    isBefore(parseISO(`${instance.technical_due_date}T12:00:00`), startOfToday());
+}
+
+function buildObligationGroups(instances: CalendarObligationInstance[]) {
+  const groups = new Map<string, ObligationDayGroup>();
+  for (const instance of instances) {
+    const templateId = instance.template?.id || instance.template_id;
+    const group = groups.get(templateId) || {
+      templateId,
+      name: instance.template?.name || "Obrigação sem nome",
+      sector: instance.template?.sector || "Geral",
+      instances: [],
+      doneCount: 0,
+    };
+    group.instances.push(instance);
+    if (instance.status === "concluida") group.doneCount += 1;
+    groups.set(templateId, group);
+  }
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      instances: [...group.instances].sort((left, right) =>
+        obligationStatusOrder[left.status] - obligationStatusOrder[right.status] ||
+        (left.client?.name || "").localeCompare(right.client?.name || "", "pt-BR")),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+}
+
 export default function CalendarioPage() {
   const { user, effectiveAccess } = useAuth();
+  const navigate = useNavigate();
+  const organizationId = effectiveAccess?.organizationId || null;
   const collaboratorSector =
     effectiveAccess?.primaryRole === "colaborador" ? effectiveAccess.sectorCode : null;
   const availableSectorOptions = collaboratorSector
@@ -204,6 +267,13 @@ export default function CalendarioPage() {
   const [editingEvent, setEditingEvent] = useState<CalendarEntry | null>(null);
   const [form, setForm] = useState<CalendarFormState>(makeFormState(new Date()));
   const [saving, setSaving] = useState(false);
+  const [openingTaskId, setOpeningTaskId] = useState<string | null>(null);
+  const [periodMode, setPeriodMode] = useState<CalendarPeriodMode>("month");
+  const [calendarSearch, setCalendarSearch] = useState("");
+  const [sectorFilter, setSectorFilter] = useState(collaboratorSector || "all");
+  const [statusFilter, setStatusFilter] = useState<CalendarStatusFilter>("all");
+  const [templateFilter, setTemplateFilter] = useState("all");
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
 
   const monthKey = format(selectedDate, "yyyy-MM");
 
@@ -212,12 +282,16 @@ export default function CalendarioPage() {
     const from = startOfMonth(baseDate).toISOString();
     const to = endOfMonth(baseDate).toISOString();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("calendar_events")
       .select("*")
       .gte("due_at", from)
       .lte("due_at", to)
       .order("due_at", { ascending: true });
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const effectiveSector = collaboratorSector || (sectorFilter !== "all" ? sectorFilter : null);
+    if (effectiveSector) query = query.eq("sector", SECTOR_LABELS[effectiveSector as keyof typeof SECTOR_LABELS]);
+    const { data, error } = await query;
 
     if (error) {
       toast.error("Erro ao carregar eventos do calendário");
@@ -225,21 +299,29 @@ export default function CalendarioPage() {
       return;
     }
 
-    setEvents((data || []) as CalendarEntry[]);
-  }, []);
+    setEvents(
+      ((data || []) as CalendarEntry[]).filter(
+        (event) => event.integration_source !== "grow_obligation",
+      ),
+    );
+  }, [collaboratorSector, organizationId, sectorFilter]);
 
   const loadMonthTasks = useCallback(async (baseDate: Date) => {
     const from = format(startOfMonth(baseDate), "yyyy-MM-dd");
     const to = format(endOfMonth(baseDate), "yyyy-MM-dd");
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("kanban_tasks")
-      .select("id, title, client_name, sector, priority, due_date, status, integration_source")
+      .select("id, title, client_name, sector, priority, due_date, status, integration_source, integration_task_id")
       .not("due_date", "is", null)
       .gte("due_date", from)
       .lte("due_date", to)
       .neq("status", "archived")
       .order("due_date", { ascending: true });
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const effectiveSector = collaboratorSector || (sectorFilter !== "all" ? sectorFilter : null);
+    if (effectiveSector) query = query.eq("sector", SECTOR_LABELS[effectiveSector as keyof typeof SECTOR_LABELS]);
+    const { data, error } = await query;
 
     if (error) {
       toast.error("Erro ao carregar tarefas do calendário");
@@ -253,7 +335,7 @@ export default function CalendarioPage() {
     });
 
     setTasks(normalizedData);
-  }, [collaboratorSector]);
+  }, [collaboratorSector, organizationId, sectorFilter]);
 
   const loadMonthObligations = useCallback(async (baseDate: Date) => {
     setLoadingObligations(true);
@@ -261,7 +343,7 @@ export default function CalendarioPage() {
     const from = format(startOfMonth(baseDate), "yyyy-MM-dd");
     const to = format(endOfMonth(baseDate), "yyyy-MM-dd");
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("obligation_instances")
       .select(`
         id,
@@ -273,13 +355,20 @@ export default function CalendarioPage() {
         priority,
         completed_at,
         updated_at,
-        template:obligation_templates(id, name, sector),
+        template:obligation_templates!inner(id, name, sector),
         client:clients(id, name, cnpj)
       `)
       .gte("technical_due_date", from)
       .lte("technical_due_date", to)
+      .is("superseded_by_instance_id", null)
       .neq("status", "cancelada")
       .order("technical_due_date", { ascending: true });
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const effectiveSector = collaboratorSector || (sectorFilter !== "all" ? sectorFilter : null);
+    if (effectiveSector) query = query.eq("obligation_templates.sector", SECTOR_LABELS[effectiveSector as keyof typeof SECTOR_LABELS]);
+    if (statusFilter !== "all") query = query.eq("status", statusFilter);
+    if (templateFilter !== "all") query = query.eq("template_id", templateFilter);
+    const { data, error } = await query;
 
     if (error) {
       toast.error("Erro ao carregar obrigações do calendário");
@@ -296,7 +385,7 @@ export default function CalendarioPage() {
 
     setObligationInstances(normalizedData);
     setLoadingObligations(false);
-  }, [collaboratorSector]);
+  }, [collaboratorSector, organizationId, sectorFilter, statusFilter, templateFilter]);
 
   useEffect(() => {
     const [year, month] = monthKey.split("-").map(Number);
@@ -307,30 +396,55 @@ export default function CalendarioPage() {
     void loadMonthObligations(monthDate);
   }, [loadMonthEvents, loadMonthObligations, loadMonthTasks, monthKey]);
 
+  useEffect(() => {
+    if (collaboratorSector) setSectorFilter(collaboratorSector);
+  }, [collaboratorSector]);
+
   const selectedDayObligationGroups = useMemo<ObligationDayGroup[]>(() => {
-    const groups = new Map<string, ObligationDayGroup>();
-
-    obligationInstances
-      .filter((instance) => isSameDay(parseISO(`${instance.technical_due_date}T12:00:00`), selectedDate))
-      .forEach((instance) => {
-        const templateId = instance.template?.id || instance.template_id;
-        const group = groups.get(templateId) || {
-          templateId,
-          name: instance.template?.name || "Obrigação sem nome",
-          sector: instance.template?.sector || "Geral",
-          instances: [],
-          doneCount: 0,
-        };
-
-        group.instances.push(instance);
-        if (instance.status === "concluida") {
-          group.doneCount += 1;
-        }
-        groups.set(templateId, group);
-      });
-
-    return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    return buildObligationGroups(obligationInstances.filter((instance) =>
+      isSameDay(parseISO(`${instance.technical_due_date}T12:00:00`), selectedDate)));
   }, [obligationInstances, selectedDate]);
+
+  const templateOptions = useMemo(() => {
+    const templates = new Map<string, string>();
+    for (const instance of obligationInstances) {
+      templates.set(instance.template_id, instance.template?.name || "Obrigação sem nome");
+    }
+    return Array.from(templates, ([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+  }, [obligationInstances]);
+
+  const filteredObligations = useMemo(() => {
+    const normalizedSearch = calendarSearch.trim().toLocaleLowerCase("pt-BR");
+    return obligationInstances.filter((instance) => {
+      if (periodMode === "day" && !isSameDay(parseISO(`${instance.technical_due_date}T12:00:00`), selectedDate)) return false;
+      if (sectorFilter !== "all" && normalizeSectorCode(instance.template?.sector || "") !== sectorFilter) return false;
+      if (statusFilter !== "all" && instance.status !== statusFilter) return false;
+      if (templateFilter !== "all" && instance.template_id !== templateFilter) return false;
+      if (onlyOverdue && !isOperationallyOverdue(instance)) return false;
+      if (normalizedSearch) {
+        const haystack = `${instance.client?.name || ""} ${instance.client?.cnpj || ""} ${instance.template?.name || ""} ${instance.competence_label}`.toLocaleLowerCase("pt-BR");
+        if (!haystack.includes(normalizedSearch)) return false;
+      }
+      return true;
+    });
+  }, [calendarSearch, obligationInstances, onlyOverdue, periodMode, sectorFilter, selectedDate, statusFilter, templateFilter]);
+
+  const operationalDateGroups = useMemo<ObligationDateGroup[]>(() => {
+    const dates = new Map<string, CalendarObligationInstance[]>();
+    for (const instance of filteredObligations) {
+      const items = dates.get(instance.technical_due_date) || [];
+      items.push(instance);
+      dates.set(instance.technical_due_date, items);
+    }
+    return Array.from(dates, ([date, instances]) => ({
+      date,
+      groups: buildObligationGroups(instances),
+      total: instances.length,
+      done: instances.filter((instance) => instance.status === "concluida").length,
+      overdue: instances.filter(isOperationallyOverdue).length,
+    })).sort((left, right) => left.date.localeCompare(right.date));
+  }, [filteredObligations]);
 
   const selectedDayEvents = useMemo(() => {
     return events.filter((event) => isSameDay(parseISO(event.due_at), selectedDate));
@@ -354,6 +468,41 @@ export default function CalendarioPage() {
   const obligationDays = useMemo(
     () => obligationInstances.map((instance) => parseISO(`${instance.technical_due_date}T12:00:00`)),
     [obligationInstances]
+  );
+
+  const openTaskDetails = useCallback(
+    (taskId: string) => {
+      navigate(`/app/tarefas?view=kanban&task=${encodeURIComponent(taskId)}`);
+    },
+    [navigate],
+  );
+
+  const openObligationTaskDetails = useCallback(
+    async (instanceId: string) => {
+      const integrationTaskId = `instance:${instanceId}`;
+      const loadedTask = tasks.find((task) => task.integration_task_id === integrationTaskId);
+      if (loadedTask) {
+        openTaskDetails(loadedTask.id);
+        return;
+      }
+
+      setOpeningTaskId(instanceId);
+      const { data, error } = await supabase
+        .from("kanban_tasks")
+        .select("id")
+        .eq("integration_source", "grow_obligation_task")
+        .eq("integration_task_id", integrationTaskId)
+        .maybeSingle();
+      setOpeningTaskId(null);
+
+      if (error || !data?.id) {
+        toast.error(error?.message || "Não foi possível localizar a tarefa desta obrigação.");
+        return;
+      }
+
+      openTaskDetails(data.id);
+    },
+    [openTaskDetails, tasks],
   );
 
   const openNewDialog = () => {
@@ -457,8 +606,108 @@ export default function CalendarioPage() {
           </Button>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(430px,0.8fr)_minmax(0,1.2fr)]">
-          <div className="h-fit min-w-0 rounded-xl border bg-card p-6 shadow-sm">
+        <section aria-labelledby="calendar-filters-title" className="rounded-2xl border bg-card p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 id="calendar-filters-title" className="flex items-center gap-2 font-semibold"><Filter className="h-4 w-4" />Controle operacional</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Filtre as competências e identifique rapidamente pendências e atrasos.</p>
+            </div>
+            <Button
+              type="button"
+              variant={onlyOverdue ? "destructive" : "outline"}
+              size="sm"
+              className="shrink-0 gap-2"
+              onClick={() => setOnlyOverdue((current) => !current)}
+              aria-pressed={onlyOverdue}
+            >
+              <AlertTriangle className="h-4 w-4" />Atrasadas
+            </Button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_repeat(4,minmax(150px,0.8fr))]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input value={calendarSearch} onChange={(event) => setCalendarSearch(event.target.value)} className="pl-9" placeholder="Buscar cliente, CNPJ ou obrigação" aria-label="Buscar no calendário" />
+            </div>
+            <Select value={periodMode} onValueChange={(value) => setPeriodMode(value as CalendarPeriodMode)}>
+              <SelectTrigger aria-label="Período da agenda"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="day">Dia selecionado</SelectItem><SelectItem value="month">Mês inteiro</SelectItem></SelectContent>
+            </Select>
+            <Select value={sectorFilter} onValueChange={setSectorFilter} disabled={Boolean(collaboratorSector)}>
+              <SelectTrigger aria-label="Filtrar por setor"><SelectValue placeholder="Setor" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos os setores</SelectItem>{availableSectorOptions.map(({ code, label }) => <SelectItem key={code} value={code}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as CalendarStatusFilter)}>
+              <SelectTrigger aria-label="Filtrar por status"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos os status</SelectItem>{Object.entries(obligationStatusLabels).filter(([status]) => status !== "cancelada").map(([status, label]) => <SelectItem key={status} value={status}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={templateFilter} onValueChange={setTemplateFilter}>
+              <SelectTrigger aria-label="Filtrar por obrigação"><SelectValue placeholder="Obrigação" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todas as obrigações</SelectItem>{templateOptions.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </section>
+
+        <section aria-labelledby="operational-agenda-title" className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+          <div className="flex flex-col gap-2 border-b p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 id="operational-agenda-title" className="font-semibold">Agenda operacional do {periodMode === "day" ? "dia" : "mês"}</h2>
+              <p className="text-xs text-muted-foreground">{filteredObligations.length} competência(s) em {operationalDateGroups.length} data(s), ordenadas por vencimento e criticidade.</p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">{filteredObligations.filter((instance) => instance.status !== "concluida").length} em aberto</Badge>
+              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">{filteredObligations.filter(isOperationallyOverdue).length} atrasada(s)</Badge>
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">{filteredObligations.filter((instance) => instance.status === "concluida").length} concluída(s)</Badge>
+            </div>
+          </div>
+          {loadingObligations ? (
+            <div className="flex min-h-52 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+          ) : operationalDateGroups.length === 0 ? (
+            <div className="flex min-h-52 flex-col items-center justify-center p-6 text-center"><CalendarDays className="mb-2 h-8 w-8 text-muted-foreground" /><p className="font-medium">Nenhuma obrigação encontrada</p><p className="text-sm text-muted-foreground">Altere o período ou remova algum filtro.</p></div>
+          ) : (
+            <div className="divide-y">
+              {operationalDateGroups.map((dateGroup) => (
+                <div key={dateGroup.date} className="p-4 sm:p-5">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-11 min-w-11 flex-col items-center justify-center rounded-xl px-2 ${dateGroup.overdue ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"}`}>
+                        <span className="text-base font-bold leading-none">{format(parseISO(`${dateGroup.date}T12:00:00`), "dd")}</span>
+                        <span className="text-[10px] uppercase">{format(parseISO(`${dateGroup.date}T12:00:00`), "MMM", { locale: ptBR })}</span>
+                      </div>
+                      <div><p className="font-semibold">{format(parseISO(`${dateGroup.date}T12:00:00`), "EEEE", { locale: ptBR })}</p><p className="text-xs text-muted-foreground">{dateGroup.total} competência(s) · {dateGroup.done} concluída(s)</p></div>
+                    </div>
+                    {dateGroup.overdue > 0 ? <Badge variant="destructive">{dateGroup.overdue} atrasada(s)</Badge> : null}
+                  </div>
+                  <div className="space-y-2">
+                    {dateGroup.groups.map((group) => {
+                      const overdueCount = group.instances.filter(isOperationallyOverdue).length;
+                      const reviewCount = group.instances.filter((instance) => instance.status === "em_revisao").length;
+                      return (
+                        <Collapsible key={`${dateGroup.date}-${group.templateId}`} defaultOpen={overdueCount > 0}>
+                          <div className="overflow-hidden rounded-xl border bg-background/60">
+                            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-muted/30">
+                              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{group.name}</h3><Badge variant="outline">{group.sector}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{group.instances.length} cliente(s) · {group.doneCount} concluída(s){reviewCount ? ` · ${reviewCount} em revisão` : ""}{overdueCount ? ` · ${overdueCount} atrasada(s)` : ""}</p></div>
+                              <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent><div className="divide-y border-t">{group.instances.map((instance) => (
+                              <button key={instance.id} type="button" onClick={() => void openObligationTaskDetails(instance.id)} disabled={openingTaskId === instance.id} className="flex w-full flex-wrap items-center gap-3 p-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:flex-nowrap">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">{openingTaskId === instance.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}</div>
+                                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{instance.client?.name || "Cliente sem nome"}</p><p className="text-xs text-muted-foreground">Competência {instance.competence_label}{instance.client?.cnpj ? ` · ${instance.client.cnpj}` : ""}</p></div>
+                                {isOperationallyOverdue(instance) ? <Badge variant="destructive">Atrasada</Badge> : <Badge variant="outline" className={`border-0 ${obligationStatusClasses[instance.status]}`}>{obligationStatusLabels[instance.status]}</Badge>}
+                              </button>
+                            ))}</div></CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(430px,0.8fr)]">
+          <div className="h-fit min-w-0 rounded-xl border bg-card p-6 shadow-sm lg:order-2">
             <div className="flex justify-center overflow-hidden">
             <Calendar
               mode="single"
@@ -496,7 +745,7 @@ export default function CalendarioPage() {
             </div>
           </div>
 
-          <div className="min-w-0">
+          <div className="min-w-0 lg:order-1">
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between gap-2 border-b p-5">
                 <div>
@@ -552,9 +801,15 @@ export default function CalendarioPage() {
                         <CollapsibleContent>
                           <div className="divide-y border-t">
                             {group.instances.map((instance) => (
-                              <div key={instance.id} className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                              <button
+                                key={instance.id}
+                                type="button"
+                                className="flex w-full flex-wrap items-center gap-3 p-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:flex-nowrap"
+                                onClick={() => void openObligationTaskDetails(instance.id)}
+                                disabled={openingTaskId === instance.id}
+                              >
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                                  <Building2 className="h-4 w-4" />
+                                  {openingTaskId === instance.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-medium">{instance.client?.name || "Cliente sem nome"}</p>
@@ -563,7 +818,7 @@ export default function CalendarioPage() {
                                 <Badge variant="outline" className={`shrink-0 border-0 ${obligationStatusClasses[instance.status] || "bg-muted text-muted-foreground"}`}>
                                   {obligationStatusLabels[instance.status] || instance.status}
                                 </Badge>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </CollapsibleContent>
@@ -584,7 +839,12 @@ export default function CalendarioPage() {
                       </div>
                       <div className="divide-y">
                         {selectedDayTasks.map((task) => (
-                          <div key={`task-${task.id}`} className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
+                          <button
+                            key={`task-${task.id}`}
+                            type="button"
+                            className="flex w-full flex-wrap items-center gap-3 p-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:flex-nowrap"
+                            onClick={() => openTaskDetails(task.id)}
+                          >
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">{task.title}</p>
                               <p className="text-xs text-muted-foreground">
@@ -597,7 +857,7 @@ export default function CalendarioPage() {
                             <Badge variant="outline" className="shrink-0 border-0 bg-muted text-muted-foreground">
                               {task.status}
                             </Badge>
-                          </div>
+                          </button>
                         ))}
 
                         {selectedDayEvents.map((event) => (

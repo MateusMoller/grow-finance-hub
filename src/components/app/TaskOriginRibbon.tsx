@@ -4,11 +4,12 @@ import { resolveTaskOrigin, taskOriginMeta } from "@/lib/taskOrigin";
 interface TaskOriginRibbonProps {
   requestId?: string | null;
   integrationSource?: string | null;
+  integrationTaskId?: string | null;
   className?: string;
 }
 
-export function TaskOriginRibbon({ requestId, integrationSource, className }: TaskOriginRibbonProps) {
-  const origin = resolveTaskOrigin({ requestId, integrationSource });
+export function TaskOriginRibbon({ requestId, integrationSource, integrationTaskId, className }: TaskOriginRibbonProps) {
+  const origin = resolveTaskOrigin({ requestId, integrationSource, integrationTaskId });
   const meta = taskOriginMeta[origin];
 
   return (

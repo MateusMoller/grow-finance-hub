@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -9,7 +9,7 @@ type RobotConfig = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   robotUserEmail: string;
-  robotUserPassword: string;
+  robotUserPassword?: string;
   machineId: string;
   stateFile: string;
   scanIntervalMs?: number;
@@ -23,6 +23,7 @@ type RobotConfig = {
 type RobotFileStatus = "na_fila" | "enviado" | "processado" | "falhou" | "reprocessar";
 
 type RobotFileState = {
+  submissionId?: string;
   filePath: string;
   fileName: string;
   status: RobotFileStatus;
@@ -35,6 +36,7 @@ type RobotFileState = {
   remoteInboxItemId: string | null;
   remoteIngestionJobId: string | null;
   remoteStatus: string | null;
+  localFilePresent?: boolean;
   updatedAt: string;
 };
 
@@ -185,6 +187,16 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     if (!text) continue;
     const weight = sourceWeight(item.source);
 
+    const monthNames: Record<string, string> = {
+      janeiro: "01", fevereiro: "02", marco: "03", abril: "04",
+      maio: "05", junho: "06", julho: "07", agosto: "08",
+      setembro: "09", outubro: "10", novembro: "11", dezembro: "12",
+    };
+    const namedMonthMatches = text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\D{0,8}(20\d{2})\b/g);
+    for (const match of namedMonthMatches) {
+      addCompetenceCandidate(candidates, `${match[2]}-${monthNames[match[1]]}`, 98 * weight, item.source, "mes_por_extenso");
+    }
+
     const labelledMatches = text.matchAll(/\b(?:competencia|competencia\s+de|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
     for (const match of labelledMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), 95 * weight, item.source, "rotulo_mes_ano");
@@ -323,12 +335,8 @@ function buildKeywordStats(tokens: string[]) {
     .map(([token]) => token);
 }
 
-function buildDocumentAnalysisTokens(filePath: string, extractedText: string) {
-  return tokenize([
-    path.basename(filePath),
-    path.dirname(filePath),
-    extractedText,
-  ].join(" "));
+function buildDocumentAnalysisTokens(extractedText: string) {
+  return tokenize(extractedText);
 }
 
 async function ensureParentDir(filePath: string) {
@@ -566,12 +574,10 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
     const normalizedText = normalizeReadableText(extractedText);
     const flattenedText = normalizedText.replace(/\s+/g, " ").trim();
     const preview = flattenedText ? flattenedText.slice(0, 500) : null;
-    const tokens = buildDocumentAnalysisTokens(filePath, normalizedText);
+    const tokens = buildDocumentAnalysisTokens(normalizedText);
     const keywords = buildKeywordStats(tokens);
-    const cnpjCandidates = detectCnpjCandidates(path.basename(filePath), filePath, normalizedText);
+    const cnpjCandidates = detectCnpjCandidates(normalizedText);
     const detailedCompetenceCandidates = detectCompetenceCandidatesDetailed([
-      { value: path.basename(filePath), source: "file_name" },
-      { value: filePath, source: "file_path" },
       { value: normalizedText, source: "pdf_text" },
     ]);
     const competenceCandidates = detailedCompetenceCandidates.map((candidate) => candidate.value);
@@ -581,8 +587,8 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
       extracted_text_preview: preview,
       detected_cnpj: cnpjCandidates[0] || null,
       competence_detected: competenceCandidates[0] || detectCompetence(normalizedText, filePath),
-      text_extraction_status: normalizedText ? "extracted" : "empty",
-      ocr_status: normalizedText ? "not_needed" : "not_available",
+      text_extraction_status: normalizedText ? "completed" : "failed",
+      ocr_status: normalizedText ? "not_needed" : "failed",
       fingerprint_payload: {
         version: 3,
         page_count: pageCount,
@@ -594,7 +600,7 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
         detected_cnpjs: cnpjCandidates,
         competence_candidates: competenceCandidates,
         competence_candidate_details: detailedCompetenceCandidates.slice(0, 8),
-        detection_sources: ["file_name", "file_path", "pdf_text"],
+        detection_sources: ["pdf_text", "model_zones"],
         title_guess: preview ? preview.slice(0, 120) : null,
       },
       keywords,
@@ -607,7 +613,7 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
       detected_cnpj: null,
       competence_detected: null,
       text_extraction_status: "failed",
-      ocr_status: "not_available",
+      ocr_status: "failed",
       fingerprint_payload: {
         version: 1,
         error: error instanceof Error ? error.message : "Falha desconhecida na leitura do PDF",
@@ -619,6 +625,7 @@ async function analyzePdf(filePath: string): Promise<DocumentAnalysisPayload> {
 }
 
 async function walkPdfFiles(rootDir: string): Promise<string[]> {
+  const failedFolderName = "nao_processado";
   const absoluteRoot = path.resolve(rootDir);
   const pending = [absoluteRoot];
   const pdfFiles: string[] = [];
@@ -643,6 +650,9 @@ async function walkPdfFiles(rootDir: string): Promise<string[]> {
       const entryName = entry.name;
       const fullPath = path.join(current, entryName);
       if (entry.isDirectory()) {
+        if (entryName.toLocaleLowerCase("pt-BR") === failedFolderName) {
+          continue;
+        }
         pending.push(fullPath);
         continue;
       }
@@ -653,6 +663,56 @@ async function walkPdfFiles(rootDir: string): Promise<string[]> {
   }
 
   return pdfFiles;
+}
+
+function isPathInsideRoot(rootDir: string, candidatePath: string) {
+  const relative = path.relative(path.resolve(rootDir), path.resolve(candidatePath));
+  return relative === "" || (
+    relative !== ".."
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
+  );
+}
+
+async function removeProcessedFile(filePath: string) {
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function moveToFailedFolder(config: RobotConfig, filePath: string) {
+  const absoluteFilePath = path.resolve(filePath);
+  const sourceRoot = config.folders
+    .filter((folder) => isPathInsideRoot(folder, absoluteFilePath))
+    .sort((left, right) => right.length - left.length)[0];
+
+  if (!sourceRoot) {
+    throw new Error("Arquivo fora das pastas monitoradas; movimentacao recusada por seguranca.");
+  }
+
+  const failedDirectory = path.resolve(sourceRoot, "nao_processado");
+  if (!isPathInsideRoot(sourceRoot, failedDirectory)) {
+    throw new Error("Destino de falha invalido; movimentacao recusada por seguranca.");
+  }
+
+  await fs.mkdir(failedDirectory, { recursive: true });
+  const extension = path.extname(absoluteFilePath);
+  const baseName = path.basename(absoluteFilePath, extension);
+  let destination = path.join(failedDirectory, path.basename(absoluteFilePath));
+
+  try {
+    await fs.access(destination);
+    destination = path.join(failedDirectory, `${baseName}-${Date.now()}${extension}`);
+  } catch {
+    // O nome original esta disponivel.
+  }
+
+  await fs.rename(absoluteFilePath, destination);
+  return destination;
 }
 
 async function uploadPdf(
@@ -666,12 +726,26 @@ async function uploadPdf(
   const yearMonth = new Date().toISOString().slice(0, 7).replace("-", "/");
   const storagePath = `${config.storagePrefix || DEFAULT_PREFIX}/${config.machineId}/${yearMonth}/${fileHash}${extension.toLowerCase()}`;
   const content = await fs.readFile(filePath);
+  const bucket = config.storageBucket || DEFAULT_BUCKET;
+  const storageDirectory = path.posix.dirname(storagePath);
+  const storageFileName = path.posix.basename(storagePath);
+  const storage = supabase.storage.from(bucket);
+  const { data: existingFiles, error: listError } = await storage.list(storageDirectory, {
+    limit: 1,
+    search: storageFileName,
+  });
 
-  const { error } = await supabase.storage
-    .from(config.storageBucket || DEFAULT_BUCKET)
-    .upload(storagePath, content, {
+  if (listError) {
+    throw new Error(`Falha ao consultar o storage: ${listError.message}`);
+  }
+
+  const alreadyUploaded = (existingFiles || []).some((item) => item.name === storageFileName);
+
+  const { error } = alreadyUploaded
+    ? { error: null }
+    : await storage.upload(storagePath, content, {
       contentType: "application/pdf",
-      upsert: true,
+      upsert: false,
     });
 
   if (error) {
@@ -679,7 +753,7 @@ async function uploadPdf(
   }
 
   return {
-    bucket: config.storageBucket || DEFAULT_BUCKET,
+    bucket,
     storagePath,
     fileSize: content.byteLength,
     fileName,
@@ -687,6 +761,11 @@ async function uploadPdf(
 }
 
 async function authenticateRobot(config: RobotConfig) {
+  const password = config.robotUserPassword;
+  if (!password) {
+    throw new Error("Senha do usuario do robo nao informada.");
+  }
+
   const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
     auth: {
       persistSession: false,
@@ -696,7 +775,7 @@ async function authenticateRobot(config: RobotConfig) {
 
   const { error } = await supabase.auth.signInWithPassword({
     email: config.robotUserEmail,
-    password: config.robotUserPassword,
+    password,
   });
 
   if (error) {
@@ -715,6 +794,7 @@ function buildDefaultState(): RobotState {
 
 function buildStateEntry(filePath: string, fileSize: number, lastModifiedMs: number): RobotFileState {
   return {
+    submissionId: randomUUID(),
     filePath: path.resolve(filePath),
     fileName: path.basename(filePath),
     status: "na_fila",
@@ -727,11 +807,17 @@ function buildStateEntry(filePath: string, fileSize: number, lastModifiedMs: num
     remoteInboxItemId: null,
     remoteIngestionJobId: null,
     remoteStatus: null,
+    localFilePresent: true,
     updatedAt: new Date().toISOString(),
   };
 }
 
 function shouldProcessEntry(entry: RobotFileState, now: Date, maxRetries: number) {
+  // The scan may discover that a user, another cycle or the successful cleanup
+  // already removed the file. Never execute a stale queued entry in that case.
+  if (entry.localFilePresent === false) {
+    return false;
+  }
   if (entry.status === "processado" || entry.status === "enviado") {
     return false;
   }
@@ -745,12 +831,15 @@ function shouldProcessEntry(entry: RobotFileState, now: Date, maxRetries: number
 }
 
 async function syncScanState(config: RobotConfig, state: RobotState) {
+  const seenKeys = new Set<string>();
+
   for (const folder of config.folders) {
     const files = await walkPdfFiles(folder);
     for (const filePath of files) {
       const absolutePath = path.resolve(filePath);
       const stats = await fs.stat(absolutePath);
       const key = normalizeFileKey(absolutePath);
+      seenKeys.add(key);
       const existing = state.files[key];
 
       if (!existing) {
@@ -758,12 +847,55 @@ async function syncScanState(config: RobotConfig, state: RobotState) {
         continue;
       }
 
-      if (existing.fileSize !== stats.size || existing.lastModifiedMs !== stats.mtimeMs) {
-        state.files[key] = {
-          ...buildStateEntry(absolutePath, stats.size, stats.mtimeMs),
-          status: existing.status === "processado" ? "reprocessar" : "na_fila",
-        };
+      if (existing.status === "processado" || existing.status === "enviado") {
+        if (existing.localFilePresent === true) {
+          try {
+            await removeProcessedFile(absolutePath);
+            state.files[key] = {
+              ...existing,
+              localFilePresent: false,
+              lastError: null,
+              updatedAt: new Date().toISOString(),
+            };
+          } catch (cleanupError) {
+            const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "Falha desconhecida na remocao";
+            state.files[key] = {
+              ...existing,
+              lastError: `Envio concluido, mas o arquivo local nao foi removido: ${cleanupMessage}`,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          continue;
+        }
+
+        // O arquivo ja havia desaparecido apos um envio confirmado e voltou a
+        // existir. Ele representa uma nova entrada, mesmo com metadados iguais.
+        state.files[key] = buildStateEntry(absolutePath, stats.size, stats.mtimeMs);
+        continue;
       }
+
+      // A pending/failed file may be removed and later placed back with the
+      // same size and preserved modification date. Presence, not mtime, is the
+      // signal that this is a new local attempt.
+      if (existing.localFilePresent === false) {
+        state.files[key] = buildStateEntry(absolutePath, stats.size, stats.mtimeMs);
+        continue;
+      }
+
+      if (existing.fileSize !== stats.size || existing.lastModifiedMs !== stats.mtimeMs) {
+        state.files[key] = buildStateEntry(absolutePath, stats.size, stats.mtimeMs);
+      }
+    }
+  }
+
+  for (const [key, entry] of Object.entries(state.files)) {
+    const belongsToMonitoredFolder = config.folders.some((folder) => isPathInsideRoot(folder, entry.filePath));
+    if (belongsToMonitoredFolder && !seenKeys.has(key) && entry.localFilePresent !== false) {
+      state.files[key] = {
+        ...entry,
+        localFilePresent: false,
+        updatedAt: new Date().toISOString(),
+      };
     }
   }
 
@@ -798,12 +930,15 @@ async function processQueuedEntries(
           file_hash: fileHash,
           robot_origin_path: toPosixPath(entry.filePath),
           robot_machine_id: config.machineId,
+          robot_submission_id: entry.submissionId,
           analysis,
         },
       });
 
       if (error) {
-        throw new Error(error.message);
+        const context = (error as { context?: Response }).context;
+        const responseDetails = context ? await context.clone().text().catch(() => "") : "";
+        throw new Error([error.message, responseDetails].filter(Boolean).join(" - "));
       }
 
       const response = (data || {}) as Record<string, unknown>;
@@ -812,29 +947,70 @@ async function processQueuedEntries(
       const ingestionJob = (response.ingestion_job || {}) as Record<string, unknown>;
       const match = (response.match || {}) as Record<string, unknown>;
       const duplicate = response.duplicate === true;
+      const confirmedRemoteRecord = duplicate
+        ? typeof ingestionJob.id === "string" && ingestionJob.id.length > 0
+        : typeof inboxItem.id === "string" && inboxItem.id.length > 0;
 
-      const processed = duplicate || processingResult.processed === true;
-      const awaitingReview = inboxItem.status === "pending_review" || match.reviewRequired === true;
+      if (response.ok !== true || !confirmedRemoteRecord) {
+        throw new Error("O servidor nao confirmou o registro do documento na Central. O arquivo local sera preservado para nova tentativa.");
+      }
+
+      const duplicateCompleted = duplicate
+        && ingestionJob.status === "completed"
+        && ["sent", "not_applicable"].includes(String(ingestionJob.communication_status || ""));
+      const processed = duplicateCompleted || processingResult.processed === true;
+      const awaitingReview = inboxItem.status === "pending_review"
+        || match.reviewRequired === true
+        || ingestionJob.status === "review_required";
+
+      if (!processed) {
+        const deliveryError = typeof processingResult.deliveryError === "string" ? processingResult.deliveryError : null;
+        throw new Error(deliveryError || (awaitingReview
+          ? "O documento foi recebido, mas ainda depende de revisao e nao foi entregue ao cliente."
+          : "O documento foi recebido, mas o processamento e a entrega ainda nao foram concluidos."));
+      }
 
       state.files[key] = {
         ...entry,
         fileHash,
         fileSize: upload.fileSize,
-        status: processed ? "processado" : awaitingReview ? "enviado" : "enviado",
+        status: "processado",
         retries: 0,
         nextRetryAt: null,
         lastError: null,
         remoteInboxItemId: typeof inboxItem.id === "string" ? inboxItem.id : null,
         remoteIngestionJobId: typeof ingestionJob.id === "string" ? ingestionJob.id : null,
-        remoteStatus: typeof ingestionJob.status === "string"
-          ? ingestionJob.status
-          : processed
-            ? "completed"
-            : awaitingReview
-              ? "review_required"
+        remoteStatus: processed
+          ? "completed"
+          : awaitingReview
+            ? "review_required"
+            : typeof ingestionJob.status === "string"
+              ? ingestionJob.status
               : "ingested",
+        localFilePresent: true,
         updatedAt: new Date().toISOString(),
       };
+
+      // Persiste a confirmacao remota antes de remover o arquivo local. Assim,
+      // uma interrupcao entre as etapas nao provoca um novo envio do mesmo PDF.
+      await writeJsonFile(config.stateFile, state);
+      try {
+        await removeProcessedFile(entry.filePath);
+        state.files[key] = {
+          ...state.files[key],
+          localFilePresent: false,
+          updatedAt: new Date().toISOString(),
+        };
+        console.log(`[robot] ${entry.fileName}: removido da pasta de entrada apos confirmacao do envio`);
+      } catch (cleanupError) {
+        const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "Falha desconhecida na remocao";
+        state.files[key] = {
+          ...state.files[key],
+          lastError: `Envio concluido, mas o arquivo local nao foi removido: ${cleanupMessage}`,
+          updatedAt: new Date().toISOString(),
+        };
+        console.warn(`[robot] ${entry.fileName}: envio concluido, mas nao foi possivel remover o arquivo local: ${cleanupMessage}`);
+      }
 
       const logSuffix = duplicate
         ? "duplicado e reaproveitado"
@@ -848,12 +1024,25 @@ async function processQueuedEntries(
       const message = error instanceof Error ? error.message : "Falha desconhecida";
       const retries = entry.retries + 1;
       const exhausted = retries >= (config.maxRetries || DEFAULT_MAX_RETRIES);
+      let failedFilePath = entry.filePath;
+      let finalError = message;
+
+      if (exhausted) {
+        try {
+          failedFilePath = await moveToFailedFolder(config, entry.filePath);
+          console.error(`[robot] ${entry.fileName}: movido para ${failedFilePath} apos esgotar as tentativas`);
+        } catch (moveError) {
+          const moveMessage = moveError instanceof Error ? moveError.message : "Falha desconhecida na movimentacao";
+          finalError = `${message} | Nao foi possivel mover para nao_processado: ${moveMessage}`;
+        }
+      }
       state.files[key] = {
         ...entry,
+        filePath: failedFilePath,
         status: exhausted ? "falhou" : "reprocessar",
         retries,
         nextRetryAt: exhausted ? null : new Date(Date.now() + (config.retryDelayMs || DEFAULT_RETRY_DELAY_MS)).toISOString(),
-        lastError: message,
+        lastError: finalError,
         updatedAt: new Date().toISOString(),
       };
       console.error(`[robot] Falha ao processar ${entry.fileName}: ${message}`);
@@ -889,6 +1078,7 @@ async function main() {
   const configArg = process.argv[2];
   const configPath = path.resolve(configArg || "tools/grow-document-robot/config.example.json");
   const config = await readJsonFile<RobotConfig>(configPath, {} as RobotConfig);
+  config.robotUserPassword = process.env.GROW_ROBOT_PASSWORD || config.robotUserPassword;
 
   if (!config.supabaseUrl || !config.supabaseAnonKey || !config.robotUserEmail || !config.robotUserPassword || !config.machineId || !config.stateFile || !config.folders?.length) {
     throw new Error("Configuração do robô incompleta. Revise o arquivo JSON informado.");
@@ -896,6 +1086,13 @@ async function main() {
 
   config.stateFile = path.resolve(path.dirname(configPath), config.stateFile);
   config.folders = config.folders.map((folder) => path.resolve(folder));
+
+  if (process.argv.includes("--check")) {
+    await authenticateRobot(config);
+    await Promise.all(config.folders.map((folder) => fs.mkdir(folder, { recursive: true })));
+    console.log("[robot] Configuracao, autenticacao e pastas validadas com sucesso.");
+    return;
+  }
 
   await runRobot(config);
 }

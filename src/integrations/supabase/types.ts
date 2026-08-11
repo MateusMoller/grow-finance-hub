@@ -3070,6 +3070,86 @@ export type Database = {
           },
         ];
       };
+      obligation_document_access_events: {
+        Row: {
+          access_channel: string;
+          access_type: string;
+          accessed_at: string;
+          client_id: string;
+          file_id: string;
+          id: string;
+          instance_id: string;
+          metadata: Json;
+          organization_id: string;
+          recipient_email: string | null;
+          referrer: string | null;
+          source_context: string | null;
+          user_agent: string | null;
+          user_id: string | null;
+        };
+        Insert: {
+          access_channel?: string;
+          access_type?: string;
+          accessed_at?: string;
+          client_id: string;
+          file_id: string;
+          id?: string;
+          instance_id: string;
+          metadata?: Json;
+          organization_id: string;
+          recipient_email?: string | null;
+          referrer?: string | null;
+          source_context?: string | null;
+          user_agent: string;
+          user_id?: string | null;
+        };
+        Update: {
+          access_channel?: string;
+          access_type?: string;
+          accessed_at?: string;
+          client_id?: string;
+          file_id?: string;
+          id?: string;
+          instance_id?: string;
+          metadata?: Json;
+          organization_id?: string;
+          recipient_email?: string | null;
+          referrer?: string | null;
+          source_context?: string | null;
+          user_agent?: string;
+          user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "obligation_document_access_events_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "obligation_document_access_events_file_id_fkey";
+            columns: ["file_id"];
+            isOneToOne: false;
+            referencedRelation: "obligation_instance_files";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "obligation_document_access_events_instance_id_fkey";
+            columns: ["instance_id"];
+            isOneToOne: false;
+            referencedRelation: "obligation_instances";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "obligation_document_access_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       obligation_instance_events: {
         Row: {
           comment: string | null;
@@ -3222,6 +3302,10 @@ export type Database = {
           id: string;
           last_status_at: string;
           legal_due_date: string | null;
+          generation_run_id: string | null;
+          installment_number: number | null;
+          occurrence_key: string | null;
+          operational_month: string | null;
           organization_id: string;
           origin: string;
           priority: string;
@@ -3230,6 +3314,7 @@ export type Database = {
           protocol: string | null;
           protocol_issued_at: string | null;
           status: string;
+          superseded_by_instance_id: string | null;
           technical_due_date: string;
           template_id: string;
           updated_at: string;
@@ -3249,6 +3334,10 @@ export type Database = {
           id?: string;
           last_status_at?: string;
           legal_due_date?: string | null;
+          generation_run_id?: string | null;
+          installment_number?: number | null;
+          occurrence_key?: string | null;
+          operational_month?: string | null;
           organization_id?: string;
           origin?: string;
           priority?: string;
@@ -3257,6 +3346,7 @@ export type Database = {
           protocol?: string | null;
           protocol_issued_at?: string | null;
           status?: string;
+          superseded_by_instance_id?: string | null;
           technical_due_date: string;
           template_id: string;
           updated_at?: string;
@@ -3276,6 +3366,10 @@ export type Database = {
           id?: string;
           last_status_at?: string;
           legal_due_date?: string | null;
+          generation_run_id?: string | null;
+          installment_number?: number | null;
+          occurrence_key?: string | null;
+          operational_month?: string | null;
           organization_id?: string;
           origin?: string;
           priority?: string;
@@ -3284,11 +3378,19 @@ export type Database = {
           protocol?: string | null;
           protocol_issued_at?: string | null;
           status?: string;
+          superseded_by_instance_id?: string | null;
           technical_due_date?: string;
           template_id?: string;
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "obligation_instances_generation_run_id_fkey";
+            columns: ["generation_run_id"];
+            isOneToOne: false;
+            referencedRelation: "obligation_generation_runs";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "obligation_instances_client_id_fkey";
             columns: ["client_id"];
@@ -3736,6 +3838,8 @@ export type Database = {
           catalog_review_status: string;
           code: string;
           competence_reference: string;
+          competence_granularity: string;
+          competence_year_offset: number;
           completion_email_body: string | null;
           completion_email_enabled: boolean;
           completion_email_subject: string | null;
@@ -3744,6 +3848,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           due_day: number;
+          due_date_adjustment_policy: string;
           duplicate_group_key: string | null;
           expected_documents: Json;
           generates_calendar: boolean;
@@ -3768,6 +3873,8 @@ export type Database = {
           catalog_review_status?: string;
           code: string;
           competence_reference?: string;
+          competence_granularity?: string;
+          competence_year_offset?: number;
           completion_email_body?: string | null;
           completion_email_enabled?: boolean;
           completion_email_subject?: string | null;
@@ -3776,6 +3883,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           due_day?: number;
+          due_date_adjustment_policy?: string;
           duplicate_group_key?: string | null;
           expected_documents?: Json;
           generates_calendar?: boolean;
@@ -3800,6 +3908,8 @@ export type Database = {
           catalog_review_status?: string;
           code?: string;
           competence_reference?: string;
+          competence_granularity?: string;
+          competence_year_offset?: number;
           completion_email_body?: string | null;
           completion_email_enabled?: boolean;
           completion_email_subject?: string | null;
@@ -3808,6 +3918,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           due_day?: number;
+          due_date_adjustment_policy?: string;
           duplicate_group_key?: string | null;
           expected_documents?: Json;
           generates_calendar?: boolean;

@@ -1,3 +1,5 @@
+import { loadPdfJsClient } from "@/lib/pdfJsClient";
+
 export type DocumentFingerprint = {
   version?: number;
   probable_title: string | null;
@@ -161,7 +163,7 @@ function addCompetenceCandidate(
 }
 
 function sourceWeight(source: CompetenceSource) {
-  return source === "file_name" ? 1.45 : 1;
+  return source === "file_name" ? 0 : 1;
 }
 
 function normalizeSearchText(value: string) {
@@ -390,42 +392,7 @@ function buildFingerprint(
 }
 
 async function loadPdfJs() {
-  const [pdfModule, pdfWorkerModule] = await Promise.all([
-    import("pdfjs-dist/legacy/build/pdf.mjs"),
-    import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
-  ]);
-
-  const pdfJs = pdfModule as unknown as {
-    GlobalWorkerOptions?: { workerSrc: string };
-    getDocument: (source: { data: ArrayBuffer }) => {
-      promise: Promise<{
-        numPages: number;
-        getPage: (
-          page: number,
-        ) => Promise<{
-          getViewport: (params: { scale: number }) => { width: number; height: number };
-          render: (params: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => {
-            promise: Promise<void>;
-          };
-          getTextContent: () => Promise<{
-            items: Array<{
-              str?: string;
-              transform?: number[];
-              width?: number;
-              height?: number;
-            }>;
-          }>;
-        }>;
-      }>;
-    };
-  };
-
-  if (pdfJs.GlobalWorkerOptions) {
-    pdfJs.GlobalWorkerOptions.workerSrc =
-      (pdfWorkerModule as { default?: string }).default || "pdf.worker.min.mjs";
-  }
-
-  return pdfJs;
+  return loadPdfJsClient();
 }
 
 async function parsePdfText(file: File) {
@@ -575,14 +542,13 @@ export async function analyzePdfDocument(file: File): Promise<AnalyzedDocument> 
   const parsed = await parsePdfWithOcrFallback(file);
   const text = normalizeWhitespace(parsed.text);
   const competenceCandidates = detectCompetenceCandidatesDetailed([
-    { value: file.name, source: "file_name" },
     { value: text, source: "pdf_text" },
   ]);
-  const fingerprint = buildFingerprint(text, parsed.pageCount, file.name, parsed.pageTexts, competenceCandidates);
+  const fingerprint = buildFingerprint(text, parsed.pageCount, "", parsed.pageTexts, competenceCandidates);
   fingerprint.positioned_text_pages = parsed.positionedTextPages;
   const cues = extractPrimaryCues(parsed.text);
   const keywords = fingerprint.top_tokens.slice(0, 12);
-  const recognitionText = normalizeWhitespace([file.name, text].join(" "));
+  const recognitionText = text;
 
   return {
     file_name: file.name,

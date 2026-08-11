@@ -9,6 +9,8 @@ const corsHeaders = {
 type JsonRecord = Record<string, unknown>;
 type SupabaseAdmin = ReturnType<typeof createClient>;
 
+const internalRoles = new Set(["admin", "director", "manager", "employee", "commercial", "partner", "departamento_pessoal", "fiscal", "contabil"]);
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -138,7 +140,7 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
   const protocolIssuedAt = justCompleted ? now : instanceRecord.protocol_issued_at;
 
   if (nextStatus !== instanceRecord.status || (justCompleted && !instanceRecord.protocol) || justReadyForDelivery) {
-    await supabaseAdmin
+    const { data: updatedInstance, error: updateError } = await supabaseAdmin
       .from("obligation_instances")
       .update({
         status: nextStatus,
@@ -150,7 +152,12 @@ async function processInboxItem(supabaseAdmin: SupabaseAdmin, inboxItem: JsonRec
         ready_for_delivery_at: nextStatus === "pronto_para_envio" ? now : null,
         last_status_at: now,
       })
-      .eq("id", instanceId);
+      .eq("id", instanceId)
+      .select("id")
+      .maybeSingle();
+    if (updateError || !updatedInstance) {
+      throw updateError || new Error("A instância não pôde ser movida para a etapa de envio.");
+    }
 
     await createInstanceEvent(
       supabaseAdmin,
@@ -213,18 +220,30 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: "Supabase env vars are missing." }, 500);
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) return jsonResponse({ error: "Supabase env vars are missing." }, 500);
 
     const authHeader = req.headers.get("Authorization") || "";
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    const supabaseUser = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser();
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const { data: userData, error: userError } = await supabaseUser.auth.getUser();
     if (userError || !userData.user) return jsonResponse({ error: "Unauthorized" }, 401);
 
     const payload = await req.json().catch(() => ({})) as JsonRecord;
     const organizationId = asTrimmedString(payload.organization_id);
     if (!organizationId) return jsonResponse({ error: "organization_id is required." }, 400);
+
+    const [legacyAccess, canonicalAccess] = await Promise.all([
+      supabaseAdmin.from("user_roles").select("role").eq("user_id", userData.user.id).eq("organization_id", organizationId),
+      supabaseAdmin.from("organization_user_access").select("primary_role, status").eq("user_id", userData.user.id).eq("organization_id", organizationId),
+    ]);
+    if (legacyAccess.error) throw legacyAccess.error;
+    if (canonicalAccess.error) throw canonicalAccess.error;
+    const hasInternalAccess = (legacyAccess.data || []).some((row) => internalRoles.has(String(row.role))) ||
+      (canonicalAccess.data || []).some((row) => row.status === "active" && ["admin", "colaborador"].includes(String(row.primary_role)));
+    if (!hasInternalAccess) return jsonResponse({ error: "Forbidden for this organization." }, 403);
 
     const limit = Math.min(50, Math.max(1, Number(payload.limit || 20)));
     const inboxItemId = asTrimmedString(payload.inbox_item_id);
