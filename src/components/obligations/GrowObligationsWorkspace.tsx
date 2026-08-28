@@ -188,7 +188,6 @@ interface UploadQueueItem {
   document_type_key: string;
   instance_id: string;
   suggested_competence_label: string;
-  competenceManuallyEdited: boolean;
   notes: string;
   preview: ReferenceMatchPreview | null;
   previewError: string | null;
@@ -1980,7 +1979,7 @@ async function registerDocumentUploadDirectly({
       file_size: item.file.size,
       suggested_competence_label: item.suggested_competence_label || null,
       detected_cnpj: effectiveMatch.detectedCnpj || item.analysis.detected_cnpj,
-      competence_detected: effectiveMatch.competenceDetected || item.suggested_competence_label || null,
+      competence_detected: effectiveMatch.competenceDetected || item.analysis.competence_detected,
       identification_confidence: effectiveMatch.score,
       matched_by: effectiveMatch.strategy,
       match_score: effectiveMatch.score,
@@ -2204,9 +2203,7 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
   const nextTemplateId = match.suggestedTemplateId || item.template_id;
   const nextDocumentTypeKey = match.documentTypeKey || item.document_type_key;
   const nextInstanceId = match.resolvedInstanceId || item.instance_id;
-  const nextCompetenceLabel = item.competenceManuallyEdited
-    ? item.suggested_competence_label
-    : match.competenceDetected;
+  const nextCompetenceLabel = match.competenceDetected || item.analysis.competence_detected || item.suggested_competence_label;
 
   return {
     ...item,
@@ -3053,9 +3050,7 @@ export function GrowObligationsWorkspace({
         instance_id: item.instance_id || null,
         template_id: item.template_id || null,
         document_type_key: item.document_type_key || null,
-        suggested_competence_label: item.competenceManuallyEdited
-          ? item.suggested_competence_label || null
-          : null,
+        suggested_competence_label: item.suggested_competence_label || item.analysis.competence_detected || null,
         file_name: item.file.name,
         analysis: item.analysis,
       });
@@ -3095,8 +3090,7 @@ export function GrowObligationsWorkspace({
           template_id: "",
           document_type_key: "",
           instance_id: "",
-          suggested_competence_label: "",
-          competenceManuallyEdited: false,
+          suggested_competence_label: analysis.competence_detected || "",
           notes: "",
           preview: null,
           previewError: null,
@@ -3835,17 +3829,7 @@ export function GrowObligationsWorkspace({
                             </div>
                             <div className="space-y-2">
                               <Label>Competência da obrigação</Label>
-                              <Input
-                                value={item.suggested_competence_label}
-                                placeholder={item.isPreviewing ? "Lendo o recorte da competência..." : "Competência não encontrada no recorte"}
-                                onChange={(event) => updateQueueItem(item.id, {
-                                  suggested_competence_label: event.target.value,
-                                  competenceManuallyEdited: true,
-                                })}
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Preenchida pela leitura do recorte da competência. Edite apenas para corrigir manualmente.
-                              </p>
+                              <Input value={item.suggested_competence_label} onChange={(event) => updateQueueItem(item.id, { suggested_competence_label: event.target.value })} />
                             </div>
                           </div>
 

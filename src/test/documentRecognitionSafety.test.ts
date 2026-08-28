@@ -82,22 +82,15 @@ describe("document recognition safety contract", () => {
     expect(candidates.find((candidate) => candidate.value === "2025-11")?.score).toBe(4);
   });
 
-  it("recognizes written-out months and makes the configured competence zone exclusive", () => {
+  it("recognizes written-out months while preserving the original fallback", () => {
     const candidates = detectCompetenceCandidatesDetailed([{
       source: "pdf_text",
       value: "Admissão: 24/11/2025. Competência: 20 de agosto de 2026.",
     }]);
     expect(candidates[0]).toMatchObject({ value: "2026-08", reason: "mes_por_extenso" });
-    expect(backendSource).toContain("zoneSignals.hasCompetenceZone ? zoneSignals.competence : effectiveCompetence");
-    expect(backendSource).toContain("Competencia definida exclusivamente pelo conteudo da area marcada");
-    expect(backendSource).toContain("datas externas foram ignoradas");
-    expect(backendSource).not.toContain("competenceDetected: analysis.competence_detected");
-    expect(backendSource).not.toContain("effectiveCompetence = analysis.competence_detected");
-    expect(workspaceSource).not.toContain("suggested_competence_label: analysis.competence_detected");
-    expect(backendSource).toContain("const zoneConsensusCompetence = configuredCompetenceValues.length === 1");
-    expect(backendSource).toContain("const authoritativeZoneCompetence = primaryZoneCompetence || zoneConsensusCompetence");
-    expect(backendSource).toContain("Texto exato da area de competencia:");
-    expect(backendSource).toContain("rectContainsItemCenter(rect, item)");
+    expect(backendSource).toContain("zoneSignals.competence || effectiveCompetence");
+    expect(backendSource).toContain("analysis.competence_detected || suggestedCompetenceLabel");
+    expect(workspaceSource).toContain("item.analysis.competence_detected || item.suggested_competence_label");
   });
 
   it("scopes models and clients to the authenticated organization", () => {

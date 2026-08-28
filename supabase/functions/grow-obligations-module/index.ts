@@ -1553,7 +1553,7 @@ async function resolveDocumentReferenceMatch(
     candidateInstanceIds: [],
     detectedClientId: clientId,
     detectedCnpj: analysis.detected_cnpj,
-    competenceDetected: suggestedCompetenceLabel,
+    competenceDetected: analysis.competence_detected,
     referenceFileId: null,
     referenceMatchScore: 0,
     referenceMatchReasons: [],
@@ -1576,10 +1576,7 @@ async function resolveDocumentReferenceMatch(
     : null;
 
   let effectiveClientId = detectedClientByCnpj?.id || clientId || null;
-  // Competence is an authoritative model-zone signal. Whole-document analysis
-  // must never feed this value because unrelated dates (admission, issue date,
-  // signatures) can otherwise be mistaken for the obligation competence.
-  let effectiveCompetence = suggestedCompetenceLabel || null;
+  let effectiveCompetence = analysis.competence_detected || suggestedCompetenceLabel || null;
   let configuredReferenceId: string | null = null;
 
   const configuredModels = Array.from(
@@ -1604,17 +1601,6 @@ async function resolveDocumentReferenceMatch(
     .sort((left, right) => right.recognitionScore - left.recognitionScore);
 
   const configuredModel = configuredModels[0];
-  const configuredCompetenceValues = Array.from(new Set(
-    configuredModels
-      .map((item) => item.zoneSignals.competence)
-      .filter((value): value is string => Boolean(value)),
-  ));
-  const zoneConsensusCompetence = configuredCompetenceValues.length === 1
-    ? configuredCompetenceValues[0]
-    : null;
-  const primaryZoneCompetence = configuredModel?.zoneSignals.competence || null;
-  const authoritativeZoneCompetence = primaryZoneCompetence || zoneConsensusCompetence;
-  if (authoritativeZoneCompetence) effectiveCompetence = authoritativeZoneCompetence;
   const configuredModelIsUnique = Boolean(
     configuredModel &&
     configuredModel.layout.score >= 0.68 &&
@@ -1632,14 +1618,12 @@ async function resolveDocumentReferenceMatch(
         ...emptyResult,
         suggestedTemplateId: configuredModel.candidate.template.id,
         documentTypeKey: configuredModel.candidate.document.document_type_key,
-        competenceDetected: authoritativeZoneCompetence,
         referenceFileId: configuredReferenceId,
         referenceMatchScore: Number(configuredModel.recognitionScore.toFixed(2)),
         reasons: [
           `Modelo configurado reconhecido: ${configuredModel.candidate.reference.file_name}.`,
           !zoneClient ? "O CPF/CNPJ nao foi lido com seguranca na area marcada." : "Cliente identificado pela area marcada de CPF/CNPJ.",
           !configuredModel.zoneSignals.competence ? "A competencia nao foi lida com seguranca na area marcada." : "Competencia identificada pela area marcada.",
-          `Texto exato da area de competencia: ${configuredModel.zoneSignals.competenceText || "vazio"}.`,
           configuredModel.zoneSignals.titleText
             ? `Titulo lido na area marcada: ${configuredModel.zoneSignals.titleText.slice(0, 120)}.`
             : "O titulo nao foi localizado na area marcada; ele permanece apenas como sinal auxiliar.",
@@ -1778,7 +1762,7 @@ async function resolveDocumentReferenceMatch(
     const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens);
     const layoutMatch = computeLayoutSimilarity(analysis.fingerprint_payload, referenceFingerprintForLayout);
     const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
-    const zoneCompetence = zoneSignals.hasCompetenceZone ? zoneSignals.competence : effectiveCompetence;
+    const zoneCompetence = zoneSignals.competence || effectiveCompetence;
     const structuralScore = layoutMatch.usable
       ? (layoutMatch.score * (layoutMatch.explicit ? 0.74 : 0.48))
       : 0;
@@ -1851,9 +1835,7 @@ async function resolveDocumentReferenceMatch(
   const zoneClientMismatch = Boolean(zoneClientByCnpj && zoneClientByCnpj.id !== effectiveClientId);
   const finalDetectedClientId = zoneClientByCnpj?.id || effectiveClientId;
   const finalDetectedCnpj = best.zoneSignals.cnpj || analysis.detected_cnpj;
-  const finalCompetence = best.zoneSignals.hasCompetenceZone
-    ? best.zoneSignals.competence || authoritativeZoneCompetence
-    : effectiveCompetence;
+  const finalCompetence = best.zoneSignals.competence || effectiveCompetence;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
   const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
   const hasConfiguredZoneAuthority = Boolean(
@@ -1915,14 +1897,6 @@ async function resolveDocumentReferenceMatch(
   if (best.zoneSignals.cnpjText || best.zoneSignals.competenceText || best.zoneSignals.titleText) {
     reasons.push("CNPJ, competencia e/ou titulo lidos nas areas predefinidas do documento modelo.");
   }
-  if (best.zoneSignals.hasCompetenceZone) {
-    reasons.push(`Texto exato da area de competencia: ${best.zoneSignals.competenceText || "vazio"}.`);
-    reasons.push(
-      best.zoneSignals.competence
-        ? "Competencia definida exclusivamente pelo conteudo da area marcada no documento modelo."
-        : "A area marcada para competencia nao contem uma competencia reconhecivel; datas externas foram ignoradas.",
-    );
-  }
   if (best.zoneSignals.referenceTitleText) {
     reasons.push(`Aderencia do titulo ao modelo: ${best.zoneSignals.titleScore.toFixed(2)}.`);
   }
@@ -1941,8 +1915,6 @@ async function resolveDocumentReferenceMatch(
 
   const autoLinkBlockReason = autoAllowed
     ? null
-    : best.zoneSignals.hasCompetenceZone && !best.zoneSignals.competence
-      ? "Nao foi possivel ler a competencia dentro da area marcada no documento modelo."
     : !uniqueOpenInstance
       ? "N?o existe uma compet?ncia ?nica e eleg?vel para a obriga??o candidata."
       : ambiguous
@@ -5839,7 +5811,7 @@ async function handlePreviewDocumentMatch(
         candidateInstanceIds: [],
         detectedClientId: asTrimmedString(payload.client_id),
         detectedCnpj: analysis.detected_cnpj,
-        competenceDetected: asTrimmedString(payload.suggested_competence_label),
+        competenceDetected: analysis.competence_detected || asTrimmedString(payload.suggested_competence_label),
         referenceFileId: null,
         referenceMatchScore: 0,
         referenceMatchReasons: [],
@@ -6082,16 +6054,6 @@ function rectOverlapRatio(
   return overlap / rightArea;
 }
 
-function rectContainsItemCenter(
-  rect: { x: number; y: number; width: number; height: number },
-  item: { x: number; y: number; width: number; height: number },
-) {
-  const centerX = item.x + item.width / 2;
-  const centerY = item.y + item.height / 2;
-  return centerX >= rect.x && centerX <= rect.x + rect.width &&
-    centerY >= rect.y && centerY <= rect.y + rect.height;
-}
-
 function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord, field: "cpf" | "cnpj" | "competence" | "title") {
   const zones = normalizeReferenceExtractionZones(referenceFingerprint.extraction_zones).zones as JsonRecord[];
   const zone = zones.find((item) => asTrimmedString(item.field) === field);
@@ -6116,11 +6078,7 @@ function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint:
       width: asNumber(item.width, 0.001),
       height: asNumber(item.height, 0.001),
     }))
-    .filter((item) => item.text && (
-      field === "competence"
-        ? rectContainsItemCenter(rect, item)
-        : rectOverlapRatio(rect, item) >= 0.15
-    ))
+    .filter((item) => item.text && rectOverlapRatio(rect, item) >= 0.15)
     .sort((left, right) => Math.abs(left.y - right.y) > 0.006 ? left.y - right.y : left.x - right.x);
 
   if (items.length === 0) return null;
