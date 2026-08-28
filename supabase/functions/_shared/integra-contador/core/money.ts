@@ -1,0 +1,1 @@
+export function normalizeMoney(value:string|number){ const text=String(value).trim().replace(/\s/g,""); const normalized=text.includes(",")?text.replace(/\./g,"").replace(",","."):text; if(!/^-?\d+(\.\d{1,2})?$/.test(normalized)) throw new Error("INVALID_MONEY"); const [whole,decimal=""] = normalized.split("."); return `${whole}.${decimal.padEnd(2,"0")}`; }

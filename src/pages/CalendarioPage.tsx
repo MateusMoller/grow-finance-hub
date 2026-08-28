@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   Building2,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ClipboardList,
   Filter,
@@ -592,31 +593,37 @@ export default function CalendarioPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-7xl space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 pb-8">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-primary/15 bg-gradient-to-br from-card via-card to-primary/[0.06] p-5 shadow-[0_18px_50px_-32px_hsl(var(--primary)/0.45)] sm:p-7">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary via-primary/70 to-primary/20" />
+          <div className="pointer-events-none absolute -right-12 -top-16 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-3">
             <ModuleContextPill icon={CalendarDays} label="Agenda operacional" />
-            <h1 className="font-heading text-2xl font-bold">Calendário</h1>
-            <p className="text-sm text-muted-foreground">
+            <div className="space-y-1">
+            <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">Calendário</h1>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               Cadastre eventos, obrigações e acompanhe prazos da operação.
             </p>
+            </div>
           </div>
-          <Button className="h-11 gap-2 self-start rounded-xl px-5 sm:self-auto" onClick={openNewDialog}>
+          <Button className="h-11 gap-2 self-start rounded-xl px-5 shadow-sm sm:self-auto" onClick={openNewDialog}>
             <Plus className="h-4 w-4" /> Novo registro
           </Button>
-        </div>
+          </div>
+        </section>
 
-        <section aria-labelledby="calendar-filters-title" className="rounded-2xl border bg-card p-4 shadow-sm">
+        <section aria-labelledby="calendar-filters-title" className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h2 id="calendar-filters-title" className="flex items-center gap-2 font-semibold"><Filter className="h-4 w-4" />Controle operacional</h2>
+              <h2 id="calendar-filters-title" className="flex items-center gap-2 font-semibold"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Filter className="h-4 w-4" aria-hidden="true" /></span>Controle operacional</h2>
               <p className="mt-1 text-xs text-muted-foreground">Filtre as competências e identifique rapidamente pendências e atrasos.</p>
             </div>
             <Button
               type="button"
               variant={onlyOverdue ? "destructive" : "outline"}
               size="sm"
-              className="shrink-0 gap-2"
+              className="shrink-0 gap-2 rounded-xl"
               onClick={() => setOnlyOverdue((current) => !current)}
               aria-pressed={onlyOverdue}
             >
@@ -626,7 +633,7 @@ export default function CalendarioPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_repeat(4,minmax(150px,0.8fr))]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input value={calendarSearch} onChange={(event) => setCalendarSearch(event.target.value)} className="pl-9" placeholder="Buscar cliente, CNPJ ou obrigação" aria-label="Buscar no calendário" />
+              <Input value={calendarSearch} onChange={(event) => setCalendarSearch(event.target.value)} className="rounded-xl bg-muted/20 pl-9" placeholder="Buscar cliente, CNPJ ou obrigação" aria-label="Buscar no calendário" />
             </div>
             <Select value={periodMode} onValueChange={(value) => setPeriodMode(value as CalendarPeriodMode)}>
               <SelectTrigger aria-label="Período da agenda"><SelectValue /></SelectTrigger>
@@ -647,11 +654,14 @@ export default function CalendarioPage() {
           </div>
         </section>
 
-        <section aria-labelledby="operational-agenda-title" className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-          <div className="flex flex-col gap-2 border-b p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        <section aria-labelledby="operational-agenda-title" className="order-4 overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-border/60 bg-gradient-to-r from-muted/30 via-card to-primary/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ClipboardList className="h-5 w-5" aria-hidden="true" /></span>
+              <div>
               <h2 id="operational-agenda-title" className="font-semibold">Agenda operacional do {periodMode === "day" ? "dia" : "mês"}</h2>
               <p className="text-xs text-muted-foreground">{filteredObligations.length} competência(s) em {operationalDateGroups.length} data(s), ordenadas por vencimento e criticidade.</p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">{filteredObligations.filter((instance) => instance.status !== "concluida").length} em aberto</Badge>
@@ -666,7 +676,7 @@ export default function CalendarioPage() {
           ) : (
             <div className="divide-y">
               {operationalDateGroups.map((dateGroup) => (
-                <div key={dateGroup.date} className="p-4 sm:p-5">
+                <div key={dateGroup.date} className="p-4 transition-colors hover:bg-muted/[0.12] sm:p-5">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <div className={`flex h-11 min-w-11 flex-col items-center justify-center rounded-xl px-2 ${dateGroup.overdue ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"}`}>
@@ -683,8 +693,8 @@ export default function CalendarioPage() {
                       const reviewCount = group.instances.filter((instance) => instance.status === "em_revisao").length;
                       return (
                         <Collapsible key={`${dateGroup.date}-${group.templateId}`} defaultOpen={overdueCount > 0}>
-                          <div className="overflow-hidden rounded-xl border bg-background/60">
-                            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-muted/30">
+                          <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/80 shadow-sm transition-all hover:border-primary/20 hover:shadow-md">
+                            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-primary/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                               <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{group.name}</h3><Badge variant="outline">{group.sector}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{group.instances.length} cliente(s) · {group.doneCount} concluída(s){reviewCount ? ` · ${reviewCount} em revisão` : ""}{overdueCount ? ` · ${overdueCount} atrasada(s)` : ""}</p></div>
                               <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
                             </CollapsibleTrigger>
@@ -706,8 +716,13 @@ export default function CalendarioPage() {
           )}
         </section>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(430px,0.8fr)]">
-          <div className="h-fit min-w-0 rounded-xl border bg-card p-6 shadow-sm lg:order-2">
+        <div className="order-3 grid items-start gap-5 lg:grid-cols-[minmax(390px,0.8fr)_minmax(0,1.2fr)]">
+          <div className="h-fit min-w-0 overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm lg:sticky lg:top-4">
+            <div className="flex items-center gap-3 border-b border-border/60 bg-gradient-to-r from-muted/30 to-primary/[0.04] p-5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><CalendarDays className="h-5 w-5" aria-hidden="true" /></span>
+              <div><h2 className="font-semibold">Calendário mensal</h2><p className="text-xs text-muted-foreground">Selecione uma data para ver os detalhes.</p></div>
+            </div>
+            <div className="p-5 sm:p-6">
             <div className="flex justify-center overflow-hidden">
             <Calendar
               mode="single"
@@ -743,18 +758,22 @@ export default function CalendarioPage() {
               <p><span className="inline-block h-2 w-2 rounded-full bg-primary mr-1.5" /> Dia com evento</p>
               <p><span className="inline-block h-2 w-2 rounded-full bg-orange-500 mr-1.5" /> Dia com obrigação</p>
             </div>
+            </div>
           </div>
 
-          <div className="min-w-0 lg:order-1">
-            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-              <div className="flex items-center justify-between gap-2 border-b p-5">
-                <div>
+          <div className="min-w-0">
+            <div className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm">
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-gradient-to-r from-muted/30 via-card to-primary/[0.04] p-5 sm:p-6">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><CheckCircle2 className="h-5 w-5" aria-hidden="true" /></span>
+                  <div>
                   <h2 className="font-semibold">
                     Agenda de {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
                   </h2>
                   <p className="text-xs text-muted-foreground">
                     {selectedDayObligationGroups.reduce((total, group) => total + group.instances.length, 0)} obrigação(ões), {selectedDayTasks.length} tarefa(s) e {selectedDayEvents.length} registro(s)
                   </p>
+                  </div>
                 </div>
               </div>
 
@@ -774,8 +793,8 @@ export default function CalendarioPage() {
                 <div className="space-y-3 p-4">
                   {selectedDayObligationGroups.map((group) => (
                     <Collapsible key={group.templateId}>
-                      <div className="rounded-xl border bg-background/60 shadow-sm">
-                        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left">
+                      <div className="rounded-2xl border border-border/70 bg-background/80 shadow-sm transition-all hover:border-primary/20 hover:shadow-md">
+                        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-primary/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <h3 className="truncate font-semibold">{group.name}</h3>

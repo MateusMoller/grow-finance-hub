@@ -68,8 +68,8 @@ export function ObligationDeliveryCard({ instance, taskId }: { instance: GrowObl
   const latestAttempt = instance.latest_delivery_attempt || attempts[0] || null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <CollapsibleTrigger className="group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-muted/30 lg:flex-row lg:items-center lg:justify-between">
+    <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition-all hover:border-primary/20 hover:shadow-md">
+      <CollapsibleTrigger className="group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-primary/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{instance.template?.name || "Obrigação"}</p>

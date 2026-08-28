@@ -179,6 +179,10 @@ function hasDateContext(value: string) {
   return /\b(vencimento|pagamento|emissao|data|gerado|emitido|recolhimento|validade|processamento)\b/.test(value);
 }
 
+function hasNonCompetenceDateContext(value: string) {
+  return /\b(admissao|nascimento|demissao|afastamento|ferias|assinatura)\b/.test(value);
+}
+
 function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; source: CompetenceCandidate["source"] }>) {
   const candidates: CompetenceCandidate[] = [];
 
@@ -187,12 +191,17 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     if (!text) continue;
     const weight = sourceWeight(item.source);
 
+    const labelledFullDateMatches = text.matchAll(/\b(?:competencia|periodo|referencia|mes\s+referencia|mes\s+base|referente(?:\s+ao\s+mes|\s+data)?|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|[12]\d|3[01])[-_/ .](0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
+    for (const match of labelledFullDateMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 99 * weight, item.source, "rotulo_data_completa");
+    }
+
     const monthNames: Record<string, string> = {
       janeiro: "01", fevereiro: "02", marco: "03", abril: "04",
       maio: "05", junho: "06", julho: "07", agosto: "08",
       setembro: "09", outubro: "10", novembro: "11", dezembro: "12",
     };
-    const namedMonthMatches = text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\D{0,8}(20\d{2})\b/g);
+    const namedMonthMatches = text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de)?\D{0,8}(20\d{2})\b/g);
     for (const match of namedMonthMatches) {
       addCompetenceCandidate(candidates, `${match[2]}-${monthNames[match[1]]}`, 98 * weight, item.source, "mes_por_extenso");
     }
@@ -229,7 +238,9 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     const isoMatches = text.matchAll(/\b(20\d{2})[-_/ .](0?[1-9]|1[0-2])\b/g);
     for (const match of isoMatches) {
       const prefix = text.slice(Math.max(0, match.index - 36), match.index);
-      const score = hasCompetenceContext(prefix)
+      const score = hasNonCompetenceDateContext(prefix)
+        ? 4
+        : hasCompetenceContext(prefix)
         ? 86
         : item.source === "file_name"
           ? 76
@@ -242,7 +253,9 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     const brMatches = text.matchAll(/\b(0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
     for (const match of brMatches) {
       const prefix = text.slice(Math.max(0, match.index - 36), match.index);
-      const score = hasCompetenceContext(prefix)
+      const score = hasNonCompetenceDateContext(prefix)
+        ? 4
+        : hasCompetenceContext(prefix)
         ? 88
         : item.source === "file_name"
           ? 78

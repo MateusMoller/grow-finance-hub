@@ -92,6 +92,7 @@ export interface KanbanTaskItem {
   created_at: string;
   created_by?: string | null;
   updated_at?: string | null;
+  version?: number;
   integration_source?: string | null;
   integration_task_id?: string | null;
   integration_payload?: unknown;
@@ -781,7 +782,7 @@ export function KanbanTaskDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
         <Tabs defaultValue="informacoes" className="space-y-4">
           <TabsList className="sticky top-0 z-20 grid w-full grid-cols-3 bg-muted/90 backdrop-blur">
             <TabsTrigger value="informacoes">Informações</TabsTrigger>

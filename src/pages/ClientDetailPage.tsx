@@ -30,12 +30,15 @@ import { invokeGrowObligations } from "@/lib/growObligations";
 import { normalizeTaxRegime } from "@/lib/obligations/taxRegimes";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ClientCertificateVault } from "@/components/clients/ClientCertificateVault";
+import { ClientMonthlyValuesPanel } from "@/components/clients/ClientMonthlyValuesPanel";
 
 interface ClientRecord {
   id: string;
   name: string;
   cnpj: string | null;
   regime: string | null;
+  is_factor_r: boolean;
   sector: string | null;
   status: string | null;
   contact: string | null;
@@ -1694,6 +1697,7 @@ export default function ClientDetailPage() {
         name: (clientForm.name || "").trim(),
         cnpj: normalizedCnpj,
         regime: (clientForm.regime || "").trim() || null,
+        is_factor_r: Boolean(clientForm.is_factor_r),
         sector: (clientForm.sector || "").trim() || null,
         status: (clientForm.status || "").trim() || null,
         contact: (clientForm.contact || "").trim() || null,
@@ -1808,6 +1812,7 @@ export default function ClientDetailPage() {
         ...clientForm,
         name: (clientForm.name || "").trim(),
         regime: (clientForm.regime || "").trim() || null,
+        is_factor_r: Boolean(clientForm.is_factor_r),
         sector: (clientForm.sector || "").trim() || null,
         status: (clientForm.status || "").trim() || null,
         contact: (clientForm.contact || "").trim() || null,
@@ -1822,6 +1827,7 @@ export default function ClientDetailPage() {
         ...prev,
         name: (prev.name || "").trim(),
         regime: (prev.regime || "").trim(),
+        is_factor_r: Boolean(prev.is_factor_r),
         sector: (prev.sector || "").trim(),
         status: (prev.status || "").trim(),
         contact: (prev.contact || "").trim(),
@@ -2640,11 +2646,17 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="info" className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-muted/60 p-1 sm:grid-cols-4">
+          <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-muted/60 p-1 sm:grid-cols-6">
             <TabsTrigger value="info" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Dados Gerais</TabsTrigger>
+            <TabsTrigger value="valores_mensais" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Valores Mensais</TabsTrigger>
             <TabsTrigger value="dados_cadastrais" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Dados Cadastrais</TabsTrigger>
             <TabsTrigger value="obrigações" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Obrigações</TabsTrigger>
             <TabsTrigger value="pendencias" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">Pendências</TabsTrigger>
+            {role === "admin" ? (
+              <TabsTrigger value="certificado-a1" className="h-10 rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                Certificado A1
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           {/* General Info */}
@@ -2731,6 +2743,18 @@ export default function ClientDetailPage() {
                   <select className="w-full text-sm bg-background border rounded-lg px-3 py-2" value={clientForm.sector || ""} onChange={(e) => setClientForm((p) => ({ ...p, sector: e.target.value }))}>
                     {getClientSegmentOptions(clientForm.sector).map((segment) => <option key={segment}>{segment}</option>)}
                   </select>
+                </div>
+                <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 px-4 py-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="client-factor-r" className="text-sm font-medium">Fator R</Label>
+                    <p className="text-xs text-muted-foreground">Indica se a empresa está enquadrada no Fator R.</p>
+                  </div>
+                  <Switch
+                    id="client-factor-r"
+                    checked={Boolean(clientForm.is_factor_r)}
+                    onCheckedChange={(checked) => setClientForm((previous) => ({ ...previous, is_factor_r: checked }))}
+                    aria-label="Empresa enquadrada no Fator R"
+                  />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label className="text-xs">Classificacao de Atividade</Label>
@@ -2989,6 +3013,10 @@ export default function ClientDetailPage() {
             </div>
           </TabsContent>
 
+          <TabsContent value="valores_mensais" className="space-y-4">
+            {currentOrganizationId ? <ClientMonthlyValuesPanel organizationId={currentOrganizationId} clientId={client.id} /> : null}
+          </TabsContent>
+
           <TabsContent value="dados_cadastrais" className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-5">
               <div className="space-y-1">
@@ -3125,6 +3153,12 @@ export default function ClientDetailPage() {
               )}
             </div>
           </TabsContent>
+
+          {role === "admin" && currentOrganizationId ? (
+            <TabsContent value="certificado-a1" className="space-y-4">
+              <ClientCertificateVault organizationId={currentOrganizationId} clientId={client.id} />
+            </TabsContent>
+          ) : null}
 
           <TabsContent value="pendencias" className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-5">

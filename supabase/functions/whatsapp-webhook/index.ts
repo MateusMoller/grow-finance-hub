@@ -311,7 +311,66 @@ async function processStatus(supabaseAdmin: SupabaseAdmin, status: NonNullable<R
     .eq("provider_message_id", status.providerMessageId)
     .maybeSingle();
   if (messageError) throw messageError;
-  if (!message) return { ok: true, ignored: "message_not_found" };
+  if (!message) {
+    const { data: attempt, error: attemptError } = await supabaseAdmin
+      .from("obligation_delivery_attempts")
+      .select("id, organization_id, instance_id, status, metadata")
+      .eq("provider_message_id", status.providerMessageId)
+      .maybeSingle();
+    if (attemptError) throw attemptError;
+    if (!attempt) return { ok: true, ignored: "message_not_found" };
+
+    const now = new Date().toISOString();
+    const failed = status.deliveryStatus === "failed";
+    const metadata = {
+      ...asRecord(attempt.metadata),
+      whatsapp_delivery_status: status.deliveryStatus,
+      whatsapp_status_updated_at: now,
+      ...(status.failureReason ? { whatsapp_failure_reason: status.failureReason } : {}),
+    };
+    const { error: attemptUpdateError } = await supabaseAdmin
+      .from("obligation_delivery_attempts")
+      .update({
+        metadata,
+        ...(failed
+          ? {
+              status: "failed",
+              failure_reason: status.failureReason || "whatsapp_delivery_failed",
+              failed_at: now,
+            }
+          : {}),
+      })
+      .eq("id", attempt.id);
+    if (attemptUpdateError) throw attemptUpdateError;
+
+    if (failed) {
+      const { error: instanceUpdateError } = await supabaseAdmin
+        .from("obligation_instances")
+        .update({ status: "falha_envio", last_status_at: now })
+        .eq("organization_id", attempt.organization_id)
+        .eq("id", attempt.instance_id);
+      if (instanceUpdateError) throw instanceUpdateError;
+    }
+
+    const { error: eventError } = await supabaseAdmin.from("obligation_instance_events").insert({
+      organization_id: attempt.organization_id,
+      instance_id: attempt.instance_id,
+      event_type: failed ? "delivery_failed" : "delivery_status_updated",
+      to_status: failed ? "falha_envio" : null,
+      comment: failed
+        ? "O WhatsApp informou falha posterior na entrega da obrigação."
+        : `Status do WhatsApp atualizado para ${status.deliveryStatus}.`,
+      metadata: {
+        attempt_id: attempt.id,
+        provider_message_id: status.providerMessageId,
+        delivery_status: status.deliveryStatus,
+        failure_reason: status.failureReason,
+      },
+    });
+    if (eventError) throw eventError;
+
+    return { ok: true, status: status.deliveryStatus, target: "obligation_delivery" };
+  }
 
   const { error: updateError } = await supabaseAdmin
     .from("whatsapp_messages")

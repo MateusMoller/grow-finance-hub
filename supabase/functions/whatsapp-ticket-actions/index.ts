@@ -9,6 +9,7 @@ import { createWhatsAppTicketEvent } from "../_shared/whatsapp-ticket/audit.ts";
 import { buildPublicTicketProtocol } from "../_shared/whatsapp-ticket/protocol.ts";
 import { dispatchWhatsAppTextMessage } from "../_shared/whatsapp-provider.ts";
 import { asRecord, asString, errorMessage, safePreview } from "../_shared/whatsapp-validation.ts";
+import { assertDelegatedTaskAction } from "../_shared/task-authorization.ts";
 
 type SupabaseAdmin = ReturnType<typeof buildSupabaseAdminClient>;
 
@@ -28,7 +29,7 @@ async function loadConversation(supabaseAdmin: SupabaseAdmin, conversationId: st
 async function loadTask(supabaseAdmin: SupabaseAdmin, organizationId: string, taskId: string) {
   const { data, error } = await supabaseAdmin
     .from("kanban_tasks")
-    .select("id, title, description, client_name, priority, sector, status, assigned_to_user_id, assignee, organization_id")
+    .select("id, title, description, client_name, priority, sector, status, assigned_to_user_id, assignee, organization_id, version")
     .eq("id", taskId)
     .eq("organization_id", organizationId)
     .maybeSingle();
@@ -334,13 +335,32 @@ async function transitionTicket(supabaseAdmin: SupabaseAdmin, userId: string, bo
 async function completeTicketTask(supabaseAdmin: SupabaseAdmin, userId: string, body: Record<string, unknown>) {
   const summary = asString(body.summary).trim();
   if (!summary) throw new Error("completion_summary_required");
+  const ticketId = asString(body.ticketId);
+  const { data: pendingTicket, error: pendingTicketError } = await supabaseAdmin
+    .from("whatsapp_customer_tickets")
+    .select("*")
+    .eq("id", ticketId)
+    .maybeSingle();
+  if (pendingTicketError) throw pendingTicketError;
+  if (!pendingTicket) throw new Error("ticket_not_found");
+  const task = await loadTask(supabaseAdmin, pendingTicket.organization_id, pendingTicket.task_id);
+  await assertDelegatedTaskAction(supabaseAdmin, {
+    actor: { kind: "human", userId, source: "whatsapp_ticket" },
+    organizationId: pendingTicket.organization_id,
+    taskId: task.id,
+    action: "task.change_status",
+  });
+  const { error: taskError } = await supabaseAdmin.rpc("mutate_tasks_canonical", {
+    _actor_user_id: userId,
+    _organization_id: pendingTicket.organization_id,
+    _action: "task.change_status",
+    _items: [{ taskId: task.id, expectedVersion: task.version, changes: { status: "done" } }],
+    _actor_source: "whatsapp_ticket",
+    _correlation_id: `ticket:${pendingTicket.id}:complete`,
+  });
+  if (taskError) throw taskError;
   const result = await transitionTicket(supabaseAdmin, userId, body, "resolved");
   const ticket = result.ticket;
-  await supabaseAdmin
-    .from("kanban_tasks")
-    .update({ status: "done", updated_at: nowIso() })
-    .eq("id", ticket.task_id)
-    .eq("organization_id", ticket.organization_id);
 
   if (ticket.conversation_id) {
     const messageBody = [

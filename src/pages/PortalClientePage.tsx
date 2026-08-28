@@ -460,6 +460,7 @@ export default function PortalClientePage() {
           .from("client_portal_tasks")
           .select("id, client_id, title, description, type, status, due_date, sector, request_id, created_by, created_at, updated_at")
           .eq("client_id", client.id)
+          .eq("status", "pending_client")
           .order("created_at", { ascending: false }),
         supabase
           .from("obligation_instances")
@@ -624,6 +625,25 @@ export default function PortalClientePage() {
       .on(
         "postgres_changes",
         {
+          event: "UPDATE",
+          schema: "public",
+          table: "client_requests",
+          filter: `client_id=eq.${clientProfile.id}`,
+        },
+        (payload) => {
+          const previousStatus = String((payload.old as { status?: string })?.status || "");
+          const nextStatus = String((payload.new as { status?: string })?.status || "");
+
+          if (nextStatus === "completed" && previousStatus !== "completed") {
+            toast.success("Sua solicitação foi concluída pela equipe.");
+          }
+
+          void refetchPortalData();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
           event: "*",
           schema: "public",
           table: "client_portal_tasks",
@@ -729,7 +749,14 @@ export default function PortalClientePage() {
   );
 
   const pendingNow = useMemo(() => {
-    const taskItems = portalTasks.filter((task) => task.status === "pending_client").map(toActionFromTask);
+    const closedRequestIds = new Set(
+      requests
+        .filter((request) => request.status === "completed" || request.status === "cancelled")
+        .map((request) => request.id),
+    );
+    const taskItems = portalTasks
+      .filter((task) => !task.request_id || !closedRequestIds.has(task.request_id))
+      .map(toActionFromTask);
     const requestItems = requestsAwaitingClient.map((request) => ({
       id: `request-${request.id}`,
       title: `Responder: ${request.title}`,
@@ -739,7 +766,7 @@ export default function PortalClientePage() {
       requestId: request.id,
     }));
     return [...taskItems, ...requestItems].slice(0, 6);
-  }, [portalTasks, requestsAwaitingClient]);
+  }, [portalTasks, requests, requestsAwaitingClient]);
 
   const recentUpdates = useMemo(() => {
     const sorted = [...requests].sort(

@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 const ENV_FILE = join(process.cwd(), ".env");
 const REQUIRED_KEYS = ["VITE_SUPABASE_PUBLISHABLE_KEY"];
+const FORBIDDEN_PUBLIC_SECRET_PREFIXES = ["VITE_INTEGRA_CONTADOR_", "VITE_SERPRO_"];
 
 function parseEnv(content) {
   const parsed = {};
@@ -35,6 +36,16 @@ if (!existsSync(ENV_FILE)) {
 
 const env = parseEnv(readFileSync(ENV_FILE, "utf8"));
 const missing = REQUIRED_KEYS.filter((key) => !env[key] || isPlaceholderValue(key, env[key]));
+const forbiddenPublicSecrets = Object.keys(env).filter((key) =>
+  FORBIDDEN_PUBLIC_SECRET_PREFIXES.some((prefix) => key.startsWith(prefix)),
+);
+
+if (forbiddenPublicSecrets.length > 0) {
+  process.stderr.write(
+    `Variaveis secretas da integracao nao podem usar prefixo VITE_: ${forbiddenPublicSecrets.join(", ")}\n`,
+  );
+  process.exit(1);
+}
 
 const hasSupabaseUrl = Boolean(env.VITE_SUPABASE_URL) && !isPlaceholderValue("VITE_SUPABASE_URL", env.VITE_SUPABASE_URL);
 const hasSupabaseProjectId =

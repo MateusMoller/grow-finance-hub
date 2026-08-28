@@ -2,18 +2,19 @@ import { useDeferredValue, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  History,
   Loader2,
   Pencil,
   Plus,
   Search,
   ShieldAlert,
-  ShieldCheck,
+  SlidersHorizontal,
   UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/app/AppLayout";
-import { ModuleContextPill } from "@/components/app/ModuleContextPill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -137,6 +138,8 @@ export default function UsuariosPage() {
     pageSize: 25,
   });
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [auditAction, setAuditAction] = useState("all");
   const [form, setForm] = useState<UserAccessInput>(emptyForm);
 
@@ -247,26 +250,26 @@ export default function UsuariosPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-none space-y-5 px-1">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
+      <div className="max-w-none space-y-4 px-1">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-2">
           <div>
-            <ModuleContextPill icon={ShieldCheck} label="Controle de acesso" />
-            <h1 className="font-heading text-3xl font-bold tracking-tight">Usuários e permissões</h1>
+            <h1 className="font-heading text-2xl font-bold tracking-tight">Usuários e permissões</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Papéis, setores, módulos e empresas vinculadas.
             </p>
           </div>
-          <Button onClick={openCreate} className="h-11 rounded-xl px-5 shadow-sm">
+          <Button onClick={openCreate} className="h-10 rounded-lg px-4">
             <Plus className="mr-2 h-4 w-4" />
             Novo usuário
           </Button>
         </div>
 
-        <div className="grid gap-3 rounded-2xl border bg-card/70 p-3 shadow-sm md:grid-cols-6">
-          <div className="relative md:col-span-2">
+        <div className="rounded-xl border bg-card p-2">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="h-11 rounded-xl border-muted bg-background pl-9"
+              className="h-10 rounded-lg border-transparent bg-background pl-9 shadow-none"
               placeholder="Buscar por nome ou e-mail"
               value={search}
               onChange={(event) => {
@@ -275,29 +278,41 @@ export default function UsuariosPage() {
               }}
             />
           </div>
+            <Button
+              variant={showFilters ? "secondary" : "ghost"}
+              className="h-10 gap-2 rounded-lg px-3 text-muted-foreground"
+              onClick={() => setShowFilters((current) => !current)}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filtros
+              <ChevronDown className={`h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+            </Button>
+          </div>
+          {showFilters && (
+            <div className="mt-2 grid gap-2 border-t pt-2 sm:grid-cols-2 lg:grid-cols-4">
           <Select value={filters.role} onValueChange={(role) => setFilters((current) => ({ ...current, role: role as UserFilters["role"], page: 1 }))}>
-            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Papel" /></SelectTrigger>
+            <SelectTrigger className="h-10 rounded-lg border-transparent bg-background shadow-none"><SelectValue placeholder="Papel" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os papéis</SelectItem>
               {PRIMARY_ROLES.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.status} onValueChange={(status) => setFilters((current) => ({ ...current, status: status as UserFilters["status"], page: 1 }))}>
-            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="h-10 rounded-lg border-transparent bg-background shadow-none"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
               {USER_STATUSES.map((status) => <SelectItem key={status} value={status}>{statusLabels[status]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.sectorCode} onValueChange={(sectorCode) => setFilters((current) => ({ ...current, sectorCode: sectorCode as UserFilters["sectorCode"], page: 1 }))}>
-            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Setor" /></SelectTrigger>
+            <SelectTrigger className="h-10 rounded-lg border-transparent bg-background shadow-none"><SelectValue placeholder="Setor" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os setores</SelectItem>
               {SECTOR_CODES.map((sector) => <SelectItem key={sector} value={sector}>{SECTOR_LABELS[sector]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.moduleKey} onValueChange={(moduleKey) => setFilters((current) => ({ ...current, moduleKey: moduleKey as UserFilters["moduleKey"], page: 1 }))}>
-            <SelectTrigger className="h-11 rounded-xl bg-background"><SelectValue placeholder="Módulo" /></SelectTrigger>
+            <SelectTrigger className="h-10 rounded-lg border-transparent bg-background shadow-none"><SelectValue placeholder="Módulo" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os módulos</SelectItem>
               {MODULE_KEYS.map((moduleKey) => (
@@ -305,10 +320,12 @@ export default function UsuariosPage() {
               ))}
             </SelectContent>
           </Select>
+            </div>
+          )}
         </div>
 
-        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-          <div className="grid grid-cols-[minmax(260px,1.45fr)_140px_170px_minmax(260px,1fr)_96px] gap-4 border-b bg-muted/30 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <div className="grid grid-cols-[minmax(260px,1.45fr)_130px_160px_minmax(240px,1fr)_88px] gap-3 border-b bg-muted/15 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             <span>Usuário</span><span>Papel</span><span>Setor / status</span><span>Acesso</span><span className="text-right">Ações</span>
           </div>
           {usersQuery.isLoading ? (
@@ -319,9 +336,9 @@ export default function UsuariosPage() {
             <div className="p-8 text-sm text-muted-foreground">Nenhum usuário encontrado.</div>
           ) : (
             visibleUsers.map((managedUser) => (
-              <div key={managedUser.user_id} className="grid grid-cols-[minmax(260px,1.45fr)_140px_170px_minmax(260px,1fr)_96px] items-center gap-4 border-b px-5 py-4 text-sm transition-colors last:border-b-0 hover:bg-muted/20">
+              <div key={managedUser.user_id} className="grid grid-cols-[minmax(260px,1.45fr)_130px_160px_minmax(240px,1fr)_88px] items-center gap-3 border-b px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-muted/15">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/10">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
                     {initialsFromName(managedUser.display_name || managedUser.email)}
                   </div>
                   <div className="min-w-0">
@@ -343,25 +360,21 @@ export default function UsuariosPage() {
                     {managedUser.requires_access_review && <Badge variant="destructive" className="rounded-full px-2 py-0 text-[11px]">Revisar</Badge>}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {managedUser.primary_role === "admin" && <Badge className="rounded-full">Todos os módulos</Badge>}
-                  {managedUser.enabled_modules.slice(0, 4).map((moduleKey) => (
-                    <Badge key={moduleKey} variant="secondary" className="rounded-full px-2.5 py-1 text-xs">{MODULE_LABELS[moduleKey]}</Badge>
-                  ))}
-                  {managedUser.linked_clients.slice(0, 3).map((client) => (
-                    <Badge key={client.client_id} variant="secondary" className="max-w-40 rounded-full px-2.5 py-1 text-xs">
-                      <span className="truncate">{client.name}</span>
-                    </Badge>
-                  ))}
-                  {Math.max(0, managedUser.enabled_modules.length - 4) + Math.max(0, managedUser.linked_clients.length - 3) > 0 && (
-                    <Badge variant="outline" className="rounded-full px-2.5 py-1 text-xs">
-                      +{Math.max(0, managedUser.enabled_modules.length - 4) + Math.max(0, managedUser.linked_clients.length - 3)}
-                    </Badge>
-                  )}
+                <div className="min-w-0 text-xs text-muted-foreground">
+                  <p className="truncate font-medium text-foreground/80">
+                    {managedUser.primary_role === "admin"
+                      ? "Acesso administrativo"
+                      : `${managedUser.enabled_modules.length} módulo${managedUser.enabled_modules.length === 1 ? "" : "s"}`}
+                  </p>
+                  <p className="mt-0.5 truncate">
+                    {managedUser.linked_clients.length > 0
+                      ? `${managedUser.linked_clients.length} empresa${managedUser.linked_clients.length === 1 ? "" : "s"} vinculada${managedUser.linked_clients.length === 1 ? "" : "s"}`
+                      : "Sem empresas vinculadas"}
+                  </p>
                 </div>
                 <div className="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" title="Editar" onClick={() => openEdit(managedUser)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:text-destructive" title="Desativar" disabled={managedUser.status === "inactive"} onClick={() => void deactivate(managedUser)}><UserX className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Editar" onClick={() => openEdit(managedUser)}><Pencil className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive" title="Desativar" disabled={managedUser.status === "inactive"} onClick={() => void deactivate(managedUser)}><UserX className="h-4 w-4" /></Button>
                 </div>
               </div>
             ))
@@ -377,7 +390,17 @@ export default function UsuariosPage() {
           </div>
         </div>
 
-        <section className="space-y-3 border-t pt-5">
+        <section className="border-t pt-3">
+          <Button
+            variant="ghost"
+            className="h-10 w-full justify-between rounded-lg px-2 text-muted-foreground hover:text-foreground"
+            onClick={() => setShowHistory((current) => !current)}
+          >
+            <span className="flex items-center gap-2"><History className="h-4 w-4" /> Histórico de permissões</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${showHistory ? "rotate-180" : ""}`} />
+          </Button>
+          {showHistory && (
+          <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Histórico de permissões</h2>
@@ -427,6 +450,8 @@ export default function UsuariosPage() {
               ))
             )}
           </div>
+          </div>
+          )}
         </section>
       </div>
 

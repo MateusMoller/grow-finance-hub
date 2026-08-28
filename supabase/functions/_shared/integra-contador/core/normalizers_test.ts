@@ -1,0 +1,3 @@
+import {assertEquals,assertThrows} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {normalizeTaxIdentifier} from "./identifiers.ts"; import {canonicalJson,normalizePeriod} from "./periods.ts"; import {normalizeMoney} from "./money.ts";
+Deno.test("canonical fiscal primitives",()=>{assertEquals(normalizeTaxIdentifier("529.982.247-25"),{type:"CPF",value:"52998224725"});assertEquals(normalizeTaxIdentifier("04.252.011/0001-10"),{type:"CNPJ",value:"04252011000110"});assertThrows(()=>normalizeTaxIdentifier("111.111.111-11"));assertEquals(normalizePeriod("2026/08"),"2026-08");assertEquals(normalizeMoney("1.234,5"),"1234.50");assertEquals(canonicalJson({b:2,a:1}),'{"a":1,"b":2}');});

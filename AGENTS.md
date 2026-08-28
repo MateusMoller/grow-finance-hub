@@ -62,5 +62,5 @@ Adaptacao ao Grow Finance Hub:
 
 <!-- SPECKIT START -->
 Current Spec Kit feature plan:
-`specs/011-improve-whatsapp-flow/plan.md`
+`specs/013-integra-contador/plan.md`
 <!-- SPECKIT END -->

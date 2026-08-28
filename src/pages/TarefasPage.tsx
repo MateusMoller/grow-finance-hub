@@ -82,6 +82,8 @@ import {
   loadRelatedTasks,
   type RelatedTaskSummary,
 } from "@/lib/taskRelations";
+import { buildTaskWorkspaceSearch } from "@/lib/taskWorkspaceUrl";
+import { mutateTasks } from "@/lib/taskActions";
 
 interface TaskSubtask {
   title: string;
@@ -107,6 +109,7 @@ interface Task {
   requestId: string | null;
   integrationSource: string | null;
   integrationTaskId: string | null;
+  version: number;
 }
 
 interface KanbanTaskRow {
@@ -126,9 +129,8 @@ interface KanbanTaskRow {
   request_id?: string | null;
   integration_source?: string | null;
   integration_task_id?: string | null;
+  version: number;
 }
-
-type KanbanTaskSnapshot = Tables<"kanban_tasks">;
 
 interface ClientOption {
   id: string;
@@ -267,6 +269,7 @@ const mapRowToTask = (row: KanbanTaskRow): Task => ({
   requestId: row.request_id || null,
   integrationSource: row.integration_source || null,
   integrationTaskId: row.integration_task_id || null,
+  version: row.version,
 });
 
 const isSubtasksColumnIssue = (errorMessage: string | undefined) => {
@@ -381,11 +384,32 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     setHistoryVersion((prev) => prev + 1);
   };
 
+  const updateSelectedTaskInUrl = useCallback((taskId: string | null) => {
+    navigate(
+      {
+        pathname: location.pathname,
+        search: buildTaskWorkspaceSearch(location.search, taskId),
+      },
+      { replace: true },
+    );
+  }, [location.pathname, location.search, navigate]);
+
+  const openTaskDetails = useCallback((
+    task: Task,
+    options?: { syncUrl?: boolean },
+  ) => {
+    setSelectedTask(task);
+    setSheetOpen(true);
+    if (options?.syncUrl !== false) updateSelectedTaskInUrl(task.id);
+  }, [updateSelectedTaskInUrl]);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("create") !== "1") return;
 
     setRelatedSourceTask(null);
+    setSelectedTask(null);
+    setSheetOpen(false);
     setCreateOpen(true);
     params.delete("create");
     const nextSearch = params.toString();
@@ -460,6 +484,24 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     void loadClients();
     void loadAssignees();
   }, [loadAssignees, loadClients, loadTasks]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get("task");
+    if (!taskId) return;
+
+    const targetTask = tasks.find((task) => task.id === taskId);
+    if (!targetTask) {
+      toast.error("Tarefa não encontrada ou sem acesso nesta visualização.");
+      updateSelectedTaskInUrl(null);
+      return;
+    }
+
+    if (selectedTask?.id === targetTask.id && sheetOpen) return;
+    openTaskDetails(targetTask, { syncUrl: false });
+  }, [loading, location.search, openTaskDetails, selectedTask?.id, sheetOpen, tasks, updateSelectedTaskInUrl]);
 
   useEffect(() => {
     if (sectorFilter === "Todos") return;
@@ -773,6 +815,8 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
 
     setRelatedSourceTask(sourceTask);
     setSheetOpen(false);
+    setSelectedTask(null);
+    updateSelectedTaskInUrl(null);
     setCreateOpen(true);
   };
 
@@ -783,8 +827,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       return;
     }
 
-    setSelectedTask(relatedTask);
-    setSheetOpen(true);
+    openTaskDetails(relatedTask);
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -796,46 +839,43 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
     );
     if (!confirmed) return;
 
-    const { data: snapshot } = await supabase
-      .from("kanban_tasks")
-      .select("*")
-      .eq("id", taskId)
-      .maybeSingle();
-
-    const { error } = await supabase
-      .from("kanban_tasks")
-      .delete()
-      .eq("id", taskId);
-
-    if (error) {
-      toast.error(`Erro ao excluir tarefa: ${error.message}`);
+    if (!currentOrganizationId) {
+      toast.error("Organização ativa não encontrada.");
+      return;
+    }
+    const result = await mutateTasks({
+      action: "task.delete",
+      organizationId: currentOrganizationId,
+      items: [{ taskId, expectedVersion: taskToDelete.version, changes: {} }],
+    });
+    if (!result.ok) {
+      toast.error(result.code === "version_conflict" ? "A tarefa foi alterada. Atualize a lista e tente novamente." : "Não foi possível excluir a tarefa.");
       return;
     }
 
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
     setSelectedTask((prev) => (prev?.id === taskId ? null : prev));
     setSheetOpen(false);
+    updateSelectedTaskInUrl(null);
     void registerTaskHistory(taskId, "Tarefa excluída", taskToDelete.title);
 
     toast.success("Tarefa excluída", {
       action: {
         label: "Desfazer",
         onClick: () => {
-          if (!snapshot) return;
           void (async () => {
-            const { error: restoreError } = await supabase
-              .from("kanban_tasks")
-              .insert(snapshot as KanbanTaskSnapshot);
-
-            if (restoreError) {
-              toast.error(`Não foi possível desfazer: ${restoreError.message}`);
+            const deletedTask = result.tasks[0];
+            const deletedVersion = Number(deletedTask?.version || taskToDelete.version + 1);
+            const restoreResult = await mutateTasks({
+              action: "task.restore",
+              organizationId: currentOrganizationId,
+              items: [{ taskId, expectedVersion: deletedVersion, changes: {} }],
+            });
+            if (!restoreResult.ok) {
+              toast.error("Não foi possível restaurar a tarefa.");
               return;
             }
-
-            setTasks((prev) => [
-              mapRowToTask(snapshot as unknown as KanbanTaskRow),
-              ...prev,
-            ]);
+            await loadTasks();
             void registerTaskHistory(
               taskId,
               "Exclusao desfeita",
@@ -897,10 +937,10 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card/45 px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-gradient-to-r from-card via-card to-primary/[0.035] px-4 py-3 shadow-sm">
           <TaskOriginLegend />
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <div className="flex w-full items-center gap-2 rounded-md border border-border/70 bg-background/80 px-3 py-2 sm:w-72">
+            <div className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-background/80 px-3 py-2 shadow-sm sm:w-72">
               <Search className="h-4 w-4 text-muted-foreground" />
               <input
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -962,7 +1002,7 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
           ].map((item) => (
             <div
               key={item.label}
-              className="rounded-md border border-border/60 bg-muted/20 px-3 py-2"
+              className="rounded-xl border border-border/60 bg-gradient-to-br from-card to-muted/30 px-4 py-3 shadow-sm"
             >
               <div className={`text-lg font-semibold leading-none ${item.color}`}>
                 {item.value}
@@ -997,10 +1037,9 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.04 }}
-                  className="relative overflow-hidden rounded-lg border border-border/60 bg-card/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-primary/25 hover:shadow-sm cursor-pointer"
+                  className="relative cursor-pointer overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                   onClick={() => {
-                    setSelectedTask(task);
-                    setSheetOpen(true);
+                    openTaskDetails(task);
                   }}
                 >
                   <TaskOriginRibbon
@@ -1094,7 +1133,13 @@ export function TaskListView({ embedded = false }: TaskListViewProps) {
       <TaskDetailSheet
         task={selectedTask}
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(open) => {
+          setSheetOpen(open);
+          if (!open) {
+            setSelectedTask(null);
+            updateSelectedTaskInUrl(null);
+          }
+        }}
         onSubtaskToggle={handleSubtaskToggle}
         onDeleteTask={handleDeleteTask}
         onCommentCountChange={handleCommentCountChange}

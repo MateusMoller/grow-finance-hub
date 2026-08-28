@@ -30,3 +30,10 @@ tools/grow-document-robot/runtime/state.json
 *.njsproj
 *.sln
 *.sw?
+
+# Local agent, test, and inspection artifacts
+.codex/
+tmp/
+test-results/
+outputs/obligation-attachments/
+*.inspect.ndjson

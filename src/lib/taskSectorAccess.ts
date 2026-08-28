@@ -4,6 +4,7 @@ import {
   normalizeSectorCode,
   type EffectiveAccess,
 } from "@/lib/userPermissions";
+import { canTask } from "@/lib/taskPermissions";
 
 const ALL_TASK_SECTOR_ROLES = new Set(["admin"]);
 
@@ -112,9 +113,9 @@ export const canViewTaskByCanonicalScope = (
   task: { sector: string | null; assignedToUserId?: string | null },
   access: EffectiveAccess | null,
 ) => {
-  if (!access || access.status !== "active" || access.requiresAccessReview) return false;
-  if (access.primaryRole === "admin") return true;
-  if (access.primaryRole !== "colaborador" || !access.enabledModules.includes("tarefas")) return false;
-
-  return Boolean(access.sectorCode) && normalizeSectorCode(task.sector) === access.sectorCode;
+  if (!access) return false;
+  return canTask(access, "task.read", {
+    organizationId: access.organizationId,
+    sector: task.sector,
+  });
 };

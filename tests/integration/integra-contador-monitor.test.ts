@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{MONITORING_FIXTURES}from"../../supabase/functions/_shared/integra-contador/testing/fixtures/monitoring";import{selectChangedEvents}from"../../supabase/functions/_shared/integra-contador/workflows/monitor-fiscal";
+describe("fiscal monitor integration contract",()=>{it("queues changed targets once",()=>expect(selectChangedEvents(MONITORING_FIXTURES.repeated.events,new Set())).toHaveLength(1));it("disabled/no-change produces no work",()=>expect(selectChangedEvents(MONITORING_FIXTURES.unchanged.events,new Set())).toHaveLength(0))});

@@ -280,15 +280,6 @@ export default function ClientsPage() {
     );
   });
 
-  const totalActiveClients = useMemo(
-    () => clients.filter((client) => String(client.status || "").trim().toLowerCase() === "ativo").length,
-    [clients],
-  );
-  const totalInactiveClients = useMemo(
-    () => clients.filter((client) => String(client.status || "").trim().toLowerCase() === "inativo").length,
-    [clients],
-  );
-
   const isInactiveClient = (client: Client) =>
     String(client.status || "").trim().toLowerCase() === "inativo";
 
@@ -502,57 +493,42 @@ export default function ClientsPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-none space-y-5 px-1 sm:px-2 xl:px-3">
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Users className="h-6 w-6" />
-              </div>
-              <div>
-                <ModuleContextPill icon={Users} label="Base de clientes" />
-                <h1 className="font-heading text-2xl font-bold">Clientes</h1>
-                <p className="text-sm text-muted-foreground">
-                  Base cadastral da operação, acessos de portal e dados fiscais.
-                </p>
+      <div className="mx-auto w-full max-w-[1800px] space-y-5 px-1 pb-8 sm:px-2 xl:px-3">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-primary/15 bg-gradient-to-br from-card via-card to-primary/[0.06] p-5 shadow-[0_18px_50px_-32px_hsl(var(--primary)/0.45)] sm:p-7">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary via-primary/70 to-primary/20" />
+          <div className="pointer-events-none absolute -right-12 -top-16 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <ModuleContextPill icon={Users} label="Relacionamento e cadastro" />
+              <div className="space-y-1">
+                <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">Clientes</h1>
+                <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Consulte a carteira, acompanhe dados cadastrais e acesse a operação de cada empresa.</p>
               </div>
             </div>
-            {canCreateClients && (
-              <Button className="h-11 gap-2 rounded-xl px-5 lg:self-start" onClick={openCreateDialog}>
-                <Plus className="h-4 w-4" />
-                Novo cliente
-              </Button>
-            )}
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <p className="text-xs text-muted-foreground">Total cadastrado</p>
-              <p className="mt-1 text-2xl font-bold">{clients.length}</p>
-            </div>
-            <div className="rounded-xl border bg-primary/5 p-4">
-              <p className="text-xs text-muted-foreground">Clientes ativos</p>
-              <p className="mt-1 text-2xl font-bold text-primary">{totalActiveClients}</p>
-            </div>
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <p className="text-xs text-muted-foreground">Inativos arquivados</p>
-              <p className="mt-1 text-2xl font-bold text-muted-foreground">{totalInactiveClients}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm shadow-sm backdrop-blur"><span className="font-semibold">{activeClients.length}</span> <span className="text-muted-foreground">ativos</span></div>
+              {canCreateClients ? (
+            <Button className="h-11 gap-2 rounded-xl px-5 shadow-sm" onClick={openCreateDialog}>
+              <Plus className="h-4 w-4" />
+              Novo cliente
+            </Button>
+              ) : null}
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-2xl border bg-card p-3 shadow-sm">
+        <div className="rounded-3xl border border-border/70 bg-card p-3 shadow-sm sm:p-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="h-11 rounded-xl border-muted bg-muted/30 pl-10"
+                className="h-11 rounded-xl border-border/60 bg-muted/20 pl-10 shadow-inner"
                 placeholder="Buscar por razão social, contato, e-mail ou CNPJ..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
             </div>
-            <Button variant="outline" className="h-11 gap-2 rounded-xl px-4">
+            <Button variant="outline" className="h-11 gap-2 rounded-xl bg-background px-4 shadow-sm">
               <Filter className="h-4 w-4" /> Filtros
             </Button>
           </div>
@@ -563,24 +539,11 @@ export default function ClientsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <div className="flex flex-col gap-1 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold">Carteira de clientes</p>
-                <p className="text-xs text-muted-foreground">
-                  {filtered.length} resultado(s) na visualização atual
-                </p>
-              </div>
-              {search.trim() && (
-                <Button variant="ghost" size="sm" className="self-start rounded-lg" onClick={() => setSearch("")}>
-                  Limpar busca
-                </Button>
-              )}
-            </div>
+          <div className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b bg-card">
+                  <tr className="border-b bg-muted/[0.12]">
                     <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Empresa</th>
                     <th className="hidden px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:table-cell">CNPJ</th>
                     <th className="hidden px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:table-cell">Tipo</th>
@@ -596,16 +559,16 @@ export default function ClientsPage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: index * 0.03 }}
-                      className="group cursor-pointer transition-colors hover:bg-primary/[0.035]"
+                      className="group cursor-pointer transition-all hover:bg-primary/[0.035] focus-within:bg-primary/[0.035]"
                       onClick={() => navigate(`/app/clientes/${client.id}`)}
                     >
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 transition-colors group-hover:bg-primary/15">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 shadow-sm ring-1 ring-primary/10 transition-all group-hover:scale-105 group-hover:bg-primary/15">
                             <Building2 className="h-4 w-4 text-primary" />
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold">{client.name}</div>
+                            <div className="truncate text-sm font-semibold transition-colors group-hover:text-primary">{client.name}</div>
                             <div className="text-xs text-muted-foreground">
                               {(client.client_entity_type || "matriz") === "filial" && client.parent_client?.name
                                 ? `Filial de ${client.parent_client.name}`

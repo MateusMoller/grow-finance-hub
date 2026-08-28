@@ -24,6 +24,26 @@ Source of function names and `verify_jwt`: `supabase/config.toml`.
 
 Run `npm run security:inventory` for the generated per-function rows.
 
+## Integra Contador (feature 013)
+
+| Function | Entry authentication | Privileged boundary | Provider/network rule |
+| --- | --- | --- | --- |
+| `integra-contador-module` | Supabase JWT plus organization, membership, role and feature checks | Service role only after actor/tenant validation; manage/reprocess requires admin | Browser never receives SERPRO secrets or calls it directly |
+| `integra-contador-worker` | Internal worker secret | Claims logged PGMQ jobs and revalidates tenant/client/capability | Real provider stays disabled until contract and mTLS evidence |
+| `integra-contador-monitor` | Internal scheduler secret | Enqueues allowlisted monitoring work | Queue messages contain opaque IDs only |
+
+Secrets are backend-only. Logs contain correlation IDs and redacted error codes, never taxpayer IDs, raw fiscal payload, token or certificate material.
+
+## Integra Contador (feature 013)
+
+| Function | Entry authentication | Privileged boundary | Provider/network rule |
+| --- | --- | --- | --- |
+| `integra-contador-module` | Supabase JWT plus organization, membership, role and feature-capability checks | Service role is used only after actor/tenant validation; management and reprocess actions require admin permission | Browser never receives SERPRO credentials or calls SERPRO directly |
+| `integra-contador-worker` | Internal worker secret; no end-user route | Claims logged PGMQ jobs and revalidates organization/client/capability | Real provider remains disabled until the contract and mTLS gate is evidenced |
+| `integra-contador-monitor` | Internal scheduler secret; no end-user route | Enqueues only allowlisted monitor/reconciliation work | Queue messages contain identifiers only, never CPF/CNPJ, tokens, certificates or raw fiscal payloads |
+
+All three functions are declared with `verify_jwt = true` where invoked by users; internal invocations additionally require their dedicated secret. Secrets are backend-only (`SUPABASE_SERVICE_ROLE_KEY`, worker/cron invocation secrets and Vault references for SERPRO credentials/certificate). Ordinary logs use correlation IDs and redacted error codes only.
+
 ## Code Evidence
 
 - `supabase/config.toml` marks `conecta-chat-webhook`, `email-inbox-webhook`, `whatsapp-webhook`, `open-finance-module` and `open-finance-webhook` with `verify_jwt = false`, so they remain critical until provider controls are proven.

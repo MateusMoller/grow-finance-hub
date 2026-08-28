@@ -41,6 +41,7 @@ function retryPreservesHistory(statuses: DeliveryStatus[]) {
 describe("obligation delivery flow rules", () => {
   const backendSource = readFileSync("supabase/functions/grow-obligations-module/index.ts", "utf8");
   const accessSource = readFileSync("supabase/functions/obligation-document-access/index.ts", "utf8");
+  const webhookSource = readFileSync("supabase/functions/whatsapp-webhook/index.ts", "utf8");
   it("groups files from the same obligation into one central delivery", () => {
     expect(groupCentralDeliveries([
       { instanceId: "instance-a", inboxItemId: "file-1", resultIndex: 0 },
@@ -118,7 +119,10 @@ describe("obligation delivery flow rules", () => {
 
   it("sends WhatsApp deliveries with the same secure-link audit flow", () => {
     expect(backendSource).toContain('prepared.deliveryChannel === "whatsapp" ? "whatsapp_link" : "email_link"');
-    expect(backendSource).toContain("sendWhatsAppTextMessage(prepared.recipientPhone");
+    expect(backendSource).toContain("sendObligationWhatsAppText(supabaseAdmin");
+    expect(backendSource).toContain("dispatchWhatsAppTemplateMessage");
+    expect(backendSource).toContain("WHATSAPP_OBLIGATION_TEMPLATE_NAME");
+    expect(backendSource).toContain("hasOpenWhatsAppCustomerWindow");
     expect(backendSource).toContain("recipient_phone: prepared.recipientPhone");
     expect(accessSource).toContain('"obligation_delivery_whatsapp"');
     expect(backendSource).toContain('action === "send_configured_delivery"');
@@ -132,8 +136,21 @@ describe("obligation delivery flow rules", () => {
     expect(backendSource).toContain('/functions/v1/d?t=');
     expect(backendSource).not.toContain("Documentos disponíveis por 30 dias");
     expect(backendSource).not.toContain("Acesse os documentos pelos links seguros abaixo");
-    expect(backendSource).toContain("confirm_duplicate: isNewRobotSubmission");
+    expect(backendSource).toContain("confirm_duplicate: true");
+    expect(backendSource).toContain('const deliveryRequestKey = robotSubmissionId ? `robot:${robotSubmissionId}` : `inbox:${inboxItem.id}`');
     expect(backendSource).toContain("idempotency_key: baseIdempotencyKey ? `${baseIdempotencyKey}:${channel}` : null");
     expect(backendSource).toContain("idempotent: true");
+    expect(webhookSource).toContain('from("obligation_delivery_attempts")');
+    expect(webhookSource).toContain("whatsapp_delivery_status: status.deliveryStatus");
+    expect(webhookSource).toContain('status: "failed"');
+  });
+
+  it("requires and renders the document link placeholder at the selected message position", () => {
+    expect(backendSource).toContain('const DOCUMENT_LINK_PLACEHOLDER = "{{documento_link}}"');
+    expect(backendSource).toContain("hasRequiredDocumentLinkPlaceholder(emailBody)");
+    expect(backendSource).toContain("hasRequiredDocumentLinkPlaceholder(whatsappBody)");
+    expect(backendSource).toContain("body.replaceAll(DOCUMENT_LINK_PLACEHOLDER, list)");
+    expect(backendSource).toContain(".split(DOCUMENT_LINK_PLACEHOLDER)");
+    expect(backendSource).not.toContain("appendDocumentLinksToText");
   });
 });

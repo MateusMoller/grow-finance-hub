@@ -53,6 +53,7 @@ export type GrowObligationTemplate = {
   technical_due_month_reference: "vigente" | "anterior";
   due_day: number;
   due_rule_type: "calendar_day" | "business_day_from_month_start" | "last_business_day" | "fixed_date";
+  due_date_adjustment_policy: "none" | "previous_business_day" | "next_business_day";
   due_business_day_index: number | null;
   due_fixed_month: number | null;
   due_fixed_day: number | null;

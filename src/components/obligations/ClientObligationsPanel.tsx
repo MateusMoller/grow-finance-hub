@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { ObligationDeliveryCard } from "@/components/obligations/ObligationDeliveryCard";
+import { FactorRObligationAlert } from "@/components/obligations/FactorRObligationAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -506,7 +507,12 @@ export function ClientObligationsPanel({ clientId }: ClientObligationsPanelProps
               {filteredInstances.map((instance) => {
                 const attempts = attemptsByInstanceId.get(instance.id) || [];
                 const deliveryInstance = { ...instance, delivery_attempts: attempts, latest_delivery_attempt: attempts[0] || null };
-                return <ObligationDeliveryCard key={instance.id} instance={deliveryInstance} taskId={taskByInstanceId.get(instance.id)?.id} />;
+                return (
+                  <div key={instance.id} className="space-y-2">
+                    <FactorRObligationAlert instance={deliveryInstance} />
+                    <ObligationDeliveryCard instance={deliveryInstance} taskId={taskByInstanceId.get(instance.id)?.id} />
+                  </div>
+                );
               })}
             </div>
           )}

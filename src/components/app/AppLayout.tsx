@@ -26,7 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
@@ -188,6 +188,7 @@ export function AppLayout({
   } = useInternalChatNotifications();
 
   const navigate = useNavigate();
+  const location = useLocation();
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
   const hasInternalAccess =
     effectiveAccess?.primaryRole === "admin" ||
@@ -472,6 +473,13 @@ export function AppLayout({
     return quickLinks.filter((item) => normalizeText(item.title).includes(term));
   }, [quickLinks, searchTerm]);
 
+  const currentPageTitle = useMemo(() => {
+    const match = [...quickLinks]
+      .sort((a, b) => b.url.length - a.url.length)
+      .find((item) => item.url === "/app" ? location.pathname === "/app" : location.pathname.startsWith(item.url));
+    return match?.title || "Área interna";
+  }, [location.pathname, quickLinks]);
+
   const userInitials = useMemo(() => {
     const fallback = "U";
     if (!user?.email) return fallback;
@@ -503,7 +511,7 @@ export function AppLayout({
   };
 
   const sidebarFooterControls = (
-    <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-1">
+    <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -626,19 +634,26 @@ export function AppLayout({
   );
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="app-shell min-h-screen flex w-full bg-background">
         <AppSidebar
           footerControls={sidebarFooterControls}
           internalChatUnreadCount={internalChatUnreadCount}
         />
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-16 flex items-center justify-between border-b px-3 md:px-4 bg-card shrink-0">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="app-topbar flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/90 px-3 backdrop-blur-xl md:px-5">
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
-              <SidebarTrigger />
-              <div className="hidden md:flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5">
+              <SidebarTrigger className="h-9 w-9 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground" />
+              <div className="hidden min-w-0 md:block">
+                <p className="truncate text-sm font-semibold text-foreground">{currentPageTitle}</p>
+                <p className="text-[11px] text-muted-foreground">Grow Finance Hub</p>
+              </div>
+            </div>
+
+            <div className="hidden items-center gap-2 md:flex">
+              <div className="flex h-9 items-center gap-2 rounded-lg border border-transparent bg-muted/45 px-3 transition-colors focus-within:border-border focus-within:bg-background">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
-                  className="bg-transparent text-sm outline-none placeholder:text-muted-foreground w-44 lg:w-56"
+                  className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground lg:w-60"
                   placeholder="Buscar páginas..."
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
@@ -667,8 +682,8 @@ export function AppLayout({
           <main
             className={
               flushContentTop
-                ? "flex-1 overflow-auto bg-muted/20 px-3 pb-0 pt-0 sm:px-4 lg:px-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0"
-                : "flex-1 overflow-auto bg-muted/20 p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0"
+                ? "app-workspace-content flex-1 overflow-auto px-0 pb-0 pt-0 [&>div]:mx-auto [&>div]:min-w-0 [&>div]:w-full"
+                : "app-standard-content flex-1 overflow-auto p-3 sm:p-4 lg:p-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-6 [&>div]:w-full [&>div]:mx-auto [&>div]:min-w-0"
             }
           >
             {children}

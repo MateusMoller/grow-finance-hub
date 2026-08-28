@@ -9,10 +9,13 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2,
   ChevronDown,
   ClipboardList,
+  LayoutDashboard,
+  LibraryBig,
   Download,
   Eye,
   FileText,
@@ -25,7 +28,9 @@ import {
   Paperclip,
   Plus,
   RefreshCcw,
+  Search,
   Settings2,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UploadCloud,
@@ -61,7 +66,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzePdfDocument, type AnalyzedDocument } from "@/lib/documentRecognition";
 import { loadPdfJsClient } from "@/lib/pdfJsClient";
@@ -97,8 +102,11 @@ import {
 } from "@/lib/growObligations";
 import { supabase } from "@/integrations/supabase/client";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { TemplateMessageAssetsField } from "@/components/obligations/TemplateMessageAssetsField";
+import { ObligationsDashboard } from "@/components/obligations/ObligationsDashboard";
+import { FactorRObligationAlert } from "@/components/obligations/FactorRObligationAlert";
 
-type WorkspaceTab = "catalogo" | "documentos" | "entregas";
+type WorkspaceTab = "dashboard" | "catalogo" | "documentos" | "entregas";
 type MatchStrategy = "manual_instance" | "direct_expected_doc" | "alias_match" | "single_open_instance" | "manual_review";
 
 const showLocalRobotPanel = false;
@@ -107,6 +115,7 @@ const robotInstallerDownloadUrl = `${import.meta.env.BASE_URL}downloads/instalar
 interface GrowObligationsWorkspaceProps {
   defaultTab?: WorkspaceTab;
   initialClientId?: string | null;
+  initialInstanceId?: string | null;
 }
 
 interface TemplateExpectedDocumentDraft extends GrowExpectedDocument {
@@ -122,6 +131,7 @@ interface TemplateFormState {
   technical_due_month_reference: GrowObligationTemplate["technical_due_month_reference"];
   due_day: string;
   due_rule_type: GrowObligationTemplate["due_rule_type"];
+  due_date_adjustment_policy: GrowObligationTemplate["due_date_adjustment_policy"];
   due_business_day_index: string;
   due_fixed_month: string;
   due_fixed_day: string;
@@ -178,10 +188,42 @@ interface UploadQueueItem {
   document_type_key: string;
   instance_id: string;
   suggested_competence_label: string;
+  competenceManuallyEdited: boolean;
   notes: string;
   preview: ReferenceMatchPreview | null;
   previewError: string | null;
   isPreviewing: boolean;
+  obligationSelectionConfirmed: boolean;
+}
+
+const DOCUMENT_LINK_PLACEHOLDER = "{{documento_link}}";
+
+function hasRequiredDocumentLinkPlaceholder(message: string) {
+  return message.includes(DOCUMENT_LINK_PLACEHOLDER);
+}
+
+const workspaceTabs = [
+  { value: "dashboard" as const, label: "Dashboard", description: "Visão geral e próximos prazos", icon: LayoutDashboard },
+  { value: "catalogo" as const, label: "Catálogo", description: "Regras e obrigações padrão", icon: LibraryBig },
+  { value: "documentos" as const, label: "Central de documentos", description: "Reconhecimento e envio de arquivos", icon: FolderUp },
+  { value: "entregas" as const, label: "Lista de entregas", description: "Acompanhamento por cliente", icon: ClipboardList },
+];
+
+interface ObligationMatchCandidate {
+  templateId: string;
+  templateName: string;
+  documentTypeKey: string;
+  documentLabel: string;
+  score: number;
+  reasons: string[];
+  candidateInstanceIds: string[];
+}
+
+interface DocumentSelectOption {
+  optionKey: string;
+  label: string;
+  templateId: string;
+  documentTypeKey: string;
 }
 
 interface ReferenceMatchPreview {
@@ -202,6 +244,7 @@ interface ReferenceMatchPreview {
     referenceMatchScore?: number;
     referenceMatchReasons?: string[];
     autoLinkBlockReason?: string | null;
+    obligationCandidates?: ObligationMatchCandidate[];
   };
 }
 
@@ -215,7 +258,7 @@ interface UploadQueueResult {
   match: ReferenceMatchPreview["match"];
 }
 
-type ExtractionZoneField = "cnpj" | "competence";
+type ExtractionZoneField = "cpf" | "cnpj" | "competence" | "title";
 
 interface ExtractionZoneCircle {
   field: ExtractionZoneField;
@@ -296,15 +339,23 @@ const statusOptions: GrowObligationInstance["status"][] = [
 ];
 
 const extractionZoneFieldLabels: Record<ExtractionZoneField, string> = {
+  cpf: "CPF",
   cnpj: "CNPJ",
   competence: "Competência",
+  title: "Título",
+};
+const dueDateAdjustmentPolicyLabels: Record<GrowObligationTemplate["due_date_adjustment_policy"], string> = {
+  none: "Manter a data cadastrada",
+  previous_business_day: "Antecipar para o dia útil anterior",
+  next_business_day: "Postergar para o próximo dia útil",
 };
 
 const defaultExtractionZones: ReferenceExtractionZones = {
   version: 1,
   zones: [
-    { field: "cnpj", label: "CNPJ", page: 1, shape: "rounded_rect", x: 0.3, y: 0.22, width: 0.24, height: 0.08 },
+    { field: "cpf", label: "CPF", page: 1, shape: "rounded_rect", x: 0.3, y: 0.22, width: 0.24, height: 0.08 },
     { field: "competence", label: "Competência", page: 1, shape: "rounded_rect", x: 0.68, y: 0.22, width: 0.22, height: 0.08 },
+    { field: "title", label: "Título", page: 1, shape: "rounded_rect", x: 0.5, y: 0.1, width: 0.5, height: 0.08 },
   ],
 };
 
@@ -328,7 +379,7 @@ function normalizeExtractionZones(value: unknown): ReferenceExtractionZones {
   for (const item of rawZones) {
     if (!item || typeof item !== "object") continue;
     const zone = item as Record<string, unknown>;
-    const field = zone.field === "cnpj" || zone.field === "competence" ? zone.field : null;
+    const field = zone.field === "cpf" || zone.field === "cnpj" || zone.field === "competence" || zone.field === "title" ? zone.field : null;
     if (!field) continue;
     const legacyRadius = Number(zone.r);
     const width = Number(zone.width);
@@ -347,7 +398,9 @@ function normalizeExtractionZones(value: unknown): ReferenceExtractionZones {
 
   return {
     version: 1,
-    zones: defaultExtractionZones.zones.map((fallback) => zonesByField.get(fallback.field) || { ...fallback }),
+    zones: defaultExtractionZones.zones.map((fallback) =>
+      zonesByField.get(fallback.field) || (fallback.field === "cpf" ? zonesByField.get("cnpj") : undefined) || { ...fallback },
+    ),
   };
 }
 
@@ -750,7 +803,7 @@ function ReferenceDocumentPreviewDialog({
             <div>
               <DialogTitle>Marcação de leitura do documento</DialogTitle>
               <DialogDescription className="mt-1 max-w-2xl">
-                Defina exatamente onde o robô deve ler CNPJ e competência neste modelo. As áreas ficam salvas para os próximos anexos.
+                Defina onde o robô deve ler CNPJ, competência e título. O título auxilia a reconhecer a obrigação correta.
               </DialogDescription>
             </div>
             <div className="flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
@@ -758,6 +811,8 @@ function ReferenceDocumentPreviewDialog({
               CNPJ
               <span className="ml-2 h-2 w-2 rounded-full bg-amber-500" />
               Competência
+              <span className="ml-2 h-2 w-2 rounded-full bg-violet-500" />
+              Título
             </div>
           </div>
         </DialogHeader>
@@ -793,7 +848,9 @@ function ReferenceDocumentPreviewDialog({
                         className={`absolute cursor-move rounded-lg border-2 transition-shadow ${
                           zone.field === "cnpj"
                             ? "border-sky-500 bg-sky-500/10 shadow-[0_0_0_9999px_rgba(14,165,233,0.015)]"
-                            : "border-amber-500 bg-amber-500/10 shadow-[0_0_0_9999px_rgba(245,158,11,0.015)]"
+                            : zone.field === "competence"
+                              ? "border-amber-500 bg-amber-500/10 shadow-[0_0_0_9999px_rgba(245,158,11,0.015)]"
+                              : "border-violet-500 bg-violet-500/10 shadow-[0_0_0_9999px_rgba(139,92,246,0.015)]"
                         } ${selected ? "ring-4 ring-primary/20" : "hover:ring-2 hover:ring-primary/10"}`}
                         style={{
                           left: `${(zone.x - zone.width / 2) * 100}%`,
@@ -805,7 +862,7 @@ function ReferenceDocumentPreviewDialog({
                       >
                         <span
                           className={`absolute -top-7 left-0 rounded-full px-2 py-0.5 text-xs font-medium text-white shadow-sm ${
-                            zone.field === "cnpj" ? "bg-sky-600" : "bg-amber-600"
+                            zone.field === "cnpj" ? "bg-sky-600" : zone.field === "competence" ? "bg-amber-600" : "bg-violet-600"
                           }`}
                         >
                           {zone.label}
@@ -838,7 +895,7 @@ function ReferenceDocumentPreviewDialog({
                   className="h-11 w-full justify-start rounded-xl px-3"
                   onClick={() => setActiveField(zone.field)}
                 >
-                  <span className={`mr-2 h-2.5 w-2.5 rounded-full ${zone.field === "cnpj" ? "bg-sky-500" : "bg-amber-500"}`} />
+                  <span className={`mr-2 h-2.5 w-2.5 rounded-full ${zone.field === "cnpj" ? "bg-sky-500" : zone.field === "competence" ? "bg-amber-500" : "bg-violet-500"}`} />
                   <span className="flex flex-col items-start">
                     <span className="text-sm">{zone.label}</span>
                     <span className="text-xs font-normal opacity-75">
@@ -996,6 +1053,7 @@ function makeTemplateForm(template?: GrowObligationTemplate | null): TemplateFor
     technical_due_month_reference: template?.technical_due_month_reference || "vigente",
     due_day: String(template?.due_day ?? 10),
     due_rule_type: template?.due_rule_type || "calendar_day",
+    due_date_adjustment_policy: template?.due_date_adjustment_policy || "none",
     due_business_day_index: template?.due_business_day_index ? String(template.due_business_day_index) : "",
     due_fixed_month: template?.due_fixed_month ? String(template.due_fixed_month) : template?.yearly_due_month ? String(template.yearly_due_month) : "",
     due_fixed_day: template?.due_fixed_day ? String(template.due_fixed_day) : "",
@@ -1066,6 +1124,21 @@ function formatDateTime(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString("pt-BR");
+}
+
+function configuredExtractionZoneFields(reference: GrowExpectedDocumentReferenceFile) {
+  const extractionZones = reference.fingerprint_payload?.extraction_zones;
+  if (!extractionZones || typeof extractionZones !== "object") return new Set<ExtractionZoneField>();
+  const rawZones = Array.isArray((extractionZones as Record<string, unknown>).zones)
+    ? (extractionZones as Record<string, unknown>).zones as unknown[]
+    : [];
+  return new Set(rawZones.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const field = (item as Record<string, unknown>).field;
+    return field === "cpf" || field === "cnpj" || field === "competence" || field === "title"
+      ? [field]
+      : [];
+  }));
 }
 
 type DeliveryInstanceFile = {
@@ -1174,11 +1247,13 @@ async function openDeliveryFile(file: DeliveryInstanceFile) {
 function DeliveryListItem({
   instance,
   onEdit,
+  initiallyOpen = false,
 }: {
   instance: GrowObligationInstance;
   onEdit: (instance: GrowObligationInstance) => void;
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const detailQuery = useQuery({
     queryKey: ["grow-obligations", "delivery-detail", instance.id],
     queryFn: () => loadDeliveryInstanceDetails(instance.id),
@@ -1189,16 +1264,17 @@ function DeliveryListItem({
   const latestAttempt = instance.latest_delivery_attempt || attempts[0] || null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <CollapsibleTrigger className="group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-muted/30 lg:flex-row lg:items-center lg:justify-between">
+    <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition-all hover:border-primary/20 hover:shadow-md">
+      <CollapsibleTrigger className="group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:bg-primary/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">{instance.template?.name || "Obrigação"}</p>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><FileText className="h-4 w-4" aria-hidden="true" /></span>
+            <p className="font-semibold">{instance.template?.name || "Obrigação"}</p>
             <Badge className={`border-0 ${growObligationStatusClass[instance.status]}`}>{growObligationStatusLabel[instance.status]}</Badge>
             <Badge variant="outline">{growPriorityLabel[instance.priority]}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">{instance.client?.name || "Cliente"} · competência {instance.competence_label}</p>
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+          <p className="pl-0 text-sm text-muted-foreground sm:pl-12">{instance.client?.name || "Cliente"} · competência {instance.competence_label}</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pl-0 text-xs text-muted-foreground sm:pl-12">
             <span>Vencimento: {formatDate(instance.technical_due_date)}</span>
             <span>Setor: {instance.template?.sector || "Geral"}</span>
             <span>Envio: {latestAttempt ? deliveryAttemptStatusLabel[latestAttempt.status] : "Não realizado"}</span>
@@ -1209,6 +1285,10 @@ function DeliveryListItem({
           <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
         </span>
       </CollapsibleTrigger>
+
+      <div className="px-4 pb-3 sm:px-5">
+        <FactorRObligationAlert instance={instance} compact />
+      </div>
 
       <CollapsibleContent className="border-t border-border/70 bg-muted/10">
         <div className="space-y-5 p-4">
@@ -1337,8 +1417,14 @@ function validateTemplateForm(form: TemplateFormState, options?: { allowMissingD
   if (form.completion_email_enabled && !form.completion_email_body.trim()) {
     return "Informe o corpo padrao do e-mail automatico.";
   }
+  if (form.completion_email_enabled && !hasRequiredDocumentLinkPlaceholder(form.completion_email_body)) {
+    return `Inclua ${DOCUMENT_LINK_PLACEHOLDER} no corpo do e-mail para definir onde o link do documento sera exibido.`;
+  }
   if (form.completion_whatsapp_enabled && !form.completion_whatsapp_body.trim()) {
     return "Informe o corpo padrao do WhatsApp automatico.";
+  }
+  if (form.completion_whatsapp_enabled && !hasRequiredDocumentLinkPlaceholder(form.completion_whatsapp_body)) {
+    return `Inclua ${DOCUMENT_LINK_PLACEHOLDER} na mensagem do WhatsApp para definir onde o link do documento sera exibido.`;
   }
   return null;
 }
@@ -1365,6 +1451,7 @@ async function upsertTemplateDirectly(payload: TemplateFormState) {
     technical_due_month_reference: payload.technical_due_month_reference,
     due_day: Number(payload.due_day || 10),
     due_rule_type: payload.due_rule_type,
+    due_date_adjustment_policy: payload.due_date_adjustment_policy,
     due_business_day_index: payload.due_business_day_index ? Number(payload.due_business_day_index) : null,
     due_fixed_month: firstFixedDate?.month ?? null,
     due_fixed_day: firstFixedDate?.day ?? null,
@@ -1893,7 +1980,7 @@ async function registerDocumentUploadDirectly({
       file_size: item.file.size,
       suggested_competence_label: item.suggested_competence_label || null,
       detected_cnpj: effectiveMatch.detectedCnpj || item.analysis.detected_cnpj,
-      competence_detected: effectiveMatch.competenceDetected || item.analysis.competence_detected,
+      competence_detected: effectiveMatch.competenceDetected || item.suggested_competence_label || null,
       identification_confidence: effectiveMatch.score,
       matched_by: effectiveMatch.strategy,
       match_score: effectiveMatch.score,
@@ -1994,6 +2081,13 @@ function validateUploadQueueItem(item: UploadQueueItem) {
   if (!item.file?.name) return "Existe um arquivo invalido na fila.";
   if (!item.analysis) return `O arquivo ${item.file.name} ainda não foi analisado.`;
   if (item.isPreviewing) return `Aguarde o preview do arquivo ${item.file.name} terminar.`;
+  if (
+    item.preview?.match.reviewRequired &&
+    (item.preview.match.obligationCandidates?.length || 0) > 0 &&
+    !item.obligationSelectionConfirmed
+  ) {
+    return `Confirme uma das obrigações sugeridas para o arquivo ${item.file.name}.`;
+  }
   if (item.document_type_key && !item.template_id) {
     return `O arquivo ${item.file.name} esta com documento esperado sem template vinculado.`;
   }
@@ -2017,6 +2111,13 @@ function matchStrategyLabel(strategy: MatchStrategy | null | undefined) {
     default:
       return "Revisao manual";
   }
+}
+
+function documentOptionsForUpload(item: UploadQueueItem, allOptions: DocumentSelectOption[]) {
+  const candidates = item.preview?.match.reviewRequired ? item.preview.match.obligationCandidates || [] : [];
+  if (candidates.length === 0) return allOptions;
+  const allowedKeys = new Set(candidates.map((candidate) => `${candidate.templateId}::${candidate.documentTypeKey}`));
+  return allOptions.filter((option) => allowedKeys.has(option.optionKey));
 }
 
 function inboxStatusLabel(status: GrowDocumentInboxItem["status"]) {
@@ -2103,7 +2204,9 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
   const nextTemplateId = match.suggestedTemplateId || item.template_id;
   const nextDocumentTypeKey = match.documentTypeKey || item.document_type_key;
   const nextInstanceId = match.resolvedInstanceId || item.instance_id;
-  const nextCompetenceLabel = match.competenceDetected || item.analysis.competence_detected || item.suggested_competence_label;
+  const nextCompetenceLabel = item.competenceManuallyEdited
+    ? item.suggested_competence_label
+    : match.competenceDetected;
 
   return {
     ...item,
@@ -2208,6 +2311,20 @@ function buildLocalDocumentPreview(
       referenceMatchScore: 0,
       referenceMatchReasons: [],
       autoLinkBlockReason: reviewRequired ? "Selecao insuficiente para vinculo automatico." : null,
+      obligationCandidates: reviewRequired
+        ? rankedDocuments.slice(0, 5).map((candidate) => ({
+            templateId: candidate.template.id,
+            templateName: candidate.template.name,
+            documentTypeKey: candidate.document.document_type_key,
+            documentLabel: candidate.document.label,
+            score: Math.min(0.95, Math.max(0.25, candidate.score / 140)),
+            reasons: [
+              candidate.familyMatched ? "Tipo documental compatível." : "Palavras do documento compatíveis.",
+              candidate.documentTokenMatched ? "Título ou identificação do documento encontrado." : "Obrigação relacionada ao conteúdo lido.",
+            ],
+            candidateInstanceIds: [],
+          }))
+        : [],
     },
   };
 }
@@ -2215,9 +2332,11 @@ function buildLocalDocumentPreview(
 const overviewQueryKey = ["grow-obligations-overview"];
 
 export function GrowObligationsWorkspace({
-  defaultTab = "documentos",
+  defaultTab = "dashboard",
   initialClientId = null,
+  initialInstanceId = null,
 }: GrowObligationsWorkspaceProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(defaultTab);
@@ -2230,6 +2349,7 @@ export function GrowObligationsWorkspace({
   const [instanceCompetenceFilter, setInstanceCompetenceFilter] = useState("");
   const [instanceDueFrom, setInstanceDueFrom] = useState("");
   const [instanceDueTo, setInstanceDueTo] = useState("");
+  const [instanceTargetId, setInstanceTargetId] = useState<string | null>(initialInstanceId);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(makeTemplateForm());
   const [templateDeleteTarget, setTemplateDeleteTarget] = useState<GrowObligationTemplate | null>(null);
@@ -2264,6 +2384,7 @@ export function GrowObligationsWorkspace({
       instanceCompetenceFilter,
       instanceDueFrom,
       instanceDueTo,
+      activeTab,
     ],
     queryFn: () =>
       invokeGrowObligations<GrowObligationsOverviewPayload>({
@@ -2272,13 +2393,13 @@ export function GrowObligationsWorkspace({
         document_client_id: documentClientFilter,
         document_template_id: documentTemplateFilter,
         document_competence: documentCompetenceFilter || null,
-        instance_status: instanceStatusFilter,
-        instance_client_id: instanceClientFilter,
-        instance_sector: instanceSectorFilter,
-        instance_priority: instancePriorityFilter,
-        instance_competence: instanceCompetenceFilter || null,
-        instance_due_from: instanceDueFrom || null,
-        instance_due_to: instanceDueTo || null,
+        instance_status: activeTab === "entregas" ? instanceStatusFilter : "all",
+        instance_client_id: activeTab === "entregas" ? instanceClientFilter : initialClientId || "all",
+        instance_sector: activeTab === "entregas" ? instanceSectorFilter : "all",
+        instance_priority: activeTab === "entregas" ? instancePriorityFilter : "all",
+        instance_competence: activeTab === "entregas" ? instanceCompetenceFilter || null : null,
+        instance_due_from: activeTab === "entregas" ? instanceDueFrom || null : null,
+        instance_due_to: activeTab === "entregas" ? instanceDueTo || null : null,
         skip_operational_sync: true,
       }),
     staleTime: 30_000,
@@ -2320,6 +2441,7 @@ export function GrowObligationsWorkspace({
         technical_due_month_reference: payload.technical_due_month_reference,
         due_day: Number(payload.due_day || 10),
         due_rule_type: payload.due_rule_type,
+        due_date_adjustment_policy: payload.due_date_adjustment_policy,
         due_business_day_index: payload.due_business_day_index ? Number(payload.due_business_day_index) : null,
         due_fixed_month: firstFixedDate?.month ?? null,
         due_fixed_day: firstFixedDate?.day ?? null,
@@ -2547,7 +2669,7 @@ export function GrowObligationsWorkspace({
       const organizationId = await getStoredCurrentOrganizationId();
       if (!organizationId) throw new Error("Organizacao ativa nao encontrada.");
 
-      const results: Array<UploadQueueResult & { deliveryError?: string | null }> = [];
+      const results: Array<UploadQueueResult & { deliveryError?: string | null; deliverySent?: boolean }> = [];
       const processedDocuments: ProcessedCentralDocument[] = [];
       for (const item of uploadQueue) {
         const validationError = validateUploadQueueItem(item);
@@ -2587,7 +2709,7 @@ export function GrowObligationsWorkspace({
               inboxItemId,
             });
             const resultIndex = results.length;
-            results.push({ ...response, deliveryError: null });
+            results.push({ ...response, deliveryError: null, deliverySent: false });
             processedDocuments.push({ instanceId, inboxItemId, resultIndex });
             continue;
           } catch (error) {
@@ -2601,20 +2723,23 @@ export function GrowObligationsWorkspace({
 
         results.push(response);
       }
-      if (response?.generation_warnings?.length) {
-        toast.warning(
-          `Obrigação salva, mas ${response.generation_warnings.length} cliente(s) ficaram pendentes de sincronização.`,
-        );
-      }
-
       for (const delivery of groupCentralDeliveries(processedDocuments)) {
         try {
-          await invokeGrowObligations({
+          const deliveryResult = await invokeGrowObligations<{
+            ok: true;
+            channels?: Array<{ ok?: boolean; delivery_attempt?: { id?: string; status?: string } }>;
+          }>({
             action: "send_configured_delivery",
             instance_id: delivery.instanceId,
             inbox_item_ids: delivery.inboxItemIds,
             confirm_duplicate: true,
+            idempotency_key: `central:${delivery.inboxItemIds.slice().sort().join(":")}`,
           });
+          const recordedDelivery = deliveryResult.channels?.some(
+            (channel) => channel.ok === true && Boolean(channel.delivery_attempt?.id),
+          );
+          if (!recordedDelivery) throw new Error("A entrega não gerou registro no histórico. Tente novamente.");
+          for (const resultIndex of delivery.resultIndexes) results[resultIndex].deliverySent = true;
         } catch (error) {
           const message = error instanceof Error ? error.message : "Falha ao enviar os documentos ao cliente.";
           for (const resultIndex of delivery.resultIndexes) results[resultIndex].deliveryError = message;
@@ -2624,13 +2749,16 @@ export function GrowObligationsWorkspace({
     },
     onSuccess: async (results) => {
       const autoLinked = results.filter((item) => !item.match.reviewRequired).length;
+      const sent = results.filter((item) => item.deliverySent).length;
       const deliveryErrors = results
         .map((item) => item.deliveryError)
         .filter((message): message is string => Boolean(message));
       if (deliveryErrors.length > 0) {
         toast.error(`${results.length} arquivo(s) anexados. ${autoLinked} vinculado(s). ${deliveryErrors[0]}`);
+      } else if (sent > 0) {
+        toast.success(`${results.length} arquivo(s) anexados. ${sent} entrega(s) registrada(s) e enviada(s).`);
       } else {
-        toast.success(`${results.length} arquivo(s) anexados e enviados pelos canais configurados na obrigacao.`);
+        toast.success(`${results.length} arquivo(s) anexados e ${autoLinked} vinculado(s). Nenhum envio era aplicavel neste momento.`);
       }
       setUploadQueue([]);
       await queryClient.invalidateQueries({ queryKey: overviewQueryKey });
@@ -2709,6 +2837,26 @@ export function GrowObligationsWorkspace({
     [catalogTemplatesQuery.data, overview?.templates],
   );
 
+  const modelsMissingReadAreas = useMemo(() => catalogTemplates.flatMap((template) =>
+    template.expected_documents.flatMap((document) => (document.reference_files || [])
+      .filter((reference) => reference.is_active)
+      .flatMap((reference) => {
+        const fields = configuredExtractionZoneFields(reference);
+        const missingAreas = [
+          !fields.has("cpf") && !fields.has("cnpj") ? "CPF/CNPJ" : null,
+          !fields.has("competence") ? "Competência" : null,
+          !fields.has("title") ? "Título (auxiliar)" : null,
+        ].filter((area): area is string => Boolean(area));
+        return missingAreas.length > 0 ? [{
+          referenceId: reference.id,
+          templateName: template.name,
+          documentName: document.label,
+          fileName: reference.file_name,
+          missingAreas,
+        }] : [];
+      })),
+  ), [catalogTemplates]);
+
   const filteredTemplates = useMemo(() => {
     const items = catalogTemplates;
     const token = templateSearch.trim().toLowerCase();
@@ -2720,6 +2868,7 @@ export function GrowObligationsWorkspace({
     const items = overview?.instances || [];
     const token = instanceSearch.trim().toLowerCase();
     return items.filter((instance) => {
+      if (instanceTargetId && instance.id !== instanceTargetId) return false;
       if (instanceStatusFilter !== "all" && instance.status !== instanceStatusFilter) return false;
       if (instanceClientFilter !== "all" && instance.client_id !== instanceClientFilter) return false;
       if (instanceSectorFilter !== "all" && instance.template?.sector !== instanceSectorFilter) return false;
@@ -2739,6 +2888,7 @@ export function GrowObligationsWorkspace({
     instanceSearch,
     instanceSectorFilter,
     instanceStatusFilter,
+    instanceTargetId,
     overview?.instances,
   ]);
 
@@ -2748,6 +2898,8 @@ export function GrowObligationsWorkspace({
   );
 
   const clearInstanceFilters = () => {
+    if (instanceTargetId) navigate("/app/obrigacoes?tab=entregas", { replace: true });
+    setInstanceTargetId(null);
     setInstanceSearch("");
     setInstanceStatusFilter("all");
     setInstanceClientFilter(initialClientId || "all");
@@ -2762,6 +2914,14 @@ export function GrowObligationsWorkspace({
     setInstanceForm(makeInstanceForm(selectedInstance));
     setInstanceDialogOpen(true);
   }, []);
+
+  const handleOpenDashboardDelivery = useCallback((selectedInstance: GrowObligationInstance) => {
+    navigate(`/app/obrigacoes?tab=entregas&instance_id=${encodeURIComponent(selectedInstance.id)}`);
+  }, [navigate]);
+
+  const handleViewAllDeliveries = useCallback(() => {
+    navigate("/app/obrigacoes?tab=entregas");
+  }, [navigate]);
 
   const pendingDocuments = useMemo(
     () => (overview?.documents || []).filter((item) => item.status === "pending_review"),
@@ -2893,7 +3053,9 @@ export function GrowObligationsWorkspace({
         instance_id: item.instance_id || null,
         template_id: item.template_id || null,
         document_type_key: item.document_type_key || null,
-        suggested_competence_label: item.suggested_competence_label || item.analysis.competence_detected || null,
+        suggested_competence_label: item.competenceManuallyEdited
+          ? item.suggested_competence_label || null
+          : null,
         file_name: item.file.name,
         analysis: item.analysis,
       });
@@ -2933,11 +3095,13 @@ export function GrowObligationsWorkspace({
           template_id: "",
           document_type_key: "",
           instance_id: "",
-          suggested_competence_label: analysis.competence_detected || "",
+          suggested_competence_label: "",
+          competenceManuallyEdited: false,
           notes: "",
           preview: null,
           previewError: null,
           isPreviewing: true,
+          obligationSelectionConfirmed: false,
         });
       } catch (error) {
         toast.error(`${file.name}: ${error instanceof Error ? error.message : "Falha ao analisar o PDF."}`);
@@ -2986,22 +3150,22 @@ export function GrowObligationsWorkspace({
   }
 
   return (
-    <div className="mx-auto w-full max-w-none space-y-5 px-1 sm:px-2 xl:px-4">
-      <section className="relative overflow-hidden rounded-[1.75rem] border border-border/70 bg-card p-6 shadow-sm">
-        <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
-        <div className="absolute right-8 top-6 h-24 w-24 rounded-full bg-primary/5 blur-2xl" />
+    <div className="mx-auto w-full max-w-none space-y-5 px-1 pb-8 sm:px-2 xl:px-4">
+      <section className="relative overflow-hidden rounded-[1.75rem] border border-primary/15 bg-gradient-to-br from-card via-card to-primary/[0.06] p-5 shadow-[0_18px_50px_-32px_hsl(var(--primary)/0.45)] sm:p-7">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary via-primary/70 to-primary/20" />
+        <div className="pointer-events-none absolute -right-12 -top-16 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 space-y-3">
             <ModuleContextPill icon={FileSpreadsheet} label="Obrigações padrão" />
             <div className="space-y-1">
-              <h1 className="font-heading text-3xl font-bold tracking-tight">Obrigações Grow</h1>
-              <p className="max-w-3xl text-sm text-muted-foreground">
+              <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">Obrigações Grow</h1>
+              <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
                 Central operacional para envio de guias, documentos esperados e gestão do catálogo padrão.
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" className="rounded-xl" onClick={() => overviewQuery.refetch()}>
+            <Button variant="outline" className="rounded-xl bg-background/80 shadow-sm backdrop-blur" onClick={() => overviewQuery.refetch()}>
               <RefreshCcw className="mr-2 h-4 w-4" />
               Atualizar visão
             </Button>
@@ -3010,14 +3174,49 @@ export function GrowObligationsWorkspace({
       </section>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-card p-2 shadow-sm lg:grid-cols-4">
+          {workspaceTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="group h-auto min-h-16 justify-start gap-3 rounded-xl px-3 py-3 text-left transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:px-4"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors group-data-[state=active]:bg-primary-foreground/15 group-data-[state=active]:text-primary-foreground">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{tab.label}</span>
+                  <span className="mt-0.5 hidden truncate text-xs font-normal opacity-70 sm:block">{tab.description}</span>
+                </span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+        <TabsContent value="dashboard" className="space-y-4">
+          <ObligationsDashboard
+            instances={overview.instances}
+            onOpenInstance={handleOpenDashboardDelivery}
+            onViewAll={handleViewAllDeliveries}
+          />
+        </TabsContent>
+
         <TabsContent value="catalogo" className="space-y-4">
-          <Card className="rounded-3xl">
-            <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div><CardTitle>Catalogo mestre</CardTitle></div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Buscar por nome ou setor" className="w-full sm:w-72" />
+          <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm">
+            <CardHeader className="border-b border-border/60 bg-gradient-to-r from-muted/30 via-card to-primary/[0.04] p-5 sm:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2"><CardTitle>Catálogo mestre</CardTitle><Badge variant="secondary">{filteredTemplates.length} obrigações</Badge></div>
+                  <CardDescription>Configure prazos, documentos esperados e clientes vinculados.</CardDescription>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Buscar por nome ou setor" className="h-11 rounded-xl bg-background pl-9 shadow-sm" />
+                  </div>
                 <Button
-                  className="rounded-2xl"
+                  className="h-11 rounded-xl shadow-sm"
                   onClick={() => {
                     setTemplateForm(makeTemplateForm());
                     setTemplateClientSearch("");
@@ -3025,9 +3224,10 @@ export function GrowObligationsWorkspace({
                     setTemplateDialogOpen(true);
                   }}
                 ><Plus className="mr-2 h-4 w-4" />Nova obrigação</Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-4 sm:p-6">
               {overviewQuery.isFetching || catalogTemplatesQuery.isFetching ? (
                 <div className="flex items-center gap-2 rounded-2xl border border-border/70 p-4 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -3035,11 +3235,11 @@ export function GrowObligationsWorkspace({
                 </div>
               ) : null}
               {filteredTemplates.map((template) => (
-                <div key={template.id} className="rounded-2xl border border-border/70 p-4">
+                <div key={template.id} className="group rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition-all hover:border-primary/25 hover:shadow-md sm:p-5">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{template.name}</p>
+                        <p className="font-semibold">{template.name}</p>
                         <Badge variant="outline">{template.sector}</Badge>
                         {isSystemDefaultTemplate(template) ? <Badge variant="secondary">Padrao do sistema</Badge> : null}
                         {!template.is_active && <Badge variant="destructive">Inativa</Badge>}
@@ -3098,14 +3298,17 @@ export function GrowObligationsWorkspace({
         </TabsContent>
 
         <TabsContent value="entregas" className="space-y-4">
-          <Card className="rounded-3xl">
-            <CardHeader className="space-y-4">
+          <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm">
+            <CardHeader className="space-y-4 border-b border-border/60 bg-gradient-to-r from-muted/30 via-card to-primary/[0.04] p-5 sm:p-6">
               <div className="space-y-4">
-                <div><CardTitle>Lista de entregas</CardTitle><CardDescription>Visão simplificada das obrigações geradas que precisam ser acompanhadas e concluídas.</CardDescription></div>
-                <div className="grid gap-3 rounded-2xl border border-border/70 bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ClipboardList className="h-5 w-5" aria-hidden="true" /></span>
+                  <div><div className="flex flex-wrap items-center gap-2"><CardTitle>Lista de entregas</CardTitle><Badge variant="secondary">{filteredInstances.length}</Badge></div><CardDescription className="mt-1">Visão simplificada das obrigações geradas que precisam ser acompanhadas e concluídas.</CardDescription></div>
+                </div>
+                <div className="grid gap-3 rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="delivery-search">Busca</Label>
-                    <Input id="delivery-search" value={instanceSearch} onChange={(event) => setInstanceSearch(event.target.value)} placeholder="Cliente, obrigação ou competência" />
+                    <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id="delivery-search" value={instanceSearch} onChange={(event) => setInstanceSearch(event.target.value)} placeholder="Cliente, obrigação ou competência" className="rounded-xl pl-9" /></div>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Status</Label>
@@ -3151,12 +3354,20 @@ export function GrowObligationsWorkspace({
                     <Input id="delivery-due-to" type="date" value={instanceDueTo} min={instanceDueFrom || undefined} onChange={(event) => setInstanceDueTo(event.target.value)} />
                   </div>
                   <div className="flex items-end">
-                    <Button type="button" variant="outline" className="w-full" onClick={clearInstanceFilters}>Limpar filtros</Button>
+                    <Button type="button" variant="outline" className="w-full rounded-xl" onClick={clearInstanceFilters}><SlidersHorizontal className="mr-2 h-4 w-4" aria-hidden="true" />Limpar filtros</Button>
                   </div>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-4 sm:p-6">
+              {instanceTargetId ? (
+                <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span>Exibindo a entrega selecionada no Dashboard.</span>
+                  <Button type="button" variant="outline" size="sm" onClick={clearInstanceFilters}>
+                    Mostrar todas as entregas
+                  </Button>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
                 <span>{filteredInstances.length} entrega{filteredInstances.length === 1 ? "" : "s"} encontrada{filteredInstances.length === 1 ? "" : "s"}</span>
                 {overviewQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -3166,6 +3377,7 @@ export function GrowObligationsWorkspace({
                   key={instance.id}
                   instance={instance}
                   onEdit={handleEditDeliveryInstance}
+                  initiallyOpen={instance.id === instanceTargetId}
                 />
               ))}
               {!overviewQuery.isFetching && filteredInstances.length === 0 ? (
@@ -3179,14 +3391,17 @@ export function GrowObligationsWorkspace({
 
         <TabsContent value="documentos" className="space-y-4">
           <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm">
-            <CardHeader className="border-b bg-muted/20">
+            <CardHeader className="border-b border-border/60 bg-gradient-to-r from-muted/30 via-card to-primary/[0.04] p-5 sm:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><FolderUp className="h-5 w-5" aria-hidden="true" /></span>
+                  <div>
                   <CardTitle>Central de Documentos</CardTitle>
-                  <CardDescription>Envie documentos manualmente ou instale o robô para monitorar uma pasta no Windows.</CardDescription>
+                  <CardDescription className="mt-1">Envie documentos manualmente ou instale o robô para monitorar uma pasta no Windows.</CardDescription>
+                  </div>
                 </div>
                 <div className="flex flex-col items-stretch gap-1 sm:items-end">
-                  <Button asChild variant="outline" className="gap-2">
+                  <Button asChild variant="outline" className="h-11 gap-2 rounded-xl bg-background shadow-sm">
                     <a href={robotInstallerDownloadUrl} download="instalar-robo-grow.cmd">
                       <Download className="h-4 w-4" aria-hidden="true" />
                       Baixar robô para Windows
@@ -3196,7 +3411,7 @@ export function GrowObligationsWorkspace({
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-5 p-6">
+            <CardContent className="space-y-5 p-4 sm:p-6">
               <div className="space-y-4">
                 <div className="hidden">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
@@ -3295,10 +3510,10 @@ export function GrowObligationsWorkspace({
                   </div>
                 )}
                 <div
-                  className={`group relative overflow-hidden rounded-3xl border border-dashed p-8 transition-all ${
+                  className={`group relative overflow-hidden rounded-3xl border-2 border-dashed p-5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-8 ${
                     isDraggingUpload
                       ? "border-primary bg-primary/10 shadow-md"
-                      : "border-border bg-muted/20 hover:border-primary/50 hover:bg-primary/[0.03]"
+                      : "border-border/80 bg-gradient-to-br from-muted/25 via-background to-primary/[0.03] hover:border-primary/50 hover:shadow-md"
                   }`}
                   onDragEnter={(event) => {
                     event.preventDefault();
@@ -3322,9 +3537,9 @@ export function GrowObligationsWorkspace({
                   }}
                 >
                   <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-                  <div className="grid min-h-[260px] items-center gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="grid min-h-[280px] items-center gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
                     <div className="flex flex-col items-center justify-center text-center lg:items-start lg:text-left">
-                      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm ring-1 ring-primary/15 transition-transform group-hover:-translate-y-0.5 group-hover:scale-105">
                         <UploadCloud className="h-8 w-8" />
                       </div>
                       <p className="text-2xl font-semibold tracking-tight">
@@ -3359,8 +3574,8 @@ export function GrowObligationsWorkspace({
                         Escolher arquivos
                       </Button>
                     </div>
-                    <div className="rounded-2xl border bg-background/80 p-4 shadow-sm">
-                      <p className="text-sm font-medium">Como funciona</p>
+                    <div className="rounded-2xl border border-border/70 bg-background/90 p-5 shadow-sm backdrop-blur">
+                      <p className="text-sm font-semibold">Como funciona</p>
                       <div className="mt-4 space-y-3 text-sm text-muted-foreground">
                         <div className="flex gap-3">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">1</span>
@@ -3427,10 +3642,33 @@ export function GrowObligationsWorkspace({
                       <p className="mt-2 text-2xl font-semibold">{overview.summary.recognition_corrected}</p>
                     </div>
                   </div>
-                  {overview.summary.document_models_total > overview.summary.document_models_configured ? (
-                    <p className="mt-3 rounded-xl border border-orange-300/60 bg-orange-50 p-3 text-xs text-orange-800">
-                      Existem modelos sem as duas areas obrigatorias. Eles permanecem em revisao manual ate que CNPJ e competencia sejam marcados.
-                    </p>
+                  {modelsMissingReadAreas.length > 0 ? (
+                    <details className="group mt-3 rounded-xl border border-orange-300/60 bg-orange-50 text-xs text-orange-900">
+                      <summary className="flex cursor-pointer list-none items-center gap-3 p-3 [&::-webkit-details-marker]:hidden">
+                        <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 transition-transform group-open:rotate-0" aria-hidden="true" />
+                        <span className="font-medium">
+                          {modelsMissingReadAreas.length} modelo(s) ainda precisam de áreas de leitura
+                        </span>
+                        <span className="ml-auto text-orange-800/80 group-open:hidden">Ver quais</span>
+                        <span className="ml-auto hidden text-orange-800/80 group-open:inline">Recolher</span>
+                      </summary>
+                      <div className="border-t border-orange-300/60 px-3 py-2">
+                        <p className="mb-2 text-orange-800">
+                          CPF/CNPJ e competência são obrigatórios. O título melhora o reconhecimento da obrigação.
+                        </p>
+                        <ul className="divide-y divide-orange-200/80" aria-label="Modelos com áreas de leitura pendentes">
+                          {modelsMissingReadAreas.map((model) => (
+                            <li key={model.referenceId} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+                              <span className="min-w-0">
+                                <span className="font-medium">{model.templateName}</span>
+                                <span className="text-orange-800/75"> · {model.documentName} · {model.fileName}</span>
+                              </span>
+                              <span className="text-orange-800">Falta: {model.missingAreas.join(", ")}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </details>
                   ) : null}
                 </section>
 
@@ -3523,13 +3761,49 @@ export function GrowObligationsWorkspace({
                             <div>
                               <p className="font-medium">{item.file.name}</p>
                               <p className="text-xs text-muted-foreground">
-                                CNPJ: {item.analysis.detected_cnpj || "não detectado"} · Competência: {item.analysis.competence_detected || "não detectada"} · OCR: {item.analysis.ocr_status}
+                                CPF/CNPJ: {item.analysis.detected_cnpj || "não detectado"} · OCR: {item.analysis.ocr_status}
                               </p>
                             </div>
                             <Button variant="ghost" size="icon" className="rounded-xl text-destructive" onClick={() => setUploadQueue((prev) => prev.filter((current) => current.id !== item.id))}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
+
+                          {item.preview?.match.reviewRequired && (item.preview.match.obligationCandidates?.length || 0) > 0 ? (
+                            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                              <div className="mb-3">
+                                <p className="text-sm font-medium">Possíveis obrigações</p>
+                                <p className="text-xs text-muted-foreground">
+                                  O sistema ficou em dúvida e filtrou somente as opções compatíveis. Confirme uma delas para continuar.
+                                </p>
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                {item.preview.match.obligationCandidates?.map((candidate) => {
+                                  const selected = item.obligationSelectionConfirmed && item.template_id === candidate.templateId && item.document_type_key === candidate.documentTypeKey;
+                                  return (
+                                    <button
+                                      key={`${candidate.templateId}::${candidate.documentTypeKey}`}
+                                      type="button"
+                                      className={`rounded-xl border p-3 text-left transition-colors ${selected ? "border-primary bg-background ring-2 ring-primary/20" : "border-border/70 bg-background/80 hover:border-primary/50"}`}
+                                      onClick={() => updateQueueItem(item.id, {
+                                        template_id: candidate.templateId,
+                                        document_type_key: candidate.documentTypeKey,
+                                        instance_id: candidate.candidateInstanceIds.length === 1 ? candidate.candidateInstanceIds[0] : "",
+                                        obligationSelectionConfirmed: true,
+                                      })}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="text-sm font-medium">{candidate.templateName}</span>
+                                        <Badge variant="outline">{Math.round(candidate.score * 100)}%</Badge>
+                                      </div>
+                                      <p className="mt-1 text-xs text-muted-foreground">{candidate.documentLabel}</p>
+                                      <p className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">{candidate.reasons.join(" · ")}</p>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
 
                           <div className="grid gap-3 md:grid-cols-3">
                             <div className="space-y-2">
@@ -3543,19 +3817,35 @@ export function GrowObligationsWorkspace({
                               <Label>Documento esperado</Label>
                               <Select value={item.document_type_key ? `${item.template_id}::${item.document_type_key}` : "none"} onValueChange={(value) => {
                                 if (value === "none") {
-                                  updateQueueItem(item.id, { template_id: "", document_type_key: "", instance_id: "" });
+                                  updateQueueItem(item.id, { template_id: "", document_type_key: "", instance_id: "", obligationSelectionConfirmed: false });
                                   return;
                                 }
                                 const [templateId, documentTypeKey] = value.split("::");
-                                updateQueueItem(item.id, { template_id: templateId, document_type_key: documentTypeKey, instance_id: "" });
+                                const candidate = item.preview?.match.obligationCandidates?.find((option) => option.templateId === templateId && option.documentTypeKey === documentTypeKey);
+                                updateQueueItem(item.id, {
+                                  template_id: templateId,
+                                  document_type_key: documentTypeKey,
+                                  instance_id: candidate?.candidateInstanceIds.length === 1 ? candidate.candidateInstanceIds[0] : "",
+                                  obligationSelectionConfirmed: true,
+                                });
                               }}>
                                 <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                                <SelectContent><SelectItem value="none">Sem documento manual</SelectItem>{allDocumentOptions.map((option) => <SelectItem key={option.optionKey} value={option.optionKey}>{option.label}</SelectItem>)}</SelectContent>
+                                <SelectContent><SelectItem value="none">Sem documento manual</SelectItem>{documentOptionsForUpload(item, allDocumentOptions).map((option) => <SelectItem key={option.optionKey} value={option.optionKey}>{option.label}</SelectItem>)}</SelectContent>
                               </Select>
                             </div>
                             <div className="space-y-2">
                               <Label>Competência da obrigação</Label>
-                              <Input value={item.suggested_competence_label} onChange={(event) => updateQueueItem(item.id, { suggested_competence_label: event.target.value })} />
+                              <Input
+                                value={item.suggested_competence_label}
+                                placeholder={item.isPreviewing ? "Lendo o recorte da competência..." : "Competência não encontrada no recorte"}
+                                onChange={(event) => updateQueueItem(item.id, {
+                                  suggested_competence_label: event.target.value,
+                                  competenceManuallyEdited: true,
+                                })}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Preenchida pela leitura do recorte da competência. Edite apenas para corrigir manualmente.
+                              </p>
                             </div>
                           </div>
 
@@ -3740,6 +4030,28 @@ export function GrowObligationsWorkspace({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">{dueRuleTypeDescription[templateForm.due_rule_type]}</p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Ajuste quando o vencimento cair em dia não útil</Label>
+                <Select
+                  value={templateForm.due_date_adjustment_policy}
+                  onValueChange={(value) =>
+                    setTemplateForm((prev) => ({
+                      ...prev,
+                      due_date_adjustment_policy: value as GrowObligationTemplate["due_date_adjustment_policy"],
+                    }))
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(dueDateAdjustmentPolicyLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se a data cair em sábado, domingo ou feriado cadastrado, o sistema antecipa ou posterga conforme esta opção.
+                </p>
               </div>
               {templateForm.due_rule_type === "calendar_day" && (
                 <div className="space-y-2">
@@ -3944,7 +4256,15 @@ export function GrowObligationsWorkspace({
                 value={templateForm.completion_whatsapp_body}
                 onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_whatsapp_body: event.target.value }))}
                 rows={6}
-                placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                disabled={!templateForm.completion_whatsapp_enabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                Posicione <code>{DOCUMENT_LINK_PLACEHOLDER}</code> onde o link deve aparecer. Essa variável é obrigatória na mensagem.
+              </p>
+              <TemplateMessageAssetsField
+                templateId={templateForm.id}
+                channel="whatsapp"
                 disabled={!templateForm.completion_whatsapp_enabled}
               />
             </div>
@@ -3997,13 +4317,18 @@ export function GrowObligationsWorkspace({
                   value={templateForm.completion_email_body}
                   onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_email_body: event.target.value }))}
                   rows={6}
-                  placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                  placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                  disabled={!templateForm.completion_email_enabled}
+                />
+                <TemplateMessageAssetsField
+                  templateId={templateForm.id}
+                  channel="email"
                   disabled={!templateForm.completion_email_enabled}
                 />
               </div>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-              {"Placeholders disponíveis: {{cliente_nome}}, {{obrigacao_nome}}, {{competencia}}, {{setor}}, {{prazo_tecnico}}."}
+              {"Variáveis disponíveis: {{cliente_nome}}, {{obrigacao_nome}}, {{competencia}}, {{setor}}, {{prazo_tecnico}}, {{documento_link}}. A variável {{documento_link}} é obrigatória no corpo da mensagem."}
             </div>
           </details>
 
@@ -4445,7 +4770,7 @@ export function GrowObligationsWorkspace({
               <div className="rounded-2xl border border-border/60 p-4 text-sm">
                 <p className="font-medium">Evidencias da leitura</p>
                 <div className="mt-2 grid gap-1 text-muted-foreground sm:grid-cols-2">
-                  <p>CNPJ detectado: <span className="text-foreground">{documentInResolution.detected_cnpj || "nao encontrado"}</span></p>
+                  <p>CPF/CNPJ detectado: <span className="text-foreground">{documentInResolution.detected_cnpj || "nao encontrado"}</span></p>
                   <p>Competencia detectada: <span className="text-foreground">{documentInResolution.competence_detected || "nao encontrada"}</span></p>
                   <p>Modelo: <span className="text-foreground">{documentInResolution.reference_file?.file_name || "nao identificado"}</span></p>
                   <p>Decisao: <span className="text-foreground">{documentInResolution.recognition_decision || "revisao manual"}</span></p>

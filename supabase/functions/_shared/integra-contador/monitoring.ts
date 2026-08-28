@@ -1,0 +1,4 @@
+export type MonitoringRun={id:string;created_at:string;status:string;error_category:string|null;attempt_count:number;max_attempts:number};
+export const isReprocessEligible=(run:MonitoringRun)=>run.status==="failed"&&["temporary","timeout","rate_limit"].includes(run.error_category||"")&&run.attempt_count>=run.max_attempts;
+export function nextKeysetCursor<T extends {id:string;created_at:string}>(rows:T[],pageSize:number){if(rows.length<pageSize)return null;const last=rows.at(-1)!;return{createdAt:last.created_at,id:last.id}}
+export function summarizeUsage(rows:Array<{success:boolean;cache_hit:boolean;estimated_cost?:number|null}>){return rows.reduce((summary,row)=>({requests:summary.requests+1,successes:summary.successes+Number(row.success),cacheHits:summary.cacheHits+Number(row.cache_hit),estimatedCost:summary.estimatedCost+(row.estimated_cost||0)}),{requests:0,successes:0,cacheHits:0,estimatedCost:0})}

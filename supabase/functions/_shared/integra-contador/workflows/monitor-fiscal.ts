@@ -1,0 +1,5 @@
+import type {MonitoringFixtureEvent} from "../testing/fixtures/monitoring.ts";
+export const MONITOR_BATCH_LIMIT=1000;
+export function batchMonitorTargets<T>(targets:T[],size=MONITOR_BATCH_LIMIT){if(size<1||size>MONITOR_BATCH_LIMIT)throw new Error("INVALID_BATCH_SIZE");const batches:T[][]=[];for(let i=0;i<targets.length;i+=size)batches.push(targets.slice(i,i+size));return batches;}
+export function selectChangedEvents(events:readonly MonitoringFixtureEvent[],seen:ReadonlySet<string>){const accepted:MonitoringFixtureEvent[]=[];const fingerprints=new Set(seen);for(const event of events){if(!event.changed||fingerprints.has(event.fingerprint))continue;fingerprints.add(event.fingerprint);accepted.push(event)}return accepted;}
+export function nextMonitorState(input:{quotaRemaining:number;waitMs:number;reconciliation?:boolean}){if(input.quotaRemaining<=0)return{status:"quota_exhausted" as const,nextAttemptAt:new Date(Date.now()+Math.max(input.waitMs,86400000)).toISOString()};return{status:"completed" as const,nextAttemptAt:new Date(Date.now()+Math.max(input.waitMs,3000)).toISOString(),reason:input.reconciliation?"scheduled_reconciliation":null};}

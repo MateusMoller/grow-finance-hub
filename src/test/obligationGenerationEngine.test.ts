@@ -11,6 +11,10 @@ const canonicalMigration = readFileSync(
   resolve(root, "supabase/migrations/20260806114901_unify_obligation_generation_day_25.sql"),
   "utf8",
 );
+const workspaceSource = readFileSync(
+  resolve(root, "src/components/obligations/GrowObligationsWorkspace.tsx"),
+  "utf8",
+);
 
 describe("canonical obligation generation engine", () => {
   it("keeps all API generation paths on the database RPC", () => {
@@ -35,6 +39,14 @@ describe("canonical obligation generation engine", () => {
     expect(canonicalMigration).toContain("leap year regression");
     expect(canonicalMigration).toContain("business day regression");
     expect(canonicalMigration).toContain("last business day regression");
+  });
+
+  it("allows the obligation catalog to anticipate or postpone non-business-day deadlines", () => {
+    expect(canonicalMigration).toContain("previous_business_day");
+    expect(canonicalMigration).toContain("next_business_day");
+    expect(edgeFunction).toContain("due_date_adjustment_policy");
+    expect(workspaceSource).toContain("Antecipar para o dia útil anterior");
+    expect(workspaceSource).toContain("Postergar para o próximo dia útil");
   });
 
   it("saves client links in bulk without failing the main template save", () => {

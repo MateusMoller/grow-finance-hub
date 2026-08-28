@@ -15,6 +15,7 @@ import {
   BookOpen,
   FileUp,
   ListChecks,
+  ReceiptText,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -68,6 +69,7 @@ const mainItems = [
 ];
 
 const operationalItems = [
+  { title: "Notas Fiscais", url: "/app/notas-fiscais", icon: ReceiptText },
   { title: "Vendas", url: "/app/crm", icon: TrendingUp },
   { title: "WhatsApp", url: "/app/whatsapp", icon: MessageCircle },
   { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
@@ -78,6 +80,7 @@ const operationalItems = [
     url: "/app/obrigacoes",
     icon: FileSpreadsheet,
     subItems: [
+      { title: "Dashboard de obrigações", url: "/app/obrigacoes?tab=dashboard", icon: LayoutDashboard, tab: "dashboard" },
       { title: "Central de documentos", url: "/app/obrigacoes?tab=documentos", icon: FileUp, tab: "documentos" },
       { title: "Catálogo", url: "/app/obrigacoes?tab=catalogo", icon: BookOpen, tab: "catalogo" },
       { title: "Lista de entregas", url: "/app/obrigacoes?tab=entregas", icon: ListChecks, tab: "entregas" },
@@ -95,7 +98,7 @@ function SidebarSection({
   label,
   items,
   icon: SectionIcon,
-  defaultOpen = false,
+  defaultOpen = true,
 }: {
   label: string;
   items: SidebarItem[];
@@ -111,22 +114,60 @@ function SidebarSection({
       : location.pathname === item.url || location.pathname.startsWith(`${item.url}/`),
   );
 
+  if (collapsed) {
+    return (
+      <SidebarGroup className="items-center px-0 py-1">
+        <SidebarGroupContent className="flex justify-center">
+          <SidebarMenu className="w-auto items-center gap-1.5">
+            {items.map((item) => (
+              <SidebarMenuItem key={item.title} className="flex justify-center">
+                <SidebarMenuButton
+                  asChild
+                  tooltip={item.title}
+                  className="group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:!p-0"
+                >
+                  <NavLink
+                    to={item.url}
+                    end={item.url === "/app"}
+                    onClick={() => {
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/40 hover:text-sidebar-foreground [&>svg]:m-0"
+                    activeClassName="bg-sidebar-accent/75 text-sidebar-primary shadow-sm ring-1 ring-sidebar-border/40"
+                    aria-label={item.title}
+                  >
+                    <item.icon className="h-[18px] w-[18px]" />
+                    {item.badgeCount && item.badgeCount > 0 ? (
+                      <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground ring-2 ring-sidebar">
+                        {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                      </span>
+                    ) : null}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    );
+  }
+
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/section">
-      <SidebarGroup className="px-1.5 py-1.5">
+      <SidebarGroup className="px-1.5 py-1">
         <CollapsibleTrigger asChild disabled={collapsed}>
           <SidebarGroupLabel
             className={cn(
               collapsed
                 ? "cursor-default"
-                : "mb-1 flex h-12 cursor-pointer items-center justify-between rounded-2xl border border-sidebar-border/35 bg-sidebar-accent/10 px-3 text-sidebar-foreground/75 shadow-sm transition-all hover:-translate-y-px hover:border-sidebar-border/60 hover:bg-sidebar-accent/25 hover:text-sidebar-foreground hover:shadow-md",
-              isSectionActive && !collapsed && "border-sidebar-primary/25 bg-sidebar-accent/30 text-sidebar-foreground",
+                : "mb-1 flex h-10 cursor-pointer items-center justify-between rounded-xl px-2.5 text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent/25 hover:text-sidebar-foreground",
+              isSectionActive && !collapsed && "bg-sidebar-accent/20 text-sidebar-foreground",
             )}
           >
             <span className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-sidebar-accent/45 text-sidebar-foreground/70",
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent/30 text-sidebar-foreground/65",
                   isSectionActive && "bg-sidebar-primary/15 text-sidebar-primary",
                 )}
               >
@@ -136,34 +177,31 @@ function SidebarSection({
                 <span className="block truncate text-[11px] font-bold uppercase tracking-[0.08em]">
                   {label}
                 </span>
-                <span className="block text-[10px] font-medium normal-case text-sidebar-foreground/45">
-                  {items.length} atalho{items.length === 1 ? "" : "s"}
-                </span>
               </span>
             </span>
             {!collapsed && (
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/30 transition-colors group-hover/section:bg-sidebar-accent/50">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors group-hover/section:bg-sidebar-accent/35">
                 <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=closed]/section:-rotate-90" />
               </span>
             )}
           </SidebarGroupLabel>
         </CollapsibleTrigger>
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-          <SidebarGroupContent className="pl-2">
-            <SidebarMenu className="gap-1 border-l border-sidebar-border/35 pl-2">
+          <SidebarGroupContent className="pl-1">
+            <SidebarMenu className="gap-1 pl-1">
               {items.map((item) => item.subItems?.length ? (
                 <Collapsible
                   key={item.title}
                   asChild
-                  defaultOpen={location.pathname === item.url}
+                  defaultOpen
                   className="group/item"
                 >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild disabled={collapsed}>
                       <SidebarMenuButton
                         className={cn(
-                          "h-9 rounded-xl px-2 text-sidebar-foreground/72 transition-all hover:translate-x-0.5 hover:bg-sidebar-accent/35 hover:text-sidebar-foreground",
-                          location.pathname === item.url && "bg-sidebar-accent/70 font-semibold text-sidebar-primary shadow-sm ring-1 ring-sidebar-border/35",
+                          "h-9 rounded-lg px-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
+                          location.pathname === item.url && "bg-sidebar-accent/65 font-semibold text-sidebar-primary",
                         )}
                       >
                         <item.icon className="mr-2 h-4 w-4 text-sidebar-foreground/60" />
@@ -298,9 +336,9 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent className="gap-2 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
-        <div className="mb-3 flex items-center gap-2 rounded-2xl px-2.5 py-2.5">
-          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl bg-sidebar-accent/30 p-0.5 opacity-90 shadow-sm">
+      <SidebarContent className="sidebar-scrollbar gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+        <div className="mb-2 flex items-center gap-2 px-2.5 py-2 group-data-[collapsible=icon]:mb-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-1.5">
+          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-sidebar-accent/30 p-0.5 opacity-90">
             <img src={growIcon} alt="Grow" className="h-full w-full object-cover" />
           </div>
           {!collapsed && (
@@ -324,7 +362,7 @@ export function AppSidebar({
         )}
       </SidebarContent>
       {footerControls && (
-        <SidebarFooter className="border-t border-sidebar-border/50 bg-sidebar-accent/10 px-3 py-3 shadow-[0_-10px_30px_rgba(0,0,0,0.08)]">
+        <SidebarFooter className="border-t border-sidebar-border/40 px-3 py-3">
           {footerControls}
         </SidebarFooter>
       )}

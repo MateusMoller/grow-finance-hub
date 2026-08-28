@@ -1,0 +1,41 @@
+insert into public.obligation_templates (
+  organization_id,
+  code,
+  name,
+  sector,
+  periodicity,
+  competence_reference,
+  technical_due_month_reference,
+  due_day,
+  priority,
+  expected_documents,
+  is_active,
+  generates_calendar,
+  generates_kanban,
+  requires_document,
+  operational_notes,
+  baseline_source,
+  catalog_review_status,
+  normalized_name
+)
+select
+  organization.id,
+  'darf_inss',
+  'DARF - INSS',
+  'Fiscal',
+  'monthly',
+  'anterior',
+  'vigente',
+  20,
+  'alta',
+  '[]'::jsonb,
+  true,
+  true,
+  true,
+  true,
+  'Emissão do DARF previdenciário após a transmissão da DCTFWeb. Cadastro inicial sujeito a complementação.',
+  'seed',
+  'approved',
+  'darf inss'
+from public.organizations organization
+on conflict (organization_id, code) do nothing;

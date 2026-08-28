@@ -108,6 +108,116 @@
   }
 }
 
+@layer components {
+  /* Linguagem visual compartilhada das páginas administrativas.
+     Prioriza hierarquia, leitura rápida e consistência entre módulos. */
+  .app-shell {
+    --app-surface: hsl(var(--card));
+    --app-surface-muted: hsl(var(--muted) / 0.28);
+    --app-border: hsl(var(--border) / 0.68);
+    --app-radius: 0.875rem;
+  }
+
+  .app-topbar {
+    box-shadow: 0 1px 0 hsl(var(--foreground) / 0.025);
+  }
+
+  .app-workspace-content {
+    background: hsl(var(--background));
+    scrollbar-gutter: stable;
+  }
+
+  .app-workspace-content > div {
+    min-height: 100%;
+  }
+
+  .app-standard-content {
+    background:
+      radial-gradient(circle at 50% -12rem, hsl(var(--primary) / 0.045), transparent 30rem),
+      hsl(var(--background));
+    scrollbar-gutter: stable;
+  }
+
+  .app-standard-content > div {
+    max-width: 100%;
+  }
+
+  .app-standard-content h1.font-heading {
+    font-size: 1.5rem;
+    line-height: 2rem;
+    letter-spacing: -0.025em;
+    color: hsl(var(--foreground));
+  }
+
+  .app-standard-content h2.font-heading,
+  .app-standard-content h2.font-semibold {
+    letter-spacing: -0.012em;
+  }
+
+  .app-standard-content :where(.shadow-sm) {
+    --tw-shadow: 0 1px 2px 0 hsl(var(--foreground) / 0.025);
+    --tw-shadow-colored: 0 1px 2px 0 var(--tw-shadow-color);
+  }
+
+  .app-standard-content :where(.rounded-3xl.border.bg-card, .rounded-2xl.border.bg-card, .rounded-xl.border.bg-card) {
+    border-color: var(--app-border);
+    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.018);
+  }
+
+  .app-standard-content :where(.rounded-3xl.border, .rounded-2xl.border) {
+    border-radius: var(--app-radius);
+  }
+
+  .app-standard-content :where(.bg-muted\/20, .bg-muted\/30, .bg-muted\/35) {
+    background-color: var(--app-surface-muted);
+  }
+
+  .app-standard-content :where(table, [role="table"]) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .app-standard-content :where(input, textarea, [role="combobox"]) {
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .app-standard-content :where(input, textarea, [role="combobox"]):focus {
+    border-color: hsl(var(--ring) / 0.42);
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.08);
+  }
+
+  .app-standard-content :where(input, button, [role="combobox"]):focus-visible {
+    outline: none;
+  }
+
+  .app-standard-content :where(button, a) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app-standard-content :where(.divide-y > :not([hidden]) ~ :not([hidden])) {
+    border-color: hsl(var(--border) / 0.58);
+  }
+
+  .app-standard-content::-webkit-scrollbar,
+  .app-standard-content *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .app-standard-content::-webkit-scrollbar-thumb,
+  .app-standard-content *::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.22);
+    background-clip: padding-box;
+  }
+
+  @media (min-width: 768px) {
+    .app-standard-content > div {
+      padding-inline: 0.125rem;
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

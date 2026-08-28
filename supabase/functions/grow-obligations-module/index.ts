@@ -1,7 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendWhatsAppTextMessage } from "../_shared/ai/whatsapp.ts";
+import { sendWhatsAppImageMessage, sendWhatsAppTextMessage } from "../_shared/ai/whatsapp.ts";
 import { normalizePhoneDigits } from "../_shared/ai/utils.ts";
 import { resolveConfiguredEmailSender, sendEmailViaSmtp } from "../_shared/email/smtp.ts";
+import { dispatchWhatsAppTemplateMessage } from "../_shared/whatsapp-provider.ts";
+import { isActiveWindowOpen } from "../_shared/whatsapp-validation.ts";
+
+const WHATSAPP_OBLIGATION_TEMPLATE_NAME = Deno.env.get("WHATSAPP_OBLIGATION_TEMPLATE_NAME")?.trim() || "";
+const WHATSAPP_OBLIGATION_TEMPLATE_LANGUAGE = Deno.env.get("WHATSAPP_OBLIGATION_TEMPLATE_LANGUAGE")?.trim() || "pt_BR";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +51,16 @@ type MatchCandidate = {
   document: ExpectedDocumentDefinition;
 };
 
+type ObligationMatchCandidate = {
+  templateId: string;
+  templateName: string;
+  documentTypeKey: string;
+  documentLabel: string;
+  score: number;
+  reasons: string[];
+  candidateInstanceIds: string[];
+};
+
 type MatchResult = {
   resolvedInstanceId: string | null;
   suggestedTemplateId: string | null;
@@ -67,6 +82,7 @@ type MatchResult = {
   extractedTextPreview? : string | null;
   fingerprintPayload? : JsonRecord;
   autoLinkBlockReason? : string | null;
+  obligationCandidates? : ObligationMatchCandidate[];
 };
 
 type ReferenceFileRow = {
@@ -122,6 +138,7 @@ type TemplateRow = {
   technical_due_month_reference: string;
   due_day: number;
   due_rule_type? : string | null;
+  due_date_adjustment_policy? : string | null;
   due_business_day_index? : number | null;
   due_fixed_month? : number | null;
   due_fixed_day? : number | null;
@@ -357,6 +374,7 @@ type DeliveryPreparation = {
   client: ClientDeliveryContext;
   inboxItem: InboxRow | null;
   files: Array<JsonRecord>;
+  messageAssets: Array<JsonRecord>;
   sender: {
     verifiedFrom: string;
     replyTo: string;
@@ -370,6 +388,93 @@ type DeliveryPreparation = {
   textBody: string;
   warnings: string[];
 };
+
+const messageAssetMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const maxMessageAssetBytes = 5 * 1024 * 1024;
+
+async function handleListTemplateMessageAssets(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  const templateId = asTrimmedString(payload.template_id);
+  const channel = asTrimmedString(payload.channel);
+  if (!templateId || !["email", "whatsapp"].includes(channel || "")) {
+    return jsonResponse({ error: "Template e canal validos sao obrigatorios." }, 400);
+  }
+  const { data, error } = await supabaseAdmin
+    .from("obligation_template_message_assets")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("template_id", templateId)
+    .eq("channel", channel)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) return jsonResponse({ error: error.message }, 400);
+  const assets = await Promise.all(((data || []) as JsonRecord[]).map(async (asset) => {
+    const { data: signed } = await supabaseAdmin.storage
+      .from(String(asset.storage_bucket))
+      .createSignedUrl(String(asset.storage_path), 600);
+    return { ...asset, preview_url: signed?.signedUrl || null };
+  }));
+  return jsonResponse({ ok: true, assets });
+}
+
+async function handleRegisterTemplateMessageAsset(
+  supabaseAdmin: SupabaseAdmin,
+  actorId: string,
+  roles: string[],
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  if (!hasTemplateManagerRole(roles)) return jsonResponse({ error: "Acesso negado." }, 403);
+  const templateId = asTrimmedString(payload.template_id);
+  const channel = asTrimmedString(payload.channel);
+  const storagePath = asTrimmedString(payload.storage_path);
+  const fileName = asTrimmedString(payload.file_name);
+  const contentType = asTrimmedString(payload.content_type);
+  const fileSize = Number(payload.file_size);
+  if (!templateId || !["email", "whatsapp"].includes(channel || "") || !storagePath || !fileName) {
+    return jsonResponse({ error: "Dados do anexo invalidos." }, 400);
+  }
+  if (!contentType || !messageAssetMimeTypes.has(contentType) || !Number.isFinite(fileSize) || fileSize <= 0 || fileSize > maxMessageAssetBytes) {
+    return jsonResponse({ error: "Envie uma imagem JPG, PNG, WEBP ou GIF de ate 5 MB." }, 400);
+  }
+  const expectedPrefix = `${organizationId}/message-assets/${templateId}/`;
+  if (!storagePath.startsWith(expectedPrefix)) return jsonResponse({ error: "Caminho de armazenamento invalido." }, 400);
+  const { data: template } = await supabaseAdmin.from("obligation_templates").select("id").eq("organization_id", organizationId).eq("id", templateId).maybeSingle();
+  if (!template) return jsonResponse({ error: "Template nao encontrado." }, 404);
+  const { data, error } = await supabaseAdmin.from("obligation_template_message_assets").insert({
+    organization_id: organizationId,
+    template_id: templateId,
+    channel,
+    storage_bucket: "obligation-files",
+    storage_path: storagePath,
+    file_name: fileName,
+    content_type: contentType,
+    file_size: fileSize,
+    created_by: actorId,
+  }).select("*").single();
+  if (error) return jsonResponse({ error: error.message }, 400);
+  return jsonResponse({ ok: true, asset: data });
+}
+
+async function handleDeleteTemplateMessageAsset(
+  supabaseAdmin: SupabaseAdmin,
+  roles: string[],
+  organizationId: string,
+  payload: JsonRecord,
+) {
+  if (!hasTemplateManagerRole(roles)) return jsonResponse({ error: "Acesso negado." }, 403);
+  const assetId = asTrimmedString(payload.asset_id);
+  if (!assetId) return jsonResponse({ error: "Anexo obrigatorio." }, 400);
+  const { data: asset } = await supabaseAdmin.from("obligation_template_message_assets").select("*").eq("organization_id", organizationId).eq("id", assetId).maybeSingle();
+  if (!asset) return jsonResponse({ error: "Anexo nao encontrado." }, 404);
+  const { error } = await supabaseAdmin.from("obligation_template_message_assets").delete().eq("organization_id", organizationId).eq("id", assetId);
+  if (error) return jsonResponse({ error: error.message }, 400);
+  await supabaseAdmin.storage.from(String(asset.storage_bucket)).remove([String(asset.storage_path)]);
+  return jsonResponse({ ok: true });
+}
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -500,7 +605,7 @@ function asInteger(value: unknown, fallback: number | null = null) {
 function normalizeCnpj(value: string | null | undefined) {
   if (!value) return null;
   const digits = value.replace(/\D/g, "");
-  return digits.length === 14 ? digits : null;
+  return digits.length === 11 || digits.length === 14 ? digits : null;
 }
 
 function normalizeToken(value: unknown) {
@@ -1448,7 +1553,7 @@ async function resolveDocumentReferenceMatch(
     candidateInstanceIds: [],
     detectedClientId: clientId,
     detectedCnpj: analysis.detected_cnpj,
-    competenceDetected: analysis.competence_detected,
+    competenceDetected: suggestedCompetenceLabel,
     referenceFileId: null,
     referenceMatchScore: 0,
     referenceMatchReasons: [],
@@ -1471,7 +1576,10 @@ async function resolveDocumentReferenceMatch(
     : null;
 
   let effectiveClientId = detectedClientByCnpj?.id || clientId || null;
-  let effectiveCompetence = analysis.competence_detected || suggestedCompetenceLabel || null;
+  // Competence is an authoritative model-zone signal. Whole-document analysis
+  // must never feed this value because unrelated dates (admission, issue date,
+  // signatures) can otherwise be mistaken for the obligation competence.
+  let effectiveCompetence = suggestedCompetenceLabel || null;
   let configuredReferenceId: string | null = null;
 
   const configuredModels = Array.from(
@@ -1488,16 +1596,29 @@ async function resolveDocumentReferenceMatch(
         extracted_text: candidate.reference.extracted_text,
         extracted_text_preview: candidate.reference.extracted_text_preview,
       });
-      return { candidate, referenceFingerprint, layout, zoneSignals: extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint) };
+      const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
+      const recognitionScore = Math.min(1, layout.score * 0.85 + zoneSignals.titleScore * 0.15);
+      return { candidate, referenceFingerprint, layout, zoneSignals, recognitionScore };
     })
     .filter((item) => item.layout.usable)
-    .sort((left, right) => right.layout.score - left.layout.score);
+    .sort((left, right) => right.recognitionScore - left.recognitionScore);
 
   const configuredModel = configuredModels[0];
+  const configuredCompetenceValues = Array.from(new Set(
+    configuredModels
+      .map((item) => item.zoneSignals.competence)
+      .filter((value): value is string => Boolean(value)),
+  ));
+  const zoneConsensusCompetence = configuredCompetenceValues.length === 1
+    ? configuredCompetenceValues[0]
+    : null;
+  const primaryZoneCompetence = configuredModel?.zoneSignals.competence || null;
+  const authoritativeZoneCompetence = primaryZoneCompetence || zoneConsensusCompetence;
+  if (authoritativeZoneCompetence) effectiveCompetence = authoritativeZoneCompetence;
   const configuredModelIsUnique = Boolean(
     configuredModel &&
     configuredModel.layout.score >= 0.68 &&
-    (!configuredModels[1] || configuredModel.layout.score - configuredModels[1].layout.score > 0.05),
+    (!configuredModels[1] || configuredModel.recognitionScore - configuredModels[1].recognitionScore > 0.05),
   );
 
   if (configuredModelIsUnique && configuredModel) {
@@ -1511,12 +1632,17 @@ async function resolveDocumentReferenceMatch(
         ...emptyResult,
         suggestedTemplateId: configuredModel.candidate.template.id,
         documentTypeKey: configuredModel.candidate.document.document_type_key,
+        competenceDetected: authoritativeZoneCompetence,
         referenceFileId: configuredReferenceId,
-        referenceMatchScore: Number(configuredModel.layout.score.toFixed(2)),
+        referenceMatchScore: Number(configuredModel.recognitionScore.toFixed(2)),
         reasons: [
           `Modelo configurado reconhecido: ${configuredModel.candidate.reference.file_name}.`,
-          !zoneClient ? "O CNPJ nao foi lido com seguranca na area marcada." : "Cliente identificado pela area marcada de CNPJ.",
+          !zoneClient ? "O CPF/CNPJ nao foi lido com seguranca na area marcada." : "Cliente identificado pela area marcada de CPF/CNPJ.",
           !configuredModel.zoneSignals.competence ? "A competencia nao foi lida com seguranca na area marcada." : "Competencia identificada pela area marcada.",
+          `Texto exato da area de competencia: ${configuredModel.zoneSignals.competenceText || "vazio"}.`,
+          configuredModel.zoneSignals.titleText
+            ? `Titulo lido na area marcada: ${configuredModel.zoneSignals.titleText.slice(0, 120)}.`
+            : "O titulo nao foi localizado na area marcada; ele permanece apenas como sinal auxiliar.",
           "O conteudo fora das areas marcadas e o nome do arquivo foram ignorados.",
         ],
         autoLinkBlockReason: "Modelo reconhecido, mas as areas obrigatorias exigem correcao manual.",
@@ -1551,9 +1677,9 @@ async function resolveDocumentReferenceMatch(
     return {
       ...emptyResult,
       reasons: analysis.detected_cnpj
-        ?["CNPJ detectado nao corresponde a nenhum cliente da Grow."]
-        : ["Nao foi possivel detectar CNPJ valido no documento."],
-      autoLinkBlockReason: "CNPJ obrigatorio para auto-vinculo.",
+        ?["CPF/CNPJ detectado nao corresponde a nenhum cliente da Grow."]
+        : ["Nao foi possivel detectar CPF/CNPJ valido no documento."],
+      autoLinkBlockReason: "CPF/CNPJ obrigatorio para auto-vinculo.",
     };
   }
 
@@ -1652,7 +1778,7 @@ async function resolveDocumentReferenceMatch(
     const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens);
     const layoutMatch = computeLayoutSimilarity(analysis.fingerprint_payload, referenceFingerprintForLayout);
     const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
-    const zoneCompetence = zoneSignals.competence || effectiveCompetence;
+    const zoneCompetence = zoneSignals.hasCompetenceZone ? zoneSignals.competence : effectiveCompetence;
     const structuralScore = layoutMatch.usable
       ? (layoutMatch.score * (layoutMatch.explicit ? 0.74 : 0.48))
       : 0;
@@ -1660,9 +1786,10 @@ async function resolveDocumentReferenceMatch(
       ? keywordScore * 0.04 + cueScore * 0.04 + fingerprintScore * 0.03
       : keywordScore * 0.18 + cueScore * 0.12 + fingerprintScore * 0.1;
     const cnpjScore = detectedClientByCnpj ? 0.08 : 0;
+    const titleScore = zoneSignals.titleScore * 0.12;
     const totalScore = Math.max(
       0,
-      Math.min(1, structuralScore + textSupportScore + aliasScore + docHintScore + cnpjScore + familyMatch.score),
+      Math.min(1, structuralScore + textSupportScore + aliasScore + docHintScore + cnpjScore + titleScore + familyMatch.score),
     );
 
     const eligibleInstances = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
@@ -1697,13 +1824,36 @@ async function resolveDocumentReferenceMatch(
   }
 
   const ambiguous = second && Math.abs(best.totalScore - second.totalScore) <= 0.05;
+  const candidateFloor = Math.max(0.25, best.totalScore - 0.18);
+  const obligationCandidates: ObligationMatchCandidate[] = ranked
+    .filter((candidate) => candidate.totalScore >= candidateFloor && !candidate.familyMismatched)
+    .slice(0, 5)
+    .map((candidate) => ({
+      templateId: candidate.template.id,
+      templateName: candidate.template.name,
+      documentTypeKey: candidate.document.document_type_key,
+      documentLabel: candidate.document.label,
+      score: candidate.totalScore,
+      reasons: [
+        candidate.zoneSignals.titleScore > 0
+          ? `Titulo compativel (${candidate.zoneSignals.titleScore.toFixed(2)}).`
+          : "Titulo sem evidencia suficiente.",
+        candidate.familyMatched ? "Tipo documental compativel." : "Tipo documental nao confirmado.",
+        candidate.layoutUsable
+          ? `Layout compativel (${candidate.layoutScore.toFixed(2)}).`
+          : "Layout sem assinatura completa.",
+      ],
+      candidateInstanceIds: candidate.eligibleInstances.map((item) => item.instance.id),
+    }));
   const zoneClientByCnpj = best.zoneSignals.cnpj
     ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === best.zoneSignals.cnpj) || null
     : null;
   const zoneClientMismatch = Boolean(zoneClientByCnpj && zoneClientByCnpj.id !== effectiveClientId);
   const finalDetectedClientId = zoneClientByCnpj?.id || effectiveClientId;
   const finalDetectedCnpj = best.zoneSignals.cnpj || analysis.detected_cnpj;
-  const finalCompetence = best.zoneSignals.competence || effectiveCompetence;
+  const finalCompetence = best.zoneSignals.hasCompetenceZone
+    ? best.zoneSignals.competence || authoritativeZoneCompetence
+    : effectiveCompetence;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
   const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
   const hasConfiguredZoneAuthority = Boolean(
@@ -1762,8 +1912,19 @@ async function resolveDocumentReferenceMatch(
   if (finalCompetence) {
     reasons.push(`Competencia considerada: ${finalCompetence}.`);
   }
-  if (best.zoneSignals.cnpjText || best.zoneSignals.competenceText) {
-    reasons.push("CNPJ/competencia lidos nas areas predefinidas do documento modelo.");
+  if (best.zoneSignals.cnpjText || best.zoneSignals.competenceText || best.zoneSignals.titleText) {
+    reasons.push("CNPJ, competencia e/ou titulo lidos nas areas predefinidas do documento modelo.");
+  }
+  if (best.zoneSignals.hasCompetenceZone) {
+    reasons.push(`Texto exato da area de competencia: ${best.zoneSignals.competenceText || "vazio"}.`);
+    reasons.push(
+      best.zoneSignals.competence
+        ? "Competencia definida exclusivamente pelo conteudo da area marcada no documento modelo."
+        : "A area marcada para competencia nao contem uma competencia reconhecivel; datas externas foram ignoradas.",
+    );
+  }
+  if (best.zoneSignals.referenceTitleText) {
+    reasons.push(`Aderencia do titulo ao modelo: ${best.zoneSignals.titleScore.toFixed(2)}.`);
   }
   if (configuredReferenceId && best.reference.validation_status !== "approved") {
     reasons.push("O modelo ainda nao foi aprovado com amostras reais; vinculo automatico bloqueado.");
@@ -1780,6 +1941,8 @@ async function resolveDocumentReferenceMatch(
 
   const autoLinkBlockReason = autoAllowed
     ? null
+    : best.zoneSignals.hasCompetenceZone && !best.zoneSignals.competence
+      ? "Nao foi possivel ler a competencia dentro da area marcada no documento modelo."
     : !uniqueOpenInstance
       ? "N?o existe uma compet?ncia ?nica e eleg?vel para a obriga??o candidata."
       : ambiguous
@@ -1816,6 +1979,7 @@ async function resolveDocumentReferenceMatch(
     extractedTextPreview: analysis.extracted_text_preview,
     fingerprintPayload: analysis.fingerprint_payload,
     autoLinkBlockReason,
+    obligationCandidates: autoAllowed ? [] : obligationCandidates,
   };
 }
 
@@ -1967,12 +2131,22 @@ function renderCompletionEmailTemplate(
     technicalDueDate: string;
   },
 ) {
+  const formattedTechnicalDueDate = /^\d{4}-\d{2}-\d{2}$/.test(payload.technicalDueDate)
+    ? payload.technicalDueDate.split("-").reverse().join("/")
+    : payload.technicalDueDate;
+
   return templateText
     .replaceAll("{{cliente_nome}}", payload.clientName)
     .replaceAll("{{obrigacao_nome}}", payload.obligationName)
     .replaceAll("{{competencia}}", payload.competence)
     .replaceAll("{{setor}}", payload.sector)
-    .replaceAll("{{prazo_tecnico}}", payload.technicalDueDate);
+    .replaceAll("{{prazo_tecnico}}", formattedTechnicalDueDate);
+}
+
+const DOCUMENT_LINK_PLACEHOLDER = "{{documento_link}}";
+
+function hasRequiredDocumentLinkPlaceholder(message: string | null) {
+  return Boolean(message?.includes(DOCUMENT_LINK_PLACEHOLDER));
 }
 
 async function resolveActorEmailSender(supabaseAdmin: SupabaseAdmin, actorId: string) {
@@ -2051,6 +2225,9 @@ async function resolveDeliverySender(supabaseAdmin: SupabaseAdmin, actorId: stri
 function sanitizeProviderMessage(value: unknown) {
   const message = asTrimmedString(value);
   if (!message) return "Falha no provedor de e-mail.";
+  if (message.includes("#132001") || message.includes("Template name does not exist")) {
+    return "O modelo de mensagem para envio de obrigações ainda não está aprovado pela Meta para pt_BR.";
+  }
 
   let parsed: JsonRecord | null = null;
   try {
@@ -2090,6 +2267,68 @@ function normalizeBrazilWhatsAppRecipient(value: string | null | undefined) {
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
   return digits.length >= 10 && digits.length <= 15 ? digits : null;
+}
+
+async function hasOpenWhatsAppCustomerWindow(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  recipientPhone: string,
+) {
+  const localPhone = recipientPhone.startsWith("55") ? recipientPhone.slice(2) : recipientPhone;
+  const candidates = Array.from(new Set([recipientPhone, `+${recipientPhone}`, localPhone, `+55${localPhone}`]));
+  const { data: contacts, error: contactsError } = await supabaseAdmin
+    .from("whatsapp_contacts")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .in("phone_number", candidates);
+  if (contactsError) throw contactsError;
+  const contactIds = (contacts || []).map((contact: JsonRecord) => asTrimmedString(contact.id)).filter(Boolean);
+  if (contactIds.length === 0) return false;
+
+  const { data: conversations, error: conversationsError } = await supabaseAdmin
+    .from("whatsapp_conversations")
+    .select("active_window_expires_at")
+    .eq("organization_id", organizationId)
+    .in("contact_id", contactIds)
+    .order("active_window_expires_at", { ascending: false })
+    .limit(1);
+  if (conversationsError) throw conversationsError;
+  return isActiveWindowOpen(asTrimmedString(conversations?.[0]?.active_window_expires_at));
+}
+
+async function sendObligationWhatsAppText(
+  supabaseAdmin: SupabaseAdmin,
+  input: {
+    organizationId: string;
+    recipientPhone: string;
+    body: string;
+    clientName: string;
+    obligationName: string;
+    competence: string;
+  },
+) {
+  if (await hasOpenWhatsAppCustomerWindow(supabaseAdmin, input.organizationId, input.recipientPhone)) {
+    const result = await sendWhatsAppTextMessage(input.recipientPhone, input.body);
+    if (!result.sent) throw new Error("A integração do WhatsApp não está configurada para esta organização.");
+    const response = asJsonRecord(result.response);
+    const messages = Array.isArray(response.messages) ? response.messages : [];
+    return { providerMessageId: asTrimmedString(asJsonRecord(messages[0]).id), mode: "session" as const };
+  }
+
+  if (!WHATSAPP_OBLIGATION_TEMPLATE_NAME) {
+    throw new Error("O template aprovado de envio de obrigações do WhatsApp não está configurado.");
+  }
+
+  const secureLinks = Array.from(input.body.matchAll(/https?:\/\/\S+/g), (match) => match[0]).join("\n");
+  if (!secureLinks) throw new Error("O envio por WhatsApp não possui link seguro para o documento da obrigação.");
+
+  const result = await dispatchWhatsAppTemplateMessage({
+    toPhone: input.recipientPhone,
+    templateName: WHATSAPP_OBLIGATION_TEMPLATE_NAME,
+    languageCode: WHATSAPP_OBLIGATION_TEMPLATE_LANGUAGE,
+    bodyParameters: [input.clientName, input.obligationName, input.competence, secureLinks],
+  });
+  return { providerMessageId: result.providerMessageId, mode: "template" as const };
 }
 
 async function sha256Hex(value: string) {
@@ -2137,9 +2376,62 @@ async function createDeliveryDocumentLinks(
   return links;
 }
 
-function appendDocumentLinksToText(body: string, links: DeliveryDocumentLink[]) {
+function renderDocumentLinksInText(body: string, links: DeliveryDocumentLink[]) {
   const list = links.map((link, index) => `${index + 1}. ${link.label}: ${link.url}`).join("\n");
-  return `${body}\n\n${list}`;
+  return body.includes(DOCUMENT_LINK_PLACEHOLDER)
+    ? body.replaceAll(DOCUMENT_LINK_PLACEHOLDER, list)
+    : `${body}\n\n${list}`;
+}
+
+async function assertPgdasFactorRGate(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  instance: InstanceRow,
+  template: TemplateRow,
+) {
+  const templateCode = (asTrimmedString(template.code) || "").toLowerCase();
+  const templateName = (asTrimmedString(template.name) || "").toLowerCase();
+  if (templateCode !== "pgdas_d" && !templateName.includes("pgdas")) return;
+
+  const { data: client, error: clientError } = await supabaseAdmin
+    .from("clients")
+    .select("is_factor_r")
+    .eq("organization_id", organizationId)
+    .eq("id", instance.client_id)
+    .single();
+  if (clientError || !client) throw clientError || new Error("Cliente da obrigação não encontrado.");
+  if (!(client as JsonRecord).is_factor_r) return;
+
+  const competence = new Date(`${instance.competence_date}T00:00:00.000Z`);
+  const periodStart = new Date(Date.UTC(competence.getUTCFullYear(), competence.getUTCMonth() - 12, 1));
+  const periodEnd = new Date(Date.UTC(competence.getUTCFullYear(), competence.getUTCMonth() - 1, 1));
+  const toDate = (value: Date) => value.toISOString().slice(0, 10);
+  const { data: monthlyValues, error: valuesError } = await supabaseAdmin
+    .from("client_monthly_values")
+    .select("payroll_with_charges,gross_revenue")
+    .eq("organization_id", organizationId)
+    .eq("client_id", instance.client_id)
+    .gte("reference_month", toDate(periodStart))
+    .lte("reference_month", toDate(periodEnd));
+  if (valuesError) throw valuesError;
+
+  const completeValues = ((monthlyValues || []) as JsonRecord[]).filter(
+    (row) => row.payroll_with_charges != null && row.gross_revenue != null,
+  );
+  if (completeValues.length < 12) {
+    throw new Error(`PGDAS-D bloqueado: Fator R possui apenas ${completeValues.length} de 12 competências preenchidas.`);
+  }
+
+  let payrollFs12 = 0;
+  let revenueRbt12 = 0;
+  for (const row of completeValues) {
+    payrollFs12 += Number(row.payroll_with_charges) || 0;
+    revenueRbt12 += Number(row.gross_revenue) || 0;
+  }
+  const factorR = payrollFs12 === 0 ? 0.01 : revenueRbt12 === 0 ? 0.28 : payrollFs12 / revenueRbt12;
+  if (factorR < 0.28) {
+    throw new Error(`PGDAS-D bloqueado: Fator R de ${(factorR * 100).toFixed(2).replace(".", ",")}% está abaixo do mínimo de 28%.`);
+  }
 }
 
 async function prepareObligationDelivery(
@@ -2179,6 +2471,7 @@ async function prepareObligationDelivery(
   if (clientError || !clientData) throw new Error("Cliente da obrigacao nao encontrado.");
 
   const template = templateData as TemplateRow;
+  await assertPgdasFactorRGate(supabaseAdmin, organizationId, instance, template);
   const clientRecord = clientData as JsonRecord;
   const client: ClientDeliveryContext = {
     id: String(clientRecord.id),
@@ -2222,6 +2515,17 @@ async function prepareObligationDelivery(
       ? "O arquivo recém-anexado não foi localizado para envio."
       : "Nao ha guia anexada para enviar ao cliente.");
   }
+
+  const { data: messageAssetsData, error: messageAssetsError } = await supabaseAdmin
+    .from("obligation_template_message_assets")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("template_id", template.id)
+    .eq("channel", deliveryChannel)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (messageAssetsError) throw messageAssetsError;
+  const messageAssets = (messageAssetsData || []) as JsonRecord[];
 
   const inboxItemId =
     asTrimmedString(payload.inbox_item_id) ||
@@ -2270,7 +2574,7 @@ async function prepareObligationDelivery(
   );
   const textBody = renderCompletionEmailTemplate(
     (deliveryChannel === "whatsapp" ? template.completion_whatsapp_body : template.completion_email_body) ||
-      "Ola, {{cliente_nome}}.\n\nA guia da obrigacao {{obrigacao_nome}} referente a competencia {{competencia}} esta disponivel no link seguro abaixo.\n\nSetor responsavel: {{setor}}.",
+      "Ola, {{cliente_nome}}.\n\nA guia da obrigacao {{obrigacao_nome}} referente a competencia {{competencia}} esta disponivel aqui:\n{{documento_link}}\n\nSetor responsavel: {{setor}}.",
     renderPayload,
   );
 
@@ -2292,6 +2596,7 @@ async function prepareObligationDelivery(
     client,
     inboxItem,
     files,
+    messageAssets,
     sender,
     deliveryChannel,
     recipientEmail,
@@ -2333,6 +2638,12 @@ async function handlePrepareDelivery(
           content_type: file.content_type,
           file_size: file.file_size,
         })),
+        message_assets: prepared.messageAssets.map((asset) => ({
+          id: asset.id,
+          file_name: asset.file_name,
+          content_type: asset.content_type,
+          file_size: asset.file_size,
+        })),
         warnings: prepared.warnings,
       },
     });
@@ -2357,10 +2668,13 @@ async function handleSendDelivery(
   const attachmentIds = prepared.files
     .map((file) => asTrimmedString(file.id))
     .filter((value): value is string => Boolean(value));
+  const messageAssetIds = prepared.messageAssets
+    .map((asset) => asTrimmedString(asset.id))
+    .filter((value): value is string => Boolean(value));
   const deliveryAttemptToken = new Date().toISOString();
   const idempotencyKey =
     asTrimmedString(payload.idempotency_key) ||
-    `${buildDeliveryIdempotencyKey(prepared.instance.id, prepared.deliveryChannel, prepared.recipientEmail || prepared.recipientPhone || "", attachmentIds)}:${deliveryAttemptToken}`;
+    `${buildDeliveryIdempotencyKey(prepared.instance.id, prepared.deliveryChannel, prepared.recipientEmail || prepared.recipientPhone || "", [...attachmentIds, ...messageAssetIds])}:${deliveryAttemptToken}`;
 
   const { data: idempotentAttempt, error: idempotentAttemptError } = await supabaseAdmin
     .from("obligation_delivery_attempts")
@@ -2420,6 +2734,7 @@ async function handleSendDelivery(
         delivery_channel: prepared.deliveryChannel,
         duplicate_confirmed: duplicateConfirmed,
         attachment_count: attachmentIds.length,
+        message_asset_ids: messageAssetIds,
       },
     })
     .select("*")
@@ -2451,11 +2766,11 @@ async function handleSendDelivery(
     return jsonResponse({ error: message }, 400);
   }
 
-  const deliveryTextBody = appendDocumentLinksToText(prepared.textBody, documentLinks);
+  const deliveryTextBody = renderDocumentLinksInText(prepared.textBody, documentLinks);
   const deliveryHtmlBody = buildCompletionEmailBodyHtml(prepared.textBody, documentLinks);
   await supabaseAdmin
     .from("obligation_delivery_attempts")
-    .update({ message_body: deliveryTextBody, metadata: { delivery_channel: prepared.deliveryChannel, duplicate_confirmed: duplicateConfirmed, link_count: documentLinks.length, delivery_mode: "secure_links" } })
+    .update({ message_body: deliveryTextBody, metadata: { delivery_channel: prepared.deliveryChannel, duplicate_confirmed: duplicateConfirmed, link_count: documentLinks.length, delivery_mode: "secure_links", message_asset_ids: messageAssetIds } })
     .eq("id", String((attemptData as JsonRecord).id));
 
   let providerMessageId: string | null = null;
@@ -2463,16 +2778,20 @@ async function handleSendDelivery(
   let providerFailure: string | null = null;
   try {
     if (prepared.deliveryChannel === "whatsapp") {
-      const whatsappResult = await sendWhatsAppTextMessage(prepared.recipientPhone || "", deliveryTextBody);
-      if (!whatsappResult.sent) {
-        providerFailure = "A integracao do WhatsApp nao esta configurada para esta organizacao.";
-        providerStatus = 503;
-      } else {
-        const response = asJsonRecord(whatsappResult.response);
-        const messages = Array.isArray(response.messages) ? response.messages : [];
-        providerMessageId = asTrimmedString(asJsonRecord(messages[0]).id);
+      const whatsappResult = await sendObligationWhatsAppText(supabaseAdmin, {
+        organizationId,
+        recipientPhone: prepared.recipientPhone || "",
+        body: deliveryTextBody,
+        clientName: prepared.client.name,
+        obligationName: prepared.template.name,
+        competence: prepared.instance.competence_label,
+      });
+      providerMessageId = whatsappResult.providerMessageId;
+      if (whatsappResult.mode === "session") {
+        await sendWhatsAppMessageAssets(supabaseAdmin, prepared.recipientPhone || "", prepared.messageAssets);
       }
     } else {
+      const emailAttachments = await buildEmailMessageAttachments(supabaseAdmin, prepared.messageAssets);
       const emailResult = await sendEmailViaSmtp({
         from: prepared.sender.verifiedFrom,
         replyTo: prepared.sender.replyTo,
@@ -2480,6 +2799,7 @@ async function handleSendDelivery(
         subject: prepared.subject,
         html: deliveryHtmlBody,
         text: deliveryTextBody,
+        attachments: emailAttachments,
       });
       providerStatus = emailResult.status;
       providerMessageId = emailResult.id;
@@ -2784,13 +3104,66 @@ async function handleCancelDelivery(
 }
 
 function buildCompletionEmailBodyHtml(body: string, documentLinks: DeliveryDocumentLink[] = []) {
-  const messageHtml = escapeHtml(body).replace(/\r?\n/g, "<br>");
   const linksHtml = documentLinks.length === 0
     ? ""
-    : `<br><br>${documentLinks
+    : documentLinks
       .map((link) => `${escapeHtml(link.label)}: <a href="${escapeHtml(link.url)}">Clique aqui</a>`)
-      .join("<br>")}`;
-  return `${messageHtml}${linksHtml}`;
+      .join("<br>");
+  const messageHtml = body
+    .split(DOCUMENT_LINK_PLACEHOLDER)
+    .map((part) => escapeHtml(part).replace(/\r?\n/g, "<br>"))
+    .join(linksHtml);
+  return body.includes(DOCUMENT_LINK_PLACEHOLDER) || !linksHtml
+    ? messageHtml
+    : `${messageHtml}<br><br>${linksHtml}`;
+}
+
+async function loadTemplateMessageAssets(
+  supabaseAdmin: SupabaseAdmin,
+  organizationId: string,
+  templateId: string,
+  channel: "email" | "whatsapp",
+) {
+  const { data, error } = await supabaseAdmin
+    .from("obligation_template_message_assets")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("template_id", templateId)
+    .eq("channel", channel)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data || []) as JsonRecord[];
+}
+
+async function buildEmailMessageAttachments(supabaseAdmin: SupabaseAdmin, assets: JsonRecord[]) {
+  return await Promise.all(assets.map(async (asset) => {
+    const { data: file, error } = await supabaseAdmin.storage
+      .from(String(asset.storage_bucket))
+      .download(String(asset.storage_path));
+    if (error || !file) throw error || new Error("Falha ao carregar anexo do e-mail.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return { filename: String(asset.file_name), content: btoa(binary), contentType: String(asset.content_type) };
+  }));
+}
+
+async function sendWhatsAppMessageAssets(
+  supabaseAdmin: SupabaseAdmin,
+  recipientPhone: string,
+  assets: JsonRecord[],
+) {
+  for (const asset of assets) {
+    const { data: signed, error } = await supabaseAdmin.storage
+      .from(String(asset.storage_bucket))
+      .createSignedUrl(String(asset.storage_path), 3600);
+    if (error || !signed?.signedUrl) throw error || new Error("Falha ao preparar imagem do WhatsApp.");
+    const result = await sendWhatsAppImageMessage(recipientPhone, signed.signedUrl, asTrimmedString(asset.file_name));
+    if (!result.sent) throw new Error("A integracao do WhatsApp nao esta configurada para esta organizacao.");
+  }
 }
 
 async function resolveClientWhatsAppTarget(
@@ -2891,6 +3264,11 @@ async function maybeSendCompletionEmail(
     renderPayload,
   );
   const htmlBody = buildCompletionEmailBodyHtml(textBody);
+  const organizationId = resolveRowOrganizationId(instance, template);
+  const messageAssets = organizationId
+    ? await loadTemplateMessageAssets(supabaseAdmin, organizationId, template.id, "email")
+    : [];
+  const attachments = await buildEmailMessageAttachments(supabaseAdmin, messageAssets);
 
   const sendResult = await sendEmailViaSmtp({
     from: sender.from,
@@ -2899,6 +3277,7 @@ async function maybeSendCompletionEmail(
     subject,
     html: htmlBody,
     text: textBody,
+    attachments,
   });
 
   if (!sendResult.ok) {
@@ -2991,23 +3370,21 @@ async function maybeSendCompletionWhatsApp(
   );
 
   try {
-    const sendResult = await sendWhatsAppTextMessage(target.phoneDigits, messageBody);
-    if (!sendResult.sent) {
-      await createInstanceEvent(
-        supabaseAdmin,
-        instance.id,
-        actorId,
-        "completion_whatsapp_failed",
-        null,
-        null,
-        "Obriga??o conclu?da, mas o WhatsApp autom?tico n?o foi enviado porque a integra??o n?o est? configurada.",
-        {
-          inbox_item_id: inboxItem.id,
-          recipient_phone: target.phoneDigits,
-          recipient_source: target.source,
-        },
-      );
-      return { attempted: true as const, sent: false as const, reason: "missing_provider_config" };
+    const organizationId = resolveRowOrganizationId(instance, template);
+    if (!organizationId) throw new Error("Organização da obrigação não identificada para o envio por WhatsApp.");
+    const messageAssets = organizationId
+      ? await loadTemplateMessageAssets(supabaseAdmin, organizationId, template.id, "whatsapp")
+      : [];
+    const sendResult = await sendObligationWhatsAppText(supabaseAdmin, {
+      organizationId,
+      recipientPhone: target.phoneDigits,
+      body: messageBody,
+      clientName: client.name,
+      obligationName: template.name,
+      competence: instance.competence_label,
+    });
+    if (sendResult.mode === "session") {
+      await sendWhatsAppMessageAssets(supabaseAdmin, target.phoneDigits, messageAssets);
     }
 
     await createInstanceEvent(
@@ -3022,6 +3399,8 @@ async function maybeSendCompletionWhatsApp(
         inbox_item_id: inboxItem.id,
         recipient_phone: target.phoneDigits,
         recipient_source: target.source,
+        provider_message_id: sendResult.providerMessageId,
+        delivery_mode: sendResult.mode,
       },
     );
 
@@ -3626,17 +4005,31 @@ async function applyDocumentOperationalFlowV2(
 
   if (deliveryRequired && documentsComplete) {
     const robotSubmissionId = asTrimmedString(asJsonRecord(inboxItem.recognition_evidence).robot_submission_id);
-    const isNewRobotSubmission = inboxItem.source_kind === "local_robot" && Boolean(robotSubmissionId);
+    const deliveryRequestKey = robotSubmissionId ? `robot:${robotSubmissionId}` : `inbox:${inboxItem.id}`;
+    console.info("grow-obligations central delivery started", {
+      organizationId: inboxItem.organization_id,
+      instanceId: updatedInstance.id,
+      inboxItemId: inboxItem.id,
+      actorId,
+      sourceKind: inboxItem.source_kind,
+    });
     const deliveryResponse = await handleSendConfiguredDelivery(supabaseAdmin, actorId, inboxItem.organization_id, {
       action: "send_configured_delivery",
       instance_id: updatedInstance.id,
       inbox_item_ids: [inboxItem.id],
-      confirm_duplicate: isNewRobotSubmission,
-      idempotency_key: robotSubmissionId ? `robot:${robotSubmissionId}` : null,
+      confirm_duplicate: true,
+      idempotency_key: deliveryRequestKey,
     });
     const deliveryResult = await deliveryResponse.json().catch(() => ({ error: "Resposta de entrega invalida." })) as JsonRecord;
     if (!deliveryResponse.ok) {
       const deliveryError = asTrimmedString(deliveryResult.error) || "Falha ao entregar documento pelos canais configurados.";
+      console.error("grow-obligations central delivery failed", {
+        organizationId: inboxItem.organization_id,
+        instanceId: updatedInstance.id,
+        inboxItemId: inboxItem.id,
+        actorId,
+        deliveryError,
+      });
       await updateIngestionJob(supabaseAdmin, inboxItem.ingestion_job_id, {
         status: "failed",
         communication_status: "failed",
@@ -3671,6 +4064,12 @@ async function applyDocumentOperationalFlowV2(
         last_error: null,
       }),
     ]);
+    console.info("grow-obligations central delivery completed", {
+      organizationId: inboxItem.organization_id,
+      instanceId: updatedInstance.id,
+      inboxItemId: inboxItem.id,
+      actorId,
+    });
     return {
       processed: true,
       nextStatus: "concluida",
@@ -4158,6 +4557,18 @@ async function handleUpsertTemplate(
   if (emailEnabled && (!emailSubject || !emailBody)) {
     return jsonResponse({ error: "Envio por e-mail exige assunto e mensagem padrao." }, 400);
   }
+  if (emailEnabled && !hasRequiredDocumentLinkPlaceholder(emailBody)) {
+    return jsonResponse({ error: `Inclua ${DOCUMENT_LINK_PLACEHOLDER} no corpo do e-mail antes de salvar a obrigacao.` }, 400);
+  }
+
+  const whatsappEnabled = asBoolean(payload.completion_whatsapp_enabled, false);
+  const whatsappBody = asTrimmedString(payload.completion_whatsapp_body);
+  if (whatsappEnabled && !whatsappBody) {
+    return jsonResponse({ error: "Envio por WhatsApp exige uma mensagem padrao." }, 400);
+  }
+  if (whatsappEnabled && !hasRequiredDocumentLinkPlaceholder(whatsappBody)) {
+    return jsonResponse({ error: `Inclua ${DOCUMENT_LINK_PLACEHOLDER} na mensagem do WhatsApp antes de salvar a obrigacao.` }, 400);
+  }
 
   if (id) {
     const { data: existingTemplateData, error: existingTemplateError } = await supabaseAdmin
@@ -4242,6 +4653,9 @@ async function handleUpsertTemplate(
     technical_due_month_reference: normalizeMonthReference(payload.technical_due_month_reference, "vigente"),
     due_day: asInteger(payload.due_day, 10),
     due_rule_type: asTrimmedString(payload.due_rule_type) || "calendar_day",
+    due_date_adjustment_policy: ["none", "previous_business_day", "next_business_day"].includes(asTrimmedString(payload.due_date_adjustment_policy) || "")
+      ? asTrimmedString(payload.due_date_adjustment_policy)
+      : "none",
     due_business_day_index: asInteger(payload.due_business_day_index, null),
     due_fixed_month: asInteger(payload.due_fixed_month, null),
     due_fixed_day: asInteger(payload.due_fixed_day, null),
@@ -4258,8 +4672,8 @@ async function handleUpsertTemplate(
     completion_email_enabled: emailEnabled,
     completion_email_subject: emailSubject,
     completion_email_body: emailBody,
-    completion_whatsapp_enabled: asBoolean(payload.completion_whatsapp_enabled, false),
-    completion_whatsapp_body: asTrimmedString(payload.completion_whatsapp_body),
+    completion_whatsapp_enabled: whatsappEnabled,
+    completion_whatsapp_body: whatsappBody,
     created_by: actorId,
     ...(id ? {} : { baseline_source: "manual", catalog_review_status: "approved" }),
   };
@@ -4705,6 +5119,17 @@ async function handleUpdateInstance(
     const documentStatus = await determineInstanceDocumentStatus(supabaseAdmin, current, template);
     if (!["em_revisao", "concluida"].includes(documentStatus)) {
       return jsonResponse({ error: "A obrigacao so pode ir para revisao depois que todos os documentos obrigatorios forem anexados." }, 400);
+    }
+  }
+  if (["pronto_para_envio", "enviando", "concluida"].includes(nextStatus) && current.status !== nextStatus) {
+    const templatesMap = await loadTemplatesMap(supabaseAdmin);
+    const template = templatesMap.get(current.template_id);
+    if (!template) return jsonResponse({ error: "Obrigacao vinculada nao encontrada." }, 404);
+
+    try {
+      await assertPgdasFactorRGate(supabaseAdmin, current.organization_id, current, template);
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : "PGDAS-D bloqueado pelo Fator R." }, 400);
     }
   }
   if (nextStatus === "concluida" && current.status !== "concluida") {
@@ -5414,7 +5839,7 @@ async function handlePreviewDocumentMatch(
         candidateInstanceIds: [],
         detectedClientId: asTrimmedString(payload.client_id),
         detectedCnpj: analysis.detected_cnpj,
-        competenceDetected: analysis.competence_detected || asTrimmedString(payload.suggested_competence_label),
+        competenceDetected: asTrimmedString(payload.suggested_competence_label),
         referenceFileId: null,
         referenceMatchScore: 0,
         referenceMatchReasons: [],
@@ -5576,7 +6001,7 @@ async function handleReprocessReferenceDocument(
 function normalizeReferenceExtractionZones(value: unknown) {
   const record = asJsonRecord(value);
   const rawZones = Array.isArray(record.zones) ? record.zones : [];
-  const allowedFields = new Set(["cnpj", "competence"]);
+  const allowedFields = new Set(["cpf", "cnpj", "competence", "title"]);
   const zones = rawZones
     .map((item) => {
       const zone = asJsonRecord(item);
@@ -5589,7 +6014,7 @@ function normalizeReferenceExtractionZones(value: unknown) {
       const height = Math.max(0.02, Math.min(0.35, asNumber(zone.height, legacyRadius ? legacyRadius * 2 : 0.08)));
       return {
         field,
-        label: asTrimmedString(zone.label) || (field === "cnpj" ? "CNPJ" : "Compet?ncia"),
+        label: asTrimmedString(zone.label) || (field === "cpf" ? "CPF" : field === "cnpj" ? "CNPJ" : field === "competence" ? "Competencia" : "Titulo"),
         page: Math.max(1, asInteger(zone.page, 1) || 1),
         shape: "rounded_rect",
         x,
@@ -5606,11 +6031,11 @@ function normalizeReferenceExtractionZones(value: unknown) {
   };
 }
 
-function detectCnpjInText(value: string | null | undefined) {
+function detectTaxIdentifierInText(value: string | null | undefined) {
   const text = asTrimmedString(value) || "";
-  const formatted = text.match(/\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2}/);
+  const formatted = text.match(/(?:\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}|\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2})/);
   if (formatted?.[0]) return normalizeCnpj(formatted[0]);
-  const compact = text.match(/(?:^|[^0-9])(\d{14})(?:[^0-9]|$)/);
+  const compact = text.match(/(?:^|[^0-9])(\d{11}|\d{14})(?:[^0-9]|$)/);
   return compact?.[1] ? normalizeCnpj(compact[1]) : null;
 }
 
@@ -5657,7 +6082,17 @@ function rectOverlapRatio(
   return overlap / rightArea;
 }
 
-function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord, field: "cnpj" | "competence") {
+function rectContainsItemCenter(
+  rect: { x: number; y: number; width: number; height: number },
+  item: { x: number; y: number; width: number; height: number },
+) {
+  const centerX = item.x + item.width / 2;
+  const centerY = item.y + item.height / 2;
+  return centerX >= rect.x && centerX <= rect.x + rect.width &&
+    centerY >= rect.y && centerY <= rect.y + rect.height;
+}
+
+function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord, field: "cpf" | "cnpj" | "competence" | "title") {
   const zones = normalizeReferenceExtractionZones(referenceFingerprint.extraction_zones).zones as JsonRecord[];
   const zone = zones.find((item) => asTrimmedString(item.field) === field);
   if (!zone) return null;
@@ -5681,7 +6116,11 @@ function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint:
       width: asNumber(item.width, 0.001),
       height: asNumber(item.height, 0.001),
     }))
-    .filter((item) => item.text && rectOverlapRatio(rect, item) >= 0.15)
+    .filter((item) => item.text && (
+      field === "competence"
+        ? rectContainsItemCenter(rect, item)
+        : rectOverlapRatio(rect, item) >= 0.15
+    ))
     .sort((left, right) => Math.abs(left.y - right.y) > 0.006 ? left.y - right.y : left.x - right.x);
 
   if (items.length === 0) return null;
@@ -5699,13 +6138,24 @@ function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint:
 }
 
 function extractZoneSignals(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord) {
-  const cnpjText = extractTextFromZone(inputFingerprint, referenceFingerprint, "cnpj");
+  const referenceZones = normalizeReferenceExtractionZones(referenceFingerprint.extraction_zones).zones as JsonRecord[];
+  const hasCompetenceZone = referenceZones.some((zone) => asTrimmedString(zone.field) === "competence");
+  const cnpjText = extractTextFromZone(inputFingerprint, referenceFingerprint, "cpf") ||
+    extractTextFromZone(inputFingerprint, referenceFingerprint, "cnpj");
   const competenceText = extractTextFromZone(inputFingerprint, referenceFingerprint, "competence");
+  const titleText = extractTextFromZone(inputFingerprint, referenceFingerprint, "title");
+  const referenceTitleText = extractTextFromZone(referenceFingerprint, referenceFingerprint, "title");
+  const titleTokens = normalizeToken(titleText).split("_").filter((token) => token.length >= 3);
+  const referenceTitleTokens = normalizeToken(referenceTitleText).split("_").filter((token) => token.length >= 3);
   return {
     cnpjText,
     competenceText,
-    cnpj: detectCnpjInText(cnpjText),
+    titleText,
+    referenceTitleText,
+    titleScore: referenceTitleTokens.length > 0 ? overlapRatio(titleTokens, referenceTitleTokens) : 0,
+    cnpj: detectTaxIdentifierInText(cnpjText),
     competence: detectCompetenceInText(competenceText),
+    hasCompetenceZone,
   };
 }
 
@@ -7173,6 +7623,18 @@ Deno.serve(async (req) => {
 
     if (action === "upsert_template") {
       return await handleUpsertTemplate(supabaseAdmin, user.id, roles, organizationId, payload);
+    }
+
+    if (action === "list_template_message_assets") {
+      return await handleListTemplateMessageAssets(supabaseAdmin, organizationId, payload);
+    }
+
+    if (action === "register_template_message_asset") {
+      return await handleRegisterTemplateMessageAsset(supabaseAdmin, user.id, roles, organizationId, payload);
+    }
+
+    if (action === "delete_template_message_asset") {
+      return await handleDeleteTemplateMessageAsset(supabaseAdmin, roles, organizationId, payload);
     }
 
     if (action === "delete_template") {

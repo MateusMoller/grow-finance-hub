@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
+  FileQuestion,
   Loader2,
   Plus,
   RefreshCcw,
@@ -397,47 +398,57 @@ export default function SolicitacoesPage() {
   };
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-8">
+        <section className="relative overflow-hidden rounded-[1.75rem] border border-primary/15 bg-gradient-to-br from-card via-card to-primary/[0.06] p-5 shadow-[0_18px_50px_-32px_hsl(var(--primary)/0.45)] sm:p-7">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary via-primary/70 to-primary/20" />
+          <div className="pointer-events-none absolute -right-12 -top-16 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
             <ModuleContextPill icon={ClipboardList} label="Portal do cliente" />
-            <h1 className="font-heading text-2xl font-bold">Solicitações</h1>
-            <p className="text-sm text-muted-foreground">
+            <div className="space-y-1">
+            <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">Solicitações</h1>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               Configure os tipos de solicitação que aparecem como atalhos no portal do cliente.
             </p>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="gap-1.5" onClick={() => void loadRequestTypes()} disabled={loading}>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" className="h-11 gap-1.5 rounded-xl bg-background/80 shadow-sm" onClick={() => void loadRequestTypes()} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
               Atualizar
             </Button>
-            <Button className="gap-1.5" onClick={handleNewType}>
+            <Button className="h-11 gap-1.5 rounded-xl shadow-sm" onClick={handleNewType}>
               <Plus className="h-4 w-4" />
               Novo tipo
             </Button>
           </div>
-        </div>
+          </div>
+        </section>
 
-        <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="overflow-hidden">
-            <CardHeader className="border-b">
-              <CardTitle className="text-base">Tipos cadastrados</CardTitle>
+        <div className="grid items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
+          <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm lg:sticky lg:top-4">
+            <CardHeader className="border-b border-border/60 bg-gradient-to-r from-muted/30 to-primary/[0.04] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><ClipboardList className="h-4 w-4" aria-hidden="true" /></span><CardTitle className="text-base">Tipos cadastrados</CardTitle></div>
+                <Badge variant="secondary">{requestTypes.length}</Badge>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-2 p-3">
+            <CardContent className="max-h-[calc(100vh-280px)] space-y-2 overflow-y-auto p-3">
               {requestTypes.map((requestType) => {
                 const selected = selectedRequestType?.id === requestType.id;
                 return (
                   <button
                     key={requestType.id}
                     type="button"
-                    className={`w-full rounded-xl border p-3 text-left transition ${
-                      selected ? "border-primary bg-primary/5" : "bg-card hover:bg-muted/50"
+                    className={`group relative w-full overflow-hidden rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      selected ? "border-primary/40 bg-primary/[0.07] shadow-sm" : "border-border/70 bg-card hover:border-primary/20 hover:bg-primary/[0.025] hover:shadow-sm"
                     }`}
                     onClick={() => handleSelect(requestType)}
                   >
+                    {selected ? <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-primary" /> : null}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{requestType.title}</p>
+                        <p className="truncate text-sm font-semibold transition-colors group-hover:text-primary">{requestType.title}</p>
                         <p className="text-xs text-muted-foreground">{requestType.sector}</p>
                       </div>
                       <Badge variant={requestType.is_active ? "default" : "secondary"} className="shrink-0">
@@ -453,19 +464,19 @@ export default function SolicitacoesPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="border-b">
+          <Card className="overflow-hidden rounded-3xl border-border/70 shadow-sm">
+            <CardHeader className="border-b border-border/60 bg-gradient-to-r from-muted/30 via-card to-primary/[0.04] p-5 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Settings2 className="h-4 w-4" />
-                    Editor do tipo
+                  <CardTitle className="flex items-center gap-3 text-base">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Settings2 className="h-4 w-4" aria-hidden="true" /></span>
+                    <span><span className="block">Editor do tipo</span><span className="mt-0.5 block text-xs font-normal text-muted-foreground">{draft.title || "Novo tipo de solicitação"}</span></span>
                   </CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Campos extras aparecem no formulário do portal quando o cliente escolhe este tipo.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-background px-3 py-2 shadow-sm">
                   <Switch
                     checked={draft.isActive}
                     onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, isActive: checked }))}
@@ -474,7 +485,9 @@ export default function SolicitacoesPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-5 p-5">
+            <CardContent className="space-y-6 p-4 sm:p-6">
+              <section className="space-y-4 rounded-2xl border border-border/60 bg-muted/[0.12] p-4 sm:p-5">
+                <div className="flex items-center gap-2"><FileQuestion className="h-4 w-4 text-primary" aria-hidden="true" /><div><p className="text-sm font-semibold">Informações do atalho</p><p className="text-xs text-muted-foreground">Defina como a solicitação será apresentada e encaminhada.</p></div></div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Nome do atalho</Label>
@@ -541,8 +554,9 @@ export default function SolicitacoesPage() {
                   />
                 </div>
               </div>
+              </section>
 
-              <div className="space-y-3 rounded-2xl border bg-muted/20 p-4">
+              <div className="space-y-4 rounded-2xl border border-border/60 bg-gradient-to-b from-muted/20 to-background p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">Campos do formulário</p>
@@ -550,7 +564,7 @@ export default function SolicitacoesPage() {
                       Defina perguntas adicionais para este tipo de solicitação.
                     </p>
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleAddField}>
+                  <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-xl bg-background shadow-sm" onClick={handleAddField}>
                     <Plus className="h-4 w-4" />
                     Adicionar campo
                   </Button>
@@ -566,7 +580,7 @@ export default function SolicitacoesPage() {
                       const fieldAcceptsOptions = portalRequestFieldTypesWithOptions.has(field.type);
 
                       return (
-                      <div key={`${field.id}-${index}`} className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-[minmax(0,1fr)_190px_130px_40px] md:items-end">
+                      <div key={`${field.id}-${index}`} className="grid gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition-colors hover:border-primary/20 md:grid-cols-[minmax(0,1fr)_190px_210px] md:items-end">
                         <div className="space-y-2">
                           <Label>Nome do campo</Label>
                           <Input
@@ -593,24 +607,27 @@ export default function SolicitacoesPage() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="flex items-center gap-2 pb-2">
-                          <Switch
-                            checked={Boolean(field.required)}
-                            onCheckedChange={(required) => handleFieldChange(index, { required })}
-                          />
-                          <span className="text-sm">Obrigatório</span>
+                        <div className="flex min-w-0 items-center justify-between gap-4 pb-0.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Switch
+                              checked={Boolean(field.required)}
+                              onCheckedChange={(required) => handleFieldChange(index, { required })}
+                            />
+                            <span className="whitespace-nowrap text-sm">Obrigatório</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 shrink-0 text-destructive"
+                            onClick={() => handleRemoveField(index)}
+                            aria-label={`Excluir campo ${field.label || index + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => handleRemoveField(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                         {fieldAcceptsOptions ? (
-                          <div className="space-y-3 rounded-xl border bg-muted/20 p-3 md:col-span-4">
+                          <div className="space-y-3 rounded-xl border bg-muted/20 p-3 md:col-span-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <Label>Opções disponíveis</Label>
@@ -659,7 +676,7 @@ export default function SolicitacoesPage() {
                           </div>
                         ) : null}
                         {field.type === "file" ? (
-                          <p className="text-xs text-muted-foreground md:col-span-4">
+                          <p className="text-xs text-muted-foreground md:col-span-3">
                             No portal este campo vira upload. No WhatsApp, o cliente deverá responder com mídia ou documento.
                           </p>
                         ) : null}
@@ -670,12 +687,12 @@ export default function SolicitacoesPage() {
                 )}
               </div>
 
-              <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:justify-between">
-                <Button type="button" variant="outline" className="gap-1.5" onClick={() => void handleDelete()} disabled={saving || !draft.id}>
+              <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t bg-card/95 px-4 pb-1 pt-4 backdrop-blur sm:-mx-6 sm:flex-row sm:justify-between sm:px-6">
+                <Button type="button" variant="outline" className="gap-1.5 rounded-xl border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={() => void handleDelete()} disabled={saving || !draft.id}>
                   <Trash2 className="h-4 w-4" />
                   Excluir
                 </Button>
-                <Button type="button" className="gap-1.5" onClick={() => void handleSave()} disabled={saving}>
+                <Button type="button" className="gap-1.5 rounded-xl shadow-sm" onClick={() => void handleSave()} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Salvar alterações
                 </Button>

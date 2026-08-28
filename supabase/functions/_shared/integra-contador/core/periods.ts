@@ -1,0 +1,3 @@
+export function normalizePeriod(value:string){ const match=value.trim().match(/^(\d{4})[-/]?(\d{2})$/); if(!match||Number(match[2])<1||Number(match[2])>12) throw new Error("INVALID_PERIOD"); return `${match[1]}-${match[2]}`; }
+export function normalizeIsoDate(value:string){ const date=new Date(value); if(Number.isNaN(date.valueOf())) throw new Error("INVALID_DATE"); return date.toISOString(); }
+export function canonicalJson(value:unknown):string { if(Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`; if(value&&typeof value==="object") return `{${Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`; return JSON.stringify(value); }

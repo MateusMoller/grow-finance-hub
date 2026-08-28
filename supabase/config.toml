@@ -88,8 +88,26 @@ verify_jwt = true
 [functions.whatsapp-ticket-automations]
 verify_jwt = false
 
+[functions.task-actions]
+verify_jwt = true
+
+[functions.integra-contador-module]
+verify_jwt = true
+
+[functions.integra-contador-worker]
+verify_jwt = true
+
+[functions.integra-contador-monitor]
+verify_jwt = true
+
 [functions.open-finance-module]
 verify_jwt = false
 
 [functions.open-finance-webhook]
 verify_jwt = false
+
+[functions.client-certificate-vault]
+verify_jwt = true
+
+[functions.fiscal-invoices-module]
+verify_jwt = true

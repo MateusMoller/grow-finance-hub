@@ -27,7 +27,7 @@ export type DocumentFingerprint = {
   extraction_zones?: {
     version: number;
     zones: Array<{
-      field: "cnpj" | "competence";
+      field: "cpf" | "cnpj" | "competence" | "title";
       label: string;
       page: number;
       shape: "rounded_rect";
@@ -107,23 +107,23 @@ function getFileExtension(fileName: string) {
   return parts.length > 1 ? parts[parts.length - 1] : "";
 }
 
-function normalizeCnpj(value: string | null | undefined) {
+function normalizeTaxIdentifier(value: string | null | undefined) {
   if (!value) return null;
   const digits = value.replace(/\D/g, "");
-  return digits.length === 14 ? digits : null;
+  return digits.length === 11 || digits.length === 14 ? digits : null;
 }
 
-function extractCnpj(rawText: string) {
-  const cnpjPattern = /\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2}/g;
-  const directMatch = rawText.match(cnpjPattern);
+function extractTaxIdentifier(rawText: string) {
+  const taxIdPattern = /(?:\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}|\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2})/g;
+  const directMatch = rawText.match(taxIdPattern);
   if (directMatch?.[0]) {
-    return normalizeCnpj(directMatch[0]);
+    return normalizeTaxIdentifier(directMatch[0]);
   }
 
-  const digitsOnlyPattern = /(?:^|[^0-9])(\d{14})(?:[^0-9]|$)/;
+  const digitsOnlyPattern = /(?:^|[^0-9])(\d{11}|\d{14})(?:[^0-9]|$)/;
   const digitsMatch = rawText.match(digitsOnlyPattern);
   if (digitsMatch?.[1]) {
-    return normalizeCnpj(digitsMatch[1]);
+    return normalizeTaxIdentifier(digitsMatch[1]);
   }
 
   return null;
@@ -138,9 +138,9 @@ function toCompetence(year: string, month: string) {
   return `${yearValue}-${String(monthValue).padStart(2, "0")}`;
 }
 
-type CompetenceSource = "file_name" | "pdf_text";
+export type CompetenceSource = "file_name" | "pdf_text";
 
-type CompetenceCandidate = {
+export type CompetenceCandidate = {
   value: string;
   score: number;
   source: CompetenceSource;
@@ -176,6 +176,21 @@ function normalizeSearchText(value: string) {
     .trim();
 }
 
+const competenceMonthNames: Record<string, string> = {
+  janeiro: "01",
+  fevereiro: "02",
+  marco: "03",
+  abril: "04",
+  maio: "05",
+  junho: "06",
+  julho: "07",
+  agosto: "08",
+  setembro: "09",
+  outubro: "10",
+  novembro: "11",
+  dezembro: "12",
+};
+
 function hasCompetenceContext(value: string) {
   return /\b(competencia|comp|periodo|apuracao|referencia|ref|pa|mes\s+base|mes\s+referencia|folha\s+de|salario\s+de)\b/.test(value);
 }
@@ -184,13 +199,27 @@ function hasDateContext(value: string) {
   return /\b(vencimento|pagamento|emissao|emissao|data|gerado|emitido|recolhimento|validade|processamento)\b/.test(value);
 }
 
-function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; source: CompetenceSource }>) {
+function hasNonCompetenceDateContext(value: string) {
+  return /\b(admissao|nascimento|demissao|afastamento|ferias|assinatura)\b/.test(value);
+}
+
+export function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; source: CompetenceSource }>) {
   const candidates: CompetenceCandidate[] = [];
 
   for (const item of sources) {
     const text = normalizeSearchText(item.value);
     if (!text) continue;
     const weight = sourceWeight(item.source);
+
+    const namedMonthMatches = text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de)?\D{0,8}(20\d{2})\b/g);
+    for (const match of namedMonthMatches) {
+      addCompetenceCandidate(candidates, `${match[2]}-${competenceMonthNames[match[1]]}`, 98 * weight, item.source, "mes_por_extenso");
+    }
+
+    const labelledFullDateMatches = text.matchAll(/\b(?:competencia|periodo|referencia|mes\s+referencia|mes\s+base|referente(?:\s+ao\s+mes|\s+data)?|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|[12]\d|3[01])[-_/ .](0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
+    for (const match of labelledFullDateMatches) {
+      addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 99 * weight, item.source, "rotulo_data_completa");
+    }
 
     const labelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
     for (const match of labelledMatches) {
@@ -216,7 +245,9 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     const isoMatches = text.matchAll(/\b(20\d{2})[-_/ .](0?[1-9]|1[0-2])\b/g);
     for (const match of isoMatches) {
       const prefix = text.slice(Math.max(0, match.index - 36), match.index);
-      const score = hasCompetenceContext(prefix)
+      const score = hasNonCompetenceDateContext(prefix)
+        ? 4
+        : hasCompetenceContext(prefix)
         ? 86
         : item.source === "file_name"
           ? 76
@@ -229,7 +260,9 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     const brMatches = text.matchAll(/\b(0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
     for (const match of brMatches) {
       const prefix = text.slice(Math.max(0, match.index - 36), match.index);
-      const score = hasCompetenceContext(prefix)
+      const score = hasNonCompetenceDateContext(prefix)
+        ? 4
+        : hasCompetenceContext(prefix)
         ? 88
         : item.source === "file_name"
           ? 78
@@ -370,7 +403,7 @@ function buildFingerprint(
 
   const keyPhrases = Array.from(new Set(lines.filter((line) => line.length >= 16))).slice(0, 10);
   const detectedFields = [
-    extractCnpj(compactText) ? "cnpj" : null,
+    extractTaxIdentifier(compactText) ? "tax_identifier" : null,
     extractCompetence(compactText) ? "competence" : null,
     /folha/i.test(compactText) ? "folha" : null,
     /fiscal/i.test(compactText) ? "fiscal" : null,
@@ -450,18 +483,38 @@ async function parsePdfText(file: File) {
   };
 }
 
+type PositionedTextItem = NonNullable<DocumentFingerprint["positioned_text_pages"]>[number]["items"][number];
+
 async function runOcrFromBlob(blob: Blob) {
   const tesseractModule = await import("tesseract.js");
-  const recognize =
-    (tesseractModule as { recognize?: (...args: unknown[]) => Promise<unknown> }).recognize ||
-    (tesseractModule as { default?: { recognize?: (...args: unknown[]) => Promise<unknown> } }).default?.recognize;
-
-  if (!recognize) {
+  const createWorker =
+    tesseractModule.createWorker ||
+    (tesseractModule as { default?: { createWorker?: typeof tesseractModule.createWorker } }).default?.createWorker;
+  if (!createWorker) {
     throw new Error("OCR indisponivel neste navegador.");
   }
-
-  const result = (await recognize(blob, "por+eng")) as { data?: { text?: string } };
-  return normalizeWhitespace(result?.data?.text || "");
+  const worker = await createWorker("por+eng");
+  try {
+    const result = (await worker.recognize(blob, {}, { text: true, blocks: true })) as {
+      data?: {
+        text?: string;
+        blocks?: Array<{
+          paragraphs?: Array<{
+            lines?: Array<{
+              words?: Array<{ text?: string; bbox?: { x0?: number; y0?: number; x1?: number; y1?: number } }>;
+            }>;
+          }>;
+        }> | null;
+      };
+    };
+    const words = (result.data?.blocks || [])
+      .flatMap((block) => block.paragraphs || [])
+      .flatMap((paragraph) => paragraph.lines || [])
+      .flatMap((line) => line.words || []);
+    return { text: normalizeWhitespace(result.data?.text || ""), words };
+  } finally {
+    await worker.terminate();
+  }
 }
 
 async function renderPdfPageToBlob(page: {
@@ -477,7 +530,7 @@ async function renderPdfPageToBlob(page: {
 
   await page.render({ canvasContext: context, viewport }).promise;
 
-  return await new Promise<Blob>((resolve, reject) => {
+  const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
         reject(new Error("Nao foi possivel gerar imagem da pagina para OCR."));
@@ -486,6 +539,7 @@ async function renderPdfPageToBlob(page: {
       resolve(blob);
     }, "image/png");
   });
+  return { blob, width: canvas.width, height: canvas.height };
 }
 
 async function parsePdfWithOcrFallback(file: File) {
@@ -504,13 +558,35 @@ async function parsePdfWithOcrFallback(file: File) {
   }
 
   const ocrPages: string[] = [];
+  const ocrPositionedTextPages: NonNullable<DocumentFingerprint["positioned_text_pages"]> = [];
   try {
     const ocrMaxPages = Math.min(pdfResult.pageCount, 3);
     for (let pageNumber = 1; pageNumber <= ocrMaxPages; pageNumber += 1) {
       const page = await pdfResult.pdf.getPage(pageNumber);
-      const blob = await renderPdfPageToBlob(page);
-      const pageText = await runOcrFromBlob(blob);
-      if (pageText) ocrPages.push(pageText);
+      const rendered = await renderPdfPageToBlob(page);
+      const ocr = await runOcrFromBlob(rendered.blob);
+      if (ocr.text) ocrPages.push(ocr.text);
+      const items = ocr.words
+        .map((word): PositionedTextItem | null => {
+          const bbox = word.bbox;
+          const text = normalizeWhitespace(word.text || "");
+          if (!text || !bbox || rendered.width <= 0 || rendered.height <= 0) return null;
+          const x0 = Number(bbox.x0 || 0);
+          const y0 = Number(bbox.y0 || 0);
+          const x1 = Number(bbox.x1 || x0);
+          const y1 = Number(bbox.y1 || y0);
+          return {
+            text,
+            x: Math.max(0, Math.min(1, x0 / rendered.width)),
+            y: Math.max(0, Math.min(1, y0 / rendered.height)),
+            width: Math.max(0.001, Math.min(1, (x1 - x0) / rendered.width)),
+            height: Math.max(0.001, Math.min(1, (y1 - y0) / rendered.height)),
+          };
+        })
+        .filter((item): item is PositionedTextItem => Boolean(item));
+      if (items.length > 0) {
+        ocrPositionedTextPages.push({ page: pageNumber, width: rendered.width, height: rendered.height, items });
+      }
     }
   } catch {
     return {
@@ -527,7 +603,7 @@ async function parsePdfWithOcrFallback(file: File) {
   return {
     text: mergedText,
     pageTexts: mergedText ? [...pdfResult.pageTexts, ...ocrPages] : pdfResult.pageTexts,
-    positionedTextPages: pdfResult.positionedTextPages,
+    positionedTextPages: ocrPositionedTextPages.length > 0 ? ocrPositionedTextPages : pdfResult.positionedTextPages,
     pageCount: pdfResult.pageCount,
     textExtractionStatus: mergedText ? ("completed" as const) : ("failed" as const),
     ocrStatus: ocrPages.length > 0 ? ("completed" as const) : ("failed" as const),
@@ -556,7 +632,7 @@ export async function analyzePdfDocument(file: File): Promise<AnalyzedDocument> 
     extracted_text_preview: text.slice(0, 600),
     text_extraction_status: parsed.textExtractionStatus,
     ocr_status: parsed.ocrStatus,
-    detected_cnpj: extractCnpj(recognitionText),
+    detected_cnpj: extractTaxIdentifier(recognitionText),
     competence_detected: competenceCandidates[0]?.value || extractCompetence(recognitionText),
     fingerprint_payload: fingerprint,
     keywords,

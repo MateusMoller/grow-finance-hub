@@ -33,4 +33,12 @@ Evidence sources: `src/lib/fileUploadSecurity.ts`, Storage references from `npm 
 - `src/pages/ClientDetailPage.tsx` validates files with `validateSecureDocument`, uploads to `client-files` and performs direct downloads from that bucket.
 - `src/components/obligations/GrowObligationsWorkspace.tsx`, `supabase/functions/acessorias-module/index.ts` and `supabase/functions/grow-obligations-module/index.ts` are included in the generated Storage inventory and require policy validation.
 - Unauthorized download, expired signed URL and invalid file type checks are documented in `docs/security/manual-scenarios/storage-documents.md`.
+
+## Integra Contador (feature 013)
+
+The Caixa Postal pilot stores only the normalized new-message indicator and creates no bucket or object path. `fiscal_documents.storage_bucket/storage_path` remain unused in this slice. A future document capability must first define a private bucket, tenant/client policies, signed URL lifetime, file validation, retention and audited portal publication.
 - Supabase connector confirmed `storage.buckets` and `storage.objects` have RLS enabled in the active project. This proves RLS is enabled, but not that bucket policies reject unauthorized private object access.
+
+## Integra Contador (feature 013)
+
+The Caixa Postal pilot persists only the normalized new-message indicator and does not fetch or store message content or documents. It therefore creates no bucket, object path or portal publication policy. `fiscal_documents.storage_bucket/storage_path` remain reserved and null for this slice. Any future document-producing capability must define a private bucket, tenant/client-scoped policies, signed-URL lifetime, malware/type validation, retention and audited publication before activation.

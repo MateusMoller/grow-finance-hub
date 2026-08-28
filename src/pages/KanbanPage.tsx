@@ -18,6 +18,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -41,7 +48,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { invokeGrowObligations } from "@/lib/growObligations";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Archive, CalendarDays, Check, ChevronDown, ChevronsUpDown, Filter, KanbanSquare, Loader2, Plus, Search, X } from "lucide-react";
 import {
   useCallback,
@@ -82,6 +89,8 @@ import {
   loadRelatedTasks,
   type RelatedTaskSummary,
 } from "@/lib/taskRelations";
+import { buildTaskWorkspaceSearch } from "@/lib/taskWorkspaceUrl";
+import { mutateTasks } from "@/lib/taskActions";
 
 const baseColumns: { id: KanbanStatus; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "bg-muted-foreground" },
@@ -99,6 +108,9 @@ const archiveColumn: { id: KanbanStatus; label: string; color: string } = {
 
 const AUTO_ARCHIVE_COMPLETED_AFTER_DAYS = 3;
 const AUTO_ARCHIVE_COMPLETED_AFTER_MS = AUTO_ARCHIVE_COMPLETED_AFTER_DAYS * 24 * 60 * 60 * 1000;
+const KANBAN_VIEW_MODE_STORAGE_KEY = "grow:tasks:kanban-view-mode";
+const INITIAL_VISIBLE_TASKS_PER_COLUMN = 30;
+const TASKS_PER_GROUP_PAGE = 10;
 const obligationTaskSource = "grow_obligation_task";
 const obligationReadyForReviewStatuses = new Set(["em_revisao", "pronto_para_envio", "concluida"]);
 
@@ -371,7 +383,15 @@ interface ObligationTaskGroup {
   tasks: KanbanTaskItem[];
 }
 
-const groupBacklogObligationTasks = (tasks: KanbanTaskItem[]) => {
+const priorityWeight = (priority: string) => {
+  const normalized = normalizeText(priority);
+  if (normalized === "urgente") return 4;
+  if (normalized === "alta") return 3;
+  if (normalized === "media") return 2;
+  return 1;
+};
+
+const groupObligationTasks = (tasks: KanbanTaskItem[]) => {
   const groups = new Map<string, ObligationTaskGroup>();
   const regularTasks: KanbanTaskItem[] = [];
 
@@ -389,6 +409,15 @@ const groupBacklogObligationTasks = (tasks: KanbanTaskItem[]) => {
 
     if (existing) {
       existing.tasks.push(task);
+      if (priorityWeight(task.priority) > priorityWeight(existing.priority)) {
+        existing.priority = task.priority;
+      }
+      if (
+        task.due_date &&
+        (!existing.dueDate || task.due_date < existing.dueDate)
+      ) {
+        existing.dueDate = task.due_date;
+      }
       return;
     }
 
@@ -435,6 +464,21 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [taskSearch, setTaskSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [boardViewMode, setBoardViewMode] = useState<"grouped" | "individual">(
+    () => localStorage.getItem(KANBAN_VIEW_MODE_STORAGE_KEY) === "individual"
+      ? "individual"
+      : "grouped",
+  );
+  const [visibleTaskCounts, setVisibleTaskCounts] = useState<Record<KanbanStatus, number>>(
+    () => ({
+      backlog: INITIAL_VISIBLE_TASKS_PER_COLUMN,
+      todo: INITIAL_VISIBLE_TASKS_PER_COLUMN,
+      doing: INITIAL_VISIBLE_TASKS_PER_COLUMN,
+      review: INITIAL_VISIBLE_TASKS_PER_COLUMN,
+      done: INITIAL_VISIBLE_TASKS_PER_COLUMN,
+      archived: INITIAL_VISIBLE_TASKS_PER_COLUMN,
+    }),
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -551,6 +595,18 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     setTaskSearch("");
   };
 
+  const handleBoardViewModeChange = (mode: "grouped" | "individual") => {
+    setBoardViewMode(mode);
+    localStorage.setItem(KANBAN_VIEW_MODE_STORAGE_KEY, mode);
+  };
+
+  const showMoreTasks = (status: KanbanStatus) => {
+    setVisibleTaskCounts((current) => ({
+      ...current,
+      [status]: current[status] + INITIAL_VISIBLE_TASKS_PER_COLUMN,
+    }));
+  };
+
   const registerTaskHistory = async (
     taskId: string,
     action: string,
@@ -571,6 +627,8 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     if (params.get("create") !== "1") return;
 
     setRelatedSourceTask(null);
+    setSelectedTask(null);
+    setDetailOpen(false);
     setCreateOpen(true);
     params.delete("create");
     const nextSearch = params.toString();
@@ -583,9 +641,23 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     );
   }, [location.pathname, location.search, navigate]);
 
-  const openTaskDetails = useCallback(async (task: KanbanTaskItem) => {
+  const updateSelectedTaskInUrl = useCallback((taskId: string | null) => {
+    navigate(
+      {
+        pathname: location.pathname,
+        search: buildTaskWorkspaceSearch(location.search, taskId),
+      },
+      { replace: true },
+    );
+  }, [location.pathname, location.search, navigate]);
+
+  const openTaskDetails = useCallback(async (
+    task: KanbanTaskItem,
+    options?: { syncUrl?: boolean },
+  ) => {
     setSelectedTask(task);
     setDetailOpen(true);
+    if (options?.syncUrl !== false) updateSelectedTaskInUrl(task.id);
 
     const { data, error } = await supabase
       .from("kanban_tasks")
@@ -605,7 +677,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         prev.map((current) => current.id === fullTask.id ? { ...current, ...fullTask } : current),
       );
     }
-  }, []);
+  }, [updateSelectedTaskInUrl]);
 
   useEffect(() => {
     if (loading) return;
@@ -629,21 +701,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
       return;
     }
 
-    void openTaskDetails(targetTask);
+    if (selectedTask?.id === targetTask.id && detailOpen) return;
+
+    void openTaskDetails(targetTask, { syncUrl: false });
     if (targetTask.status === "archived") {
       setShowArchived(true);
     }
-
-    params.delete("task");
-    const nextSearch = params.toString();
-    navigate(
-      {
-        pathname: location.pathname,
-        search: nextSearch ? `?${nextSearch}` : "",
-      },
-      { replace: true },
-    );
-  }, [loading, location.pathname, location.search, navigate, openTaskDetails, tasks]);
+  }, [detailOpen, loading, location.pathname, location.search, navigate, openTaskDetails, selectedTask?.id, tasks]);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -833,7 +897,23 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     });
     return grouped;
   }, [filteredTasks]);
+  const groupedTasksByStatus = useMemo(() => {
+    if (boardViewMode !== "grouped") return null;
+
+    return Object.fromEntries(
+      (Object.keys(tasksByStatus) as KanbanStatus[]).map((status) => [
+        status,
+        groupObligationTasks(tasksByStatus[status]),
+      ]),
+    ) as Record<KanbanStatus, ReturnType<typeof groupObligationTasks>>;
+  }, [boardViewMode, tasksByStatus]);
   const archivedCount = tasksByStatus.archived.length;
+  const archivedObligationGroups = groupedTasksByStatus?.archived || null;
+  const visibleArchivedTasks = archivedObligationGroups?.regularTasks || tasksByStatus.archived;
+  const renderedArchivedTasks = visibleArchivedTasks.slice(
+    0,
+    visibleTaskCounts.archived,
+  );
 
   useEffect(() => {
     if (!currentOrganizationId || !selectedTask?.id) {
@@ -913,23 +993,30 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
     }
 
     const previousStatus = currentTask.status;
-    const updatedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from("kanban_tasks")
-      .update({ status: newStatus, updated_at: updatedAt })
-      .eq("id", taskId);
-    if (error) {
-      toast.error(`Erro ao mover tarefa: ${error.message}`);
+    if (!currentOrganizationId) {
+      toast.error("Organização ativa não encontrada.");
       return;
     }
+    const result = await mutateTasks({
+      action: newStatus === "archived" ? "task.archive" : "task.change_status",
+      organizationId: currentOrganizationId,
+      items: [{ taskId, expectedVersion: currentTask.version || 1, changes: { status: newStatus } }],
+    });
+    if (!result.ok) {
+      toast.error(result.code === "version_conflict" ? "A tarefa foi alterada por outra pessoa. Atualize o quadro." : "Não foi possível mover a tarefa.");
+      return;
+    }
+    const savedTask = result.tasks[0];
+    const updatedAt = typeof savedTask?.updated_at === "string" ? savedTask.updated_at : new Date().toISOString();
+    const version = typeof savedTask?.version === "number" ? savedTask.version : (currentTask.version || 1) + 1;
 
     setTasks((prev) =>
       prev.map((task) =>
-        task.id === taskId ? { ...task, status: newStatus, updated_at: updatedAt } : task,
+        task.id === taskId ? { ...task, status: newStatus, updated_at: updatedAt, version } : task,
       ),
     );
     setSelectedTask((prev) =>
-      prev && prev.id === taskId ? { ...prev, status: newStatus, updated_at: updatedAt } : prev,
+      prev && prev.id === taskId ? { ...prev, status: newStatus, updated_at: updatedAt, version } : prev,
     );
 
     if (!options?.skipHistory) {
@@ -1278,6 +1365,8 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
 
     setRelatedSourceTask(sourceTask);
     setDetailOpen(false);
+    setSelectedTask(null);
+    updateSelectedTaskInUrl(null);
     setCreateOpen(true);
   };
 
@@ -1357,15 +1446,37 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               </Button>
             </div>
           )}
-          <div className="rounded-lg border border-border/60 bg-card/45 px-3 py-2.5">
+          <div className="rounded-2xl border border-border/70 bg-gradient-to-r from-card via-card to-primary/[0.035] px-4 py-3 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <TaskOriginLegend />
               <div className={`flex flex-wrap items-center gap-2 ${embedded ? "ml-auto" : ""}`}>
+                <div className="inline-flex rounded-xl border border-border/70 bg-background/80 p-1 shadow-sm" aria-label="Modo de visualização do quadro">
+                  <Button
+                    type="button"
+                    variant={boardViewMode === "grouped" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 rounded-lg px-3 text-xs"
+                    aria-pressed={boardViewMode === "grouped"}
+                    onClick={() => handleBoardViewModeChange("grouped")}
+                  >
+                    Agrupado
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={boardViewMode === "individual" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 rounded-lg px-3 text-xs"
+                    aria-pressed={boardViewMode === "individual"}
+                    onClick={() => handleBoardViewModeChange("individual")}
+                  >
+                    Individual
+                  </Button>
+                </div>
                 <Button
                   type="button"
                   variant={filtersOpen || hasLocalTaskFilters ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-9 gap-1.5 rounded-md px-3 text-xs"
+                  className="h-9 gap-1.5 rounded-xl px-3 text-xs"
                   onClick={() => setFiltersOpen((current) => !current)}
                   aria-expanded={filtersOpen}
                 >
@@ -1388,7 +1499,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                     type="button"
                     variant={showArchived ? "secondary" : "ghost"}
                     size="sm"
-                    className="h-9 gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground"
+                    className="h-9 gap-1.5 rounded-xl px-2.5 text-xs text-muted-foreground"
                     onClick={() => setShowArchived((current) => !current)}
                   >
                     <Archive className="h-3.5 w-3.5" />
@@ -1491,26 +1602,27 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
               <div className="grid w-full min-w-[1120px] grid-cols-5 gap-4 pr-2 2xl:min-w-0">
                 {baseColumns.map((column) => {
                   const columnTasks = tasksByStatus[column.id] || [];
-                  const backlogObligationGroups =
-                    column.id === "backlog"
-                      ? groupBacklogObligationTasks(columnTasks)
-                      : null;
+                  const obligationGroups = groupedTasksByStatus?.[column.id] || null;
                   const visibleColumnTasks =
-                    backlogObligationGroups?.regularTasks || columnTasks;
+                    obligationGroups?.regularTasks || columnTasks;
+                  const renderedColumnTasks = visibleColumnTasks.slice(
+                    0,
+                    visibleTaskCounts[column.id],
+                  );
                   const visibleItemCount =
-                    visibleColumnTasks.length + (backlogObligationGroups?.groups.length || 0);
+                    visibleColumnTasks.length + (obligationGroups?.groups.length || 0);
 
                   return (
                     <div
                       key={column.id}
                       className="min-w-0"
                     >
-                      <div className="mb-2.5 flex items-center gap-2 px-1">
-                        <div className={`h-2 w-2 rounded-full ${column.color}`} />
+                      <div className="mb-3 flex items-center gap-2 rounded-xl border border-border/50 bg-card/80 px-3 py-2 shadow-sm">
+                        <div className={`h-2.5 w-2.5 rounded-full ring-4 ring-muted/70 ${column.color}`} />
                         <span className="text-sm font-semibold">
                           {column.label}
                         </span>
-                        <span className="ml-auto text-xs text-muted-foreground">
+                        <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                           {columnTasks.length}
                         </span>
                       </div>
@@ -1519,13 +1631,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                           handleColumnDragOver(event, column.id)
                         }
                         onDrop={(event) => void handleColumnDrop(event, column.id)}
-                        className={`min-h-[calc(100vh-270px)] space-y-3 rounded-lg border border-dashed p-2.5 transition-colors ${
+                        className={`min-h-[calc(100vh-270px)] space-y-3 rounded-2xl border border-dashed p-2.5 transition-colors ${
                           draggingTaskId && dropTargetStatus === column.id
                             ? "border-primary bg-primary/5"
-                            : "border-border/35 bg-background/40"
+                            : "border-border/45 bg-muted/[0.12]"
                         }`}
                       >
-                        {backlogObligationGroups?.groups.map((group) => (
+                        {obligationGroups?.groups.map((group) => (
                           <ObligationTaskGroupCard
                             key={group.id}
                             group={group}
@@ -1540,7 +1652,7 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                             canArchive={isAdmin}
                           />
                         ))}
-                        {visibleColumnTasks.map((task, index) => (
+                        {renderedColumnTasks.map((task, index) => (
                           <KanbanCard
                             key={task.id}
                             task={task}
@@ -1557,9 +1669,23 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                           />
                         ))}
                         {visibleItemCount === 0 && (
-                          <div className="rounded-lg border border-dashed bg-card/40 p-5 text-center text-xs leading-relaxed text-muted-foreground">
+                          <div className="rounded-xl border border-dashed bg-card/60 p-6 text-center text-xs leading-relaxed text-muted-foreground">
                             Arraste uma tarefa para esta coluna
                           </div>
+                        )}
+                        {renderedColumnTasks.length < visibleColumnTasks.length && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-full text-xs text-muted-foreground"
+                            onClick={() => showMoreTasks(column.id)}
+                          >
+                            Carregar mais {Math.min(
+                              INITIAL_VISIBLE_TASKS_PER_COLUMN,
+                              visibleColumnTasks.length - renderedColumnTasks.length,
+                            )}
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -1588,7 +1714,22 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       : "border-border/35 bg-background/40"
                   }`}
                 >
-                  {tasksByStatus.archived.map((task, index) => (
+                  {archivedObligationGroups?.groups.map((group) => (
+                    <ObligationTaskGroupCard
+                      key={group.id}
+                      group={group}
+                      currentStatus={archiveColumn.id}
+                      onStatusChange={handleStatusChange}
+                      onOpenTask={(task) => {
+                        void openTaskDetails(task);
+                      }}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      draggingTaskId={draggingTaskId}
+                      canArchive={isAdmin}
+                    />
+                  ))}
+                  {renderedArchivedTasks.map((task, index) => (
                     <KanbanCard
                       key={task.id}
                       task={task}
@@ -1609,6 +1750,20 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
                       Tarefas arquivadas aparecem aqui.
                     </div>
                   )}
+                  {renderedArchivedTasks.length < visibleArchivedTasks.length && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 w-full text-xs text-muted-foreground"
+                      onClick={() => showMoreTasks("archived")}
+                    >
+                      Carregar mais {Math.min(
+                        INITIAL_VISIBLE_TASKS_PER_COLUMN,
+                        visibleArchivedTasks.length - renderedArchivedTasks.length,
+                      )}
+                    </Button>
+                  )}
                 </div>
               </aside>
             )}
@@ -1621,7 +1776,13 @@ export function TaskKanbanView({ embedded = false }: TaskKanbanViewProps) {
         open={detailOpen}
         saving={savingDetail}
         canArchive={isAdmin}
-        onOpenChange={setDetailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open);
+          if (!open) {
+            setSelectedTask(null);
+            updateSelectedTaskInUrl(null);
+          }
+        }}
         onSave={handleSaveTaskDetails}
         onSubtaskToggle={handleSubtaskToggle}
         onHistory={(taskId, action, details) => {
@@ -1928,7 +2089,7 @@ function KanbanCard({
       }}
       onDragEnd={onDragEnd}
       onClick={onOpenDetails}
-      className={`group relative flex min-h-[122px] flex-col overflow-hidden rounded-lg border border-border/60 bg-card/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-sm cursor-grab active:cursor-grabbing ${
+      className={`group relative flex min-h-[122px] cursor-grab flex-col overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md active:cursor-grabbing ${
         isDragging ? "opacity-50" : ""
       }`}
     >
@@ -2026,42 +2187,118 @@ function ObligationTaskGroupCard({
   canArchive: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(TASKS_PER_GROUP_PAGE);
   const dueDate = formatTaskCreatedDate(group.dueDate);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const overdueCount = ["done", "archived"].includes(currentStatus)
+    ? 0
+    : group.tasks.reduce((count, task) => {
+        if (!task.due_date) return count;
+        const dueAt = new Date(`${task.due_date}T23:59:59`).getTime();
+        return !Number.isNaN(dueAt) && dueAt < todayStart.getTime()
+          ? count + 1
+          : count;
+      }, 0);
+  const urgentCount = group.tasks.reduce(
+    (count, task) => normalizeText(task.priority) === "urgente" ? count + 1 : count,
+    0,
+  );
+  const visibleTasks = group.tasks.slice(0, visibleCount);
+  const remainingTasks = group.tasks.length - visibleTasks.length;
+  const groupSearchToken = normalizeText(groupSearch);
+  const filteredGroupTasks = groupSearchToken
+    ? group.tasks.filter((task) => normalizeText([
+        task.title,
+        task.client_name || "",
+        task.assignee || "",
+      ].join(" ")).includes(groupSearchToken))
+    : group.tasks;
+  const currentStatusLabel = currentStatus === archiveColumn.id
+    ? archiveColumn.label
+    : baseColumns.find((column) => column.id === currentStatus)?.label || currentStatus;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/35"
-        onClick={() => setOpen((current) => !current)}
-      >
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-        />
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground/95">
-          {group.name}
-        </p>
-        {group.competenceKey && (
-          <span className="hidden shrink-0 text-[11px] text-muted-foreground 2xl:inline">
-            {group.competenceKey}
-          </span>
-        )}
-        {dueDate && (
-          <span className="hidden shrink-0 text-[11px] text-muted-foreground 2xl:inline">
-            {dueDate}
-          </span>
-        )}
-        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-          {group.tasks.length}
-        </span>
-      </button>
+    <>
+      <div className="relative pb-2">
+        {!open ? (
+          <>
+            <div className="pointer-events-none absolute inset-x-2 top-2 h-full rounded-lg border border-border/45 bg-card/75 shadow-sm" />
+            <div className="pointer-events-none absolute inset-x-1 top-1 h-full rounded-lg border border-border/55 bg-card/90 shadow-sm" />
+          </>
+        ) : null}
 
-      {open && (
-        <div className="space-y-3 border-t border-border/50 bg-muted/15 p-2.5">
-          {group.tasks.map((task, index) => (
+        <button
+          type="button"
+          aria-expanded={open}
+          className={cn(
+            "group relative z-10 flex min-h-[122px] w-full flex-col overflow-hidden rounded-2xl border border-border/70 bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            open && "border-primary/20 shadow-sm",
+          )}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <TaskOriginRibbon
+            requestId={null}
+            integrationSource={obligationTaskSource}
+            integrationTaskId={group.tasks[0]?.integration_task_id || null}
+            className="right-2"
+          />
+
+          <div className="flex flex-1 flex-col gap-2.5 pr-3">
+            <div className="space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <span className="line-clamp-2 text-sm font-semibold leading-snug text-foreground/95">
+                  {group.name}
+                </span>
+                <span
+                  className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", priorityDot[group.priority] || "bg-muted-foreground")}
+                  title={`Maior prioridade: ${group.priority}`}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                {group.competenceKey ? <span>Competência {group.competenceKey}</span> : null}
+                {dueDate ? (
+                  <span className="flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    Vence {dueDate}
+                  </span>
+                ) : null}
+              </div>
+
+              {overdueCount > 0 || urgentCount > 0 ? (
+                <div className="flex flex-wrap gap-1.5 text-[11px]">
+                  {overdueCount > 0 ? <span className="font-medium text-destructive">{overdueCount} atrasada(s)</span> : null}
+                  {urgentCount > 0 ? <span className="font-medium text-orange-600">{urgentCount} urgente(s)</span> : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-auto flex items-center justify-between gap-3">
+              <span className="max-w-[160px] truncate rounded-md bg-muted/70 px-2 py-1 text-xs text-muted-foreground">
+                {group.sector}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                {group.tasks.length} tarefas
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+              </span>
+            </div>
+          </div>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {open ? (
+            <motion.div
+              initial={{ height: 0, opacity: 0, y: -12 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -12 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="relative z-0 -mt-1 overflow-hidden pl-2 pt-4"
+            >
+              <div className="space-y-3 border-l-2 border-primary/15 pl-2">
+          {visibleTasks.map((task, index) => (
             <KanbanCard
               key={task.id}
               task={task}
@@ -2075,8 +2312,91 @@ function ObligationTaskGroupCard({
               canArchive={canArchive}
             />
           ))}
-        </div>
-      )}
-    </div>
+          {remainingTasks > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-full text-xs text-muted-foreground"
+              onClick={() => setVisibleCount((current) => current + TASKS_PER_GROUP_PAGE)}
+            >
+              Carregar mais {Math.min(TASKS_PER_GROUP_PAGE, remainingTasks)}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-full text-xs"
+            onClick={() => setListOpen(true)}
+          >
+            Ver todas as {group.tasks.length} tarefas
+          </Button>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+
+      <Sheet open={listOpen} onOpenChange={setListOpen}>
+        {listOpen ? (
+          <SheetContent className="sm:max-w-xl">
+            <SheetHeader>
+              <SheetTitle>{group.name}</SheetTitle>
+              <SheetDescription>
+                {group.competenceKey ? `${group.competenceKey} · ` : ""}
+                {group.tasks.length} tarefa(s) em {currentStatusLabel}
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="relative mt-5">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={groupSearch}
+                onChange={(event) => setGroupSearch(event.target.value)}
+                placeholder="Buscar empresa, tarefa ou responsável"
+                className="pl-9"
+              />
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {filteredGroupTasks.map((task) => (
+                <button
+                  key={task.id}
+                  type="button"
+                  className="w-full rounded-lg border border-border/60 bg-card p-3 text-left transition-colors hover:border-primary/30 hover:bg-muted/25"
+                  onClick={() => {
+                    setListOpen(false);
+                    onOpenTask(task);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{task.client_name || task.title}</p>
+                      {task.client_name ? (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.title}</p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {task.due_date ? formatTaskCreatedDate(task.due_date) : "Sem prazo"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>{task.priority}</span>
+                    <span>·</span>
+                    <span>{task.assignee || "Sem responsável"}</span>
+                  </div>
+                </button>
+              ))}
+              {filteredGroupTasks.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  Nenhuma tarefa encontrada neste grupo.
+                </div>
+              ) : null}
+            </div>
+          </SheetContent>
+        ) : null}
+      </Sheet>
+    </>
   );
 }

@@ -1,0 +1,12 @@
+begin;
+select plan(8);
+select has_table('public','caixa_postal_indicators','indicator table exists');
+select ok((select relrowsecurity from pg_class where oid='public.caixa_postal_indicators'::regclass),'indicator RLS active');
+select has_function('public','enqueue_caixa_postal_indicator_sync',array['uuid','uuid','boolean'],'enqueue API exists');
+select has_function('public','get_client_fiscal_status',array['uuid','uuid'],'status API exists');
+select has_function('public','complete_caixa_postal_indicator_sync',array['uuid','boolean','text','timestamp with time zone'],'atomic completion exists');
+select ok(not has_function_privilege('authenticated','public.complete_caixa_postal_indicator_sync(uuid,boolean,text,timestamptz)','EXECUTE'),'authenticated cannot complete runs');
+select ok(not has_function_privilege('anon','public.enqueue_caixa_postal_indicator_sync(uuid,uuid,boolean)','EXECUTE'),'anon cannot enqueue');
+select ok(exists(select 1 from pg_constraint where conrelid='public.caixa_postal_indicators'::regclass and contype='u'),'one indicator per tenant client');
+select * from finish();
+rollback;

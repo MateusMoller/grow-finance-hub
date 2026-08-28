@@ -309,6 +309,19 @@ export async function sendWhatsAppDocumentMessage(to: string, documentUrl: strin
   });
 }
 
+export async function sendWhatsAppImageMessage(to: string, imageUrl: string, caption?: string | null) {
+  return await sendWhatsAppRequest({
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "image",
+    image: {
+      link: imageUrl,
+      caption: caption || undefined,
+    },
+  });
+}
+
 function buildUnknownPhoneReply() {
   return "Nao consegui localizar um cliente vinculado a este numero. Informe o CNPJ da empresa ou acesse o portal da Grow para continuar com seguranca.";
 }
