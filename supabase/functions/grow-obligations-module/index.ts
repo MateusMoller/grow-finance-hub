@@ -1535,12 +1535,13 @@ async function resolveDocumentReferenceMatch(
     templateId: string | null;
     documentTypeKey: string | null;
     suggestedCompetenceLabel: string | null;
+    competenceManuallyEdited: boolean;
     fileName: string | null;
     analysis: DocumentAnalysisPayload;
     organizationId: string;
   },
 ) {
-  const { clientId, instanceId, templateId, documentTypeKey, suggestedCompetenceLabel, fileName, analysis, organizationId } = payload;
+  const { clientId, instanceId, templateId, documentTypeKey, suggestedCompetenceLabel, competenceManuallyEdited, fileName, analysis, organizationId } = payload;
   const emptyResult: MatchResult = {
     resolvedInstanceId: null,
     suggestedTemplateId: templateId,
@@ -1553,7 +1554,7 @@ async function resolveDocumentReferenceMatch(
     candidateInstanceIds: [],
     detectedClientId: clientId,
     detectedCnpj: analysis.detected_cnpj,
-    competenceDetected: analysis.competence_detected,
+    competenceDetected: competenceManuallyEdited ? suggestedCompetenceLabel : analysis.competence_detected,
     referenceFileId: null,
     referenceMatchScore: 0,
     referenceMatchReasons: [],
@@ -1576,7 +1577,9 @@ async function resolveDocumentReferenceMatch(
     : null;
 
   let effectiveClientId = detectedClientByCnpj?.id || clientId || null;
-  let effectiveCompetence = analysis.competence_detected || suggestedCompetenceLabel || null;
+  let effectiveCompetence = competenceManuallyEdited
+    ? suggestedCompetenceLabel
+    : analysis.competence_detected || suggestedCompetenceLabel || null;
   let configuredReferenceId: string | null = null;
 
   const configuredModels = Array.from(
@@ -1634,7 +1637,7 @@ async function resolveDocumentReferenceMatch(
     }
 
     effectiveClientId = zoneClient.id;
-    effectiveCompetence = configuredModel.zoneSignals.competence;
+    if (!competenceManuallyEdited) effectiveCompetence = configuredModel.zoneSignals.competence;
   }
 
   if (instanceId && effectiveClientId) {
@@ -1762,7 +1765,7 @@ async function resolveDocumentReferenceMatch(
     const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens);
     const layoutMatch = computeLayoutSimilarity(analysis.fingerprint_payload, referenceFingerprintForLayout);
     const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
-    const zoneCompetence = zoneSignals.competence || effectiveCompetence;
+    const zoneCompetence = competenceManuallyEdited ? effectiveCompetence : zoneSignals.competence || effectiveCompetence;
     const structuralScore = layoutMatch.usable
       ? (layoutMatch.score * (layoutMatch.explicit ? 0.74 : 0.48))
       : 0;
@@ -1835,7 +1838,7 @@ async function resolveDocumentReferenceMatch(
   const zoneClientMismatch = Boolean(zoneClientByCnpj && zoneClientByCnpj.id !== effectiveClientId);
   const finalDetectedClientId = zoneClientByCnpj?.id || effectiveClientId;
   const finalDetectedCnpj = best.zoneSignals.cnpj || analysis.detected_cnpj;
-  const finalCompetence = best.zoneSignals.competence || effectiveCompetence;
+  const finalCompetence = competenceManuallyEdited ? effectiveCompetence : best.zoneSignals.competence || effectiveCompetence;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
   const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
   const hasConfiguredZoneAuthority = Boolean(
@@ -5399,6 +5402,7 @@ async function handleRegisterDocumentUploadNative(
     templateId: asTrimmedString(payload.template_id),
     documentTypeKey: asTrimmedString(payload.document_type_key),
     suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
+    competenceManuallyEdited: asBoolean(payload.competence_manually_edited, false),
     fileName,
     analysis,
     organizationId,
@@ -5790,6 +5794,7 @@ async function handlePreviewDocumentMatch(
       templateId: asTrimmedString(payload.template_id),
       documentTypeKey: asTrimmedString(payload.document_type_key),
       suggestedCompetenceLabel: asTrimmedString(payload.suggested_competence_label),
+      competenceManuallyEdited: asBoolean(payload.competence_manually_edited, false),
       fileName,
       analysis,
       organizationId,

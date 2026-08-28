@@ -97,4 +97,11 @@ describe("document recognition safety contract", () => {
     expect(backendSource).toContain("loadReferenceFilesMap(supabaseAdmin, organizationId)");
     expect(backendSource).toContain("loadClientsMap(supabaseAdmin, organizationId)");
   });
+
+  it("keeps a manually corrected competence authoritative after preview", () => {
+    expect(workspaceSource).toContain("competence_manually_edited: item.competenceManuallyEdited");
+    expect(workspaceSource).toContain("competenceManuallyEdited: true");
+    expect(backendSource).toContain("competenceManuallyEdited ? effectiveCompetence");
+    expect(backendSource).toContain("competenceManuallyEdited ? suggestedCompetenceLabel");
+  });
 });
