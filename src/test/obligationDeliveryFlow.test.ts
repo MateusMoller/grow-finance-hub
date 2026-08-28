@@ -77,6 +77,11 @@ describe("obligation delivery flow rules", () => {
     expect(defaultRecipient("email-invalido")).toBeNull();
   });
 
+  it("renders double-asterisk text as safe bold HTML in email bodies", () => {
+    expect(backendSource).toContain('.replace(/\\*\\*([^*\\r\\n]+)\\*\\*/g, "<strong>$1</strong>")');
+    expect(backendSource).toContain("escapeHtml(part)");
+  });
+
   it("detects duplicate sent deliveries", () => {
     expect(hasDuplicateSentAttempt([{ status: "failed" }, { status: "cancelled" }])).toBe(false);
     expect(hasDuplicateSentAttempt([{ status: "failed" }, { status: "sent" }])).toBe(true);

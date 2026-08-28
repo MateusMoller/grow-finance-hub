@@ -4304,6 +4304,9 @@ export function GrowObligationsWorkspace({
                   placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
                   disabled={!templateForm.completion_email_enabled}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Para aplicar negrito no e-mail, envolva o texto com <code>**</code>. Exemplo: <code>**texto importante**</code>.
+                </p>
                 <TemplateMessageAssetsField
                   templateId={templateForm.id}
                   channel="email"

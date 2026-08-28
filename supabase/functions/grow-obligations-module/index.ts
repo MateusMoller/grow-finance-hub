@@ -3083,7 +3083,9 @@ function buildCompletionEmailBodyHtml(body: string, documentLinks: DeliveryDocum
       .join("<br>");
   const messageHtml = body
     .split(DOCUMENT_LINK_PLACEHOLDER)
-    .map((part) => escapeHtml(part).replace(/\r?\n/g, "<br>"))
+    .map((part) => escapeHtml(part)
+      .replace(/\*\*([^*\r\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\r?\n/g, "<br>"))
     .join(linksHtml);
   return body.includes(DOCUMENT_LINK_PLACEHOLDER) || !linksHtml
     ? messageHtml
