@@ -36,6 +36,7 @@ const UsuariosPage = lazy(() => import("./pages/UsuariosPage"));
 const SugestoesPage = lazy(() => import("./pages/SugestoesPage"));
 const SolicitacoesPage = lazy(() => import("./pages/SolicitacoesPage"));
 const FiscalInvoicesPage = lazy(() => import("./pages/FiscalInvoicesPage"));
+const CertificateManagementPage = lazy(() => import("./pages/CertificateManagementPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -182,6 +183,7 @@ const App = () => (
                   <Route path="/app/configuracoes" element={<ProtectedRoute scope="internal"><ConfiguracoesPage /></ProtectedRoute>} />
                   <Route path="/app/solicitacoes" element={<ProtectedRoute scope="internal" feature="solicitacoes"><SolicitacoesPage /></ProtectedRoute>} />
                   <Route path="/app/notas-fiscais" element={<ProtectedRoute scope="internal" feature="notas_fiscais"><FiscalInvoicesPage /></ProtectedRoute>} />
+                  <Route path="/app/certificados" element={<ProtectedRoute scope="internal" adminOnly><CertificateManagementPage /></ProtectedRoute>} />
                   <Route path="/app/usuarios" element={<ProtectedRoute scope="internal" feature="usuarios" adminOnly><UsuariosPage /></ProtectedRoute>} />
                   <Route path="/app/sugestoes" element={<ProtectedRoute scope="internal"><SugestoesPage /></ProtectedRoute>} />
                   <Route path="/app/portal" element={<ProtectedRoute scope="portal" feature="portal"><PortalClientePage /></ProtectedRoute>} />

@@ -1616,11 +1616,15 @@ async function listCatalogTemplatesDirectly(): Promise<GrowObligationTemplate[]>
   if (referenceError) throw referenceError;
 
   const referencesByDocument = new Map<string, GrowExpectedDocumentReferenceFile[]>();
+  const referencesByTemplate = new Map<string, GrowExpectedDocumentReferenceFile[]>();
   for (const reference of referenceData || []) {
     const key = `${reference.template_id}::${reference.document_type_key}`;
     const current = referencesByDocument.get(key) || [];
     current.push(reference as GrowExpectedDocumentReferenceFile);
     referencesByDocument.set(key, current);
+    const templateReferences = referencesByTemplate.get(reference.template_id) || [];
+    templateReferences.push(reference as GrowExpectedDocumentReferenceFile);
+    referencesByTemplate.set(reference.template_id, templateReferences);
   }
 
   return (data || []).map((template) => ({
@@ -1628,7 +1632,26 @@ async function listCatalogTemplatesDirectly(): Promise<GrowObligationTemplate[]>
     expected_documents: (Array.isArray(template.expected_documents)
       ? template.expected_documents as GrowExpectedDocument[]
       : []).map((document) => {
-        const references = referencesByDocument.get(`${template.id}::${document.document_type_key}`) || [];
+        const exactReferences = referencesByDocument.get(`${template.id}::${document.document_type_key}`) || [];
+        const exactReferenceIds = new Set(exactReferences.map((reference) => reference.id));
+        const documentFamilies = detectLocalDocumentFamilies(
+          document.document_type_key,
+          document.label,
+          document.aliases,
+        );
+        const compatibleReferences = (referencesByTemplate.get(template.id) || []).filter((reference) =>
+          !exactReferenceIds.has(reference.id) &&
+          hasFamilyOverlap(
+            documentFamilies,
+            detectLocalDocumentFamilies(
+              reference.document_type_key,
+              reference.file_name,
+              reference.keywords,
+              reference.primary_cues,
+            ),
+          )
+        );
+        const references = [...exactReferences, ...compatibleReferences];
         return {
           ...document,
           reference_files: references,

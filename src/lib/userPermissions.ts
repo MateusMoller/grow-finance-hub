@@ -89,6 +89,7 @@ export const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   "/app/sugestoes": "sugestoes",
   "/app/configuracoes": "configuracoes",
   "/app/notas-fiscais": "notas_fiscais",
+  "/app/certificados": "clientes",
 };
 
 export interface EffectiveAccess {

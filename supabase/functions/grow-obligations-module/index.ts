@@ -971,17 +971,21 @@ async function loadReferenceFilesMap(
 
   const rows = (data || []) as ReferenceFileRow[];
   const byTemplateDocument = new Map<string, ReferenceFileRow[]>();
+  const byTemplate = new Map<string, ReferenceFileRow[]>();
   const byId = new Map<string, ReferenceFileRow>();
 
   for (const row of rows) {
     byId.set(row.id, row);
+    const templateReferences = byTemplate.get(row.template_id) || [];
+    templateReferences.push(row);
+    byTemplate.set(row.template_id, templateReferences);
     const key = `${row.template_id}::${row.document_type_key}`;
     const current = byTemplateDocument.get(key) || [];
     current.push(row);
     byTemplateDocument.set(key, current);
   }
 
-  return { byTemplateDocument, byId, rows };
+  return { byTemplateDocument, byTemplate, byId, rows };
 }
 
 async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin, organizationId? : string) {
@@ -1001,10 +1005,27 @@ async function loadIngestionJobs(supabaseAdmin: SupabaseAdmin, organizationId? :
 function enrichExpectedDocuments(
   template: TemplateRow,
   referenceFilesMap: Map<string, ReferenceFileRow[]>,
+  referencesByTemplate: Map<string, ReferenceFileRow[]>,
 ) {
   return asExpectedDocuments(template.expected_documents).map((document) => {
     const key = `${template.id}::${document.document_type_key}`;
-    const references = (referenceFilesMap.get(key) || []).map((reference) => ({
+    const exactReferences = referenceFilesMap.get(key) || [];
+    const documentFamilies = detectDocumentFamiliesFromText(
+      document.document_type_key,
+      document.label,
+      document.aliases,
+    );
+    const compatibleReferences = (referencesByTemplate.get(template.id) || []).filter((reference) => {
+      if (exactReferences.some((item) => item.id === reference.id)) return false;
+      const referenceFamilies = detectDocumentFamiliesFromText(
+        reference.document_type_key,
+        reference.file_name,
+        reference.keywords,
+        reference.primary_cues,
+      );
+      return compareDocumentFamilies(documentFamilies, referenceFamilies).matched;
+    });
+    const references = [...exactReferences, ...compatibleReferences].map((reference) => ({
       ...reference,
       fingerprint_payload: asJsonRecord(reference.fingerprint_payload),
       keywords: asStringArray(reference.keywords),
@@ -1452,11 +1473,20 @@ const documentFamilyAliases: Array<{ family: DocumentFamily; aliases: string[] }
   },
   {
     family: "fgts",
-    aliases: ["fgts", "guia_fgts", "fgts_digital", "grf", "guia_recolhimento_fgts"],
+    aliases: ["fgts", "guia_fgts", "fgts_digital", "gfd_guia_do_fgts", "fundo_garantia", "grf", "guia_recolhimento_fgts"],
   },
   {
     family: "inss",
-    aliases: ["inss", "gps", "guia_inss", "previdencia_social", "contribuicao_previdenciaria"],
+    aliases: [
+      "inss",
+      "gps",
+      "guia_inss",
+      "previdencia_social",
+      "contribuicao_previdenciaria",
+      "contr_prev",
+      "cp_segurados",
+      "segurado_empregado_avulso",
+    ],
   },
   {
     family: "pis_cofins",
@@ -1528,6 +1558,66 @@ function buildReferenceDocumentCandidates(
   return matches;
 }
 
+const companyNameIgnoredTokens = new Set(["ltda", "limitada", "me", "epp", "sa", "matriz", "filial"]);
+
+function normalizeCompanyNameForMatch(value: unknown) {
+  return normalizeToken(value)
+    .split("_")
+    .filter((token) => token && !companyNameIgnoredTokens.has(token))
+    .join(" ");
+}
+
+function findUniqueClientByName<T extends { id: string; name: string; cnpj: string | null }>(
+  text: unknown,
+  clients: T[],
+) {
+  const normalizedText = ` ${normalizeCompanyNameForMatch(text)} `;
+  if (normalizedText.trim().length < 6) return null;
+
+  const matches = clients.filter((client) => {
+    const normalizedName = normalizeCompanyNameForMatch(client.name);
+    if (normalizedName.length < 6) return false;
+    return normalizedText.includes(` ${normalizedName} `);
+  });
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function buildConfiguredReferenceDocumentCandidates(
+  templatesMap: Map<string, TemplateRow>,
+  referencesByTemplate: Map<string, ReferenceFileRow[]>,
+) {
+  const matches: Array<MatchCandidate & { reference: ReferenceFileRow }> = [];
+
+  for (const template of templatesMap.values()) {
+    if (!template.is_active) continue;
+    const references = referencesByTemplate.get(template.id) || [];
+    for (const document of asExpectedDocuments(template.expected_documents).filter((item) => item.active)) {
+      const documentFamilies = detectDocumentFamiliesFromText(
+        document.document_type_key,
+        document.label,
+        document.aliases,
+      );
+      for (const reference of references) {
+        const referenceFamilies = detectDocumentFamiliesFromText(
+          reference.document_type_key,
+          reference.file_name,
+          reference.keywords,
+          reference.primary_cues,
+        );
+        if (
+          reference.document_type_key === document.document_type_key ||
+          compareDocumentFamilies(documentFamilies, referenceFamilies).matched
+        ) {
+          matches.push({ template, document, reference });
+        }
+      }
+    }
+  }
+
+  return matches;
+}
+
 async function resolveDocumentReferenceMatch(
   supabaseAdmin: SupabaseAdmin,
   payload: {
@@ -1577,16 +1667,29 @@ async function resolveDocumentReferenceMatch(
   const detectedClientByCnpj = analysis.detected_cnpj
     ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === analysis.detected_cnpj) || null
     : null;
+  const detectedClientByName = detectedClientByCnpj
+    ? null
+    : findUniqueClientByName(
+        analysis.extracted_text || analysis.extracted_text_preview,
+        Array.from(clientsMap.values()),
+      );
+  const detectedClient = detectedClientByCnpj || detectedClientByName;
 
-  let effectiveClientId = detectedClientByCnpj?.id || clientId || null;
+  let effectiveClientId = detectedClient?.id || clientId || null;
   let effectiveCompetence = competenceManuallyEdited
     ? suggestedCompetenceLabel
     : analysis.competence_detected || suggestedCompetenceLabel || null;
   let configuredReferenceId: string | null = null;
+  const configuredInputFamilies = detectDocumentFamiliesFromText(
+    analysis.extracted_text,
+    analysis.extracted_text_preview,
+    analysis.keywords,
+    analysis.primary_cues,
+  );
 
   const configuredModels = Array.from(
     new Map(
-      buildReferenceDocumentCandidates(null, templatesMap, Array.from(profilesMap.values()), referenceFiles.byTemplateDocument)
+      buildConfiguredReferenceDocumentCandidates(templatesMap, referenceFiles.byTemplate)
         .filter((candidate) => normalizeReferenceExtractionZones(asJsonRecord(candidate.reference.fingerprint_payload).extraction_zones).zones.length > 0)
         .map((candidate) => [candidate.reference.id, candidate]),
     ).values(),
@@ -1599,15 +1702,33 @@ async function resolveDocumentReferenceMatch(
         extracted_text_preview: candidate.reference.extracted_text_preview,
       });
       const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
-      const recognitionScore = Math.min(1, layout.score * 0.85 + zoneSignals.titleScore * 0.15);
-      return { candidate, referenceFingerprint, layout, zoneSignals, recognitionScore };
+      const candidateFamilies = detectDocumentFamiliesFromText(
+        candidate.template.code,
+        candidate.template.name,
+        candidate.document.document_type_key,
+        candidate.document.label,
+        candidate.document.aliases,
+        candidate.reference.document_type_key,
+        candidate.reference.keywords,
+        candidate.reference.primary_cues,
+      );
+      const familyMatch = compareDocumentFamilies(configuredInputFamilies, candidateFamilies);
+      const recognitionScore = Math.min(
+        1,
+        layout.score * 0.75 + zoneSignals.titleScore * 0.15 + (familyMatch.matched ? 0.1 : 0),
+      );
+      return { candidate, referenceFingerprint, layout, zoneSignals, familyMatch, recognitionScore };
     })
     .filter((item) =>
-      item.layout.usable ||
-      item.zoneSignals.titleScore >= 0.55 ||
-      ((templateId || documentTypeKey) &&
-        (!templateId || item.candidate.template.id === templateId) &&
-        (!documentTypeKey || item.candidate.document.document_type_key === documentTypeKey))
+      !item.familyMatch.mismatched &&
+      (
+        item.familyMatch.matched ||
+        item.layout.usable ||
+        item.zoneSignals.titleScore >= 0.55 ||
+        ((templateId || documentTypeKey) &&
+          (!templateId || item.candidate.template.id === templateId) &&
+          (!documentTypeKey || item.candidate.document.document_type_key === documentTypeKey))
+      )
     )
     .sort((left, right) => right.recognitionScore - left.recognitionScore);
 
@@ -1619,14 +1740,20 @@ async function resolveDocumentReferenceMatch(
   const explicitlyScopedModelIsUnique = Boolean((templateId || documentTypeKey) && explicitlyScopedModels.length === 1);
   const configuredModelIsUnique = Boolean(
     configuredModel &&
-    (explicitlyScopedModelIsUnique || configuredModel.layout.score >= 0.68 || configuredModel.zoneSignals.titleScore >= 0.72) &&
+    (
+      explicitlyScopedModelIsUnique ||
+      configuredModel.familyMatch.matched ||
+      configuredModel.layout.score >= 0.68 ||
+      configuredModel.zoneSignals.titleScore >= 0.72
+    ) &&
     (explicitlyScopedModelIsUnique || !configuredModels[1] || configuredModel.recognitionScore - configuredModels[1].recognitionScore > 0.05),
   );
 
   if (configuredModelIsUnique && configuredModel) {
-    const zoneClient = configuredModel.zoneSignals.cnpj
+    const zoneClientByTaxIdentifier = configuredModel.zoneSignals.cnpj
       ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === configuredModel.zoneSignals.cnpj) || null
       : null;
+    const zoneClient = zoneClientByTaxIdentifier || detectedClientByName;
     configuredReferenceId = configuredModel.candidate.reference.id;
 
     if (!zoneClient || !configuredModel.zoneSignals.competence) {
@@ -1635,13 +1762,17 @@ async function resolveDocumentReferenceMatch(
         suggestedTemplateId: configuredModel.candidate.template.id,
         documentTypeKey: configuredModel.candidate.document.document_type_key,
         detectedClientId: zoneClient?.id || null,
-        detectedCnpj: configuredModel.zoneSignals.cnpj || null,
+        detectedCnpj: configuredModel.zoneSignals.cnpj || zoneClient?.cnpj || null,
         competenceDetected: configuredModel.zoneSignals.competence || null,
         referenceFileId: configuredReferenceId,
         referenceMatchScore: Number(configuredModel.recognitionScore.toFixed(2)),
         reasons: [
           `Modelo configurado reconhecido: ${configuredModel.candidate.reference.file_name}.`,
-          !zoneClient ? "O CPF/CNPJ nao foi lido com seguranca na area marcada." : "Cliente identificado pela area marcada de CPF/CNPJ.",
+          !zoneClient
+            ? "CPF/CNPJ e nome empresarial nao identificaram um cliente unico."
+            : zoneClientByTaxIdentifier
+              ? "Cliente identificado pela area marcada de CPF/CNPJ."
+              : "Cliente identificado pelo nome empresarial unico no documento.",
           !configuredModel.zoneSignals.competence ? "A competencia nao foi lida com seguranca na area marcada." : "Competencia identificada pela area marcada.",
           configuredModel.zoneSignals.titleText
             ? `Titulo lido na area marcada: ${configuredModel.zoneSignals.titleText.slice(0, 120)}.`
@@ -1681,9 +1812,9 @@ async function resolveDocumentReferenceMatch(
     return {
       ...emptyResult,
       reasons: analysis.detected_cnpj
-        ?["CPF/CNPJ detectado nao corresponde a nenhum cliente da Grow."]
-        : ["Nao foi possivel detectar CPF/CNPJ valido no documento."],
-      autoLinkBlockReason: "CPF/CNPJ obrigatorio para auto-vinculo.",
+        ?["CPF/CNPJ detectado nao corresponde a nenhum cliente e o nome empresarial nao foi unico."]
+        : ["Nao foi possivel identificar um cliente unico por CPF/CNPJ ou nome empresarial."],
+      autoLinkBlockReason: "CPF/CNPJ ou nome empresarial unico e obrigatorio para auto-vinculo.",
     };
   }
 
@@ -1711,8 +1842,8 @@ async function resolveDocumentReferenceMatch(
         ...fallbackMatch,
         score: Math.max(fallbackMatch.score, fallbackMatch.reviewRequired ? 0.65 : 0.85),
         reasons: [
-          detectedClientByCnpj
-            ? `Cliente identificado por CNPJ: ${detectedClientByCnpj.name}.`
+          detectedClient
+            ? `Cliente identificado por ${detectedClientByCnpj ? "CNPJ" : "nome empresarial"}: ${detectedClient.name}.`
             : "Cliente selecionado manualmente.",
           ...fallbackMatch.reasons,
         ],
@@ -1733,8 +1864,8 @@ async function resolveDocumentReferenceMatch(
       ...emptyResult,
       detectedClientId: effectiveClientId,
       reasons: [
-        detectedClientByCnpj
-          ? `Cliente identificado por CNPJ: ${detectedClientByCnpj.name}.`
+        detectedClient
+          ? `Cliente identificado por ${detectedClientByCnpj ? "CNPJ" : "nome empresarial"}: ${detectedClient.name}.`
           : "Cliente selecionado manualmente.",
         "Nenhuma obrigacao ativa elegivel foi encontrada para este arquivo e competencia.",
       ],
@@ -1793,11 +1924,11 @@ async function resolveDocumentReferenceMatch(
     const textSupportScore = layoutMatch.usable
       ? keywordScore * 0.04 + cueScore * 0.04 + fingerprintScore * 0.03
       : keywordScore * 0.18 + cueScore * 0.12 + fingerprintScore * 0.1;
-    const cnpjScore = detectedClientByCnpj ? 0.08 : 0;
+    const clientIdentityScore = detectedClientByCnpj ? 0.08 : detectedClientByName ? 0.06 : 0;
     const titleScore = zoneSignals.titleScore * 0.12;
     const totalScore = Math.max(
       0,
-      Math.min(1, structuralScore + textSupportScore + aliasScore + docHintScore + cnpjScore + titleScore + familyMatch.score),
+      Math.min(1, structuralScore + textSupportScore + aliasScore + docHintScore + clientIdentityScore + titleScore + familyMatch.score),
     );
 
     const eligibleInstances = buildEligibleInstanceCandidates(instances, templatesMap, profilesMap, {
@@ -1856,13 +1987,14 @@ async function resolveDocumentReferenceMatch(
   const zoneClientByCnpj = best.zoneSignals.cnpj
     ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === best.zoneSignals.cnpj) || null
     : null;
-  const zoneClientMismatch = Boolean(zoneClientByCnpj && zoneClientByCnpj.id !== effectiveClientId);
+  const finalClient = zoneClientByCnpj || detectedClientByName || detectedClientByCnpj;
+  const zoneClientMismatch = Boolean(zoneClientByCnpj && effectiveClientId && zoneClientByCnpj.id !== effectiveClientId);
   const finalDetectedClientId = best.zoneSignals.hasTaxIdentifierZone
-    ? zoneClientByCnpj?.id || null
-    : zoneClientByCnpj?.id || effectiveClientId;
+    ? finalClient?.id || null
+    : finalClient?.id || effectiveClientId;
   const finalDetectedCnpj = best.zoneSignals.hasTaxIdentifierZone
-    ? best.zoneSignals.cnpj || null
-    : best.zoneSignals.cnpj || analysis.detected_cnpj;
+    ? best.zoneSignals.cnpj || finalClient?.cnpj || null
+    : best.zoneSignals.cnpj || analysis.detected_cnpj || finalClient?.cnpj || null;
   const finalCompetence = competenceManuallyEdited
     ? effectiveCompetence
     : best.zoneSignals.hasCompetenceZone
@@ -1892,8 +2024,7 @@ async function resolveDocumentReferenceMatch(
   // and only one eligible instance. Ambiguity and family mismatch remain hard
   // blockers below.
   const hasDeterministicBusinessRoute = Boolean(
-    analysis.detected_cnpj &&
-    detectedClientByCnpj &&
+    detectedClient &&
     finalCompetence &&
     uniqueOpenInstance &&
     best.familyMatched &&
@@ -1908,14 +2039,14 @@ async function resolveDocumentReferenceMatch(
     (
       hasConfiguredZoneAuthority ||
       hasDeterministicBusinessRoute ||
-      (analysis.detected_cnpj && detectedClientByCnpj && best.totalScore >= 0.82 && (!best.layoutUsable || best.layoutScore >= 0.55)) ||
+      (detectedClient && best.totalScore >= 0.82 && (!best.layoutUsable || best.layoutScore >= 0.55)) ||
       (hasManualContext && hasStrongDocumentHint && best.totalScore >= 0.72)
     ),
   );
 
   const reasons = [
-    detectedClientByCnpj
-      ? `Cliente identificado por CNPJ: ${detectedClientByCnpj.name}.`
+    detectedClient
+      ? `Cliente identificado por ${detectedClientByCnpj ? "CNPJ" : "nome empresarial"}: ${detectedClient.name}.`
       : "Cliente sugerido manualmente, sem CNPJ confiavel para auto-vinculo.",
     `Documento modelo mais aderente: ${best.reference.file_name}.`,
     `Score do modelo: ${best.totalScore.toFixed(2)}.`,
@@ -1956,8 +2087,8 @@ async function resolveDocumentReferenceMatch(
         ? "Mais de um documento modelo apresentou score parecido."
         : zoneClientMismatch
           ? "CNPJ lido na area predefinida nao pertence ao cliente usado no roteamento."
-        : !analysis.detected_cnpj && !hasManualContext
-          ? "Nao foi detectado CNPJ valido no documento e nao ha contexto manual suficiente."
+        : !detectedClient && !hasManualContext
+          ? "Nao foi identificado cliente unico por CPF/CNPJ ou nome empresarial e nao ha contexto manual suficiente."
           : configuredReferenceId && best.reference.validation_status !== "approved"
             ? "Modelo em validacao. Confirme amostras reais antes de habilitar vinculo automatico."
           : "Score abaixo do limiar de auto-vinculo.";
@@ -4347,7 +4478,7 @@ async function buildOverview(
 
   const templates = Array.from(templatesMap.values()).map((template) => ({
     ...template,
-    expected_documents: enrichExpectedDocuments(template, referenceFiles.byTemplateDocument),
+    expected_documents: enrichExpectedDocuments(template, referenceFiles.byTemplateDocument, referenceFiles.byTemplate),
   }));
 
   const profiles = Array.from(profilesMap.values()).map((profile) => ({

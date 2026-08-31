@@ -111,6 +111,34 @@ describe("document recognition safety contract", () => {
     expect(backendSource).toContain("loadClientsMap(supabaseAdmin, organizationId)");
   });
 
+  it("keeps configured models available before and after client assignment", () => {
+    expect(backendSource).toContain("buildConfiguredReferenceDocumentCandidates(templatesMap, referenceFiles.byTemplate)");
+    expect(backendSource).toContain("for (const template of templatesMap.values())");
+    expect(backendSource).not.toContain("buildReferenceDocumentCandidates(null, templatesMap, Array.from(profilesMap.values())");
+  });
+
+  it("keeps reference files visible when a compatible document key changes", () => {
+    expect(backendSource).toContain("const compatibleReferences = (referencesByTemplate.get(template.id) || [])");
+    expect(workspaceSource).toContain("const referencesByTemplate = new Map");
+    expect(workspaceSource).toContain("hasFamilyOverlap(");
+  });
+
+  it("identifies a client by a unique company name when the tax id is unreadable", () => {
+    expect(backendSource).toContain("function findUniqueClientByName");
+    expect(backendSource).toContain("const detectedClientByName = detectedClientByCnpj");
+    expect(backendSource).toContain("const detectedClient = detectedClientByCnpj || detectedClientByName");
+    expect(backendSource).toContain('"nome empresarial"');
+    expect(backendSource).toContain("return matches.length === 1 ? matches[0] : null;");
+  });
+
+  it("rejects configured models from a different fiscal document family", () => {
+    expect(backendSource).toContain('"contr_prev"');
+    expect(backendSource).toContain('"cp_segurados"');
+    expect(backendSource).toContain("const configuredInputFamilies = detectDocumentFamiliesFromText");
+    expect(backendSource).toContain("!item.familyMatch.mismatched");
+    expect(backendSource).toContain("configuredModel.familyMatch.matched");
+  });
+
   it("keeps a manually corrected competence authoritative after preview", () => {
     expect(workspaceSource).toContain("competence_manually_edited: item.competenceManuallyEdited");
     expect(workspaceSource).toContain("competenceManuallyEdited: true");

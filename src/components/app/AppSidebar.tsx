@@ -16,6 +16,7 @@ import {
   FileUp,
   ListChecks,
   ReceiptText,
+  ShieldCheck,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -46,7 +47,7 @@ import { hasAnyInternalRole, normalizeRoles } from "@/lib/accessControl";
 import { routeFeatureMap } from "@/lib/organizationFeatures";
 import { canAccessModule, resolveRouteModule } from "@/lib/userPermissions";
 import { cn } from "@/lib/utils";
-import type { ComponentType, ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 
 interface SidebarItem {
   title: string;
@@ -61,20 +62,14 @@ interface SidebarItem {
   }>;
 }
 
-const mainItems = [
+const overviewItems = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard },
   { title: "Calendário", url: "/app/calendario", icon: CalendarDays },
   { title: "Tarefas", url: "/app/tarefas", icon: ClipboardList },
-  { title: "Clientes", url: "/app/clientes", icon: Users },
 ];
 
-const operationalItems = [
-  { title: "Notas Fiscais", url: "/app/notas-fiscais", icon: ReceiptText },
-  { title: "Vendas", url: "/app/crm", icon: TrendingUp },
-  { title: "WhatsApp", url: "/app/whatsapp", icon: MessageCircle },
-  { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
-  { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
-  { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
+const accountingItems = [
+  { title: "Clientes", url: "/app/clientes", icon: Users },
   {
     title: "Obrigações",
     url: "/app/obrigacoes",
@@ -86,11 +81,21 @@ const operationalItems = [
       { title: "Lista de entregas", url: "/app/obrigacoes?tab=entregas", icon: ListChecks, tab: "entregas" },
     ],
   },
+  { title: "Notas Fiscais", url: "/app/notas-fiscais", icon: ReceiptText },
+  { title: "Certificados digitais", url: "/app/certificados", icon: ShieldCheck },
 ];
 
-const systemItems = [
+const relationshipItems = [
+  { title: "WhatsApp", url: "/app/whatsapp", icon: MessageCircle },
+  { title: "Chat Interno", url: "/app/chat-interno", icon: MessagesSquare },
+  { title: "Vendas", url: "/app/crm", icon: TrendingUp },
   { title: "Solicitações", url: "/app/solicitacoes", icon: ClipboardList },
+];
+
+const managementItems = [
+  { title: "Relatórios", url: "/app/relatorios", icon: BarChart3 },
   { title: "Usuários", url: "/app/usuarios", icon: UserCog },
+  { title: "Newsletter", url: "/app/newsletter", icon: Newspaper },
   { title: "Sugestões", url: "/app/sugestoes", icon: Lightbulb },
 ];
 
@@ -98,12 +103,14 @@ function SidebarSection({
   label,
   items,
   icon: SectionIcon,
-  defaultOpen = true,
+  open,
+  onOpenChange,
 }: {
   label: string;
   items: SidebarItem[];
   icon: ComponentType<{ className?: string }>;
-  defaultOpen?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const location = useLocation();
@@ -153,7 +160,7 @@ function SidebarSection({
   }
 
   return (
-    <Collapsible defaultOpen={defaultOpen} className="group/section">
+    <Collapsible open={open} onOpenChange={onOpenChange} className="group/section">
       <SidebarGroup className="px-1.5 py-1">
         <CollapsibleTrigger asChild disabled={collapsed}>
           <SidebarGroupLabel
@@ -272,9 +279,17 @@ export function AppSidebar({
   internalChatUnreadCount?: number;
 }) {
   const { state } = useSidebar();
+  const location = useLocation();
   const { role, roles, effectiveAccess } = useAuth();
   const { isFeatureEnabled } = useOrganizationSettings();
   const collapsed = state === "collapsed";
+  const [openSection, setOpenSection] = useState(() => {
+    const path = location.pathname;
+    if (relationshipItems.some((item) => item.url === path)) return "relationship";
+    if (managementItems.some((item) => item.url === path)) return "management";
+    if (accountingItems.some((item) => item.url === path)) return "accounting";
+    return "overview";
+  });
   const normalizedRoleList = normalizeRoles(roles.length > 0 ? roles : role ? [role] : []);
   const hasInternalAccess =
     effectiveAccess?.primaryRole === "admin" ||
@@ -300,39 +315,33 @@ export function AppSidebar({
     return !moduleKey || canAccessModule(effectiveAccess, moduleKey);
   };
 
-  const featureFilteredMainItems = mainItems.filter((item) => {
+  const visibleOverviewItems = overviewItems.filter((item) => {
     const feature = routeFeatureMap[item.url];
     return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
   });
 
-  const featureFilteredOperationalItems = operationalItems.filter((item) => {
+  const visibleAccountingItems = accountingItems.filter((item) => {
     const feature = routeFeatureMap[item.url];
     return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
   });
 
-  const visibleMainItems = featureFilteredMainItems;
-
-  const visibleOperationalItems = featureFilteredOperationalItems.map((item) =>
+  const visibleRelationshipItems = relationshipItems.filter((item) => {
+    const feature = routeFeatureMap[item.url];
+    return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
+  }).map((item) =>
     item.url === "/app/chat-interno"
       ? { ...item, badgeCount: internalChatUnreadCount }
       : item,
   );
 
-  const visibleSystemItems = systemItems.filter((item) => {
+  const visibleManagementItems = managementItems.filter((item) => {
     const feature = routeFeatureMap[item.url];
     return (!feature || isFeatureEnabled(feature)) && hasItemAccess(item.url);
   });
 
-  const mainItemOrder: Record<string, number> = {
-    "/app": 0,
-    "/app/calendario": 1,
-    "/app/tarefas": 2,
-    "/app/clientes": 3,
+  const toggleSection = (section: string) => (nextOpen: boolean) => {
+    setOpenSection(nextOpen ? section : "");
   };
-
-  const orderedMainItems = [...visibleMainItems].sort(
-    (a, b) => (mainItemOrder[a.url] ?? 99) - (mainItemOrder[b.url] ?? 99),
-  );
 
   return (
     <Sidebar collapsible="icon">
@@ -353,12 +362,15 @@ export function AppSidebar({
           )}
         </div>
 
-        <SidebarSection label="Principal" icon={LayoutDashboard} items={orderedMainItems} />
-        {visibleOperationalItems.length > 0 && (
-          <SidebarSection label="Operacional" icon={TrendingUp} items={visibleOperationalItems} defaultOpen />
+        <SidebarSection label="Visão geral" icon={LayoutDashboard} items={visibleOverviewItems} open={openSection === "overview"} onOpenChange={toggleSection("overview")} />
+        {visibleAccountingItems.length > 0 && (
+          <SidebarSection label="Operação contábil" icon={FileSpreadsheet} items={visibleAccountingItems} open={openSection === "accounting"} onOpenChange={toggleSection("accounting")} />
         )}
-        {visibleSystemItems.length > 0 && (
-          <SidebarSection label="Sistema" icon={UserCog} items={visibleSystemItems} />
+        {visibleRelationshipItems.length > 0 && (
+          <SidebarSection label="Relacionamento" icon={MessageCircle} items={visibleRelationshipItems} open={openSection === "relationship"} onOpenChange={toggleSection("relationship")} />
+        )}
+        {visibleManagementItems.length > 0 && (
+          <SidebarSection label="Gestão" icon={BarChart3} items={visibleManagementItems} open={openSection === "management"} onOpenChange={toggleSection("management")} />
         )}
       </SidebarContent>
       {footerControls && (

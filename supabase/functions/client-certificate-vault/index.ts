@@ -56,8 +56,19 @@ function inspectPkcs12(bytes: Uint8Array, password: string) {
     const certificates = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [];
     const privateKeys = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || [];
     const plainKeys = p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] || [];
-    const certificate = certificates[0]?.cert;
-    if (!certificate || privateKeys.length + plainKeys.length === 0) throw new Error("invalid_certificate_contents");
+    const privateKey = privateKeys[0]?.key || plainKeys[0]?.key;
+    if (!privateKey) throw new Error("invalid_certificate_contents");
+    type ForgeKey = { n?: { compareTo?: (other: unknown) => number }; e?: { compareTo?: (other: unknown) => number } };
+    const rsaPrivateKey = privateKey as ForgeKey;
+    const certificate = certificates.find((bag: { cert?: { publicKey?: unknown } }) => {
+      const publicKey = bag.cert?.publicKey as ForgeKey | undefined;
+      return Boolean(
+        publicKey?.n?.compareTo && publicKey.e?.compareTo && rsaPrivateKey.n && rsaPrivateKey.e
+        && publicKey.n.compareTo(rsaPrivateKey.n) === 0
+        && publicKey.e.compareTo(rsaPrivateKey.e) === 0,
+      );
+    })?.cert;
+    if (!certificate) throw new Error("certificate_key_mismatch");
     const now = new Date();
     if (certificate.validity.notAfter <= now) throw new Error("certificate_expired");
     return {
@@ -66,7 +77,7 @@ function inspectPkcs12(bytes: Uint8Array, password: string) {
       expiresAt: certificate.validity.notAfter.toISOString(),
     };
   } catch (cause) {
-    if (cause instanceof Error && ["invalid_certificate_contents", "certificate_expired"].includes(cause.message)) throw cause;
+    if (cause instanceof Error && ["invalid_certificate_contents", "certificate_key_mismatch", "certificate_expired"].includes(cause.message)) throw cause;
     throw new Error("certificate_password_or_file_invalid");
   }
 }
@@ -80,6 +91,20 @@ function publicStatus(row: Record<string, unknown> | null) {
     validFrom: row.valid_from,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
+  };
+}
+
+function publicManagementStatus(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    status: row.status,
+    fingerprintSuffix: String(row.certificate_fingerprint_sha256 || "").slice(-8).toUpperCase(),
+    serialNumberSuffix: String(row.certificate_serial_number || "").slice(-12).toUpperCase() || null,
+    validFrom: row.valid_from,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -104,15 +129,29 @@ Deno.serve(async (request) => {
     const action = String(form.get("action") || "");
     const organizationId = String(form.get("organizationId") || "");
     const clientId = String(form.get("clientId") || "");
-    if (!organizationId || !clientId || !["status", "upload", "remove"].includes(action)) return error("invalid_request", 400);
+    if (!organizationId || !["list", "status", "upload", "remove"].includes(action) || (action !== "list" && !clientId)) return error("invalid_request", 400);
 
     const [accessResult, clientResult] = await Promise.all([
       admin.from("organization_user_access").select("primary_role,status").eq("organization_id", organizationId).eq("user_id", authData.user.id).maybeSingle(),
-      admin.from("clients").select("id").eq("id", clientId).eq("organization_id", organizationId).maybeSingle(),
+      action === "list"
+        ? Promise.resolve({ data: { id: "management-list" }, error: null })
+        : admin.from("clients").select("id").eq("id", clientId).eq("organization_id", organizationId).maybeSingle(),
     ]);
     if (accessResult.error || clientResult.error) throw accessResult.error || clientResult.error;
     if (!clientResult.data) return error("client_not_found", 404);
     if (accessResult.data?.status !== "active" || accessResult.data?.primary_role !== "admin") return error("forbidden", 403);
+
+    if (action === "list") {
+      const [certificatesResult, clientsResult] = await Promise.all([
+        admin.from("client_a1_certificates").select("id,client_id,status,certificate_fingerprint_sha256,certificate_serial_number,valid_from,expires_at,created_at,updated_at").eq("organization_id", organizationId).order("expires_at", { ascending: true, nullsFirst: false }),
+        admin.from("clients").select("id,name,cnpj,status").eq("organization_id", organizationId).order("name"),
+      ]);
+      if (certificatesResult.error || clientsResult.error) throw certificatesResult.error || clientsResult.error;
+      return json({
+        certificates: (certificatesResult.data || []).map((row: Record<string, unknown>) => publicManagementStatus(row)),
+        clients: clientsResult.data || [],
+      });
+    }
 
     const existingResult = await admin.from("client_a1_certificates").select("*").eq("organization_id", organizationId).eq("client_id", clientId).maybeSingle();
     if (existingResult.error) throw existingResult.error;
@@ -173,7 +212,7 @@ Deno.serve(async (request) => {
     }
   } catch (cause) {
     const code = cause instanceof Error ? cause.message : "operation_failed";
-    const known = new Set(["invalid_certificate_file", "invalid_certificate_size", "invalid_certificate_contents", "certificate_expired", "certificate_password_or_file_invalid", "vault_key_invalid"]);
+    const known = new Set(["invalid_certificate_file", "invalid_certificate_size", "invalid_certificate_contents", "certificate_key_mismatch", "certificate_expired", "certificate_password_or_file_invalid", "vault_key_invalid"]);
     if (!known.has(code)) console.error("client-certificate-vault operation failed", cause);
     return error(known.has(code) ? code : "operation_failed", known.has(code) && code !== "vault_key_invalid" ? 400 : 500);
   }
