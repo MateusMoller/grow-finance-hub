@@ -245,6 +245,7 @@ interface ReferenceMatchPreview {
     referenceMatchReasons?: string[];
     autoLinkBlockReason?: string | null;
     obligationCandidates?: ObligationMatchCandidate[];
+    zoneAuthorityApplied?: boolean;
   };
 }
 
@@ -1906,14 +1907,26 @@ async function registerDocumentUploadDirectly({
     referenceMatchScore: 0,
     referenceMatchReasons: [],
     autoLinkBlockReason: item.instance_id ? null : "Candidato insuficiente para auto-vinculo.",
+    zoneAuthorityApplied: false,
   };
+  const recognizedCompetence = item.competenceManuallyEdited
+    ? item.suggested_competence_label || null
+    : match.zoneAuthorityApplied
+      ? match.competenceDetected || null
+      : match.competenceDetected || item.suggested_competence_label || item.analysis.competence_detected || null;
+  const recognizedTaxIdentifier = match.zoneAuthorityApplied
+    ? match.detectedCnpj || null
+    : match.detectedCnpj || item.analysis.detected_cnpj || null;
+  const recognizedClientId = match.zoneAuthorityApplied
+    ? match.detectedClientId || null
+    : match.detectedClientId || item.client_id || null;
   let linkedInstanceId = item.instance_id || match.resolvedInstanceId || null;
-  if (!linkedInstanceId && match.detectedClientId && (match.suggestedTemplateId || item.template_id)) {
+  if (!linkedInstanceId && recognizedClientId && (match.suggestedTemplateId || item.template_id)) {
     linkedInstanceId = await ensureDetectedInstanceForUpload({
       organizationId,
-      clientId: match.detectedClientId || item.client_id || null,
+      clientId: recognizedClientId,
       templateId: match.suggestedTemplateId || item.template_id || null,
-      competenceLabel: match.competenceDetected || item.suggested_competence_label || item.analysis.competence_detected || null,
+      competenceLabel: recognizedCompetence,
       userId: user.id,
     });
   }
@@ -1933,8 +1946,8 @@ async function registerDocumentUploadDirectly({
         storage_path: storagePath,
         file_hash: null,
         file_size: item.file.size,
-        client_id: effectiveMatch.detectedClientId || item.client_id || null,
-        detected_client_id: effectiveMatch.detectedClientId || null,
+        client_id: recognizedClientId,
+        detected_client_id: recognizedClientId,
         template_id: effectiveMatch.suggestedTemplateId || item.template_id || null,
         instance_id: isLinked ? linkedInstanceId : null,
         status: isLinked ? "ingested" : "review_required",
@@ -1944,8 +1957,8 @@ async function registerDocumentUploadDirectly({
         publication_status: "pending",
         review_required: !isLinked,
         metadata: {
-          detected_cnpj: effectiveMatch.detectedCnpj || item.analysis.detected_cnpj,
-          competence_detected: effectiveMatch.competenceDetected || item.analysis.competence_detected,
+          detected_cnpj: recognizedTaxIdentifier,
+          competence_detected: recognizedCompetence,
           match_strategy: effectiveMatch.strategy,
           match_score: effectiveMatch.score,
         },
@@ -1965,9 +1978,9 @@ async function registerDocumentUploadDirectly({
     .insert({
       organization_id: organizationId,
       ingestion_job_id: ingestionJob.id,
-      client_id: effectiveMatch.detectedClientId || item.client_id || null,
+      client_id: recognizedClientId,
       suggested_client_id: item.client_id || null,
-      detected_client_id: effectiveMatch.detectedClientId || null,
+      detected_client_id: recognizedClientId,
       suggested_template_id: effectiveMatch.suggestedTemplateId || item.template_id || null,
       suggested_instance_id: effectiveMatch.resolvedInstanceId || item.instance_id || null,
       linked_instance_id: isLinked ? linkedInstanceId : null,
@@ -1979,10 +1992,10 @@ async function registerDocumentUploadDirectly({
       content_type: item.file.type || "application/pdf",
       file_size: item.file.size,
       suggested_competence_label: item.suggested_competence_label || null,
-      detected_cnpj: effectiveMatch.detectedCnpj || item.analysis.detected_cnpj,
+      detected_cnpj: recognizedTaxIdentifier,
       competence_detected: item.competenceManuallyEdited
         ? item.suggested_competence_label || null
-        : effectiveMatch.competenceDetected || item.analysis.competence_detected,
+        : recognizedCompetence,
       identification_confidence: effectiveMatch.score,
       matched_by: effectiveMatch.strategy,
       match_score: effectiveMatch.score,
@@ -2208,7 +2221,9 @@ function applyPreviewAutofill(item: UploadQueueItem, preview: ReferenceMatchPrev
   const nextInstanceId = match.resolvedInstanceId || item.instance_id;
   const nextCompetenceLabel = item.competenceManuallyEdited
     ? item.suggested_competence_label
-    : match.competenceDetected || item.analysis.competence_detected || item.suggested_competence_label;
+    : match.zoneAuthorityApplied
+      ? match.competenceDetected || ""
+      : match.competenceDetected || item.analysis.competence_detected || item.suggested_competence_label;
 
   return {
     ...item,

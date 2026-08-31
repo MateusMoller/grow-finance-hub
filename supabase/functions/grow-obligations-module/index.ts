@@ -83,6 +83,7 @@ type MatchResult = {
   fingerprintPayload? : JsonRecord;
   autoLinkBlockReason? : string | null;
   obligationCandidates? : ObligationMatchCandidate[];
+  zoneAuthorityApplied? : boolean;
 };
 
 type ReferenceFileRow = {
@@ -1563,6 +1564,7 @@ async function resolveDocumentReferenceMatch(
     extractedTextPreview: analysis.extracted_text_preview,
     fingerprintPayload: analysis.fingerprint_payload,
     autoLinkBlockReason: "Candidato insuficiente para auto-vinculo.",
+    zoneAuthorityApplied: false,
   };
 
   const [templatesMap, profilesMap, clientsMap, referenceFiles] = await Promise.all([
@@ -1600,14 +1602,25 @@ async function resolveDocumentReferenceMatch(
       const recognitionScore = Math.min(1, layout.score * 0.85 + zoneSignals.titleScore * 0.15);
       return { candidate, referenceFingerprint, layout, zoneSignals, recognitionScore };
     })
-    .filter((item) => item.layout.usable)
+    .filter((item) =>
+      item.layout.usable ||
+      item.zoneSignals.titleScore >= 0.55 ||
+      ((templateId || documentTypeKey) &&
+        (!templateId || item.candidate.template.id === templateId) &&
+        (!documentTypeKey || item.candidate.document.document_type_key === documentTypeKey))
+    )
     .sort((left, right) => right.recognitionScore - left.recognitionScore);
 
-  const configuredModel = configuredModels[0];
+  const explicitlyScopedModels = configuredModels.filter((item) =>
+    (!templateId || item.candidate.template.id === templateId) &&
+    (!documentTypeKey || item.candidate.document.document_type_key === documentTypeKey)
+  );
+  const configuredModel = explicitlyScopedModels.length === 1 ? explicitlyScopedModels[0] : configuredModels[0];
+  const explicitlyScopedModelIsUnique = Boolean((templateId || documentTypeKey) && explicitlyScopedModels.length === 1);
   const configuredModelIsUnique = Boolean(
     configuredModel &&
-    configuredModel.layout.score >= 0.68 &&
-    (!configuredModels[1] || configuredModel.recognitionScore - configuredModels[1].recognitionScore > 0.05),
+    (explicitlyScopedModelIsUnique || configuredModel.layout.score >= 0.68 || configuredModel.zoneSignals.titleScore >= 0.72) &&
+    (explicitlyScopedModelIsUnique || !configuredModels[1] || configuredModel.recognitionScore - configuredModels[1].recognitionScore > 0.05),
   );
 
   if (configuredModelIsUnique && configuredModel) {
@@ -1621,6 +1634,9 @@ async function resolveDocumentReferenceMatch(
         ...emptyResult,
         suggestedTemplateId: configuredModel.candidate.template.id,
         documentTypeKey: configuredModel.candidate.document.document_type_key,
+        detectedClientId: zoneClient?.id || null,
+        detectedCnpj: configuredModel.zoneSignals.cnpj || null,
+        competenceDetected: configuredModel.zoneSignals.competence || null,
         referenceFileId: configuredReferenceId,
         referenceMatchScore: Number(configuredModel.recognitionScore.toFixed(2)),
         reasons: [
@@ -1633,6 +1649,7 @@ async function resolveDocumentReferenceMatch(
           "O conteudo fora das areas marcadas e o nome do arquivo foram ignorados.",
         ],
         autoLinkBlockReason: "Modelo reconhecido, mas as areas obrigatorias exigem correcao manual.",
+        zoneAuthorityApplied: true,
       };
     }
 
@@ -1765,7 +1782,11 @@ async function resolveDocumentReferenceMatch(
     const fingerprintScore = overlapRatio(inputTokens, referenceFingerprintTokens);
     const layoutMatch = computeLayoutSimilarity(analysis.fingerprint_payload, referenceFingerprintForLayout);
     const zoneSignals = extractZoneSignals(analysis.fingerprint_payload, referenceFingerprint);
-    const zoneCompetence = competenceManuallyEdited ? effectiveCompetence : zoneSignals.competence || effectiveCompetence;
+    const zoneCompetence = competenceManuallyEdited
+      ? effectiveCompetence
+      : zoneSignals.hasCompetenceZone
+        ? zoneSignals.competence
+        : effectiveCompetence;
     const structuralScore = layoutMatch.usable
       ? (layoutMatch.score * (layoutMatch.explicit ? 0.74 : 0.48))
       : 0;
@@ -1836,9 +1857,18 @@ async function resolveDocumentReferenceMatch(
     ? Array.from(clientsMap.values()).find((client) => normalizeCnpj(client.cnpj) === best.zoneSignals.cnpj) || null
     : null;
   const zoneClientMismatch = Boolean(zoneClientByCnpj && zoneClientByCnpj.id !== effectiveClientId);
-  const finalDetectedClientId = zoneClientByCnpj?.id || effectiveClientId;
-  const finalDetectedCnpj = best.zoneSignals.cnpj || analysis.detected_cnpj;
-  const finalCompetence = competenceManuallyEdited ? effectiveCompetence : best.zoneSignals.competence || effectiveCompetence;
+  const finalDetectedClientId = best.zoneSignals.hasTaxIdentifierZone
+    ? zoneClientByCnpj?.id || null
+    : zoneClientByCnpj?.id || effectiveClientId;
+  const finalDetectedCnpj = best.zoneSignals.hasTaxIdentifierZone
+    ? best.zoneSignals.cnpj || null
+    : best.zoneSignals.cnpj || analysis.detected_cnpj;
+  const finalCompetence = competenceManuallyEdited
+    ? effectiveCompetence
+    : best.zoneSignals.hasCompetenceZone
+      ? best.zoneSignals.competence
+      : effectiveCompetence;
+  const zoneAuthorityApplied = best.zoneSignals.hasCompetenceZone || best.zoneSignals.hasTaxIdentifierZone;
   const uniqueOpenInstance = best.eligibleInstances.length === 1 ? best.eligibleInstances[0].instance.id : null;
   const hasManualContext = Boolean(clientId || templateId || documentTypeKey || instanceId);
   const hasConfiguredZoneAuthority = Boolean(
@@ -1871,6 +1901,8 @@ async function resolveDocumentReferenceMatch(
   );
   const autoAllowed = Boolean(
     uniqueOpenInstance &&
+    finalDetectedClientId &&
+    Boolean(finalCompetence) &&
     !ambiguous &&
     !zoneClientMismatch &&
     (
@@ -1946,6 +1978,7 @@ async function resolveDocumentReferenceMatch(
     detectedClientId: finalDetectedClientId,
     detectedCnpj: finalDetectedCnpj,
     competenceDetected: finalCompetence,
+    zoneAuthorityApplied,
     referenceFileId: best.reference.id,
     referenceMatchScore: best.totalScore,
     referenceMatchReasons: reasons,
@@ -6034,18 +6067,45 @@ function detectCompetenceInText(value: string | null | undefined) {
     maio: "05", junho: "06", julho: "07", agosto: "08",
     setembro: "09", outubro: "10", novembro: "11", dezembro: "12",
   };
-  const namedMonth = text.match(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\D{0,8}(20\d{2})\b/);
-  if (namedMonth) return toCompetenceKey(namedMonth[2], monthNames[namedMonth[1]]);
-  const labelled = text.match(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base|folha de|salario de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/);
-  if (labelled) return toCompetenceKey(labelled[2], labelled[1]);
-  const labelledYearFirst = text.match(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/);
-  if (labelledYearFirst) return toCompetenceKey(labelledYearFirst[1], labelledYearFirst[2]);
-  const monthYear = text.match(/\b(0?[1-9]|1[0-2])\D{0,4}(20\d{2})\b/);
-  if (monthYear) return toCompetenceKey(monthYear[2], monthYear[1]);
-  const yearMonth = text.match(/\b(20\d{2})\D{0,4}(0?[1-9]|1[0-2])\b/);
-  if (yearMonth) return toCompetenceKey(yearMonth[1], yearMonth[2]);
-  const compact = text.match(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/);
-  return compact ? toCompetenceKey(compact[3], compact[2]) : null;
+  const candidates: Array<{ value: string; score: number }> = [];
+  const add = (candidate: string | null, score: number) => {
+    if (candidate) candidates.push({ value: candidate, score });
+  };
+  for (const match of text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de)?\D{0,8}(20\d{2})\b/g)) {
+    add(toCompetenceKey(match[2], monthNames[match[1]]), 100);
+  }
+  for (const match of text.matchAll(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base|folha de|salario de)\D{0,32}(?:[0-3]?\d\D{1,4})?(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g)) {
+    add(toCompetenceKey(match[2], match[1]), 100);
+  }
+  for (const match of text.matchAll(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g)) {
+    add(toCompetenceKey(match[1], match[2]), 98);
+  }
+  const contextualScore = (index: number) => {
+    const prefix = text.slice(Math.max(0, index - 48), index);
+    if (/\b(competencia|comp|periodo|apuracao|referencia|ref|pa|mes base|folha de|salario de)\b/.test(prefix)) return 92;
+    if (/\b(admissao|nascimento|demissao|afastamento|ferias|assinatura|vencimento|pagamento|emissao|validade)\b/.test(prefix)) return 5;
+    return 50;
+  };
+  for (const match of text.matchAll(/\b(?:[0-3]?\d\D{1,4})?(0?[1-9]|1[0-2])\D{1,4}(20\d{2})\b/g)) {
+    add(toCompetenceKey(match[2], match[1]), contextualScore(match.index));
+  }
+  for (const match of text.matchAll(/\b(20\d{2})\D{1,4}(0?[1-9]|1[0-2])\b/g)) {
+    add(toCompetenceKey(match[1], match[2]), contextualScore(match.index));
+  }
+  for (const match of text.matchAll(/(?:^|[^\d])((0[1-9]|1[0-2])(20\d{2}))(?:[^\d]|$)/g)) {
+    add(toCompetenceKey(match[3], match[2]), contextualScore(match.index));
+  }
+  const ranked = Array.from(candidates.reduce((result, candidate) => {
+    result.set(candidate.value, Math.max(result.get(candidate.value) || 0, candidate.score));
+    return result;
+  }, new Map<string, number>()).entries())
+    .map(([candidate, score]) => ({ value: candidate, score }))
+    .sort((left, right) => right.score - left.score);
+  if (ranked.length === 0) return null;
+  if (ranked[0].score >= 90) return ranked[0].value;
+  if (ranked.length === 1 && ranked[0].score >= 50) return ranked[0].value;
+  if (ranked[0].score - (ranked[1]?.score || 0) >= 30) return ranked[0].value;
+  return null;
 }
 
 function rectOverlapRatio(
@@ -6105,6 +6165,7 @@ function extractTextFromZone(inputFingerprint: JsonRecord, referenceFingerprint:
 function extractZoneSignals(inputFingerprint: JsonRecord, referenceFingerprint: JsonRecord) {
   const referenceZones = normalizeReferenceExtractionZones(referenceFingerprint.extraction_zones).zones as JsonRecord[];
   const hasCompetenceZone = referenceZones.some((zone) => asTrimmedString(zone.field) === "competence");
+  const hasTaxIdentifierZone = referenceZones.some((zone) => ["cpf", "cnpj"].includes(asTrimmedString(zone.field) || ""));
   const cnpjText = extractTextFromZone(inputFingerprint, referenceFingerprint, "cpf") ||
     extractTextFromZone(inputFingerprint, referenceFingerprint, "cnpj");
   const competenceText = extractTextFromZone(inputFingerprint, referenceFingerprint, "competence");
@@ -6121,6 +6182,7 @@ function extractZoneSignals(inputFingerprint: JsonRecord, referenceFingerprint: 
     cnpj: detectTaxIdentifierInText(cnpjText),
     competence: detectCompetenceInText(competenceText),
     hasCompetenceZone,
+    hasTaxIdentifierZone,
   };
 }
 

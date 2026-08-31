@@ -29,8 +29,13 @@ describe("document recognition safety contract", () => {
 
   it("makes configured extraction zones authoritative", () => {
     expect(backendSource).toContain("hasConfiguredZoneAuthority");
+    expect(backendSource).toContain("zoneSignals.hasCompetenceZone");
+    expect(backendSource).toContain("zoneAuthorityApplied");
+    expect(backendSource).not.toContain("const zoneCompetence = competenceManuallyEdited ? effectiveCompetence : zoneSignals.competence || effectiveCompetence;");
     expect(backendSource).toContain("O conteudo fora das areas marcadas e o nome do arquivo foram ignorados.");
     expect(backendSource).toContain("Modelo reconhecido, mas as areas obrigatorias exigem correcao manual.");
+    expect(workspaceSource).toContain("match.zoneAuthorityApplied");
+    expect(workspaceSource).toContain('? match.competenceDetected || ""');
   });
 
   it("uses the title extraction zone as an auxiliary obligation signal", () => {
@@ -82,15 +87,23 @@ describe("document recognition safety contract", () => {
     expect(candidates.find((candidate) => candidate.value === "2025-11")?.score).toBe(4);
   });
 
-  it("recognizes written-out months while preserving the original fallback", () => {
+  it("recognizes written-out months without restoring a full-document date over a configured zone", () => {
     const candidates = detectCompetenceCandidatesDetailed([{
       source: "pdf_text",
       value: "Admissão: 24/11/2025. Competência: 20 de agosto de 2026.",
     }]);
     expect(candidates[0]).toMatchObject({ value: "2026-08", reason: "mes_por_extenso" });
-    expect(backendSource).toContain("zoneSignals.competence || effectiveCompetence");
+    expect(backendSource).toContain("? zoneSignals.competence");
     expect(backendSource).toContain("analysis.competence_detected || suggestedCompetenceLabel");
-    expect(workspaceSource).toContain("item.analysis.competence_detected || item.suggested_competence_label");
+    expect(workspaceSource).toContain("recognizedCompetence");
+    expect(workspaceSource).toContain("competence_detected: recognizedCompetence");
+  });
+
+  it("requires a unique cropped date when the zone contains competing dates", () => {
+    expect(backendSource).toContain("if (ranked.length === 1 && ranked[0].score >= 50)");
+    expect(backendSource).toContain("if (ranked[0].score - (ranked[1]?.score || 0) >= 30)");
+    expect(backendSource).toContain("return null;");
+    expect(backendSource).toContain("Boolean(finalCompetence)");
   });
 
   it("scopes models and clients to the authenticated organization", () => {
@@ -101,7 +114,7 @@ describe("document recognition safety contract", () => {
   it("keeps a manually corrected competence authoritative after preview", () => {
     expect(workspaceSource).toContain("competence_manually_edited: item.competenceManuallyEdited");
     expect(workspaceSource).toContain("competenceManuallyEdited: true");
-    expect(backendSource).toContain("competenceManuallyEdited ? effectiveCompetence");
+    expect(backendSource).toMatch(/competenceManuallyEdited\s*\?\s*effectiveCompetence/);
     expect(backendSource).toContain("competenceManuallyEdited ? suggestedCompetenceLabel");
   });
 });
