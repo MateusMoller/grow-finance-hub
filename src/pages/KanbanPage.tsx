@@ -343,6 +343,7 @@ const kanbanTaskListColumns = [
   "integration_source",
   "integration_task_id",
   "integration_payload",
+  "version",
 ].join(",");
 
 const normalizeKanbanTask = (task: Record<string, unknown>): KanbanTaskItem => ({

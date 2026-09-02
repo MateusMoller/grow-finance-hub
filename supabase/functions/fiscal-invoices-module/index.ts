@@ -65,7 +65,12 @@ async function normalizeDocument(document: DistributedDocument, source: Source, 
 }
 
 async function persistBatch(admin: SupabaseClient, organizationId: string, clientId: string, clientCnpj: string, source: Source, documents: DistributedDocument[]) {
-  const normalized = await Promise.all(documents.filter((document) => document.xml.trim().startsWith("<")).map((document) => normalizeDocument(document, source, clientCnpj)));
+  const normalizedBatch = await Promise.all(documents.filter((document) => document.xml.trim().startsWith("<")).map((document) => normalizeDocument(document, source, clientCnpj)));
+  const normalized = Array.from(normalizedBatch.reduce((byAccessKey, item) => {
+    const current = byAccessKey.get(item.access_key);
+    if (!current || Number(item.nsu || 0) >= Number(current.nsu || 0)) byAccessKey.set(item.access_key, item);
+    return byAccessKey;
+  }, new Map<string, Awaited<ReturnType<typeof normalizeDocument>>>() ).values());
   if (normalized.length === 0) return { received: documents.length, changed: 0 };
   const existingResult = await admin.from("fiscal_invoices").select("access_key,content_hash,xml_path").eq("organization_id", organizationId).eq("source", source).in("access_key", normalized.map((item) => item.access_key));
   if (existingResult.error) throw existingResult.error;
