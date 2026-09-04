@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { approveSimpleNationalDossier, createSimpleNationalDossier, generatePgdasdDas, getDefisArtifactUrl, getPgdasdArtifactUrl, listSimpleNationalClients, listSimpleNationalDossiers, previewPgdasd, requestSimpleNationalTransmission, saveSimpleNationalDossier, syncDefisDeclarations, syncPgdasdPreviousCompetence, transmitDefis, transmitPgdasd } from "../api";
+import { approveSimpleNationalDossier, createSimpleNationalDossier, generatePgdasdDas, getDefisArtifactUrl, getPgdasdArtifactUrl, listSimpleNationalClients, listSimpleNationalDossiers, previewPgdasd, requestSimpleNationalTransmission, saveSimpleNationalDossier, syncDefisAnnualValues, syncDefisDeclarations, syncPgdasdPreviousCompetence, transmitDefis, transmitPgdasd } from "../api";
 import { integraContadorKeys } from "../queryKeys";
 
 export function useSimpleNationalDossiers(organizationId: string | null) {
@@ -17,6 +17,7 @@ export function useSimpleNationalDossiers(organizationId: string | null) {
   const transmit = useMutation({ mutationFn: (dossierId: string) => transmitPgdasd(organizationId!, dossierId), onSuccess: invalidate });
   const transmitDefisDeclaration = useMutation({ mutationFn: (dossierId: string) => transmitDefis(organizationId!, dossierId), onSuccess: invalidate });
   const syncDefis = useMutation({ mutationFn: (dossierId: string) => syncDefisDeclarations(organizationId!, dossierId), onSuccess: invalidate });
+  const syncDefisAnnual = useMutation({ mutationFn: (dossierId: string) => syncDefisAnnualValues(organizationId!, dossierId), onSuccess: invalidate });
   const generateDas = useMutation({ mutationFn: (dossierId: string) => generatePgdasdDas(organizationId!, dossierId), onSuccess: invalidate });
   const openArtifact = async (dossierId: string, artifact: "declaration" | "receipt" | "das") => {
     const dossier = query.data?.find((item) => item.id === dossierId);
@@ -25,5 +26,5 @@ export function useSimpleNationalDossiers(organizationId: string | null) {
       : await getPgdasdArtifactUrl(organizationId!, dossierId, artifact);
     window.open(url, "_blank", "noopener,noreferrer");
   };
-  return { query, clients, create, save, approve, requestTransmission, preview, syncPreviousCompetence, transmit, transmitDefis: transmitDefisDeclaration, syncDefis, generateDas, openArtifact };
+  return { query, clients, create, save, approve, requestTransmission, preview, syncPreviousCompetence, transmit, transmitDefis: transmitDefisDeclaration, syncDefis, syncDefisAnnual, generateDas, openArtifact };
 }

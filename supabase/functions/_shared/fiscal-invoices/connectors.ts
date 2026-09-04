@@ -2,6 +2,7 @@ import { decodeXmlPayload, extractNfeDocZip, extractSoapValue, type DistributedD
 
 export type DistributionBatch = { statusCode: string; lastNsu: number; maxNsu: number | null; documents: DistributedDocument[]; upToDate: boolean };
 type TlsIdentity = { cert: string; key: string };
+export type NfeTransportRequest = { endpoint: string; headers: Record<string, string>; body: string };
 type NfseRow = { NSU?: unknown; nsu?: unknown; TipoDocumento?: unknown; tipoDocumento?: unknown; ChaveAcesso?: unknown; chaveAcesso?: unknown; ArquivoXml?: unknown; arquivoXml?: unknown };
 type NfseResponse = { StatusProcessamento?: unknown; statusProcessamento?: unknown; LoteDFe?: unknown; loteDFe?: unknown };
 
@@ -21,7 +22,10 @@ function requestError(source: "nfe" | "nfse", cause: unknown) {
   const details = messages.join(" ");
   console.error("fiscal connector request failed", { source, messages });
   if (/certificate|unknown issuer|bad certificate|handshake|tls|peer.*incompatible/.test(details)) return new Error(`${source}_tls_certificate_rejected`);
-  if (/dns|connection refused|connection reset|timed out|timeout|sending request/.test(details)) return new Error(`${source}_connection_failed`);
+  if (/connection reset|peer.*closed|unexpected eof/.test(details)) return new Error(`${source}_tls_peer_closed`);
+  if (/timed out|timeout/.test(details)) return new Error(`${source}_connection_timeout`);
+  if (/dns|name resolution/.test(details)) return new Error(`${source}_dns_failed`);
+  if (/connection refused|sending request|connect/.test(details)) return new Error(`${source}_connection_failed`);
   return cause instanceof Error && cause.message ? cause : new Error(`${source}_request_failed`);
 }
 
@@ -52,28 +56,37 @@ export async function fetchNfseAdnBatch(input: { identity: TlsIdentity; cnpj: st
 }
 
 export async function fetchNfeSefazBatch(input: { identity: TlsIdentity; cnpj: string; lastNsu: number; environment: string }): Promise<DistributionBatch> {
-  const endpoint = input.environment === "homologation"
-    ? "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
-    : "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx";
-  const tpAmb = input.environment === "homologation" ? "2" : "1";
-  const payload = `<distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01"><tpAmb>${tpAmb}</tpAmb><cUFAutor>91</cUFAutor><CNPJ>${input.cnpj}</CNPJ><distNSU><ultNSU>${String(input.lastNsu).padStart(15, "0")}</ultNSU></distNSU></distDFeInt>`;
-  const envelope = `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg>${payload}</nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>`;
+  const transport = buildNfeSefazRequest(input);
   const client = httpClient(input.identity);
   try {
     let response: Response;
     try {
-      response = await fetch(endpoint, { method: "POST", client, headers: { "Content-Type": "application/soap+xml; charset=utf-8; action=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse\"", "Connection": "close" }, body: envelope } as RequestInit & { client: Deno.HttpClient });
+      response = await fetch(transport.endpoint, { method: "POST", client, headers: transport.headers, body: transport.body } as RequestInit & { client: Deno.HttpClient });
     } catch (cause) {
       throw requestError("nfe", cause);
     }
     const soapXml = await response.text();
-    if (!response.ok) throw new Error(`nfe_http_${response.status}`);
-    const statusCode = extractSoapValue(soapXml, "cStat") || "UNKNOWN";
-    const lastNsu = Number(extractSoapValue(soapXml, "ultNSU") || input.lastNsu);
-    const maxNsu = Number(extractSoapValue(soapXml, "maxNSU") || lastNsu);
-    if (!["137", "138", "656"].includes(statusCode)) throw new Error(`nfe_cstat_${statusCode}`);
-    if (statusCode === "656") throw new Error("nfe_rate_limited");
-    const documents = await extractNfeDocZip(soapXml);
-    return { statusCode, lastNsu, maxNsu, documents, upToDate: statusCode === "137" || lastNsu >= maxNsu };
+    return await parseNfeSefazResponse(soapXml, response.status, input.lastNsu);
   } finally { client.close(); }
+}
+
+export function buildNfeSefazRequest(input: { cnpj: string; lastNsu: number; environment: string; cUfAutor?: string }): NfeTransportRequest {
+  const endpoint = input.environment === "homologation"
+    ? "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
+    : "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx";
+  const tpAmb = input.environment === "homologation" ? "2" : "1";
+  const payload = `<distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01"><tpAmb>${tpAmb}</tpAmb><cUFAutor>${input.cUfAutor || "35"}</cUFAutor><CNPJ>${input.cnpj}</CNPJ><distNSU><ultNSU>${String(input.lastNsu).padStart(15, "0")}</ultNSU></distNSU></distDFeInt>`;
+  const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">${payload}</nfeDadosMsg></nfeDistDFeInteresse></soap:Body></soap:Envelope>`;
+  return { endpoint, headers: { "Content-Type": "text/xml; charset=utf-8", "SOAPAction": "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse", "User-Agent": "GrowFinanceHub/1.0" }, body: envelope };
+}
+
+export async function parseNfeSefazResponse(soapXml: string, httpStatus: number, previousNsu: number): Promise<DistributionBatch> {
+  if (httpStatus < 200 || httpStatus >= 300) throw new Error(`nfe_http_${httpStatus}`);
+  const statusCode = extractSoapValue(soapXml, "cStat") || "UNKNOWN";
+  const lastNsu = Number(extractSoapValue(soapXml, "ultNSU") || previousNsu);
+  const maxNsu = Number(extractSoapValue(soapXml, "maxNSU") || lastNsu);
+  if (!["137", "138", "656"].includes(statusCode)) throw new Error(`nfe_cstat_${statusCode}`);
+  if (statusCode === "656") throw new Error("nfe_rate_limited");
+  const documents = await extractNfeDocZip(soapXml);
+  return { statusCode, lastNsu, maxNsu, documents, upToDate: statusCode === "137" || lastNsu >= maxNsu };
 }

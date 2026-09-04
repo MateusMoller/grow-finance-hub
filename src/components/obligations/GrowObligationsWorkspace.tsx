@@ -197,6 +197,14 @@ interface UploadQueueItem {
 }
 
 const DOCUMENT_LINK_PLACEHOLDER = "{{documento_link}}";
+const completionTemplateVariables = [
+  { value: "{{cliente_nome}}", label: "Cliente" },
+  { value: "{{obrigacao_nome}}", label: "Obrigação" },
+  { value: "{{competencia}}", label: "Competência" },
+  { value: "{{setor}}", label: "Setor" },
+  { value: "{{prazo_cliente}}", label: "Vencimento do cliente" },
+  { value: DOCUMENT_LINK_PLACEHOLDER, label: "Link do documento" },
+] as const;
 
 function hasRequiredDocumentLinkPlaceholder(message: string) {
   return message.includes(DOCUMENT_LINK_PLACEHOLDER);
@@ -2990,6 +2998,7 @@ export function GrowObligationsWorkspace({
     () =>
       (overview?.instances || []).filter((instance) =>
         instance.latest_delivery_attempt?.status !== "sent" &&
+        instance.latest_delivery_attempt?.status !== "cancelled" &&
         (instance.status === "pronto_para_envio" || instance.status === "falha_envio"),
       ),
     [overview?.instances],
@@ -2999,6 +3008,31 @@ export function GrowObligationsWorkspace({
     () => overview?.delivery_attempts || [],
     [overview?.delivery_attempts],
   );
+
+  const deliveryHistory = useMemo(() => {
+    const attemptedInboxIds = new Set(
+      deliveryAttempts
+        .map((attempt) => attempt.inbox_item_id)
+        .filter((inboxItemId): inboxItemId is string => Boolean(inboxItemId)),
+    );
+    const attempts = deliveryAttempts.map((attempt) => ({
+      kind: "delivery" as const,
+      id: attempt.id,
+      createdAt: attempt.created_at,
+      attempt,
+    }));
+    const blockedDocuments = pendingDocuments
+      .filter((document) => !attemptedInboxIds.has(document.id))
+      .map((document) => ({
+        kind: "blocked" as const,
+        id: document.id,
+        createdAt: document.created_at,
+        document,
+      }));
+    return [...attempts, ...blockedDocuments].sort(
+      (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    );
+  }, [deliveryAttempts, pendingDocuments]);
 
   const documentInResolution = useMemo(
     () => pendingDocuments.find((item) => item.id === documentResolutionId) || null,
@@ -3014,6 +3048,12 @@ export function GrowObligationsWorkspace({
       return true;
     });
   }, [documentInResolution, overview?.instances]);
+
+  const openDocumentResolution = useCallback((document: GrowDocumentInboxItem) => {
+    setDocumentResolutionId(document.id);
+    setDocumentResolutionInstanceId(document.suggested_instance_id || "");
+    setDocumentResolutionNotes("");
+  }, []);
 
   const allDocumentOptions = useMemo(
     () =>
@@ -3936,36 +3976,64 @@ export function GrowObligationsWorkspace({
                 <div className="rounded-3xl border border-border/70 bg-muted/10 p-5">
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">Histórico de envios</p>
-                      <p className="text-xs text-muted-foreground">Tentativas recentes preservadas para auditoria.</p>
+                      <p className="text-sm font-semibold">Histórico de processamento e envios</p>
+                      <p className="text-xs text-muted-foreground">Inclui documentos enviados, bloqueados e pendentes de revisão.</p>
                     </div>
-                    <Badge variant="secondary" className="rounded-full px-3">{deliveryAttempts.length}</Badge>
+                    <Badge variant="secondary" className="rounded-full px-3">{deliveryHistory.length}</Badge>
                   </div>
                   <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/80">
-                    {deliveryAttempts.slice(0, 12).map((attempt) => (
+                    {deliveryHistory.slice(0, 20).map((entry) => entry.kind === "delivery" ? (
                       <div
-                        key={attempt.id}
-                        className="grid min-w-0 grid-cols-[72px_128px_minmax(220px,1.1fr)_minmax(210px,1fr)_minmax(280px,1.4fr)] items-center gap-4 border-b border-border/60 px-4 py-2.5 text-xs last:border-b-0"
+                        key={`delivery-${entry.id}`}
+                        className="grid min-w-0 grid-cols-[92px_128px_minmax(220px,1.1fr)_minmax(210px,1fr)_minmax(280px,1.4fr)_120px] items-center gap-4 border-b border-border/60 px-4 py-2.5 text-xs last:border-b-0"
                       >
-                        <Badge className="h-5 w-fit rounded-full px-2 text-[10px]" variant={attempt.status === "sent" ? "default" : attempt.status === "failed" ? "destructive" : "outline"}>
-                          {attempt.status}
+                        <Badge className="h-5 w-fit rounded-full px-2 text-[10px]" variant={entry.attempt.status === "sent" ? "default" : entry.attempt.status === "failed" ? "destructive" : "outline"}>
+                          {entry.attempt.status}
                         </Badge>
-                        <span className="truncate text-[11px] text-muted-foreground" title={formatDateTime(attempt.created_at)}>
-                          {formatDateTime(attempt.created_at)}
+                        <span className="truncate text-[11px] text-muted-foreground" title={formatDateTime(entry.createdAt)}>
+                          {formatDateTime(entry.createdAt)}
                         </span>
-                        <p className="truncate font-medium" title={attempt.recipient_email || attempt.recipient_phone || undefined}>
-                          {attempt.delivery_channel === "whatsapp" ? "WhatsApp: " : "E-mail: "}{attempt.recipient_email || attempt.recipient_phone || "Destinatario nao informado"}
+                        <p className="truncate font-medium" title={entry.attempt.recipient_email || entry.attempt.recipient_phone || undefined}>
+                          {entry.attempt.delivery_channel === "whatsapp" ? "WhatsApp: " : "E-mail: "}{entry.attempt.recipient_email || entry.attempt.recipient_phone || "Destinatario nao informado"}
                         </p>
-                        <p className="truncate text-muted-foreground" title={attempt.subject}>{attempt.subject}</p>
+                        <p className="truncate text-muted-foreground" title={entry.attempt.subject}>{entry.attempt.subject}</p>
                         <p
-                          className={`truncate ${attempt.failure_reason ? "text-destructive" : "text-muted-foreground"}`}
-                          title={attempt.failure_reason || `De: ${attempt.verified_from_email} | Reply-to: ${attempt.reply_to || "-"}`}
+                          className={`truncate ${entry.attempt.failure_reason ? "text-destructive" : "text-muted-foreground"}`}
+                          title={entry.attempt.failure_reason || `De: ${entry.attempt.verified_from_email} | Reply-to: ${entry.attempt.reply_to || "-"}`}
                         >
-                          {attempt.failure_reason || `De: ${attempt.verified_from_email} | Reply-to: ${attempt.reply_to || "-"}`}
+                          {entry.attempt.failure_reason || `De: ${entry.attempt.verified_from_email} | Reply-to: ${entry.attempt.reply_to || "-"}`}
                         </p>
+                        <span />
+                      </div>
+                    ) : (
+                      <div
+                        key={`blocked-${entry.id}`}
+                        className="grid min-w-0 grid-cols-[92px_128px_minmax(220px,1.1fr)_minmax(210px,1fr)_minmax(280px,1.4fr)_120px] items-center gap-4 border-b border-border/60 px-4 py-2.5 text-xs last:border-b-0"
+                      >
+                        <Badge className="h-5 w-fit rounded-full px-2 text-[10px]" variant={entry.document.processing_status === "failed" ? "destructive" : "outline"}>
+                          {entry.document.processing_status === "failed" ? "falhou" : "revisão"}
+                        </Badge>
+                        <span className="truncate text-[11px] text-muted-foreground" title={formatDateTime(entry.createdAt)}>
+                          {formatDateTime(entry.createdAt)}
+                        </span>
+                        <p className="truncate font-medium" title={entry.document.file_name}>{entry.document.file_name}</p>
+                        <p className="truncate text-muted-foreground">Envio não iniciado</p>
+                        <p className="truncate text-orange-600" title={entry.document.last_processing_error || entry.document.auto_link_block_reason || entry.document.blocking_reason || "Revisão necessária."}>
+                          {entry.document.last_processing_error || entry.document.auto_link_block_reason || entry.document.blocking_reason || "Revisão necessária."}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg"
+                          onClick={() => openDocumentResolution(entry.document)}
+                        >
+                          <Eye className="mr-1.5 h-3.5 w-3.5" />
+                          Revisar
+                        </Button>
                       </div>
                     ))}
-                    {deliveryAttempts.length === 0 ? (
+                    {deliveryHistory.length === 0 ? (
                       <div className="p-6 text-center">
                         <p className="text-sm font-medium">Nenhum envio registrado</p>
                         <p className="mt-1 text-xs text-muted-foreground">Quando houver tentativa de envio, ela aparecerá aqui.</p>
@@ -4007,50 +4075,73 @@ export function GrowObligationsWorkspace({
               <span className="text-xs text-muted-foreground group-open:hidden">Expandir</span>
               <span className="text-xs text-muted-foreground group-open:inline hidden">Recolher</span>
             </summary>
-            <fieldset className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Nome da obrigação</Label>
-                <Input value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Ex.: DASN-SIMEI" />
-                <p className="text-xs text-muted-foreground">Nome que aparecerá no catálogo, nas tarefas e nas competências geradas.</p>
+            <fieldset className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="obligation-name">Nome da obrigação</Label>
+                  <Input id="obligation-name" value={templateForm.name} onChange={(event) => setTemplateForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Ex.: DASN-SIMEI" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Setor responsável</Label>
+                  <Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Setor responsável</Label>
-                <Select value={templateForm.sector} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, sector: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{sectors.map((sector) => <SelectItem key={sector} value={sector}>{sector}</SelectItem>)}</SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Define qual setor visualizará e conduzirá as tarefas desta obrigação.</p>
+
+              <div className="border-t border-border/60 pt-5">
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold">Frequência e competência</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">Defina quando a tarefa se repete e a qual período ela pertence.</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Periodicidade</Label>
+                    <Select
+                      value={templateForm.periodicity}
+                      onValueChange={(value) =>
+                        setTemplateForm((prev) => ({
+                          ...prev,
+                          periodicity: value as GrowObligationTemplate["periodicity"],
+                          due_rule_type: value === "yearly" && prev.due_rule_type === "calendar_day" ? "fixed_date" : prev.due_rule_type,
+                        }))
+                      }
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Período dos dados</Label>
+                    <Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vigente">Mês da tarefa</SelectItem>
+                        <SelectItem value="anterior">Mês anterior à tarefa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {templateForm.competence_reference === "anterior"
+                        ? "A tarefa usará os dados do mês anterior."
+                        : "A tarefa usará os dados do próprio mês."}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Periodicidade</Label>
-                <Select
-                  value={templateForm.periodicity}
-                  onValueChange={(value) =>
-                    setTemplateForm((prev) => ({
-                      ...prev,
-                      periodicity: value as GrowObligationTemplate["periodicity"],
-                      due_rule_type: value === "yearly" && prev.due_rule_type === "calendar_day" ? "fixed_date" : prev.due_rule_type,
-                    }))
-                  }
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{periodicities.map((periodicity) => <SelectItem key={periodicity} value={periodicity}>{growPeriodicityLabel[periodicity]}</SelectItem>)}</SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Mensal, trimestral ou anual. Obrigações anuais podem usar data fixa.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Competência considerada</Label>
-                <Select value={templateForm.competence_reference} onValueChange={(value) => setTemplateForm((prev) => ({ ...prev, competence_reference: value as GrowObligationTemplate["competence_reference"] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vigente">{growCompetenceReferenceLabel.vigente}</SelectItem>
-                    <SelectItem value="anterior">{growCompetenceReferenceLabel.anterior}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Use ?anterior? quando a obrigação de um mês se refere ao movimento do mês anterior.</p>
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Regra do vencimento técnico</Label>
+
+              <div className="border-t border-border/60 pt-5">
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold">Datas de vencimento</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">Separe o prazo interno da Grow da data apresentada ao cliente.</p>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium">Vencimento para a Grow</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Prazo interno usado para organizar e priorizar a tarefa.</p>
+                  </div>
+                  <div className="space-y-2">
+                  <Label>Tipo de vencimento da Grow</Label>
                 <Select
                   value={templateForm.due_rule_type}
                   onValueChange={(value) =>
@@ -4069,32 +4160,11 @@ export function GrowObligationsWorkspace({
                 </Select>
                 <p className="text-xs text-muted-foreground">{dueRuleTypeDescription[templateForm.due_rule_type]}</p>
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Ajuste quando o vencimento cair em dia não útil</Label>
-                <Select
-                  value={templateForm.due_date_adjustment_policy}
-                  onValueChange={(value) =>
-                    setTemplateForm((prev) => ({
-                      ...prev,
-                      due_date_adjustment_policy: value as GrowObligationTemplate["due_date_adjustment_policy"],
-                    }))
-                  }
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(dueDateAdjustmentPolicyLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Se a data cair em sábado, domingo ou feriado cadastrado, o sistema antecipa ou posterga conforme esta opção.
-                </p>
-              </div>
               {templateForm.due_rule_type === "calendar_day" && (
-                <div className="space-y-2">
-                  <Label>Dia corrido do vencimento</Label>
+                <div className="mt-4 max-w-xs space-y-2">
+                  <Label htmlFor="obligation-due-day">Dia do mês</Label>
                   <Input
+                    id="obligation-due-day"
                     value={templateForm.due_day}
                     onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_day: event.target.value }))}
                     placeholder="Ex.: 20"
@@ -4104,9 +4174,10 @@ export function GrowObligationsWorkspace({
                 </div>
               )}
               {templateForm.due_rule_type === "business_day_from_month_start" && (
-                <div className="space-y-2">
-                  <Label>Nº dia útil</Label>
+                <div className="mt-4 max-w-xs space-y-2">
+                  <Label htmlFor="obligation-business-day">Qual dia útil?</Label>
                   <Input
+                    id="obligation-business-day"
                     value={templateForm.due_business_day_index}
                     onChange={(event) => setTemplateForm((prev) => ({ ...prev, due_business_day_index: event.target.value }))}
                     placeholder="Ex.: 5"
@@ -4116,12 +4187,12 @@ export function GrowObligationsWorkspace({
                 </div>
               )}
               {templateForm.due_rule_type === "fixed_date" && (
-                <div className="space-y-3 md:col-span-2">
+                <div className="mt-4 space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <Label>Datas fixas anuais</Label>
+                      <Label>Datas do ano</Label>
                       <p className="text-xs text-muted-foreground">
-                        Adicione uma ou mais datas. O sistema gera uma competência/tarefa anual para cada data cadastrada.
+                        Cada data cadastrada gera uma tarefa própria.
                       </p>
                     </div>
                     <Button
@@ -4137,12 +4208,12 @@ export function GrowObligationsWorkspace({
                       }
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Adicionar data
+                      Nova data
                     </Button>
                   </div>
                   <div className="space-y-2">
                     {templateForm.due_fixed_dates.map((fixedDate, index) => (
-                      <div key={index} className="grid gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 md:grid-cols-[1fr_110px_1fr_auto]">
+                      <div key={index} className="grid gap-2 border-t border-border/60 py-3 first:border-t-0 md:grid-cols-[1fr_110px_1fr_auto]">
                         <div className="space-y-1">
                           <Label className="text-xs">Mês</Label>
                           <Select
@@ -4215,13 +4286,59 @@ export function GrowObligationsWorkspace({
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Exemplo: uma obrigação anual pode ter 31/05 e 30/11, cada uma gerando sua própria tarefa no mês correspondente.
-                  </p>
                 </div>
               )}
+                </div>
+
+                <div className="mt-6 border-t border-border/60 pt-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-medium">Vencimento para o cliente</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Data oficial que será informada ao cliente. Deixe vazio quando não houver um prazo diferente.</p>
+                  </div>
+                  <div className="max-w-xs space-y-2">
+                    <Label htmlFor="obligation-client-due-day">Dia do mês</Label>
+                    <Input
+                      id="obligation-client-due-day"
+                      value={templateForm.legal_due_day}
+                      onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))}
+                      placeholder="Ex.: 20"
+                      inputMode="numeric"
+                    />
+                    <p className="text-xs text-muted-foreground">O sistema grava este valor separadamente do prazo interno da Grow.</p>
+                  </div>
+                </div>
+              </div>
+
+              <details className="group border-t border-border/60 pt-5">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <h4 className="text-sm font-semibold">Ajustes adicionais</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">Dias não úteis, mês-base, prioridade e observações.</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Se o vencimento cair em dia não útil</Label>
+                    <Select
+                      value={templateForm.due_date_adjustment_policy}
+                      onValueChange={(value) =>
+                        setTemplateForm((prev) => ({
+                          ...prev,
+                          due_date_adjustment_policy: value as GrowObligationTemplate["due_date_adjustment_policy"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(dueDateAdjustmentPolicyLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
               <div className="space-y-2">
-                <Label>Mês usado para calcular o prazo</Label>
+                <Label>Mês-base do vencimento</Label>
                 <Select
                   value={templateForm.technical_due_month_reference}
                   onValueChange={(value) =>
@@ -4237,7 +4354,6 @@ export function GrowObligationsWorkspace({
                     <SelectItem value="anterior">{growDueMonthReferenceLabel.anterior}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Normalmente é o mês vigente. Use anterior apenas quando o prazo cai no mês anterior à competência.</p>
               </div>
               <div className="space-y-2">
                 <Label>Prioridade operacional</Label>
@@ -4245,18 +4361,13 @@ export function GrowObligationsWorkspace({
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{priorities.map((priority) => <SelectItem key={priority} value={priority}>{growPriorityLabel[priority]}</SelectItem>)}</SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Define o destaque inicial da tarefa gerada para essa obrigação.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Dia do vencimento legal</Label>
-                <Input value={templateForm.legal_due_day} onChange={(event) => setTemplateForm((prev) => ({ ...prev, legal_due_day: event.target.value }))} placeholder="Opcional" inputMode="numeric" />
-                <p className="text-xs text-muted-foreground">Use quando o prazo legal for diferente do prazo técnico interno.</p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label>Observações operacionais</Label>
-                <Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} />
-                <p className="text-xs text-muted-foreground">Inclua regras fiscais, exceções e orientações que ajudem a equipe a conferir o vencimento.</p>
+                <Textarea value={templateForm.operational_notes} onChange={(event) => setTemplateForm((prev) => ({ ...prev, operational_notes: event.target.value }))} rows={3} placeholder="Regras, exceções ou orientações para a equipe" />
               </div>
+                </div>
+              </details>
             </fieldset>
           </details>
 
@@ -4289,17 +4400,26 @@ export function GrowObligationsWorkspace({
               />
             </summary>
             <div className="space-y-2">
-              <Label>Mensagem padrao</Label>
+              <Label>Mensagem padrão</Label>
               <Textarea
                 value={templateForm.completion_whatsapp_body}
                 onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_whatsapp_body: event.target.value }))}
                 rows={6}
-                placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nVencimento: {{prazo_cliente}}."}
                 disabled={!templateForm.completion_whatsapp_enabled}
               />
-              <p className="text-xs text-muted-foreground">
-                Posicione <code>{DOCUMENT_LINK_PLACEHOLDER}</code> onde o link deve aparecer. Essa variável é obrigatória na mensagem.
-              </p>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <p>Campos automáticos disponíveis:</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  {completionTemplateVariables.map((variable) => (
+                    <span key={variable.value} className="inline-flex items-center gap-1.5">
+                      <span>{variable.label}:</span>
+                      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{variable.value}</code>
+                    </span>
+                  ))}
+                </div>
+                <p>O campo <code className="font-mono text-foreground">{DOCUMENT_LINK_PLACEHOLDER}</code> é obrigatório no corpo da mensagem.</p>
+              </div>
               <TemplateMessageAssetsField
                 templateId={templateForm.id}
                 channel="whatsapp"
@@ -4341,7 +4461,7 @@ export function GrowObligationsWorkspace({
             </summary>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
-                <Label>Assunto padrao</Label>
+              <Label>Assunto padrão</Label>
                 <Input
                   value={templateForm.completion_email_subject}
                   onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_email_subject: event.target.value }))}
@@ -4350,12 +4470,12 @@ export function GrowObligationsWorkspace({
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Corpo padrao</Label>
+                <Label>Corpo padrão</Label>
                 <Textarea
                   value={templateForm.completion_email_body}
                   onChange={(event) => setTemplateForm((prev) => ({ ...prev, completion_email_body: event.target.value }))}
                   rows={6}
-                  placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nPrazo técnico: {{prazo_tecnico}}."}
+                  placeholder={"Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nAcesse o documento: {{documento_link}}\n\nSetor responsável: {{setor}}.\nVencimento: {{prazo_cliente}}."}
                   disabled={!templateForm.completion_email_enabled}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -4368,8 +4488,17 @@ export function GrowObligationsWorkspace({
                 />
               </div>
             </div>
-            <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-              {"Variáveis disponíveis: {{cliente_nome}}, {{obrigacao_nome}}, {{competencia}}, {{setor}}, {{prazo_tecnico}}, {{documento_link}}. A variável {{documento_link}} é obrigatória no corpo da mensagem."}
+            <div className="space-y-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+              <p>Campos automáticos disponíveis:</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {completionTemplateVariables.map((variable) => (
+                  <span key={variable.value} className="inline-flex items-center gap-1.5">
+                    <span>{variable.label}:</span>
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{variable.value}</code>
+                  </span>
+                ))}
+              </div>
+              <p>O campo <code className="font-mono text-foreground">{DOCUMENT_LINK_PLACEHOLDER}</code> é obrigatório no corpo da mensagem.</p>
             </div>
           </details>
 
@@ -4799,7 +4928,7 @@ export function GrowObligationsWorkspace({
 
       <Dialog open={Boolean(documentResolutionId)} onOpenChange={(open) => !open && setDocumentResolutionId(null)}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Revisar vínculo do documento</DialogTitle><DialogDescription>Escolha a competência correta para concluir a triagem.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Revisar vínculo e liberar processamento</DialogTitle><DialogDescription>Confirme a obrigação e a competência. Após a confirmação, o documento seguirá o fluxo configurado de aplicação e envio.</DialogDescription></DialogHeader>
           {documentInResolution && (
             <div className="space-y-4 py-2">
               <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 text-sm">
@@ -4828,6 +4957,11 @@ export function GrowObligationsWorkspace({
                   <SelectTrigger><SelectValue placeholder="Selecione a competência" /></SelectTrigger>
                   <SelectContent><SelectItem value="none">Selecione</SelectItem>{documentResolutionOptions.map((instance) => <SelectItem key={instance.id} value={instance.id}>{buildInstanceLabel(instance)}</SelectItem>)}</SelectContent>
                 </Select>
+                {documentResolutionOptions.length === 0 ? (
+                  <p className="text-xs leading-5 text-destructive">
+                    Não existe uma obrigação dessa competência disponível para este cliente. Cadastre ou gere a obrigação antes de liberar o documento; sem esse destino o sistema não pode forçar um envio seguro.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2"><Label>Motivo da decisao</Label><Textarea value={documentResolutionNotes} onChange={(event) => setDocumentResolutionNotes(event.target.value)} placeholder="Descreva por que o vinculo foi confirmado ou corrigido." rows={3} /></div>
             </div>
@@ -4835,7 +4969,7 @@ export function GrowObligationsWorkspace({
           <DialogFooter>
             <Button variant="outline" onClick={() => setDocumentResolutionId(null)}>Cancelar</Button>
             <Button variant="ghost" className="text-destructive" onClick={() => documentResolutionId && documentResolveMutation.mutate({ inboxItemId: documentResolutionId, decision: "reject", notes: documentResolutionNotes || "Documento rejeitado manualmente." })}>Rejeitar</Button>
-            <Button onClick={() => documentResolutionId && documentResolveMutation.mutate({ inboxItemId: documentResolutionId, decision: "accept", instanceId: documentResolutionInstanceId, notes: documentResolutionNotes })} disabled={documentResolveMutation.isPending || !documentResolutionInstanceId || !documentResolutionNotes.trim()}>{documentResolveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Confirmar vinculo</Button>
+            <Button onClick={() => documentResolutionId && documentResolveMutation.mutate({ inboxItemId: documentResolutionId, decision: "accept", instanceId: documentResolutionInstanceId, notes: documentResolutionNotes })} disabled={documentResolveMutation.isPending || !documentResolutionInstanceId || !documentResolutionNotes.trim()}>{documentResolveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Confirmar e processar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

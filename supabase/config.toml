@@ -100,6 +100,9 @@ verify_jwt = true
 [functions.integra-contador-monitor]
 verify_jwt = true
 
+[functions.integra-contador-installments]
+verify_jwt = true
+
 [functions.open-finance-module]
 verify_jwt = false
 
@@ -110,4 +113,4 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.fiscal-invoices-module]
-verify_jwt = true
+verify_jwt = false

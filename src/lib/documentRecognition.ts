@@ -216,22 +216,22 @@ export function detectCompetenceCandidatesDetailed(sources: Array<{ value: strin
       addCompetenceCandidate(candidates, `${match[2]}-${competenceMonthNames[match[1]]}`, 98 * weight, item.source, "mes_por_extenso");
     }
 
-    const labelledFullDateMatches = text.matchAll(/\b(?:competencia|periodo|referencia|mes\s+referencia|mes\s+base|referente(?:\s+ao\s+mes|\s+data)?|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|[12]\d|3[01])[-_/ .](0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
+    const labelledFullDateMatches = text.matchAll(/\b(?:competencia|periodo|referencia|mes\s+referencia|mes\s+base|referente(?:\s+ao\s+mes|\s+data)?|folha\s+de|salario\s+de)\b\D{0,32}(0?[1-9]|[12]\d|3[01])[-_/ .](0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
     for (const match of labelledFullDateMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 99 * weight, item.source, "rotulo_data_completa");
     }
 
-    const labelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
+    const labelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\b\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
     for (const match of labelledMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), 96 * weight, item.source, "rotulo_mes_ano");
     }
 
-    const labelledYearFirstMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g);
+    const labelledYearFirstMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\b\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g);
     for (const match of labelledYearFirstMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[2], match[1]), 94 * weight, item.source, "rotulo_ano_mes");
     }
 
-    const compactLabelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\D{0,24}((0[1-9]|1[0-2])(20\d{2}))\b/g);
+    const compactLabelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\b\D{0,24}((0[1-9]|1[0-2])(20\d{2}))\b/g);
     for (const match of compactLabelledMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 95 * weight, item.source, "rotulo_compacto");
     }

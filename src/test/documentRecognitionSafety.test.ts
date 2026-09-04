@@ -85,6 +85,12 @@ describe("document recognition safety contract", () => {
     }]);
     expect(candidates[0]).toMatchObject({ value: "2026-08", reason: "rotulo_data_completa" });
     expect(candidates.find((candidate) => candidate.value === "2025-11")?.score).toBe(4);
+
+    const realPdfOrderCandidates = detectCompetenceCandidatesDetailed([{
+      source: "pdf_text",
+      value: "Adto. Salarial referente data: CODIGOS DESCRICOES REFERENCIAS PROVENTOS DESCONTOS Admissao: 24/11/2025 CPF: 041.258.420-43 Nome do Colaborador ALINE CTPS: 0412584 Serie: 2043 20/08/2026",
+    }]);
+    expect(realPdfOrderCandidates[0]).toMatchObject({ value: "2026-08" });
   });
 
   it("recognizes written-out months without restoring a full-document date over a configured zone", () => {
@@ -144,5 +150,12 @@ describe("document recognition safety contract", () => {
     expect(workspaceSource).toContain("competenceManuallyEdited: true");
     expect(backendSource).toMatch(/competenceManuallyEdited\s*\?\s*effectiveCompetence/);
     expect(backendSource).toContain("competenceManuallyEdited ? suggestedCompetenceLabel");
+  });
+
+  it("does not lose the cropped competence after an instance is linked", () => {
+    expect(backendSource).toMatch(
+      /if \(instanceId && effectiveClientId\)[\s\S]*?competenceDetected: effectiveCompetence,[\s\S]*?zoneAuthorityApplied: Boolean\(configuredReferenceId && configuredModel\?\.zoneSignals\.competence\)/,
+    );
+    expect(backendSource).toContain("Competencia preservada a partir da area marcada do modelo configurado.");
   });
 });

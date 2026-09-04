@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageBubble } from "@/components/whatsapp/MessageBubble";
 import { MessageComposer } from "@/components/whatsapp/MessageComposer";
+import { TaskSimpleNationalPanel } from "@/features/integra-contador/components/TaskSimpleNationalPanel";
+import { TaskInstallmentPanel } from "@/features/integra-contador/components/TaskInstallmentPanel";
+import { TaskMitPanel } from "@/features/integra-contador/components/TaskMitPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -827,6 +830,21 @@ export function KanbanTaskDetailSheet({
           <Separator />
 
             <TabsContent value="informacoes" className="flex flex-col gap-4">
+              <TaskSimpleNationalPanel
+                organizationId={currentOrganizationId}
+                taskId={task.id}
+                integrationSource={task.integration_source}
+              />
+              <TaskInstallmentPanel
+                organizationId={currentOrganizationId}
+                integrationSource={task.integration_source}
+                integrationPayload={task.integration_payload}
+              />
+              <TaskMitPanel
+                organizationId={currentOrganizationId}
+                taskId={task.id}
+                integrationSource={task.integration_source}
+              />
               <Collapsible
                 open={detailsOpen}
                 onOpenChange={setDetailsOpen}

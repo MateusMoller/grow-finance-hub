@@ -43,6 +43,7 @@ export const MODULE_KEYS = [
   "sugestoes",
   "configuracoes",
   "notas_fiscais",
+  "parcelamentos",
 ] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
@@ -66,6 +67,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   sugestoes: "Sugestões",
   configuracoes: "Configurações",
   notas_fiscais: "Notas fiscais",
+  parcelamentos: "Parcelamentos",
 };
 
 export const DEFAULT_COLLABORATOR_MODULES: readonly ModuleKey[] = ["tarefas"];
@@ -89,6 +91,7 @@ export const ROUTE_MODULE_MAP: Record<string, ModuleKey> = {
   "/app/sugestoes": "sugestoes",
   "/app/configuracoes": "configuracoes",
   "/app/notas-fiscais": "notas_fiscais",
+  "/app/parcelamentos": "parcelamentos",
   "/app/certificados": "clientes",
 };
 

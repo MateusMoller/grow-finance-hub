@@ -5,10 +5,111 @@ import { previousCompetence } from "../_shared/integra-contador/domains/pgdasd/p
 import { listDefisDeclarationsTrial, transmitDefisTrial, type DefisDeclarationInput } from "../_shared/integra-contador/domains/defis/client.ts";
 import { consultDctfwebReceiptTrial, consultDctfwebReportTrial, consultDctfwebXmlTrial, generateDctfwebDarfTrial, transmitDctfwebTrial } from "../_shared/integra-contador/domains/dctfweb/client.ts";
 import type { DctfwebCategory, DctfwebInput } from "../_shared/integra-contador/domains/dctfweb/contracts.ts";
+import { consultMitDeclaration, submitMitDeclaration, type MitDebtInput } from "../_shared/integra-contador/domains/mit/client.ts";
+import { issueFederalCnd } from "../_shared/cnd/client.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const errorResponse = (code: string, status: number) => response({ error: { code } }, status);
+
+async function publishDctfwebArtifactToObligation(
+  admin: ReturnType<typeof createClient>,
+  input: {
+    organizationId: string;
+    instanceId: string;
+    actorId: string;
+    artifactType: "receipt" | "complete_report" | "darf";
+    storagePath: string;
+    byteSize: number;
+    receiptNumber: string | null;
+    competenceKey: string;
+  },
+) {
+  const names = {
+    receipt: `Recibo_DCTFWeb_${input.competenceKey}.pdf`,
+    complete_report: `Declaracao_DCTFWeb_${input.competenceKey}.pdf`,
+    darf: `DARF_INSS_${input.competenceKey}.pdf`,
+  } as const;
+  const { error: fileError } = await admin.from("obligation_instance_files").upsert({
+    organization_id: input.organizationId,
+    instance_id: input.instanceId,
+    inbox_item_id: null,
+    file_name: names[input.artifactType],
+    storage_bucket: "obligation-files",
+    storage_path: input.storagePath,
+    content_type: "application/pdf",
+    file_size: input.byteSize,
+    triage_status: "accepted",
+    source: "integra_contador",
+    source_kind: "api",
+    protocol_number: input.receiptNumber,
+    publication_status: "published",
+    uploaded_by: input.actorId,
+    identification_confidence: 1,
+  }, { onConflict: "storage_bucket,storage_path" });
+  if (fileError) throw fileError;
+
+  if (input.artifactType === "darf" || input.artifactType === "receipt") {
+    const now = new Date().toISOString();
+    const { error: instanceError } = await admin.from("obligation_instances").update({
+      status: "concluida",
+      completed_at: now,
+      last_status_at: now,
+      processed_automatically: true,
+      protocol: input.receiptNumber,
+    }).eq("id", input.instanceId).eq("organization_id", input.organizationId);
+    if (instanceError) throw instanceError;
+  }
+}
+
+async function publishDefisDocumentsToObligation(
+  admin: ReturnType<typeof createClient>,
+  input: {
+    organizationId: string;
+    instanceId: string;
+    actorId: string;
+    year: string;
+    declarationId: string;
+    declarationPath: string;
+    declarationSize: number;
+    receiptPath: string;
+    receiptSize: number;
+  },
+) {
+  const files = [
+    { file_name: `Declaracao_DEFIS_${input.year}.pdf`, storage_path: input.declarationPath, file_size: input.declarationSize },
+    { file_name: `Recibo_DEFIS_${input.year}.pdf`, storage_path: input.receiptPath, file_size: input.receiptSize },
+  ].map((file) => ({
+    ...file,
+    organization_id: input.organizationId,
+    instance_id: input.instanceId,
+    inbox_item_id: null,
+    storage_bucket: "obligation-files",
+    content_type: "application/pdf",
+    triage_status: "accepted",
+    source: "integra_contador",
+    source_kind: "api",
+    protocol_number: input.declarationId,
+    publication_status: "published",
+    uploaded_by: input.actorId,
+    identification_confidence: 1,
+  }));
+  const { error: filesError } = await admin.from("obligation_instance_files")
+    .upsert(files, { onConflict: "storage_bucket,storage_path" });
+  if (filesError) throw filesError;
+
+  const now = new Date().toISOString();
+  const { error: instanceError } = await admin.from("obligation_instances").update({
+    status: "concluida",
+    completed_at: now,
+    ready_for_delivery_at: now,
+    last_status_at: now,
+    processed_automatically: true,
+    protocol: input.declarationId,
+    protocol_issued_at: now,
+  }).eq("id", input.instanceId).eq("organization_id", input.organizationId);
+  if (instanceError) throw instanceError;
+}
 
 function pgdasInput(dossier: Record<string, unknown>): PgdasDeclarationInput {
   const input = (dossier.input_data || {}) as Record<string, unknown>;
@@ -174,6 +275,53 @@ Deno.serve(async (request) => {
       if (reviewsResult.error) throw reviewsResult.error;
       return response({ ok: true, fiscalStatus: { ...(statusResult.data as Record<string, unknown>), reviews: reviewsResult.data || [] } });
     }
+    if (action === "get_client_cnd") {
+      const clientId=String(body.clientId||""); if(!clientId) throw new ConnectionInputError("invalid_request");
+      const clientResult=await db.from("clients").select("id").eq("id",clientId).eq("organization_id",organizationId).maybeSingle();
+      if(clientResult.error)throw clientResult.error; if(!clientResult.data)return errorResponse("client_not_available",404);
+      const certificateResult=await db.from("client_cnd_certificates").select("id,status,provider_status,provider_message,certificate_type,control_code,taxpayer_number,issued_at,valid_until,storage_path,created_at").eq("organization_id",organizationId).eq("client_id",clientId).order("created_at",{ascending:false}).limit(1).maybeSingle();
+      if(certificateResult.error)throw certificateResult.error;
+      return response({ok:true,certificate:certificateResult.data||null,configured:Boolean(Deno.env.get("CND_SERPRO_CLIENT_ID")&&Deno.env.get("CND_SERPRO_CLIENT_SECRET"))});
+    }
+    if (action === "issue_client_cnd") {
+      const clientId=String(body.clientId||""); if(!clientId) throw new ConnectionInputError("invalid_request");
+      const clientResult=await db.from("clients").select("id,cnpj").eq("id",clientId).eq("organization_id",organizationId).maybeSingle();
+      if(clientResult.error)throw clientResult.error; if(!clientResult.data)return errorResponse("client_not_available",404);
+      const cnpj=String(clientResult.data.cnpj||"").replace(/\D/g,""); if(cnpj.length!==14)return errorResponse("CND_INVALID_CNPJ",409);
+      const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if(!serviceKey)return errorResponse("operation_failed",500);
+      const admin=createClient(url,serviceKey);
+      const result=await issueFederalCnd(cnpj);
+      const providerCertificate=(result.raw.Certidao||result.raw.certidao) as Record<string,unknown>|undefined;
+      const safePayload={...Object.fromEntries(Object.entries(result.raw).filter(([key])=>key.toLowerCase()!=="certidao")),...(providerCertificate?{Certidao:Object.fromEntries(Object.entries(providerCertificate).filter(([key])=>key.toLowerCase()!=="documentopdf"))}:{})};
+      if(!result.certificate){
+        const status=result.status===7?"processing":result.status===3||result.status===4?"not_issued":"failed";
+        const inserted=await admin.from("client_cnd_certificates").insert({organization_id:organizationId,client_id:clientId,status,provider_status:result.status,provider_message:result.message,provider_payload:safePayload,created_by:auth.user.id}).select("id,status,provider_status,provider_message,certificate_type,control_code,taxpayer_number,issued_at,valid_until,storage_path,created_at").single();
+        if(inserted.error)throw inserted.error;
+        return response({ok:true,certificate:inserted.data});
+      }
+      let pdfBytes:Uint8Array;
+      try{pdfBytes=decodeBase64(result.certificate.pdfBase64);}catch{throw new Error("CND_PDF_INVALID");}
+      if(pdfBytes.length===0||pdfBytes.length>10*1024*1024)throw new Error("CND_PDF_INVALID_SIZE");
+      const signature=new TextDecoder().decode(pdfBytes.slice(0,5)); if(signature!=="%PDF-")throw new Error("CND_PDF_INVALID");
+      const digest=[...new Uint8Array(await crypto.subtle.digest("SHA-256",pdfBytes.slice().buffer))].map((value)=>value.toString(16).padStart(2,"0")).join("");
+      const path=`${organizationId}/${clientId}/cnd/cnd-${result.certificate.controlCode.replace(/[^a-zA-Z0-9]/g,"")}-${digest.slice(0,12)}.pdf`;
+      const upload=await admin.storage.from("client-files").upload(path,pdfBytes,{contentType:"application/pdf",upsert:false});
+      if(upload.error&&!upload.error.message.toLowerCase().includes("exist"))throw upload.error;
+      const existing=await admin.from("client_cnd_certificates").select("id").eq("organization_id",organizationId).eq("client_id",clientId).eq("control_code",result.certificate.controlCode).maybeSingle();
+      if(existing.error)throw existing.error;
+      const values={status:"valid",provider_status:result.status,provider_message:result.message,certificate_type:result.certificate.certificateType,control_code:result.certificate.controlCode,taxpayer_number:result.certificate.taxpayerNumber,issued_at:result.certificate.issuedAt,valid_until:result.certificate.validUntil,storage_bucket:"client-files",storage_path:path,content_sha256:digest,provider_payload:safePayload,updated_at:new Date().toISOString()};
+      const saved=existing.data?await admin.from("client_cnd_certificates").update(values).eq("id",existing.data.id).select("id,status,provider_status,provider_message,certificate_type,control_code,taxpayer_number,issued_at,valid_until,storage_path,created_at").single():await admin.from("client_cnd_certificates").insert({...values,organization_id:organizationId,client_id:clientId,created_by:auth.user.id}).select("id,status,provider_status,provider_message,certificate_type,control_code,taxpayer_number,issued_at,valid_until,storage_path,created_at").single();
+      if(saved.error)throw saved.error;
+      return response({ok:true,certificate:saved.data});
+    }
+    if (action === "get_client_cnd_pdf") {
+      const clientId=String(body.clientId||""); const certificateId=String(body.certificateId||""); if(!clientId||!certificateId)throw new ConnectionInputError("invalid_request");
+      const certificateResult=await db.from("client_cnd_certificates").select("storage_bucket,storage_path").eq("id",certificateId).eq("client_id",clientId).eq("organization_id",organizationId).maybeSingle();
+      if(certificateResult.error)throw certificateResult.error; if(!certificateResult.data?.storage_path)return errorResponse("cnd_pdf_not_available",404);
+      const serviceKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if(!serviceKey)return errorResponse("operation_failed",500);
+      const admin=createClient(url,serviceKey); const signed=await admin.storage.from(certificateResult.data.storage_bucket||"client-files").createSignedUrl(certificateResult.data.storage_path,120);
+      if(signed.error)throw signed.error; return response({ok:true,signedUrl:signed.data.signedUrl});
+    }
     if (action === "monitoring_summary") {
       const { data, error } = await db.rpc("get_fiscal_monitoring_summary", { _organization_id: organizationId });
       if (error) throw error; return response({ ok: true, summary: data });
@@ -227,6 +375,106 @@ Deno.serve(async (request) => {
       if(!dossierResult.data) return response({ok:true,eligible:true,reason:"dctfweb_declaration_required",targetInstanceId:instanceId,dossier:null});
       if(!["transmitted","completed"].includes(dossierResult.data.status)) return response({ok:true,eligible:true,reason:"dctfweb_transmission_required",targetInstanceId:instanceId,dossier:dossierResult.data});
       return response({ok:true,eligible:true,reason:null,targetInstanceId:instanceId,dossier:dossierResult.data});
+    }
+    if (action === "get_task_mit_context") {
+      const taskId=String(body.taskId||""); if(!taskId) throw new ConnectionInputError("invalid_request");
+      const taskResult=await db.from("kanban_tasks").select("id,integration_source,integration_payload").eq("id",taskId).eq("organization_id",organizationId).maybeSingle();
+      if(taskResult.error) throw taskResult.error;
+      const task=taskResult.data;
+      if(!task||task.integration_source!=="grow_obligation_task") return response({ok:true,eligible:false,reason:"not_obligation_task",dossier:null});
+      const payload=task.integration_payload&&typeof task.integration_payload==="object"?task.integration_payload as Record<string,unknown>:{};
+      const instanceId=String(payload.instance_id||"");
+      if(!instanceId) return response({ok:true,eligible:false,reason:"missing_obligation_instance",dossier:null});
+      const instanceResult=await db.from("obligation_instances").select("id,client_id,template_id,competence_key").eq("id",instanceId).eq("organization_id",organizationId).maybeSingle();
+      if(instanceResult.error) throw instanceResult.error;
+      if(!instanceResult.data) return response({ok:true,eligible:false,reason:"obligation_not_available",dossier:null});
+      const [templateResult,clientResult]=await Promise.all([
+        db.from("obligation_templates").select("code,name").eq("id",instanceResult.data.template_id).eq("organization_id",organizationId).maybeSingle(),
+        db.from("clients").select("name,cnpj").eq("id",instanceResult.data.client_id).eq("organization_id",organizationId).maybeSingle(),
+      ]);
+      if(templateResult.error) throw templateResult.error; if(clientResult.error) throw clientResult.error;
+      if(templateResult.data?.code!=="mit") return response({ok:true,eligible:false,reason:"unsupported_obligation",dossier:null});
+      const competenceKey=String(instanceResult.data.competence_key||"").replace(/\D/g,"").slice(0,6);
+      if(!/^\d{6}$/.test(competenceKey)) return response({ok:true,eligible:false,reason:"invalid_obligation_competence",dossier:null});
+      const prepared=await db.rpc("prepare_mit_dossier",{_organization_id:organizationId,_client_id:instanceResult.data.client_id,_instance_id:instanceId,_competence_key:competenceKey});
+      if(prepared.error) throw prepared.error;
+      const [dossierResult,debtsResult]=await Promise.all([
+        db.from("mit_dossiers").select("*").eq("id",prepared.data).eq("organization_id",organizationId).single(),
+        db.from("mit_debts").select("*").eq("dossier_id",prepared.data).eq("organization_id",organizationId).order("created_at"),
+      ]);
+      if(dossierResult.error) throw dossierResult.error; if(debtsResult.error) throw debtsResult.error;
+      return response({ok:true,eligible:true,reason:null,dossier:{...dossierResult.data,client_name:clientResult.data?.name||"Cliente",client_cnpj:clientResult.data?.cnpj||null},debts:debtsResult.data||[]});
+    }
+    if (["save_mit_debts","validate_mit","submit_mit","verify_mit"].includes(action)) {
+      const dossierId=String(body.dossierId||""); if(!dossierId) throw new ConnectionInputError("invalid_request");
+      const dossierResult=await db.from("mit_dossiers").select("*").eq("id",dossierId).eq("organization_id",organizationId).maybeSingle();
+      if(dossierResult.error) throw dossierResult.error; if(!dossierResult.data) return errorResponse("mit_dossier_not_available",404);
+      const dossier=dossierResult.data as Record<string,unknown>;
+      if(action==="save_mit_debts") {
+        const debts=Array.isArray(body.debts)?body.debts:[];
+        const saved=await db.rpc("replace_mit_debts",{_organization_id:organizationId,_dossier_id:dossierId,_debts:debts});
+        if(saved.error) throw saved.error;
+        return response({ok:true});
+      }
+      const debtsResult=await db.from("mit_debts").select("*").eq("dossier_id",dossierId).eq("organization_id",organizationId).order("created_at");
+      if(debtsResult.error) throw debtsResult.error;
+      const debtRows=debtsResult.data||[];
+      if(action==="validate_mit") {
+        if(debtRows.length===0) return errorResponse("mit_debts_required",409);
+        const updated=await db.from("mit_dossiers").update({status:"validated",validated_version:dossier.data_version,validated_by:auth.user.id,validated_at:new Date().toISOString(),updated_by:auth.user.id,updated_at:new Date().toISOString()}).eq("id",dossierId).eq("organization_id",organizationId).select("*").single();
+        if(updated.error) throw updated.error;
+        return response({ok:true,dossier:updated.data});
+      }
+      if(action==="submit_mit"&&(body.confirmation!=="ENCERRAR E TRANSMITIR MIT"||dossier.status!=="validated"||Number(dossier.validated_version)!==Number(dossier.data_version))) {
+        return errorResponse("mit_not_validated",409);
+      }
+      if(action==="verify_mit"&&!dossier.protocol_number) return errorResponse("mit_protocol_required",409);
+      const clientResult=await db.from("clients").select("cnpj").eq("id",String(dossier.client_id)).eq("organization_id",organizationId).single();
+      if(clientResult.error) throw clientResult.error;
+      const debts:MitDebtInput[]=debtRows.map((row)=>({revenueCode:String(row.revenue_code),description:String(row.description),debitAmount:Number(row.debit_amount),dueDate:row.due_date?String(row.due_date):null,establishmentCnpj:row.establishment_cnpj?String(row.establishment_cnpj):null}));
+      const providerInput={cnpj:String(clientResult.data.cnpj||""),competence:String(dossier.competence_key),debts,protocolNumber:dossier.protocol_number?String(dossier.protocol_number):null};
+      const tag=`mit-${dossierId.replace(/-/g,"").slice(0,20)}`;
+      const idempotencyKey=`${dossierId}:${action}:v${Number(dossier.data_version)}:${dossier.protocol_number||"none"}`;
+      const existing=await db.from("mit_operations").select("id,status").eq("organization_id",organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();
+      if(existing.error) throw existing.error;
+      if(existing.data?.status==="completed") return response({ok:true,cacheHit:true});
+      const operationPayload={organization_id:organizationId,dossier_id:dossierId,task_id:body.taskId?String(body.taskId):null,action,idempotency_key:idempotencyKey,status:"processing",request_tag:tag,error_code:null,finished_at:null,created_by:auth.user.id};
+      const operation=existing.data?await db.from("mit_operations").update(operationPayload).eq("id",existing.data.id).select("id").single():await db.from("mit_operations").insert(operationPayload).select("id").single();
+      if(operation.error) throw operation.error;
+      const operationId=operation.data.id;
+      try {
+        if(action==="submit_mit") {
+          await db.from("mit_dossiers").update({status:"submitting",updated_by:auth.user.id,updated_at:new Date().toISOString()}).eq("id",dossierId);
+          const result=await submitMitDeclaration(providerInput,tag);
+          const nextStatus=result.status==="transmitted"?"transmitted":result.status==="processing"?"processing":result.status==="rejected"?"requires_action":"transmission_unknown";
+          const updated=await db.from("mit_dossiers").update({status:nextStatus,protocol_number:result.protocolNumber,receipt_number:result.receiptNumber,provider_state:result.raw,transmitted_at:result.status==="transmitted"?new Date().toISOString():null,updated_by:auth.user.id,updated_at:new Date().toISOString()}).eq("id",dossierId).eq("organization_id",organizationId);
+          if(updated.error) throw updated.error;
+          await db.from("mit_operations").update({status:result.status==="unknown"?"transmission_unknown":"completed",provider_code:result.status,metadata:result.raw,finished_at:new Date().toISOString()}).eq("id",operationId);
+          return response({ok:true,result});
+        }
+        const result=await consultMitDeclaration(providerInput,tag);
+        if(result.status==="transmitted"&&result.receiptNumber) {
+          const now=new Date().toISOString();
+          const adminKey=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if(!adminKey) throw new Error("operation_failed");
+          const admin=createClient(url,adminKey);
+          const [dossierUpdate,instanceUpdate]=await Promise.all([
+            db.from("mit_dossiers").update({status:"verified",receipt_number:result.receiptNumber,provider_state:result.raw,verified_at:now,updated_by:auth.user.id,updated_at:now}).eq("id",dossierId).eq("organization_id",organizationId),
+            admin.from("obligation_instances").update({status:"concluida",completed_at:now,last_status_at:now,processed_automatically:true,protocol:result.receiptNumber}).eq("id",String(dossier.obligation_instance_id)).eq("organization_id",organizationId),
+          ]);
+          if(dossierUpdate.error) throw dossierUpdate.error; if(instanceUpdate.error) throw instanceUpdate.error;
+        } else {
+          const nextStatus=result.status==="processing"?"processing":result.status==="rejected"?"requires_action":"transmission_unknown";
+          await db.from("mit_dossiers").update({status:nextStatus,provider_state:result.raw,updated_by:auth.user.id,updated_at:new Date().toISOString()}).eq("id",dossierId).eq("organization_id",organizationId);
+        }
+        await db.from("mit_operations").update({status:"completed",provider_code:result.status,metadata:result.raw,finished_at:new Date().toISOString()}).eq("id",operationId);
+        return response({ok:true,result});
+      } catch(error) {
+        const message=error instanceof Error?error.message:"mit_operation_failed";
+        const ambiguous=/SERPRO_HTTP_(500|502|503|504)|network|fetch/i.test(message);
+        await db.from("mit_dossiers").update({status:ambiguous?"transmission_unknown":"requires_action",updated_by:auth.user.id,updated_at:new Date().toISOString()}).eq("id",dossierId).eq("organization_id",organizationId);
+        await db.from("mit_operations").update({status:ambiguous?"transmission_unknown":"failed",error_code:message.slice(0,120),finished_at:new Date().toISOString()}).eq("id",operationId);
+        throw error;
+      }
     }
     if (action === "get_task_dctfweb_context") {
       const taskId = String(body.taskId || "");
@@ -340,6 +588,18 @@ Deno.serve(async (request) => {
         const bytes=decodeBase64(result.base64); const digest=[...new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))].map(v=>v.toString(16).padStart(2,"0")).join(""); const ext=result.mimeType==="application/xml"?"xml":"pdf"; const path=`${organizationId}/dctfweb/${dossierId}/${type}-${mode}-${digest.slice(0,16)}.${ext}`;
         const uploaded=await admin.storage.from("obligation-files").upload(path,bytes,{contentType:result.mimeType,upsert:false}); if(uploaded.error && !uploaded.error.message.toLowerCase().includes("exist")) throw uploaded.error;
         const art=await db.from("dctfweb_artifacts").upsert({organization_id:organizationId,dossier_id:dossierId,obligation_instance_id:artifactInstanceId,artifact_type:type,storage_path:path,content_sha256:digest,mime_type:result.mimeType,byte_size:bytes.length,provider_reference:result.receiptNumber||null,created_by:auth.user.id},{onConflict:"dossier_id,artifact_type,content_sha256"}); if(art.error) throw art.error;
+        if (type === "receipt" || type === "complete_report" || type === "darf") {
+          await publishDctfwebArtifactToObligation(admin, {
+            organizationId,
+            instanceId: artifactInstanceId,
+            actorId: auth.user.id,
+            artifactType: type,
+            storagePath: path,
+            byteSize: bytes.length,
+            receiptNumber: result.receiptNumber || input.receiptNumber || null,
+            competenceKey: String(dossier.competence_key),
+          });
+        }
         const column=type==="xml"?"xml_storage_path":type==="receipt"?"receipt_storage_path":type==="complete_report"?"report_storage_path":"darf_storage_path";
         const isDeclarationRefresh=type==="xml";
         const isSeparateDarfObligation=type==="darf"&&artifactInstanceId!==String(dossier.obligation_instance_id);
@@ -503,6 +763,22 @@ Deno.serve(async (request) => {
       }
       return errorResponse("EXTERNAL_CONTRACT_UNVERIFIED", 409);
     }
+    if (action === "sync_defis_annual_values") {
+      const dossierId = String(body.dossierId || "");
+      if (!dossierId) throw new ConnectionInputError("invalid_request");
+      const { data, error } = await db.rpc("sync_defis_annual_pgdas_values", {
+        _organization_id: organizationId,
+        _dossier_id: dossierId,
+      });
+      if (error) throw error;
+      const inputData = ((data as Record<string, unknown>)?.input_data || {}) as Record<string, unknown>;
+      return response({
+        ok: true,
+        dossier: data,
+        monthsComplete: Number(inputData.pgdas_months_complete || 0),
+        annualRevenue: Number(inputData.annual_revenue || 0),
+      });
+    }
     if (["sync_defis_declarations", "transmit_defis", "get_defis_artifact"].includes(action)) {
       const dossierId = String(body.dossierId || "");
       if (!dossierId) throw new ConnectionInputError("invalid_request");
@@ -524,17 +800,34 @@ Deno.serve(async (request) => {
       const admin = createClient(url, serviceKey);
       if (action === "transmit_defis") {
         if (String(body.confirmation || "") !== "TRANSMITIR DEFIS") return errorResponse("explicit_confirmation_required", 409);
+        const defisData = (dossier.input_data || {}) as Record<string, unknown>;
+        if (Number(defisData.pgdas_months_complete || 0) !== 12) return errorResponse("defis_pgdas_months_incomplete", 409);
         const result = await transmitDefisTrial(defisInput(dossier), requestTag);
         const basePath = `${organizationId}/${dossier.client_id}/defis/${dossierId}`;
         const declarationPath = `${basePath}/declaracao.pdf`;
         const receiptPath = `${basePath}/recibo.pdf`;
+        const declarationBytes = decodeBase64(result.declarationPdf);
+        const receiptBytes = decodeBase64(result.receiptPdf);
         const uploadResults = await Promise.all([
-          admin.storage.from("obligation-files").upload(declarationPath, decodeBase64(result.declarationPdf), { contentType: "application/pdf", upsert: true }),
-          admin.storage.from("obligation-files").upload(receiptPath, decodeBase64(result.receiptPdf), { contentType: "application/pdf", upsert: true }),
+          admin.storage.from("obligation-files").upload(declarationPath, declarationBytes, { contentType: "application/pdf", upsert: true }),
+          admin.storage.from("obligation-files").upload(receiptPath, receiptBytes, { contentType: "application/pdf", upsert: true }),
         ]);
         if (uploadResults.some((item) => item.error)) throw new Error("DEFIS_ARTIFACT_UPLOAD_FAILED");
         const { data, error } = await db.rpc("record_defis_transmission", { _organization_id: organizationId, _dossier_id: dossierId, _expected_version: dossier.data_version, _external_declaration_id: result.declarationId, _declaration_storage_path: declarationPath, _receipt_storage_path: receiptPath });
         if (error) throw error;
+        if (dossier.obligation_instance_id) {
+          await publishDefisDocumentsToObligation(admin, {
+            organizationId,
+            instanceId: String(dossier.obligation_instance_id),
+            actorId: auth.user.id,
+            year: String(dossier.competence_key),
+            declarationId: result.declarationId,
+            declarationPath,
+            declarationSize: declarationBytes.length,
+            receiptPath,
+            receiptSize: receiptBytes.length,
+          });
+        }
         return response({ ok: true, dossier: data });
       }
 

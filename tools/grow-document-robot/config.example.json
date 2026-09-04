@@ -4,6 +4,7 @@
   "robotUserEmail": "robo@seudominio.com",
   "robotUserPassword": "SENHA_DO_ROBO",
   "machineId": "grow-robot-pc-01",
+  "fiscalOrganizationId": "ID_DA_ORGANIZACAO",
   "stateFile": "./runtime/state.json",
   "scanIntervalMs": 30000,
   "retryDelayMs": 120000,

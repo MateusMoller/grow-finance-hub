@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
+import https from "node:https";
 import path from "node:path";
 import process from "node:process";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -18,6 +19,7 @@ type RobotConfig = {
   folders: string[];
   storageBucket?: string;
   storagePrefix?: string;
+  fiscalOrganizationId?: string;
 };
 
 type RobotFileStatus = "na_fila" | "enviado" | "processado" | "falhou" | "reprocessar";
@@ -191,7 +193,7 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
     if (!text) continue;
     const weight = sourceWeight(item.source);
 
-    const labelledFullDateMatches = text.matchAll(/\b(?:competencia|periodo|referencia|mes\s+referencia|mes\s+base|referente(?:\s+ao\s+mes|\s+data)?|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|[12]\d|3[01])[-_/ .](0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
+    const labelledFullDateMatches = text.matchAll(/\b(?:competencia|periodo|referencia|mes\s+referencia|mes\s+base|referente(?:\s+ao\s+mes|\s+data)?|folha\s+de|salario\s+de)\b\D{0,32}(0?[1-9]|[12]\d|3[01])[-_/ .](0?[1-9]|1[0-2])[-_/ .](20\d{2})\b/g);
     for (const match of labelledFullDateMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 99 * weight, item.source, "rotulo_data_completa");
     }
@@ -206,17 +208,17 @@ function detectCompetenceCandidatesDetailed(sources: Array<{ value: string; sour
       addCompetenceCandidate(candidates, `${match[2]}-${monthNames[match[1]]}`, 98 * weight, item.source, "mes_por_extenso");
     }
 
-    const labelledMatches = text.matchAll(/\b(?:competencia|competencia\s+de|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
+    const labelledMatches = text.matchAll(/\b(?:competencia|competencia\s+de|comp|periodo\s+de\s+apuracao|periodo|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base|folha\s+de|salario\s+de)\b\D{0,32}(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g);
     for (const match of labelledMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[1], match[2]), 95 * weight, item.source, "rotulo_mes_ano");
     }
 
-    const labelledYearFirstMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g);
+    const labelledYearFirstMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\b\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g);
     for (const match of labelledYearFirstMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[2], match[1]), 92 * weight, item.source, "rotulo_ano_mes");
     }
 
-    const compactLabelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\D{0,24}((0[1-9]|1[0-2])(20\d{2}))\b/g);
+    const compactLabelledMatches = text.matchAll(/\b(?:competencia|comp|periodo\s+de\s+apuracao|apuracao|referencia|ref|pa|mes\s+referencia|mes\s+base)\b\D{0,24}((0[1-9]|1[0-2])(20\d{2}))\b/g);
     for (const match of compactLabelledMatches) {
       addCompetenceCandidate(candidates, monthLabel(match[2], match[3]), 94 * weight, item.source, "rotulo_compacto");
     }
@@ -358,7 +360,7 @@ async function ensureParentDir(filePath: string) {
 
 async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   try {
-    const content = await fs.readFile(filePath, "utf8");
+    const content = (await fs.readFile(filePath, "utf8")).replace(/^\uFEFF/, "");
     return JSON.parse(content) as T;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -915,6 +917,82 @@ async function syncScanState(config: RobotConfig, state: RobotState) {
   state.lastScanAt = new Date().toISOString();
 }
 
+type FiscalTransportJob = {
+  runId: string;
+  transport: { endpoint: string; headers: Record<string, string>; body: string };
+  identity: { cert: string; key: string };
+};
+
+function executeFiscalTransport(job: FiscalTransportJob) {
+  return new Promise<{ httpStatus: number; soapXml: string }>((resolve, reject) => {
+    const request = https.request(job.transport.endpoint, {
+      method: "POST",
+      cert: job.identity.cert,
+      key: job.identity.key,
+      headers: { ...job.transport.headers, "Content-Length": Buffer.byteLength(job.transport.body, "utf8") },
+      timeout: 45_000,
+      minVersion: "TLSv1.2",
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      let received = 0;
+      response.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        if (received > 12_000_000) request.destroy(new Error("Resposta da SEFAZ excedeu o limite seguro."));
+        else chunks.push(chunk);
+      });
+      response.on("end", () => resolve({ httpStatus: response.statusCode || 0, soapXml: Buffer.concat(chunks).toString("utf8") }));
+    });
+    request.on("timeout", () => request.destroy(new Error("Tempo limite na conexao com a SEFAZ.")));
+    request.on("error", reject);
+    request.end(job.transport.body);
+  });
+}
+
+async function processFiscalTransport(supabase: SupabaseClient, config: RobotConfig) {
+  if (!config.fiscalOrganizationId) return;
+  const claim = await supabase.functions.invoke<{ job: FiscalTransportJob | null; error?: { code?: string } }>("fiscal-invoices-module", {
+    body: { action: "claim_node_transport", organizationId: config.fiscalOrganizationId },
+  });
+  if (claim.error) throw new Error(`Falha ao buscar fila fiscal: ${claim.error.message}`);
+  const job = claim.data?.job;
+  if (!job) return;
+  try {
+    const result = await executeFiscalTransport(job);
+    job.identity.cert = "";
+    job.identity.key = "";
+    const complete = await supabase.functions.invoke("fiscal-invoices-module", {
+      body: { action: "complete_node_transport", organizationId: config.fiscalOrganizationId, runId: job.runId, ...result },
+    });
+    if (complete.error) {
+      let remoteCode = "";
+      const context = (complete.error as { context?: Response }).context;
+      if (context) {
+        try {
+          const payload = await context.clone().json() as { error?: { code?: string } };
+          remoteCode = payload.error?.code || "";
+        } catch {
+          // The HTTP status remains useful when the response is not JSON.
+        }
+      }
+      const wrapped = new Error(`Falha ao registrar retorno fiscal: ${remoteCode || complete.error.message}`) as NodeJS.ErrnoException;
+      wrapped.code = remoteCode || "nfe_complete_failed";
+      throw wrapped;
+    }
+    console.log(`[robot] Consulta NF-e concluida para o job ${job.runId}.`);
+  } catch (error) {
+    job.identity.cert = "";
+    job.identity.key = "";
+    const message = error instanceof Error ? error.message : String(error);
+    const nodeCode = typeof error === "object" && error && "code" in error ? String((error as NodeJS.ErrnoException).code || "") : "";
+    console.error(`[robot] Falha no transporte NF-e do job ${job.runId}: ${nodeCode || "sem_codigo"} - ${message}`);
+    const errorCode = /timeout|tempo limite/i.test(message) ? "nfe_connection_timeout" : `nfe_node_${nodeCode || "transport_failed"}`.slice(0, 120);
+    await supabase.functions.invoke("fiscal-invoices-module", {
+      body: { action: "fail_node_transport", organizationId: config.fiscalOrganizationId, runId: job.runId, errorCode },
+    });
+    throw error;
+  }
+}
+
 async function processQueuedEntries(
   supabase: SupabaseClient,
   config: RobotConfig,
@@ -1078,6 +1156,7 @@ async function runRobot(config: RobotConfig) {
       await syncScanState(config, state);
       await writeJsonFile(config.stateFile, state);
       await processQueuedEntries(supabase, config, state);
+      await processFiscalTransport(supabase, config);
       await writeJsonFile(config.stateFile, state);
     } catch (error) {
       console.error("[robot] Falha no ciclo principal:", error);

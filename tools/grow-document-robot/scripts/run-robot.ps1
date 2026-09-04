@@ -36,7 +36,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "A validacao do robo falhou." }
   } else {
     "[$(Get-Date -Format o)] Starting Grow Document Robot" | Tee-Object -FilePath $logPath -Append
-    & node $distPath $configPath 2>&1 | Tee-Object -FilePath $logPath -Append
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+      & node $distPath $configPath 2>&1 | Tee-Object -FilePath $logPath -Append
+    }
+    finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+    }
   }
 }
 finally {

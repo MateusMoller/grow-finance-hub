@@ -26,8 +26,10 @@ describe("Simples Nacional inside an obligation task", () => {
     expect(backendSource).toContain('kind === "defis" ? /^\\d{4}$/.test(competenceKey)');
   });
 
-  it("keeps the retired assisted workflow out of the task sheet", () => {
-    expect(taskSheetSource).not.toContain("<TaskSimpleNationalPanel");
+  it("exposes the assisted workflow inside eligible obligation tasks", () => {
+    expect(taskSheetSource).toContain("<TaskSimpleNationalPanel");
+    expect(taskSheetSource).toContain("integrationSource={task.integration_source}");
+    expect(panelSource).toContain('integrationSource === "grow_obligation_task"');
     expect(panelSource).toContain("Validar e salvar");
     expect(panelSource).toContain("Calcular");
     expect(panelSource).toContain("Aprovar valores");

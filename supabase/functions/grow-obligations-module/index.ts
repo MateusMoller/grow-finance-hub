@@ -1,9 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { parseCompetenceZone } from "../_shared/competence-zone.ts";
 import { sendWhatsAppImageMessage, sendWhatsAppTextMessage } from "../_shared/ai/whatsapp.ts";
 import { normalizePhoneDigits } from "../_shared/ai/utils.ts";
 import { resolveConfiguredEmailSender, sendEmailViaSmtp } from "../_shared/email/smtp.ts";
 import { dispatchWhatsAppTemplateMessage } from "../_shared/whatsapp-provider.ts";
 import { isActiveWindowOpen } from "../_shared/whatsapp-validation.ts";
+import { extractPayrollDocumentValue } from "../_shared/payroll-document-value.ts";
 
 const WHATSAPP_OBLIGATION_TEMPLATE_NAME = Deno.env.get("WHATSAPP_OBLIGATION_TEMPLATE_NAME")?.trim() || "";
 const WHATSAPP_OBLIGATION_TEMPLATE_LANGUAGE = Deno.env.get("WHATSAPP_OBLIGATION_TEMPLATE_LANGUAGE")?.trim() || "pt_BR";
@@ -341,6 +343,7 @@ type InboxRow = {
   ocr_status: string;
   extracted_text_preview: string | null;
   fingerprint_payload: unknown;
+  recognition_evidence: unknown;
   auto_link_block_reason: string | null;
   processing_status: string;
   processing_attempts: number;
@@ -1804,7 +1807,17 @@ async function resolveDocumentReferenceMatch(
       documentDefinition: resolveExpectedDocument(template, documentTypeKey),
       candidateInstanceIds: instance ?[instance.id] : [],
       detectedClientId: effectiveClientId,
+      detectedCnpj: configuredModel?.zoneSignals.cnpj || detectedClient?.cnpj || analysis.detected_cnpj,
+      competenceDetected: effectiveCompetence,
+      referenceFileId: configuredReferenceId,
+      referenceMatchScore: configuredModel
+        ? Number(configuredModel.recognitionScore.toFixed(2))
+        : 0,
+      referenceMatchReasons: configuredModel
+        ? ["Competencia preservada a partir da area marcada do modelo configurado."]
+        : [],
       autoLinkBlockReason: null,
+      zoneAuthorityApplied: Boolean(configuredReferenceId && configuredModel?.zoneSignals.competence),
     };
   }
 
@@ -2268,17 +2281,24 @@ function renderCompletionEmailTemplate(
     competence: string;
     sector: string;
     technicalDueDate: string;
+    clientDueDate: string | null;
   },
 ) {
   const formattedTechnicalDueDate = /^\d{4}-\d{2}-\d{2}$/.test(payload.technicalDueDate)
     ? payload.technicalDueDate.split("-").reverse().join("/")
     : payload.technicalDueDate;
+  const formattedClientDueDate = payload.clientDueDate
+    ? (/^\d{4}-\d{2}-\d{2}$/.test(payload.clientDueDate)
+      ? payload.clientDueDate.split("-").reverse().join("/")
+      : payload.clientDueDate)
+    : "Não informado";
 
   return templateText
     .replaceAll("{{cliente_nome}}", payload.clientName)
     .replaceAll("{{obrigacao_nome}}", payload.obligationName)
     .replaceAll("{{competencia}}", payload.competence)
     .replaceAll("{{setor}}", payload.sector)
+    .replaceAll("{{prazo_cliente}}", formattedClientDueDate)
     .replaceAll("{{prazo_tecnico}}", formattedTechnicalDueDate);
 }
 
@@ -2706,6 +2726,7 @@ async function prepareObligationDelivery(
     competence: instance.competence_label,
     sector: template.sector,
     technicalDueDate: instance.technical_due_date,
+    clientDueDate: instance.legal_due_date,
   };
   const subject = renderCompletionEmailTemplate(
     template.completion_email_subject || "{{obrigacao_nome}} - {{competencia}}",
@@ -3393,6 +3414,7 @@ async function maybeSendCompletionEmail(
     competence: instance.competence_label,
     sector: template.sector,
     technicalDueDate: instance.technical_due_date,
+    clientDueDate: instance.legal_due_date,
   };
 
   const subject = renderCompletionEmailTemplate(
@@ -3401,7 +3423,7 @@ async function maybeSendCompletionEmail(
   );
   const textBody = renderCompletionEmailTemplate(
     template.completion_email_body ||
-      "Ol?, {{cliente_nome}}.\n\nA obriga??o {{obrigacao_nome}} referente ? compet?ncia {{competencia}} foi conclu?da.\n\nSetor respons?vel: {{setor}}.\nPrazo t?cnico: {{prazo_tecnico}}.",
+      "Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nVencimento: {{prazo_cliente}}.",
     renderPayload,
   );
   const htmlBody = buildCompletionEmailBodyHtml(textBody);
@@ -3502,11 +3524,12 @@ async function maybeSendCompletionWhatsApp(
     competence: instance.competence_label,
     sector: template.sector,
     technicalDueDate: instance.technical_due_date,
+    clientDueDate: instance.legal_due_date,
   };
 
   const messageBody = renderCompletionEmailTemplate(
     template.completion_whatsapp_body ||
-      "Ol?, {{cliente_nome}}.\n\nA obriga??o {{obrigacao_nome}} referente ? compet?ncia {{competencia}} foi conclu?da.\n\nSetor respons?vel: {{setor}}.\nPrazo t?cnico: {{prazo_tecnico}}.",
+      "Olá, {{cliente_nome}}.\n\nA obrigação {{obrigacao_nome}} referente à competência {{competencia}} foi concluída.\n\nSetor responsável: {{setor}}.\nVencimento: {{prazo_cliente}}.",
     renderPayload,
   );
 
@@ -3985,6 +4008,61 @@ async function applyDocumentOperationalFlowV2(
       completed_at: now,
     });
     return { processed: false, reason: "file_upsert_failed" };
+  }
+
+  const templateCode = (asTrimmedString(template.code) || "").toLowerCase();
+  const documentTypeKey = (asTrimmedString(inboxItem.document_type_key) || "").toLowerCase();
+  const isPayrollDocument = templateCode === "salary_receipt" || [
+    "salary_receipt",
+    "recibo_salario",
+    "recibo_de_salario",
+    "folha_pagamento",
+    "folha_de_pagamento",
+  ].includes(documentTypeKey);
+  const payrollExtraction = asJsonRecord(asJsonRecord(inboxItem.recognition_evidence).payroll_value);
+  const payrollAmount = asNumber(payrollExtraction.amount, -1);
+  const payrollConfidence = asNumber(payrollExtraction.confidence, 0);
+  if (isPayrollDocument && payrollAmount >= 0 && payrollConfidence >= 0.9) {
+    const { data: currentMonthlyValue, error: monthlyLookupError } = await supabaseAdmin
+      .from("client_monthly_values")
+      .select("id,payroll_with_charges,payroll_source,source_metadata")
+      .eq("organization_id", inboxItem.organization_id || instance.organization_id)
+      .eq("client_id", instance.client_id)
+      .eq("reference_month", instance.competence_date)
+      .maybeSingle();
+    if (monthlyLookupError) throw monthlyLookupError;
+
+    const currentSource = asTrimmedString((currentMonthlyValue as JsonRecord | null)?.payroll_source);
+    const hasProtectedManualValue = Boolean(
+      (currentMonthlyValue as JsonRecord | null)?.payroll_with_charges != null &&
+      currentSource &&
+      !currentSource.startsWith("salary_document_auto"),
+    );
+    if (!hasProtectedManualValue) {
+      const currentMetadata = asJsonRecord((currentMonthlyValue as JsonRecord | null)?.source_metadata);
+      const { error: monthlyUpsertError } = await supabaseAdmin
+        .from("client_monthly_values")
+        .upsert({
+          organization_id: inboxItem.organization_id || instance.organization_id,
+          client_id: instance.client_id,
+          reference_month: instance.competence_date,
+          payroll_with_charges: payrollAmount,
+          payroll_source: `salary_document_auto:${asTrimmedString(payrollExtraction.label) || "gross_total"}`,
+          source_metadata: {
+            ...currentMetadata,
+            payroll_document: {
+              inbox_item_id: inboxItem.id,
+              file_name: inboxItem.file_name,
+              confidence: payrollConfidence,
+              label: asTrimmedString(payrollExtraction.label),
+              captured_at: now,
+            },
+          },
+          updated_by: actorId,
+          ...(currentMonthlyValue ? {} : { created_by: actorId }),
+        }, { onConflict: "organization_id,client_id,reference_month" });
+      if (monthlyUpsertError) throw monthlyUpsertError;
+    }
   }
 
   await createInstanceEvent(
@@ -5534,6 +5612,7 @@ async function handleRegisterDocumentUploadNative(
   const robotMachineId = asTrimmedString(payload.robot_machine_id);
   const robotSubmissionId = asTrimmedString(payload.robot_submission_id);
   const analysis = parseDocumentAnalysisPayload(payload.analysis);
+  const payrollValue = extractPayrollDocumentValue(analysis.extracted_text || analysis.extracted_text_preview);
   const duplicateJob = await findDuplicateIngestionJob(supabaseAdmin, {
     sourceKind,
     fileHash,
@@ -5596,6 +5675,7 @@ async function handleRegisterDocumentUploadNative(
       match_strategy: match.strategy,
       match_score: match.score,
       robot_submission_id: robotSubmissionId,
+      payroll_value: payrollValue,
     },
   });
 
@@ -5644,6 +5724,7 @@ async function handleRegisterDocumentUploadNative(
       extraction_zones: asJsonRecord(match.fingerprintPayload || analysis.fingerprint_payload).extraction_zones || null,
       filename_used_for_decision: false,
       robot_submission_id: robotSubmissionId,
+      payroll_value: payrollValue,
     },
     recognition_decision: autoLinked ? "automatic" : "manual_review",
     processing_status: autoLinked ? "queued" : "queued",
@@ -6205,10 +6286,10 @@ function detectCompetenceInText(value: string | null | undefined) {
   for (const match of text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de)?\D{0,8}(20\d{2})\b/g)) {
     add(toCompetenceKey(match[2], monthNames[match[1]]), 100);
   }
-  for (const match of text.matchAll(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base|folha de|salario de)\D{0,32}(?:[0-3]?\d\D{1,4})?(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g)) {
+  for (const match of text.matchAll(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base|folha de|salario de)\b\D{0,32}(?:[0-3]?\d\D{1,4})?(0?[1-9]|1[0-2])\D{0,8}(20\d{2})\b/g)) {
     add(toCompetenceKey(match[2], match[1]), 100);
   }
-  for (const match of text.matchAll(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base)\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g)) {
+  for (const match of text.matchAll(/\b(?:competencia|comp|periodo|apuracao|referencia|ref|pa|mes referencia|mes base)\b\D{0,32}(20\d{2})\D{0,8}(0?[1-9]|1[0-2])\b/g)) {
     add(toCompetenceKey(match[1], match[2]), 98);
   }
   const contextualScore = (index: number) => {
@@ -6311,7 +6392,7 @@ function extractZoneSignals(inputFingerprint: JsonRecord, referenceFingerprint: 
     referenceTitleText,
     titleScore: referenceTitleTokens.length > 0 ? overlapRatio(titleTokens, referenceTitleTokens) : 0,
     cnpj: detectTaxIdentifierInText(cnpjText),
-    competence: detectCompetenceInText(competenceText),
+    competence: parseCompetenceZone(competenceText),
     hasCompetenceZone,
     hasTaxIdentifierZone,
   };

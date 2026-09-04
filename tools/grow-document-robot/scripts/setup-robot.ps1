@@ -1,3 +1,11 @@
+param(
+  [string]$Folder = "C:\Grow\Entrada-eContinuo",
+  [string]$Email,
+  [string]$MachineId,
+  [string]$FiscalOrganizationId = "62762f9f-1b0d-4096-9b1d-b1450e511f68",
+  [switch]$NonInteractive
+)
+
 $ErrorActionPreference = "Stop"
 
 function Read-EnvValue {
@@ -47,12 +55,16 @@ if (-not $supabaseUrl -or -not $supabaseKey) {
   throw "URL ou chave publica do Supabase nao encontrada nos arquivos .env do projeto."
 }
 
-$folder = Read-WithDefault -Prompt "Pasta que o robo deve monitorar" -Default "C:\Grow\Entrada-eContinuo"
-$email = Read-Host "E-mail do usuario do robo"
+$folder = if ($NonInteractive) { $Folder } else { Read-WithDefault -Prompt "Pasta que o robo deve monitorar" -Default $Folder }
+$email = if ($Email) { $Email } else { Read-Host "E-mail do usuario do robo" }
 if ([string]::IsNullOrWhiteSpace($email)) { throw "O e-mail do robo e obrigatorio." }
-$password = Read-Host "Senha do usuario do robo" -AsSecureString
+$password = if ($NonInteractive -and $env:GROW_ROBOT_PASSWORD) {
+  ConvertTo-SecureString $env:GROW_ROBOT_PASSWORD -AsPlainText -Force
+} else {
+  Read-Host "Senha do usuario do robo" -AsSecureString
+}
 $passwordProtected = ConvertFrom-SecureString $password
-$machineId = Read-WithDefault -Prompt "Identificacao deste computador" -Default "grow-robot-$($env:COMPUTERNAME.ToLowerInvariant())"
+$machineId = if ($MachineId) { $MachineId } elseif ($NonInteractive) { "grow-robot-$($env:COMPUTERNAME.ToLowerInvariant())" } else { Read-WithDefault -Prompt "Identificacao deste computador" -Default "grow-robot-$($env:COMPUTERNAME.ToLowerInvariant())" }
 
 New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
 New-Item -ItemType Directory -Path $folder -Force | Out-Null
@@ -63,6 +75,7 @@ $config = [ordered]@{
   robotUserEmail = $email.Trim()
   robotUserPasswordProtected = $passwordProtected
   machineId = $machineId
+  fiscalOrganizationId = $FiscalOrganizationId
   stateFile = "./state.json"
   scanIntervalMs = 30000
   retryDelayMs = 120000

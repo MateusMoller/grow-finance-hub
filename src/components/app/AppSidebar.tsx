@@ -17,6 +17,7 @@ import {
   ListChecks,
   ReceiptText,
   ShieldCheck,
+  HandCoins,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -82,6 +83,7 @@ const accountingItems = [
     ],
   },
   { title: "Notas Fiscais", url: "/app/notas-fiscais", icon: ReceiptText },
+  { title: "Parcelamentos", url: "/app/parcelamentos", icon: HandCoins },
   { title: "Certificados digitais", url: "/app/certificados", icon: ShieldCheck },
 ];
 

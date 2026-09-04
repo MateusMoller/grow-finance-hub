@@ -81,7 +81,7 @@ async function orderedClientChain(certificates: ForgeCertificate[], leafIndex: n
   return chain;
 }
 
-export async function loadClientTlsIdentity(admin: SupabaseClient, organizationId: string, clientId: string) {
+export async function loadClientTlsIdentity(admin: SupabaseClient, organizationId: string, clientId: string, expectedCnpj?: string) {
   const result = await admin.from("client_a1_certificates").select("*").eq("organization_id", organizationId).eq("client_id", clientId).eq("status", "active").maybeSingle();
   if (result.error) throw result.error;
   if (!result.data) throw new Error("certificate_required");
@@ -115,6 +115,19 @@ export async function loadClientTlsIdentity(admin: SupabaseClient, organizationI
       );
     });
     if (leafIndex < 0) throw new Error("certificate_key_mismatch");
+    const leafCertificate = certificates[leafIndex].cert as ForgeCertificate;
+    const now = new Date();
+    if (leafCertificate.validity.notBefore > now) throw new Error("certificate_not_yet_valid");
+    if (leafCertificate.validity.notAfter <= now) throw new Error("certificate_expired");
+    const issuerText = JSON.stringify(leafCertificate.issuer.attributes || []).toLowerCase();
+    if (!issuerText.includes("icp-brasil") && !issuerText.includes("icp brasil")) throw new Error("certificate_not_icp_brasil");
+    if (expectedCnpj) {
+      const commonName = (leafCertificate.subject.attributes || []).find((attribute: { name?: string; shortName?: string }) =>
+        attribute.name === "commonName" || attribute.shortName === "CN"
+      );
+      const certificateCnpj = String(commonName?.value || "").match(/(?:^|\D)(\d{14})(?:\D|$)/)?.[1] || null;
+      if (certificateCnpj && certificateCnpj.slice(0, 8) !== expectedCnpj.slice(0, 8)) throw new Error("certificate_cnpj_mismatch");
+    }
     const cert = (await orderedClientChain(certificates.map((bag: { cert: ForgeCertificate }) => bag.cert), leafIndex))
       .map((certificate) => forge.pki.certificateToPem(certificate))
       .join("");

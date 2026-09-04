@@ -40,7 +40,8 @@ export const baselineMasterObligations: BaselineMasterObligation[] = [
   master("dasn_simei", "DASN-SIMEI", "Fiscal", "yearly", 31, true, 5),
   master("pgdas_d", "PGDAS-D", "Fiscal", "monthly", 20, true),
   master("defis", "DEFIS", "Fiscal", "yearly", 31, true, 3),
-  master("dctfweb_mit", "DCTFWeb/MIT", "Fiscal", "monthly", 31, true),
+  master("dctfweb_mit", "DCTFWeb", "Fiscal", "monthly", 31, true),
+  master("mit", "MIT - Módulo de Inclusão de Tributos", "Fiscal", "monthly", 31, false),
   master("esocial", "eSocial", "Departamento Pessoal", "monthly", 15, true),
   master("fgts", "FGTS", "Departamento Pessoal", "monthly", 20, true),
   master("efd_reinf", "EFD-Reinf", "Fiscal", "monthly", 15, true),
@@ -109,6 +110,7 @@ export const baselineRegimeLoads: BaselineRegimeLoad[] = [
     name: "Lucro Presumido - Carga Padrao",
     items: [
       item("dctfweb_mit", "required", 10),
+      item("mit", "required", 15),
       item("efd_reinf", "required", 20),
       item("esocial", "conditional", 30, "has_employees"),
       item("fgts", "conditional", 40, "has_employees"),
@@ -130,6 +132,7 @@ export const baselineRegimeLoads: BaselineRegimeLoad[] = [
     name: "Lucro Real - Carga Padrao",
     items: [
       item("dctfweb_mit", "required", 10),
+      item("mit", "required", 15),
       item("efd_reinf", "required", 20),
       item("esocial", "conditional", 30, "has_employees"),
       item("fgts", "conditional", 40, "has_employees"),

@@ -52,6 +52,7 @@ describe("baseline regime loads", () => {
         "iss_municipal",
         "mei_revenue_support",
         "mei_status_limit_review",
+        "mit",
         "municipal_service_tax_return",
         "nfse_municipal",
         "pgdas_d",

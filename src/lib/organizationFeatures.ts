@@ -14,6 +14,7 @@ export const organizationFeatureDefaults = {
   // Temporarily retired. Kept in the feature schema for future reactivation.
   integra_contador: false,
   notas_fiscais: true,
+  integra_parcelamentos: false,
 } as const;
 
 export const permissionRolloutDefaults = {
@@ -36,6 +37,7 @@ export const routeFeatureMap: Record<string, OrganizationFeatureKey> = {
   "/app/solicitacoes": "solicitacoes",
   "/app/newsletter": "newsletter",
   "/app/notas-fiscais": "notas_fiscais",
+  "/app/parcelamentos": "integra_parcelamentos",
 };
 
 export const normalizeFeatureFlags = (value: unknown) => {

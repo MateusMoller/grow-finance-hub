@@ -5,4 +5,5 @@ describe("DCTFWeb inside canonical task",()=>{
  it("authorizes the task and reuses its obligation instance",()=>{expect(backend).toContain('if (action === "get_task_dctfweb_context")');expect(backend).toContain('task.integration_source !== "grow_obligation_task"');expect(backend).toContain('db.rpc("prepare_dctfweb_dossier"');});
  it("keeps the obligation task focused on declaration and controlled transmission",()=>{for(const label of ["Consultar declaração","Consultar recibo","Relatório completo","Revisar e aprovar","Transmitir declaração"])expect(panel).toContain(label);expect(panel).not.toContain("Gerar DARF");expect(backend).toContain('body.confirmation!=="TRANSMITIR DCTFWEB"');});
  it("keeps provider traffic out of the browser component",()=>{expect(panel).not.toContain("gateway.apiserpro");expect(panel).not.toContain("Authorization:");});
+ it("publishes fiscal PDFs into the matching obligation workflow",()=>{expect(backend).toContain("publishDctfwebArtifactToObligation");expect(backend).toContain('source_kind: "api"');expect(backend).toContain('publication_status: "published"');expect(backend).toContain('status: "concluida"');});
 });
